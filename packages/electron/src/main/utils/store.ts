@@ -345,6 +345,10 @@ export interface WorkspaceState {
     expandedFolders: string[];
     customFolders: string[];
   };
+  collabPendingUpdates?: Record<string, {
+    mergedUpdateBase64: string;
+    updatedAt: number;
+  }>;
   // Account identity bound to this workspace (personalOrgId).
   // Set once when the workspace is first synced. Different workspaces can use different accounts.
   // Defaults to the primary account if not set.
@@ -496,6 +500,7 @@ function createDefaultWorkspaceState(workspacePath: string): WorkspaceState {
       expandedFolders: [],
       customFolders: [],
     },
+    collabPendingUpdates: {},
     lastUpdated: Date.now(),
   };
 }

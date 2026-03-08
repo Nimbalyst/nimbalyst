@@ -21,8 +21,12 @@ import { CollaborativeTabEditor } from '../TabEditor/CollaborativeTabEditor';
 import { TabEditorErrorBoundary } from '../TabEditorErrorBoundary';
 import { logger } from '../../utils/logger';
 import { useTabsActions, type TabData, notifyDirtyStateChange } from '../../contexts/TabsContext';
-import { isCollabUri } from '../../utils/collabUri';
-import { getCollabConfig, removeCollabConfig } from '../../utils/collabDocumentOpener';
+import { isCollabUri, parseCollabUri } from '../../utils/collabUri';
+import {
+  getCollabConfig,
+  removeCollabConfig,
+  resolveCollabConfigForUri,
+} from '../../utils/collabDocumentOpener';
 import { store, editorDirtyAtom, editorHasUnacceptedChangesAtom, makeEditorKey } from '@nimbalyst/runtime/store';
 import { clearMockupAnnotationsForFile, getMockupFilePath } from '../UnifiedAI/MockupAnnotationIndicator';
 
@@ -113,9 +117,26 @@ const TabContentComponent: React.FC<TabContentProps> = ({
   };
 
   // Load content for a file
-  const loadContent = useCallback(async (filePath: string): Promise<string> => {
+  const loadContent = useCallback(async (filePath: string, title?: string): Promise<string> => {
     // Collaborative documents don't load from disk -- content comes via Y.Doc
     if (isCollabUri(filePath)) {
+      if (!getCollabConfig(filePath)) {
+        if (!propsRef.current.workspaceId) {
+          logger.ui.warn('[TabContent] Cannot restore collab tab without workspace path:', filePath);
+          return '';
+        }
+        try {
+          const { documentId } = parseCollabUri(filePath);
+          await resolveCollabConfigForUri(
+            propsRef.current.workspaceId,
+            filePath,
+            documentId,
+            title,
+          );
+        } catch (error) {
+          logger.ui.error('[TabContent] Failed to resolve collab config:', error);
+        }
+      }
       return '';
     }
 
@@ -415,7 +436,7 @@ const TabContentComponent: React.FC<TabContentProps> = ({
           loadingRef.current.add(tab.id);
 
           // Load content then create editor
-          const content = tab.content || await loadContent(tab.filePath);
+          const content = tab.content || await loadContent(tab.filePath, tab.fileName);
           loadingRef.current.delete(tab.id);
 
           // Check tab still exists after async load

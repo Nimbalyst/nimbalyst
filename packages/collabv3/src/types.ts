@@ -546,6 +546,7 @@ export interface DocUpdateMessage {
   type: 'docUpdate';
   encryptedUpdate: string;
   iv: string;
+  clientUpdateId?: string;
 }
 
 /** Send an encrypted compacted state snapshot */
@@ -584,6 +585,7 @@ export interface RequestKeyEnvelopeMessage {
 export type DocServerMessage =
   | DocSyncResponseMessage
   | DocUpdateBroadcastMessage
+  | DocUpdateAckMessage
   | DocAwarenessBroadcastMessage
   | KeyEnvelopeMessage
   | DocErrorMessage;
@@ -603,6 +605,13 @@ export interface DocUpdateBroadcastMessage {
   encryptedUpdate: string;
   iv: string;
   senderId: string;
+  sequence: number;
+}
+
+/** Acknowledge receipt of a client-originated update after it is persisted. */
+export interface DocUpdateAckMessage {
+  type: 'docUpdateAck';
+  clientUpdateId: string;
   sequence: number;
 }
 

@@ -224,7 +224,13 @@ export class DocumentRoom implements DurableObject {
           break;
 
         case 'docUpdate':
-          await this.handleDocUpdate(ws, connState, message.encryptedUpdate, message.iv);
+          await this.handleDocUpdate(
+            ws,
+            connState,
+            message.encryptedUpdate,
+            message.iv,
+            message.clientUpdateId
+          );
           break;
 
         case 'docCompact':
@@ -342,7 +348,8 @@ export class DocumentRoom implements DurableObject {
     ws: WebSocket,
     connState: ConnectionState,
     encryptedUpdate: string,
-    iv: string
+    iv: string,
+    clientUpdateId?: string
   ): Promise<void> {
     const sql = this.state.storage.sql;
 
@@ -378,6 +385,14 @@ export class DocumentRoom implements DurableObject {
       },
       ws
     );
+
+    if (clientUpdateId) {
+      ws.send(JSON.stringify({
+        type: 'docUpdateAck',
+        clientUpdateId,
+        sequence: nextSeq,
+      }));
+    }
   }
 
   /**

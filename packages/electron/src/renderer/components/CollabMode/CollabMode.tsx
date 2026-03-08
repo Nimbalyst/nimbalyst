@@ -21,6 +21,7 @@ import { initSharedDocuments, destroyTeamSync, pendingCollabDocumentAtom, shared
 import { isCollabUri, parseCollabUri } from '../../utils/collabUri';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { getCollabNodeName } from './collabTree';
+import { errorNotificationService } from '../../services/ErrorNotificationService';
 
 interface CollabModeProps {
   workspacePath: string;
@@ -212,15 +213,27 @@ const CollabModeInner: React.FC<CollabModeProps> = ({
     }
 
     // Open as collab tab
-    const tabId = await openCollabDocumentViaIPC({
-      workspacePath,
-      documentId: doc.documentId,
-      title: doc.title,
-      initialContent,
-      addTab: tabsActions.addTab,
-    });
-    if (tabId) {
+    try {
+      const tabId = await openCollabDocumentViaIPC({
+        workspacePath,
+        documentId: doc.documentId,
+        title: doc.title,
+        initialContent,
+        addTab: tabsActions.addTab,
+      });
       tabsActions.updateTab(tabId, { fileName: getCollabNodeName(doc.title || doc.documentId) });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('[CollabMode] Failed to open shared document:', {
+        documentId: doc.documentId,
+        title: doc.title,
+        error,
+      });
+      errorNotificationService.showError(
+        'Failed to open shared document',
+        message,
+        { details: doc.title || doc.documentId }
+      );
     }
   }, [workspacePath, tabs, tabsActions]);
 

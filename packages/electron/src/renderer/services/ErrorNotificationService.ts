@@ -236,6 +236,8 @@ if (typeof window !== 'undefined') {
     // Ignore benign ResizeObserver errors from virtualization libraries (virtua)
     // This error occurs when ResizeObserver callbacks trigger layout changes that cause more resize events
     if (message === 'ResizeObserver loop completed with undelivered notifications.') {
+      event.preventDefault();
+      event.stopImmediatePropagation();
       return;
     }
 
@@ -264,7 +266,7 @@ if (typeof window !== 'undefined') {
         }
       }
     );
-  });
+  }, { capture: true });
 
   window.addEventListener('unhandledrejection', (event) => {
     // Ignore Monaco editor's internal "Canceled" errors - these are benign

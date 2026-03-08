@@ -8,6 +8,7 @@ import { useTabNavigation } from '../../hooks/useTabNavigation';
 import { handleWorkspaceFileSelect as handleWorkspaceFileSelectUtil } from '../../utils/workspaceFileOperations';
 import { createInitialFileContent, createMockupContent } from '../../utils/fileUtils';
 import { getFileName } from '../../utils/pathUtils';
+import { isCollabUri } from '../../utils/collabUri';
 import { aiToolService } from '../../services/AIToolService';
 import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
 import { getExtensionLoader } from '@nimbalyst/runtime';
@@ -23,6 +24,10 @@ import { contributionToExtensionFileType } from '../NewFileMenu';
 import { HistoryDialog } from '../HistoryDialog';
 import { WorkspaceHistoryDialog } from '../WorkspaceHistoryDialog';
 import { getTextSelection } from '../UnifiedAI/TextSelectionIndicator';
+import {
+  collabConnectionStatusAtom,
+  hasCollabUnsyncedChanges,
+} from '../../store/atoms/collabEditor';
 
 export interface EditorModeRef {
   closeActiveTab: () => void;
@@ -233,6 +238,20 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     // Check dirty state from Jotai atom (the source of truth)
     const editorKey = makeEditorKey(tab.filePath);
     const isDirty = store.get(editorDirtyAtom(editorKey));
+    const collabStatus = isCollabUri(tab.filePath)
+      ? store.get(collabConnectionStatusAtom(tab.filePath))
+      : 'disconnected';
+
+    if (isCollabUri(tab.filePath) && hasCollabUnsyncedChanges(collabStatus)) {
+      const confirmed = window.confirm(
+        collabStatus === 'replaying'
+          ? 'This collaborative document is still replaying local changes to the server. Close it anyway?'
+          : 'This collaborative document still has local changes that have not been confirmed by the server. Close it anyway?'
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
     // Save dirty tabs before closing to prevent data loss
     if (isDirty && saveTabByIdRef.current) {
       await saveTabByIdRef.current(tabId);

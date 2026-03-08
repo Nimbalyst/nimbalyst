@@ -17,6 +17,7 @@ import { logger } from './logger';
  * Stored in the registry and passed to CollaborativeTabEditor.
  */
 export interface CollabDocumentConfig {
+  workspacePath: string;
   orgId: string;
   documentId: string;
   title: string;
@@ -30,6 +31,8 @@ export interface CollabDocumentConfig {
   userEmail?: string;
   /** Content to seed the Y.Doc with if the room is empty (first share). */
   initialContent?: string;
+  /** Persisted local updates that still need server acknowledgement. */
+  pendingUpdateBase64?: string;
   /**
    * Factory for creating WebSocket connections.
    * When running in Electron, this proxies WebSocket connections through
@@ -80,18 +83,25 @@ export function removeCollabConfig(uri: string): void {
  */
 export function openCollabDocument(options: CollabDocumentConfig & {
   addTab: (filePath: string, content?: string, switchToTab?: boolean) => string | null;
-}): string | null {
+}): string {
   const { addTab, ...config } = options;
   const uri = buildCollabUri(config.orgId, config.documentId);
 
   // Store config for TabContent to retrieve
   collabConfigRegistry.set(uri, config);
 
-  // Add the tab. Content is empty -- CollaborationPlugin hydrates from Y.Doc.
-  // The fileName will be overridden in the tab display layer using the title.
-  const tabId = addTab(uri, '', true);
-
-  return tabId;
+  try {
+    // Add the tab. Content is empty -- CollaborationPlugin hydrates from Y.Doc.
+    // The fileName will be overridden in the tab display layer using the title.
+    const tabId = addTab(uri, '', true);
+    if (!tabId) {
+      throw new Error(`Tab creation returned no tab ID for collaborative document ${config.documentId}`);
+    }
+    return tabId;
+  } catch (error) {
+    collabConfigRegistry.delete(uri);
+    throw error;
+  }
 }
 
 /**
@@ -307,11 +317,12 @@ export async function resolveCollabConfigForUri(
       return null;
     }
 
-    const { orgId, title: resolvedTitle, orgKeyBase64, serverUrl, userId, userName, userEmail } = result.config;
+    const { orgId, title: resolvedTitle, orgKeyBase64, serverUrl, userId, userName, userEmail, pendingUpdateBase64 } = result.config;
     const documentKey = await importOrgKeyFromBase64(orgKeyBase64);
     const hasWsProxy = !!window.electronAPI?.documentSync?.wsConnect;
 
     const config: CollabDocumentConfig = {
+      workspacePath,
       orgId,
       documentId,
       title: resolvedTitle,
@@ -320,6 +331,7 @@ export async function resolveCollabConfigForUri(
       userId,
       userName,
       userEmail,
+      pendingUpdateBase64,
       createWebSocket: hasWsProxy ? createProxiedWebSocket : undefined,
       getJwt: async () => {
         const jwtResult = await window.electronAPI.documentSync.getJwt(orgId);
@@ -361,16 +373,9 @@ export async function openCollabDocumentViaIPC(options: {
   title?: string;
   initialContent?: string;
   addTab: (filePath: string, content?: string, switchToTab?: boolean) => string | null;
-}): Promise<string | null> {
+}): Promise<string> {
   if (!window.electronAPI?.documentSync) {
     throw new Error('Document sync API not available. Is the app fully loaded?');
-  }
-
-  // Check if already open
-  const uri = buildCollabUri('pending', options.documentId);
-  if (collabConfigRegistry.has(uri)) {
-    logger.ui.info('[collabDocumentOpener] Document already open:', options.documentId);
-    return null;
   }
 
   const result = await window.electronAPI.documentSync.open(
@@ -383,25 +388,21 @@ export async function openCollabDocumentViaIPC(options: {
     throw new Error(result.error || 'Failed to resolve collaborative document config');
   }
 
-  const { orgId, documentId, title, orgKeyBase64, serverUrl, userId, userName, userEmail } = result.config;
+  const { orgId, documentId, title, orgKeyBase64, serverUrl, userId, userName, userEmail, pendingUpdateBase64 } = result.config;
 
   // Reconstruct CryptoKey from raw base64
   const documentKey = await importOrgKeyFromBase64(orgKeyBase64);
 
   // Build the real URI now that we have orgId
   const realUri = buildCollabUri(orgId, documentId);
-
-  // Check again with real URI
-  if (collabConfigRegistry.has(realUri)) {
-    logger.ui.info('[collabDocumentOpener] Document already open:', realUri);
-    return null;
-  }
+  logger.ui.info('[collabDocumentOpener] Opening collaborative document:', realUri);
 
   // Use IPC-proxied WebSocket when the proxy API is available
   // (Cloudflare blocks browser WebSocket upgrades to sync.nimbalyst.com)
   const hasWsProxy = !!window.electronAPI?.documentSync?.wsConnect;
 
-  return openCollabDocument({
+  const tabId = openCollabDocument({
+    workspacePath: options.workspacePath,
     orgId,
     documentId,
     title,
@@ -411,6 +412,7 @@ export async function openCollabDocumentViaIPC(options: {
     userName,
     userEmail,
     initialContent: options.initialContent,
+    pendingUpdateBase64,
     createWebSocket: hasWsProxy ? createProxiedWebSocket : undefined,
     getJwt: async () => {
       const jwtResult = await window.electronAPI.documentSync.getJwt(orgId);
@@ -421,4 +423,10 @@ export async function openCollabDocumentViaIPC(options: {
     },
     addTab: options.addTab,
   });
+
+  if (!tabId) {
+    throw new Error(`Failed to open collaborative document ${realUri}`);
+  }
+
+  return tabId;
 }

@@ -30,6 +30,7 @@ import type {
   DocSyncResponseMessage,
   DocUpdateBroadcastMessage,
   DocAwarenessBroadcastMessage,
+  DocUpdateAckMessage,
 } from './documentSyncTypes';
 
 // ============================================================================
@@ -101,6 +102,9 @@ const REMOTE_ORIGIN = 'remote';
 /** Origin string used for snapshot Yjs transactions */
 const SNAPSHOT_ORIGIN = 'snapshot';
 
+/** Origin string used when restoring persisted local pending updates. */
+const PERSISTED_PENDING_ORIGIN = 'persistedPending';
+
 /** Awareness throttle interval: ~2Hz */
 const AWARENESS_THROTTLE_MS = 500;
 
@@ -154,12 +158,34 @@ export class DocumentSyncProvider {
   // Reconnect state
   private reconnectAttempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private suppressReconnect = false;
+  private queuedPendingUpdate: Uint8Array | null = null;
+  private inflightPendingUpdate: Uint8Array | null = null;
+  private pendingPersistTimer: ReturnType<typeof setTimeout> | null = null;
+  private replayingClientUpdateId: string | null = null;
+  private surfaceReplayStatus = false;
   private static readonly RECONNECT_BASE_MS = 1000;
   private static readonly RECONNECT_MAX_MS = 30_000;
 
   constructor(config: DocumentSyncConfig) {
     this.config = config;
     this.ydoc = new Y.Doc();
+    this.setupUpdateObserver();
+
+    if (config.initialPendingUpdateBase64) {
+      try {
+        this.queuedPendingUpdate = base64ToUint8Array(config.initialPendingUpdateBase64);
+        Y.applyUpdate(
+          this.ydoc,
+          this.queuedPendingUpdate,
+          PERSISTED_PENDING_ORIGIN
+        );
+        this.setStatus('offline-unsynced');
+      } catch (err) {
+        console.error('[DocumentSync] Failed to restore pending local update:', err);
+        this.queuedPendingUpdate = null;
+      }
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -175,6 +201,7 @@ export class DocumentSyncProvider {
     if (this.destroyed) throw new Error('Provider has been destroyed');
     if (this.ws || this.connecting) return;
 
+    this.suppressReconnect = false;
     this.connecting = true;
     this.setStatus('connecting');
 
@@ -192,7 +219,7 @@ export class DocumentSyncProvider {
     } catch (err) {
       console.error('[DocumentSync] Failed to build URL:', err);
       this.connecting = false;
-      this.setStatus('disconnected');
+      this.setStatus(this.hasPendingLocalUpdates() ? 'offline-unsynced' : 'disconnected');
       return;
     }
 
@@ -211,9 +238,9 @@ export class DocumentSyncProvider {
 
     ws.addEventListener('open', () => {
       console.log('[DocumentSync] WebSocket open');
+      this.suppressReconnect = false;
       this.reconnectAttempt = 0;
       this.setStatus('syncing');
-      this.setupUpdateObserver();
       this.startAwarenessCleanup();
       this.requestSync();
     });
@@ -239,7 +266,8 @@ export class DocumentSyncProvider {
   disconnect(): void {
     this.cancelReconnect();
     this.connecting = false;
-    this.teardownUpdateObserver();
+    this.suppressReconnect = true;
+    this.requeueInflightPendingUpdate();
     this.stopAwarenessCleanup();
     this.clearAwarenessThrottle();
     if (this.ws) {
@@ -247,7 +275,9 @@ export class DocumentSyncProvider {
       this.ws = null;
     }
     this.synced = false;
-    this.setStatus('disconnected');
+    this.setStatus(
+      this.hasPendingLocalUpdates() ? 'offline-unsynced' : 'disconnected'
+    );
   }
 
   /**
@@ -256,6 +286,8 @@ export class DocumentSyncProvider {
   destroy(): void {
     this.destroyed = true;
     this.disconnect();
+    this.teardownUpdateObserver();
+    this.flushPendingPersistImmediately();
     this.ydoc.destroy();
     this.awarenessListeners.clear();
     this.awarenessStates.clear();
@@ -501,6 +533,9 @@ export class DocumentSyncProvider {
         case 'docUpdateBroadcast':
           await this.handleUpdateBroadcast(msg);
           break;
+        case 'docUpdateAck':
+          this.handleUpdateAck(msg);
+          break;
         case 'docAwarenessBroadcast':
           await this.handleAwarenessBroadcast(msg);
           break;
@@ -560,14 +595,19 @@ export class DocumentSyncProvider {
       if (this.reviewGateEnabled) {
         this.reviewedStateVector = Y.encodeStateVector(this.ydoc);
       }
-      this.setStatus('connected');
+      if (this.hasPendingLocalUpdates()) {
+        await this.replayPendingUpdate();
+      } else {
+        this.setStatus('connected');
 
-      // After initial sync, push any local state the server is missing.
-      // This handles the case where content was bootstrapped into the Y.Doc
-      // locally (e.g., initial share) but the WebSocket was not yet open or
-      // a previous connection failed before the update could be sent.
-      this.pushLocalState(msg);
+        // After initial sync, push any local state the server is missing.
+        // This handles the case where content was bootstrapped into the Y.Doc
+        // locally (e.g., initial share) but the WebSocket was not yet open or
+        // a previous connection failed before the update could be sent.
+        await this.pushLocalState(msg);
+      }
     }
+
   }
 
   private async handleUpdateBroadcast(
@@ -632,14 +672,17 @@ export class DocumentSyncProvider {
 
     const handler = async (update: Uint8Array, origin: unknown) => {
       // Only send updates that originated locally (not remote/snapshot)
-      if (origin === REMOTE_ORIGIN || origin === SNAPSHOT_ORIGIN) return;
-      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-
-      const { encrypted, iv } = await encryptBinary(
-        update,
-        this.config.documentKey
-      );
-      this.send({ type: 'docUpdate', encryptedUpdate: encrypted, iv });
+      if (
+        origin === REMOTE_ORIGIN ||
+        origin === SNAPSHOT_ORIGIN ||
+        origin === PERSISTED_PENDING_ORIGIN
+      ) {
+        return;
+      }
+      this.enqueuePendingLocalUpdate(update);
+      if (this.ws && this.ws.readyState === WebSocket.OPEN && this.synced) {
+        await this.replayPendingUpdate();
+      }
     };
 
     this.ydoc.on('update', handler);
@@ -659,6 +702,18 @@ export class DocumentSyncProvider {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(msg));
     }
+  }
+
+  private enqueuePendingLocalUpdate(update: Uint8Array): void {
+    this.queuedPendingUpdate = this.queuedPendingUpdate
+      ? Y.mergeUpdates([this.queuedPendingUpdate, update])
+      : update.slice();
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.synced) {
+      this.setStatus('offline-unsynced');
+    } else if (this.replayingClientUpdateId && this.surfaceReplayStatus) {
+      this.setStatus('replaying');
+    }
+    this.schedulePendingPersist();
   }
 
   private setStatus(status: DocumentSyncStatus): void {
@@ -684,7 +739,6 @@ export class DocumentSyncProvider {
     if (!serverHasNoState) return; // Server already has content, nothing to push
 
     // Check if our local Y.Doc has any content worth sending
-    const localSv = Y.encodeStateVector(this.ydoc);
     const diff = Y.encodeStateAsUpdate(this.ydoc);
 
     // A minimal empty Y.Doc encodes to a very small update (~2 bytes).
@@ -692,31 +746,162 @@ export class DocumentSyncProvider {
     if (diff.length <= 2) return;
 
     console.log('[DocumentSync] Pushing local state to server after sync, update size:', diff.length);
+    this.enqueuePendingLocalUpdate(diff);
+    await this.replayPendingUpdate();
+  }
+
+  private async replayPendingUpdate(): Promise<void> {
+    if (this.replayingClientUpdateId) {
+      return;
+    }
+
+    if (!this.queuedPendingUpdate) {
+      this.setStatus('connected');
+      return;
+    }
+
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.synced) {
+      this.setStatus('offline-unsynced');
+      return;
+    }
+
     try {
-      const { encrypted, iv } = await encryptBinary(diff, this.config.documentKey);
-      this.send({ type: 'docUpdate', encryptedUpdate: encrypted, iv });
+      const clientUpdateId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const pendingUpdate = this.queuedPendingUpdate;
+      this.inflightPendingUpdate = pendingUpdate;
+      this.queuedPendingUpdate = null;
+      this.surfaceReplayStatus = this.status !== 'connected';
+      const { encrypted, iv } = await encryptBinary(
+        pendingUpdate,
+        this.config.documentKey
+      );
+      this.replayingClientUpdateId = clientUpdateId;
+      if (this.surfaceReplayStatus) {
+        this.setStatus('replaying');
+      } else {
+        this.setStatus('connected');
+      }
+      this.send({
+        type: 'docUpdate',
+        encryptedUpdate: encrypted,
+        iv,
+        clientUpdateId,
+      });
     } catch (err) {
-      console.error('[DocumentSync] Failed to push local state:', err);
+      console.error('[DocumentSync] Failed to replay pending local update:', err);
+      if (this.inflightPendingUpdate) {
+        this.queuedPendingUpdate = this.queuedPendingUpdate
+          ? Y.mergeUpdates([this.inflightPendingUpdate, this.queuedPendingUpdate])
+          : this.inflightPendingUpdate;
+        this.inflightPendingUpdate = null;
+      }
+      this.replayingClientUpdateId = null;
+      this.surfaceReplayStatus = false;
+      this.schedulePendingPersist();
+      this.setStatus('offline-unsynced');
     }
   }
 
+  private handleUpdateAck(msg: DocUpdateAckMessage): void {
+    this.lastSeq = Math.max(this.lastSeq, msg.sequence);
+    if (msg.clientUpdateId !== this.replayingClientUpdateId) {
+      return;
+    }
+
+    this.finishReplayingPendingUpdate();
+  }
+
+  private schedulePendingPersist(): void {
+    if (!this.config.onPendingUpdateChange) return;
+    if (this.pendingPersistTimer) {
+      clearTimeout(this.pendingPersistTimer);
+    }
+    this.pendingPersistTimer = setTimeout(() => {
+      this.pendingPersistTimer = null;
+      const mergedPendingUpdate = this.getMergedPendingUpdate();
+      void this.config.onPendingUpdateChange?.(
+        mergedPendingUpdate ? uint8ArrayToBase64(mergedPendingUpdate) : null
+      );
+    }, 250);
+  }
+
+  private flushPendingPersistImmediately(): void {
+    if (!this.config.onPendingUpdateChange) return;
+    if (this.pendingPersistTimer) {
+      clearTimeout(this.pendingPersistTimer);
+      this.pendingPersistTimer = null;
+    }
+    const mergedPendingUpdate = this.getMergedPendingUpdate();
+    void this.config.onPendingUpdateChange(
+      mergedPendingUpdate ? uint8ArrayToBase64(mergedPendingUpdate) : null
+    );
+  }
+
   private handleDisconnect(): void {
+    const shouldReconnect = !this.suppressReconnect;
+    this.suppressReconnect = false;
     this.ws = null;
     this.synced = false;
     this.connecting = false;
-    this.teardownUpdateObserver();
+    this.requeueInflightPendingUpdate();
     this.stopAwarenessCleanup();
     this.clearAwarenessThrottle();
     // Clear awareness states on disconnect
     this.awarenessStates.clear();
     this.awarenessTimestamps.clear();
     this.notifyAwarenessListeners();
-    this.setStatus('disconnected');
+    this.setStatus(
+      this.hasPendingLocalUpdates() ? 'offline-unsynced' : 'disconnected'
+    );
     // Note: unreviewed updates and reviewedStateVector are preserved across
     // disconnect/reconnect. If the user reconnects, they'll still see the
     // pending review state. On reconnect, initial sync is accepted but
     // buffered unreviewed updates remain.
-    this.scheduleReconnect();
+    if (shouldReconnect) {
+      this.scheduleReconnect();
+    }
+  }
+
+  private hasPendingLocalUpdates(): boolean {
+    return !!(this.queuedPendingUpdate || this.inflightPendingUpdate);
+  }
+
+  private getMergedPendingUpdate(): Uint8Array | null {
+    if (this.queuedPendingUpdate && this.inflightPendingUpdate) {
+      return Y.mergeUpdates([
+        this.inflightPendingUpdate,
+        this.queuedPendingUpdate,
+      ]);
+    }
+    return this.queuedPendingUpdate ?? this.inflightPendingUpdate;
+  }
+
+  private requeueInflightPendingUpdate(): void {
+    if (!this.inflightPendingUpdate) {
+      this.surfaceReplayStatus = false;
+      return;
+    }
+    this.queuedPendingUpdate = this.queuedPendingUpdate
+      ? Y.mergeUpdates([this.inflightPendingUpdate, this.queuedPendingUpdate])
+      : this.inflightPendingUpdate;
+    this.inflightPendingUpdate = null;
+    this.replayingClientUpdateId = null;
+    this.surfaceReplayStatus = false;
+    this.schedulePendingPersist();
+  }
+
+  private finishReplayingPendingUpdate(): void {
+    this.inflightPendingUpdate = null;
+    this.replayingClientUpdateId = null;
+    this.surfaceReplayStatus = false;
+    this.schedulePendingPersist();
+    if (this.synced && this.queuedPendingUpdate) {
+      void this.replayPendingUpdate();
+      return;
+    }
+    if (this.synced) {
+      this.setStatus('connected');
+    }
   }
 
   private scheduleReconnect(): void {

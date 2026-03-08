@@ -596,7 +596,17 @@ interface ElectronAPI {
         userId: string;
         userName?: string;
         userEmail?: string;
+        pendingUpdateBase64?: string;
       };
+      error?: string;
+    }>;
+    setPendingUpdate: (
+      workspacePath: string,
+      orgId: string,
+      documentId: string,
+      pendingUpdateBase64: string | null
+    ) => Promise<{
+      success: boolean;
       error?: string;
     }>;
     getJwt: (orgId: string) => Promise<{

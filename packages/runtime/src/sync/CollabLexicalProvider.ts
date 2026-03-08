@@ -193,8 +193,15 @@ export class CollabLexicalProvider implements Provider {
    * Wire this to DocumentSyncConfig.onStatusChange.
    */
   handleStatusChange(status: DocumentSyncStatus): void {
-    // Map our status to Lexical-compatible status strings
-    const lexicalStatus = status === 'connected' ? 'connected' : 'disconnected';
+    // Keep Lexical "connected" while the local Yjs document remains usable.
+    // Transport-level replay/offline states are surfaced in our own UI, but
+    // flipping Lexical to disconnected mid-edit causes transient editor errors.
+    const lexicalStatus =
+      status === 'disconnected' ||
+      status === 'connecting' ||
+      status === 'syncing'
+        ? 'disconnected'
+        : 'connected';
     console.log('[CollabLexicalProvider] handleStatusChange:', status, '-> lexical:', lexicalStatus,
       'sync listeners:', this.listeners.sync?.size ?? 0,
       'status listeners:', this.listeners.status?.size ?? 0);

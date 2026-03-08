@@ -15,6 +15,10 @@ import {
   makeEditorKey,
   type EditorKey,
 } from '@nimbalyst/runtime/store';
+import {
+  collabConnectionStatusAtom,
+  hasCollabUnsyncedChanges,
+} from '../store/atoms/collabEditor';
 
 /**
  * Subscribe to a tab's dirty state.
@@ -44,6 +48,14 @@ export function useTabProcessing(filePath: string, sessionId?: string): boolean 
 export function useTabHasUnacceptedChanges(filePath: string, sessionId?: string): boolean {
   const key = makeEditorKey(filePath, sessionId);
   return useAtomValue(editorHasUnacceptedChangesAtom(key));
+}
+
+/**
+ * Subscribe to whether a collaborative tab still has local unacknowledged changes.
+ */
+export function useTabHasCollabUnsyncedChanges(filePath: string): boolean {
+  const status = useAtomValue(collabConnectionStatusAtom(filePath));
+  return hasCollabUnsyncedChanges(status);
 }
 
 /**

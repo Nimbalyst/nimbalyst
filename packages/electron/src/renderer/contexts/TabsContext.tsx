@@ -219,7 +219,7 @@ export function TabsProvider({
       store.activeTabId = tabId;
     }
 
-    // Start watching file (skip virtual and collaborative documents)
+    // Start watching filesystem-backed files only.
     if (window.electronAPI && !filePath.startsWith('virtual://') && !isCollabUri(filePath)) {
       window.electronAPI.invoke('start-watching-file', filePath).catch(() => {});
     }
@@ -369,7 +369,18 @@ export function TabsProvider({
 
         if (!existingTab) {
           try {
-            await fileSelectFn(candidateTab.filePath);
+            if (isCollabUri(candidateTab.filePath)) {
+              const reopenedTabId = addTab(candidateTab.filePath, '', true);
+              if (reopenedTabId) {
+                updateTab(reopenedTabId, {
+                  fileName: candidateTab.fileName,
+                  isPinned: candidateTab.isPinned,
+                  isVirtual: candidateTab.isVirtual,
+                });
+              }
+            } else {
+              await fileSelectFn(candidateTab.filePath);
+            }
             newClosedTabs = newClosedTabs.slice(i + 1);
             store.closedTabs = newClosedTabs;
             notify();
@@ -389,7 +400,7 @@ export function TabsProvider({
     } finally {
       reopeningRef.current = false;
     }
-  }, [notify]);
+  }, [addTab, notify, updateTab]);
 
   // Restore tabs from storage on mount
   React.useEffect(() => {
@@ -408,10 +419,6 @@ export function TabsProvider({
           const restoredOrder: string[] = [];
 
           for (const tabData of savedState.tabs) {
-            // Skip collab tabs -- they need fresh auth/crypto config
-            // that only exists in-memory from openCollabDocument()
-            if (isCollabUri(tabData.filePath)) continue;
-
             restoredTabs.set(tabData.id, {
               ...tabData,
               content: '',
@@ -435,7 +442,7 @@ export function TabsProvider({
             }));
           }
 
-          // Start watching all restored tabs (skip virtual and collaborative documents)
+          // Start watching restored filesystem-backed tabs only.
           if (window.electronAPI) {
             for (const tab of restoredTabs.values()) {
               if (!tab.filePath.startsWith('virtual://') && !isCollabUri(tab.filePath)) {
@@ -472,8 +479,6 @@ export function TabsProvider({
       const tabsArray = store.tabOrder
         .map(id => store.tabs.get(id))
         .filter((tab): tab is TabData => tab !== undefined)
-        // Skip collab tabs -- they can't be restored without crypto keys
-        .filter(tab => !isCollabUri(tab.filePath))
         .map(tab => ({
           id: tab.id,
           filePath: tab.filePath,

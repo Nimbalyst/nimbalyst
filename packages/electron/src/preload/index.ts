@@ -777,9 +777,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
           orgKeyBase64: string;
           serverUrl: string;
           userId: string;
+          userName?: string;
+          userEmail?: string;
+          pendingUpdateBase64?: string;
         };
         error?: string;
       }>,
+    setPendingUpdate: (
+      workspacePath: string,
+      orgId: string,
+      documentId: string,
+      pendingUpdateBase64: string | null
+    ) =>
+      ipcRenderer.invoke('document-sync:set-pending-update', {
+        workspacePath,
+        orgId,
+        documentId,
+        pendingUpdateBase64,
+      }) as Promise<{ success: boolean; error?: string }>,
     getJwt: (orgId: string) =>
       ipcRenderer.invoke('document-sync:get-jwt', { orgId }) as Promise<{
         success: boolean;

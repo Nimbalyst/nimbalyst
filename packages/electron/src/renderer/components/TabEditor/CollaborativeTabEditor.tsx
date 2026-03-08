@@ -16,8 +16,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import { atom, useAtomValue } from 'jotai';
-import { atomFamily } from 'jotai/utils';
+import { useAtomValue } from 'jotai';
 import { MarkdownEditor } from '@nimbalyst/runtime';
 import { DocumentSyncProvider } from '@nimbalyst/runtime/sync';
 import { CollabLexicalProvider } from '@nimbalyst/runtime/sync';
@@ -27,24 +26,12 @@ import type { CollabDocumentConfig } from '../../utils/collabDocumentOpener';
 import { store, editorDirtyAtom, makeEditorKey } from '@nimbalyst/runtime/store';
 import type { Doc } from 'yjs';
 import type { Provider } from '@lexical/yjs';
-
-// ---------------------------------------------------------------------------
-// Jotai atoms for collab tab state (keyed by filePath / collab URI)
-// ---------------------------------------------------------------------------
-
-/** Connection status per collab document. Written from DocumentSyncProvider callback. */
-export const collabConnectionStatusAtom = atomFamily(
-  (_uri: string) => atom<DocumentSyncStatus>('disconnected')
-);
-
-/** Remote user awareness per collab document. Written from DocumentSyncProvider awareness callback. */
-interface RemoteUser {
-  name: string;
-  color: string;
-}
-export const collabAwarenessAtom = atomFamily(
-  (_uri: string) => atom<Map<string, RemoteUser>>(new Map())
-);
+import {
+  collabAwarenessAtom,
+  collabConnectionStatusAtom,
+  hasCollabUnsyncedChanges,
+  type RemoteUser,
+} from '../../store/atoms/collabEditor';
 
 interface CollaborativeTabEditorProps {
   /** The collab:// URI for this document */
@@ -117,12 +104,20 @@ const CollabStatusBar: React.FC<{ filePath: string; fileName: string }> = ({ fil
 
   const statusDot = status === 'connected'
     ? 'bg-green-500'
+    : status === 'replaying'
+      ? 'bg-blue-500'
+      : status === 'offline-unsynced'
+        ? 'bg-orange-500'
     : status === 'connecting' || status === 'syncing'
       ? 'bg-yellow-500'
       : 'bg-gray-500';
 
   const statusLabel = status === 'connected'
     ? 'Connected'
+    : status === 'replaying'
+      ? 'Replaying local changes...'
+      : status === 'offline-unsynced'
+        ? 'Offline - unsynced changes'
     : status === 'connecting'
       ? 'Connecting...'
       : status === 'syncing'
@@ -163,6 +158,7 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
 }) => {
   const syncProviderRef = useRef<DocumentSyncProvider | null>(null);
   const collabProviderRef = useRef<CollabLexicalProvider | null>(null);
+  const isActiveRef = useRef(isActive);
   const cursorColor = useMemo(() => randomCursorColor(), []);
   // providerReady flips once from false->true. Using a ref + forceUpdate
   // avoids the render loop from useState. We only need one re-render to
@@ -175,6 +171,16 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
   // provider.connect() itself after registering its onSync listener.
   // If we connect early, the sync event fires before the listener is
   // registered and the bootstrap / initial content seeding is missed.
+  useEffect(() => {
+    isActiveRef.current = isActive;
+    if (window.electronAPI?.setDocumentEdited) {
+      const status = syncProviderRef.current?.getStatus() ?? 'disconnected';
+      window.electronAPI.setDocumentEdited(
+        isActive && hasCollabUnsyncedChanges(status)
+      );
+    }
+  }, [isActive]);
+
   useEffect(() => {
     console.log('[CollaborativeTabEditor] Creating providers, initialContent:', !!collabConfig.initialContent);
 
@@ -190,8 +196,20 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
         console.log('[CollaborativeTabEditor] Status change:', status);
         // Write to Jotai atom -- only CollabStatusBar re-renders
         store.set(collabConnectionStatusAtom(filePath), status);
+        if (isActiveRef.current && window.electronAPI?.setDocumentEdited) {
+          window.electronAPI.setDocumentEdited(hasCollabUnsyncedChanges(status));
+        }
         // Forward to CollabLexicalProvider
         collabProviderRef.current?.handleStatusChange(status);
+      },
+      initialPendingUpdateBase64: collabConfig.pendingUpdateBase64,
+      onPendingUpdateChange: async (pendingUpdateBase64) => {
+        await window.electronAPI.documentSync.setPendingUpdate(
+          collabConfig.workspacePath,
+          collabConfig.orgId,
+          collabConfig.documentId,
+          pendingUpdateBase64,
+        );
       },
       onRemoteUpdate: (origin) => {
         // Forward to CollabLexicalProvider
@@ -226,6 +244,9 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
       syncProvider.destroy();
       syncProviderRef.current = null;
       collabProviderRef.current = null;
+      if (isActiveRef.current && window.electronAPI?.setDocumentEdited) {
+        window.electronAPI.setDocumentEdited(false);
+      }
       // Clean up the atoms
       store.set(collabConnectionStatusAtom(filePath), 'disconnected');
       store.set(collabAwarenessAtom(filePath), new Map());

@@ -1,6 +1,11 @@
 import { useEffect } from 'react';
 import { logger } from '../utils/logger';
 import { store, editorDirtyAtom, makeEditorKey } from '@nimbalyst/runtime/store';
+import { isCollabUri } from '../utils/collabUri';
+import {
+  collabConnectionStatusAtom,
+  hasCollabUnsyncedChanges,
+} from '../store/atoms/collabEditor';
 
 interface UseWindowLifecycleProps {
   tabsRef: React.MutableRefObject<any>;
@@ -22,28 +27,43 @@ export function useWindowLifecycle({
 
     // Save on window close/reload
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      // Check if any tabs are dirty using Jotai atoms (source of truth)
-      const tabs = tabsRef.current?.tabs || [];
-      const hasDirtyTabs = tabs.some((tab: any) => {
+      const snapshot = tabsRef.current?.getSnapshot?.();
+      const tabs = snapshot
+        ? snapshot.tabOrder
+          .map((tabId: string) => snapshot.tabs.get(tabId))
+          .filter(Boolean)
+        : [];
+
+      // Check if any tabs are dirty or have collab updates pending.
+      const hasBlockingChanges = tabs.some((tab: any) => {
         if (!tab.filePath) return false;
         const editorKey = makeEditorKey(tab.filePath);
-        return store.get(editorDirtyAtom(editorKey));
+        if (store.get(editorDirtyAtom(editorKey))) {
+          return true;
+        }
+        if (!isCollabUri(tab.filePath)) {
+          return false;
+        }
+        const collabStatus = store.get(collabConnectionStatusAtom(tab.filePath));
+        return hasCollabUnsyncedChanges(collabStatus);
       });
-      const activeTab = tabsRef.current?.tabs?.find((t: any) => t.id === tabsRef.current?.activeTabId);
+      const activeTab = snapshot?.activeTabId
+        ? snapshot.tabs.get(snapshot.activeTabId)
+        : null;
       const isActiveTabDirty = activeTab?.filePath
         ? store.get(editorDirtyAtom(makeEditorKey(activeTab.filePath)))
         : false;
 
       // Save current tab content first
-      if (tabsRef.current && tabsRef.current.activeTabId && getContentRef.current) {
+      if (snapshot?.activeTabId && tabsRef.current?.updateTab && getContentRef.current) {
         const currentContent = getContentRef.current();
-        tabsRef.current.updateTab(tabsRef.current.activeTabId, {
+        tabsRef.current.updateTab(snapshot.activeTabId, {
           content: currentContent,
           isDirty: isActiveTabDirty
         });
       }
 
-      if (hasDirtyTabs) {
+      if (hasBlockingChanges) {
         console.log('[WINDOW CLOSE] Has unsaved changes');
         // This will show a dialog in Electron
         e.preventDefault();

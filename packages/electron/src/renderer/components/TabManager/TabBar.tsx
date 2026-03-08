@@ -1,6 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState, memo } from 'react';
 import { Tab } from './TabManager';
-import { useTabDirty, useTabHasUnacceptedChanges } from '../../hooks/useTabState';
+import {
+  useTabDirty,
+  useTabHasCollabUnsyncedChanges,
+  useTabHasUnacceptedChanges,
+} from '../../hooks/useTabState';
 import { CommonFileActions } from '../CommonFileActions';
 
 // Separate component for dirty indicator - subscribes to its own tab's dirty state
@@ -9,6 +13,7 @@ import { CommonFileActions } from '../CommonFileActions';
 // Memoized to prevent re-renders when parent re-renders but filePath hasn't changed
 const TabDirtyIndicator = memo<{ filePath: string }>(({ filePath }) => {
   const isDirty = useTabDirty(filePath);
+  const hasCollabUnsyncedChanges = useTabHasCollabUnsyncedChanges(filePath);
   const hasUnacceptedChanges = useTabHasUnacceptedChanges(filePath);
 
   if (hasUnacceptedChanges) {
@@ -19,6 +24,10 @@ const TabDirtyIndicator = memo<{ filePath: string }>(({ filePath }) => {
     return <span className="tab-dirty-indicator font-bold ml-0.5 text-[var(--nim-warning)]" title="Unsaved changes">•</span>;
   }
 
+  if (hasCollabUnsyncedChanges) {
+    return <span className="tab-dirty-indicator font-bold ml-0.5 text-orange-500" title="Collaborative changes not yet synced">•</span>;
+  }
+
   return null;
 });
 
@@ -26,9 +35,10 @@ const TabDirtyIndicator = memo<{ filePath: string }>(({ filePath }) => {
 // Memoized to prevent re-renders when parent re-renders
 const MenuItemDirtyIndicator = memo<{ filePath: string }>(({ filePath }) => {
   const isDirty = useTabDirty(filePath);
+  const hasCollabUnsyncedChanges = useTabHasCollabUnsyncedChanges(filePath);
   const hasUnacceptedChanges = useTabHasUnacceptedChanges(filePath);
 
-  if (hasUnacceptedChanges || isDirty) {
+  if (hasUnacceptedChanges || isDirty || hasCollabUnsyncedChanges) {
     return <> •</>;
   }
 
@@ -83,11 +93,12 @@ const TabItem: React.FC<TabItemProps> = ({
   onTabRef,
 }) => {
   const isDirty = useTabDirty(tab.filePath);
+  const hasCollabUnsyncedChanges = useTabHasCollabUnsyncedChanges(tab.filePath);
 
   return (
     <div
       ref={(el) => onTabRef(tab.id, el)}
-      className={`tab group flex items-center h-[30px] px-3 mr-px cursor-pointer relative min-w-[120px] max-w-[200px] shrink-0 rounded-t-md border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] transition-all duration-200 hover:bg-[var(--nim-bg-tertiary)] ${tab.id === activeTabId ? 'active z-[1] border-b-0 bg-[var(--nim-bg)]' : ''} ${isDirty ? 'dirty' : ''} ${tab.isPinned ? 'pinned min-w-[40px] max-w-[150px]' : ''} ${draggedIndex === index ? 'dragging opacity-50 cursor-grabbing' : ''} ${dragOverIndex === index ? 'drag-over border-l-2 border-l-[var(--nim-primary)]' : ''}`}
+      className={`tab group flex items-center h-[30px] px-3 mr-px cursor-pointer relative min-w-[120px] max-w-[200px] shrink-0 rounded-t-md border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] transition-all duration-200 hover:bg-[var(--nim-bg-tertiary)] ${tab.id === activeTabId ? 'active z-[1] border-b-0 bg-[var(--nim-bg)]' : ''} ${isDirty || hasCollabUnsyncedChanges ? 'dirty' : ''} ${tab.isPinned ? 'pinned min-w-[40px] max-w-[150px]' : ''} ${draggedIndex === index ? 'dragging opacity-50 cursor-grabbing' : ''} ${dragOverIndex === index ? 'drag-over border-l-2 border-l-[var(--nim-primary)]' : ''}`}
       data-tab-type={tab.isVirtual ? 'session' : 'document'}
       data-tab-id={tab.id}
       data-filename={tab.fileName}

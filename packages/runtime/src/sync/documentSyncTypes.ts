@@ -39,6 +39,20 @@ export interface DocumentSyncConfig {
   onStatusChange?: (status: DocumentSyncStatus) => void;
 
   /**
+   * Previously persisted local updates that have not been acknowledged by the
+   * server yet. Applied locally on startup so the editor can recover them.
+   */
+  initialPendingUpdateBase64?: string;
+
+  /**
+   * Called whenever the merged pending local update changes. The host can
+   * persist this blob so offline edits survive renderer/app restarts.
+   */
+  onPendingUpdateChange?: (
+    pendingUpdateBase64: string | null
+  ) => void | Promise<void>;
+
+  /**
    * Called when the review gate state changes (remote changes arrive or are accepted/rejected).
    * Allows UI to show pending review indicators.
    */
@@ -111,6 +125,8 @@ export type DocumentSyncStatus =
   | 'disconnected'
   | 'connecting'
   | 'syncing'
+  | 'replaying'
+  | 'offline-unsynced'
   | 'connected'
   | 'error';
 
@@ -147,7 +163,7 @@ export interface AwarenessState {
 /** Client -> Server messages */
 export type DocClientMessage =
   | { type: 'docSyncRequest'; sinceSeq: number }
-  | { type: 'docUpdate'; encryptedUpdate: string; iv: string }
+  | { type: 'docUpdate'; encryptedUpdate: string; iv: string; clientUpdateId?: string }
   | { type: 'docCompact'; encryptedState: string; iv: string; replacesUpTo: number }
   | { type: 'docAwareness'; encryptedState: string; iv: string }
   | { type: 'addKeyEnvelope'; targetUserId: string; wrappedKey: string; iv: string; senderPublicKey: string }
@@ -157,6 +173,7 @@ export type DocClientMessage =
 export type DocServerMessage =
   | DocSyncResponseMessage
   | DocUpdateBroadcastMessage
+  | DocUpdateAckMessage
   | DocAwarenessBroadcastMessage
   | DocKeyEnvelopeMessage
   | DocErrorMessage;
@@ -174,6 +191,12 @@ export interface DocUpdateBroadcastMessage {
   encryptedUpdate: string;
   iv: string;
   senderId: string;
+  sequence: number;
+}
+
+export interface DocUpdateAckMessage {
+  type: 'docUpdateAck';
+  clientUpdateId: string;
   sequence: number;
 }
 

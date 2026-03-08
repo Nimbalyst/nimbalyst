@@ -103,11 +103,16 @@ import {
   initializeElectronStorageBackend,
 } from './extensions/panels';
 import { setStorageBackend } from '@nimbalyst/runtime';
-import { store } from '@nimbalyst/runtime/store';
+import { store, editorDirtyAtom, makeEditorKey } from '@nimbalyst/runtime/store';
 import { extensionPanelAIContextAtom } from './store/atoms/extensionPanels';
 import { setDiffTreeGroupByDirectoryAtom, setAgentFileScopeModeAtom } from './store/atoms/projectState';
 import { toggleSessionHistoryCollapsedAtom } from './store/atoms/agentMode';
 import { setDeveloperFeatureSettingsAtom } from './store/atoms/appSettings';
+import { isCollabUri } from './utils/collabUri';
+import {
+  collabConnectionStatusAtom,
+  hasCollabUnsyncedChanges,
+} from './store/atoms/collabEditor';
 import {
   activeTrackerTypeAtom,
   trackerPanelOpenAtom,
@@ -634,6 +639,34 @@ export default function App() {
     getContentRef,
     currentFilePathRef,
   });
+
+  useEffect(() => {
+    if (!window.electronAPI?.setDocumentEdited) return;
+
+    const syncWindowEditedState = () => {
+      const snapshot = tabsRef.current?.getSnapshot?.();
+      const tabs = snapshot
+        ? snapshot.tabOrder
+          .map((tabId: string) => snapshot.tabs.get(tabId))
+          .filter(Boolean)
+        : [];
+
+      const hasUnsavedOrUnsyncedTabs = tabs.some((tab: any) => {
+        if (!tab?.filePath) return false;
+        const isDirty = store.get(editorDirtyAtom(makeEditorKey(tab.filePath)));
+        if (isDirty) return true;
+        if (!isCollabUri(tab.filePath)) return false;
+        const status = store.get(collabConnectionStatusAtom(tab.filePath));
+        return hasCollabUnsyncedChanges(status);
+      });
+
+      window.electronAPI?.setDocumentEdited(hasUnsavedOrUnsyncedTabs);
+    };
+
+    syncWindowEditedState();
+    const interval = setInterval(syncWindowEditedState, 500);
+    return () => clearInterval(interval);
+  }, []);
 
   // NOTE: useHMRStateRestoration removed - no longer needed now that TabEditor
   // manages all editor state and useTabs persists tabs to localStorage. During HMR, tabs will
@@ -1346,6 +1379,29 @@ export default function App() {
 
     const handleConfirmClose = async () => {
       console.log('[WINDOW CLOSE] Has unsaved changes');
+      const activeFilePath = currentFilePathRef.current;
+      const activeCollabStatus = activeFilePath && isCollabUri(activeFilePath)
+        ? store.get(collabConnectionStatusAtom(activeFilePath))
+        : null;
+      const activeCollabUnsynced = !!activeCollabStatus && hasCollabUnsyncedChanges(activeCollabStatus);
+
+      if (activeCollabUnsynced) {
+        const confirmed = await confirmDialog.confirm({
+          title: 'Unsynced Collaborative Changes',
+          message: activeCollabStatus === 'replaying'
+            ? 'This collaborative document is still replaying local changes to the server. Closing now may delay recovery until you reopen it.'
+            : 'This collaborative document has local changes that have not been confirmed by the server yet. Closing now will keep them queued locally, but they will not sync until you reopen the document and reconnect.',
+          confirmLabel: 'Close Anyway',
+          cancelLabel: 'Keep Editing',
+          destructive: true
+        });
+
+        if (confirmed) {
+          window.electronAPI?.send?.('close-window-discard');
+        }
+        return;
+      }
+
       const confirmed = await confirmDialog.confirm({
         title: 'Unsaved Changes',
         message: 'Do you want to save the changes you made? Your changes will be lost if you don\'t save them.',

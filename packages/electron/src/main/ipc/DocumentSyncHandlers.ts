@@ -11,7 +11,7 @@ import { logger } from '../utils/logger';
 import { isAuthenticated, getStytchUserId, getUserEmail, getAuthState } from '../services/StytchAuthService';
 import { findTeamForWorkspace, getOrgScopedJwt } from '../services/TeamService';
 import { getOrgKey, getOrCreateIdentityKeyPair, uploadIdentityKeyToOrg, fetchAndUnwrapOrgKey } from '../services/OrgKeyService';
-import { getSessionSyncConfig } from '../utils/store';
+import { getSessionSyncConfig, getWorkspaceState, updateWorkspaceState } from '../utils/store';
 import WebSocket from 'ws';
 
 // WebSocket proxy: browser WebSocket to sync.nimbalyst.com fails due to
@@ -22,6 +22,10 @@ let wsIdCounter = 0;
 
 const PRODUCTION_SYNC_URL = 'wss://sync.nimbalyst.com';
 const DEVELOPMENT_SYNC_URL = 'ws://localhost:8790';
+
+function getCollabPendingKey(orgId: string, documentId: string): string {
+  return `org:${orgId}:doc:${documentId}`;
+}
 
 function getSyncWsUrl(): string {
   const config = getSessionSyncConfig();
@@ -90,6 +94,9 @@ export function registerDocumentSyncHandlers(): void {
     const orgKeyBase64 = Buffer.from(rawBytes).toString('base64');
 
     const serverUrl = getSyncWsUrl();
+    const pendingKey = getCollabPendingKey(orgId, payload.documentId);
+    const pendingUpdateBase64 = getWorkspaceState(payload.workspacePath)
+      .collabPendingUpdates?.[pendingKey]?.mergedUpdateBase64;
 
     logger.main.info('[DocumentSyncHandlers] Resolved collab config', {
       orgId,
@@ -109,8 +116,30 @@ export function registerDocumentSyncHandlers(): void {
         userId,
         userName: getUserDisplayName(userId),
         userEmail: getUserEmail() || undefined,
+        pendingUpdateBase64,
       },
     };
+  });
+
+  safeHandle('document-sync:set-pending-update', async (_event, payload: {
+    workspacePath: string;
+    orgId: string;
+    documentId: string;
+    pendingUpdateBase64: string | null;
+  }) => {
+    const pendingKey = getCollabPendingKey(payload.orgId, payload.documentId);
+    updateWorkspaceState(payload.workspacePath, state => {
+      state.collabPendingUpdates ??= {};
+      if (!payload.pendingUpdateBase64) {
+        delete state.collabPendingUpdates[pendingKey];
+        return;
+      }
+      state.collabPendingUpdates[pendingKey] = {
+        mergedUpdateBase64: payload.pendingUpdateBase64,
+        updatedAt: Date.now(),
+      };
+    });
+    return { success: true };
   });
 
   /**
