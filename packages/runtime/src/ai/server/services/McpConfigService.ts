@@ -158,6 +158,22 @@ export class McpConfigService {
    */
   private async processServerConfig(serverName: string, serverConfig: any): Promise<any> {
     const processedConfig = { ...serverConfig };
+    const transportType = processedConfig.type === 'sse' || processedConfig.type === 'http'
+      ? processedConfig.type
+      : 'stdio';
+
+    // Normalize transport-specific fields so stale config data does not leak
+    // into downstream providers. Codex flattens config overrides into
+    // repeated `--config a.b.c=value` flags and rejects mixed stdio/remote
+    // fields like `command` + `url` on the same server.
+    processedConfig.type = transportType;
+    if (transportType === 'stdio') {
+      delete processedConfig.url;
+      delete processedConfig.headers;
+    } else {
+      delete processedConfig.command;
+      delete processedConfig.args;
+    }
 
     // Load environment for variable expansion
     const env = await this.loadEnvironmentForExpansion();
@@ -172,14 +188,14 @@ export class McpConfigService {
 
     // For stdio transport, expand env vars in args
     // This is critical for Windows where shell doesn't expand ${VAR} syntax
-    if (processedConfig.type !== 'sse' && processedConfig.args && Array.isArray(processedConfig.args)) {
+    if (transportType === 'stdio' && processedConfig.args && Array.isArray(processedConfig.args)) {
       processedConfig.args = processedConfig.args.map((arg: string) =>
         typeof arg === 'string' ? this.expandEnvVar(arg, combinedEnv) : arg
       );
     }
 
     // For SSE transport, convert env vars to headers (SDK requirement)
-    if (processedConfig.type === 'sse' && processedConfig.env) {
+    if (transportType === 'sse' && processedConfig.env) {
       processedConfig.headers = processedConfig.headers || {};
 
       // Convert API keys from env to Authorization headers

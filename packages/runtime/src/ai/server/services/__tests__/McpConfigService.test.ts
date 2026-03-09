@@ -280,6 +280,29 @@ describe('McpConfigService', () => {
 
       consoleErrorSpy.mockRestore();
     });
+
+    it('should strip stale remote fields from stdio servers', async () => {
+      mockDeps.mcpConfigLoader = async () => ({
+        supabase: {
+          type: 'stdio',
+          command: 'npx',
+          args: ['-y', '@supabase/mcp'],
+          url: 'https://stale.example.com/mcp',
+          headers: {
+            Authorization: 'Bearer stale-token',
+          },
+        },
+      });
+
+      service = new McpConfigService(mockDeps);
+      const config = await service.getMcpServersConfig({ workspacePath: '/test' });
+
+      expect(config.supabase).toEqual({
+        type: 'stdio',
+        command: 'npx',
+        args: ['-y', '@supabase/mcp'],
+      });
+    });
   });
 
   describe('SSE Server Config Processing', () => {

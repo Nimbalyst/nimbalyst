@@ -1410,8 +1410,12 @@ export class OpenAICodexProvider extends BaseAgentProvider {
       ? serverConfig.type.toLowerCase()
       : (typeof serverConfig.transport === 'string' ? serverConfig.transport.toLowerCase() : '');
 
-    const isRemoteServer = configTypeRaw === 'sse' || configTypeRaw === 'http' || typeof serverConfig.url === 'string';
-    if (isRemoteServer) {
+    const isExplicitRemoteServer = configTypeRaw === 'sse' || configTypeRaw === 'http';
+    const isExplicitStdioServer = configTypeRaw === 'stdio';
+    const hasUrl = typeof serverConfig.url === 'string' && serverConfig.url.length > 0;
+    const hasCommand = typeof serverConfig.command === 'string' && serverConfig.command.length > 0;
+
+    if (isExplicitRemoteServer || (!isExplicitStdioServer && hasUrl && !hasCommand)) {
       if (typeof serverConfig.url !== 'string' || serverConfig.url.length === 0) {
         return null;
       }
@@ -1440,7 +1444,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
       return remoteConfig;
     }
 
-    if (typeof serverConfig.command !== 'string' || serverConfig.command.length === 0) {
+    if (!hasCommand) {
       return null;
     }
 

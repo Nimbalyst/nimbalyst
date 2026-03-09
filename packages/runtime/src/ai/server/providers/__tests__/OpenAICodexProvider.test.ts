@@ -713,6 +713,72 @@ describe('OpenAICodexProvider', () => {
     expect(chunks.some((chunk) => chunk.type === 'complete')).toBe(true);
   });
 
+  it('keeps explicit stdio servers as stdio when stale url fields are present', async () => {
+    let codexConstructorOptions: Record<string, any> | undefined;
+
+    OpenAICodexProvider.setMCPConfigLoader(async () => ({
+      supabase: {
+        type: 'stdio',
+        command: 'npx',
+        args: ['-y', '@supabase/mcp'],
+        url: 'https://stale.example.com/mcp',
+      },
+    }));
+
+    const runStreamed = vi.fn(async () => ({
+      threadId: 'thread-stdio-normalized',
+      events: createAsyncEventStream([
+        {
+          type: 'item.completed',
+          item: {
+            type: 'agent_message',
+            text: 'normalized',
+          },
+        },
+      ]),
+    }));
+
+    const provider = new OpenAICodexProvider(
+      { apiKey: 'test-key' },
+      {
+        loadSdkModule: async () =>
+          ({
+            Codex: class {
+              constructor(options?: Record<string, unknown>) {
+                codexConstructorOptions = options as Record<string, any>;
+              }
+              startThread() {
+                return {
+                  id: 'thread-stdio-normalized',
+                  runStreamed,
+                };
+              }
+              resumeThread() {
+                return {
+                  id: 'thread-stdio-normalized',
+                  runStreamed,
+                };
+              }
+            },
+          }) as any,
+      }
+    );
+
+    await provider.initialize({
+      apiKey: 'test-key',
+      model: 'openai-codex:gpt-5',
+    });
+
+    for await (const _chunk of provider.sendMessage('normalize mcp', undefined, 'session-stdio-normalized', [], process.cwd())) {
+      // drain
+    }
+
+    expect(codexConstructorOptions?.config?.mcp_servers?.supabase).toEqual({
+      command: 'npx',
+      args: ['-y', '@supabase/mcp'],
+    });
+  });
+
   it('resumes an existing provider thread when provider session data is restored', async () => {
     const resumeThread = vi.fn(() => ({
       id: 'thread-resume',

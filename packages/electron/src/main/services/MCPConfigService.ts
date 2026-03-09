@@ -729,13 +729,38 @@ export class MCPConfigService {
   }
 
   /**
+   * Drop fields that do not belong to the selected transport.
+   * This keeps stale values from edited/manual configs from leaking into
+   * downstream agent config generation.
+   */
+  private normalizeTransportFields(serverConfig: MCPServerConfig): MCPServerConfig {
+    const transportType = serverConfig.type === 'sse' || serverConfig.type === 'http'
+      ? serverConfig.type
+      : 'stdio';
+
+    if (transportType === 'stdio') {
+      const { url: _url, headers: _headers, ...rest } = serverConfig;
+      return {
+        ...rest,
+        type: transportType,
+      };
+    }
+
+    const { command: _command, args: _args, ...rest } = serverConfig;
+    return {
+      ...rest,
+      type: transportType,
+    };
+  }
+
+  /**
    * Process a server config for runtime use.
    * On Windows, converts npm/npx/etc commands to their .cmd equivalents.
    * Transparently wraps HTTP transport with mcp-remote.
    */
   processServerConfigForRuntime(serverConfig: MCPServerConfig): MCPServerConfig {
     // First, convert HTTP to stdio with mcp-remote wrapper
-    let config = this.convertHttpToStdio(serverConfig);
+    let config = this.normalizeTransportFields(this.convertHttpToStdio(serverConfig));
 
     // Only process stdio servers with a command
     if (config.type === 'sse' || !config.command) {
