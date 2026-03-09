@@ -54,6 +54,10 @@ export function joinCollabPath(parentPath: string | null | undefined, name: stri
   return `${parent}/${child}`;
 }
 
+export function renameCollabDocumentPath(path: string, name: string): string {
+  return joinCollabPath(getCollabParentPath(path), name);
+}
+
 export function getCollabDocumentPath(document: SharedDocument): string {
   return normalizeCollabPath(document.title || document.documentId);
 }

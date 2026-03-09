@@ -17,7 +17,12 @@ export { StravuEditor, type StravuEditorProps } from './StravuEditor';
 export { default as Editor } from './Editor';
 
 // Configuration
-export { type EditorConfig, DEFAULT_EDITOR_CONFIG, type Theme as ConfigTheme } from './EditorConfig';
+export {
+  type EditorConfig,
+  type UploadedEditorAsset,
+  DEFAULT_EDITOR_CONFIG,
+  type Theme as ConfigTheme,
+} from './EditorConfig';
 
 // Hooks
 export { useFlashMessage } from './hooks/useFlashMessage';

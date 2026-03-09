@@ -57,6 +57,10 @@ database_id = "c3b3979d-e20c-4547-a103-91c1a0b32388"
 binding = "SESSION_SHARES"
 bucket_name = "nimbalyst-session-shares"
 
+[[r2_buckets]]
+binding = "DOCUMENT_ASSETS"
+bucket_name = "nimbalyst-document-assets"
+
 # Observability - enables logs, traces, and metrics in Cloudflare dashboard
 [observability]
 enabled = true
@@ -112,6 +116,10 @@ class_name = "TeamRoom"
 [[env.production.r2_buckets]]
 binding = "SESSION_SHARES"
 bucket_name = "nimbalyst-session-shares"
+
+[[env.production.r2_buckets]]
+binding = "DOCUMENT_ASSETS"
+bucket_name = "nimbalyst-document-assets"
 
 # Production D1 Database
 [[env.production.d1_databases]]

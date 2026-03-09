@@ -22,6 +22,11 @@ import { parseAuth as parseAuthJWT, type AuthConfig, type AuthResult } from './a
 import { handleShareUpload, handleShareView, handleShareContent, handleShareList, handleShareDelete } from './share';
 import { handleAccountDeletion } from './accountDeletion';
 import {
+  handleDeleteDocumentAsset,
+  handleGetDocumentAsset,
+  handleUploadDocumentAsset,
+} from './documentAssets';
+import {
   handleCreateTeam,
   handleListTeams,
   handleListMembers,
@@ -132,13 +137,32 @@ function isOriginAllowed(origin: string | null, env: Env): boolean {
  */
 function getCorsHeaders(request: Request, env: Env): Record<string, string> {
   const origin = request.headers.get('Origin');
+  const allowedHeaders = [
+    'Content-Type',
+    'Authorization',
+    'X-Collab-Asset-Iv',
+    'X-Collab-Asset-Metadata',
+    'X-Collab-Asset-Metadata-Iv',
+    'X-Collab-Asset-Mime-Type',
+    'X-Collab-Asset-Plaintext-Size',
+  ].join(', ');
+  const exposedHeaders = [
+    'Content-Type',
+    'Content-Length',
+    'X-Collab-Asset-Iv',
+    'X-Collab-Asset-Metadata',
+    'X-Collab-Asset-Metadata-Iv',
+    'X-Collab-Asset-Mime-Type',
+    'X-Collab-Asset-Plaintext-Size',
+  ].join(', ');
 
   if (isOriginAllowed(origin, env)) {
     return {
       'Access-Control-Allow-Origin': origin!,
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Headers': allowedHeaders,
       'Access-Control-Allow-Credentials': 'true',
+      'Access-Control-Expose-Headers': exposedHeaders,
     };
   }
 
@@ -146,7 +170,8 @@ function getCorsHeaders(request: Request, env: Env): Record<string, string> {
   // We still include the methods/headers for preflight, but no Allow-Origin
   return {
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Headers': allowedHeaders,
+    'Access-Control-Expose-Headers': exposedHeaders,
   };
 }
 
@@ -436,6 +461,21 @@ async function handleApiRequest(
   // POST /api/account/delete - Delete user account and all data
   if (url.pathname === '/api/account/delete' && request.method === 'POST') {
     return handleAccountDeletion(auth, env, corsHeaders);
+  }
+
+  const docAssetMatch = url.pathname.match(/^\/api\/collab\/docs\/([^/]+)\/assets\/([^/]+)$/);
+  if (docAssetMatch) {
+    const [, documentId, assetId] = docAssetMatch;
+    if (request.method === 'PUT') {
+      return handleUploadDocumentAsset(request, env, auth, corsHeaders, documentId, assetId);
+    }
+    if (request.method === 'GET') {
+      return handleGetDocumentAsset(request, env, auth, corsHeaders, documentId, assetId);
+    }
+    if (request.method === 'DELETE') {
+      return handleDeleteDocumentAsset(request, env, auth, corsHeaders, documentId, assetId);
+    }
+    return new Response('Method Not Allowed', { status: 405, headers: corsHeaders });
   }
 
   // ========================================================================

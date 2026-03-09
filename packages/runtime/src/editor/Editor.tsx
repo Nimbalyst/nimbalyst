@@ -76,6 +76,7 @@ import CommentPlugin from "./plugins/CommentPlugin";
 // FloatingDocumentActionsPlugin removed - functionality moved to UnifiedEditorHeaderBar in TabEditor
 import AutoLinkPlugin from './plugins/AutoLinkPlugin';
 import { CollaborationPlugin } from '@lexical/react/LexicalCollaborationPlugin';
+import AssetLinkPlugin from './plugins/AssetLinkPlugin';
 
 
 interface EditorProps {
@@ -247,7 +248,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
         className={`editor-container ${(runtimeSettings.settings.showTreeView || config.showTreeView) ? 'tree-view' : ''} ${
           !isRichText ? 'plain-text' : ''
         }`}>
-        <DragDropPaste />
+        <DragDropPaste uploadAsset={config.onUploadAsset} />
         {selectionAlwaysOnDisplay && <SelectionAlwaysOnDisplay />}
         <ClearEditorPlugin />
         {floatingAnchorElem && <ComponentPickerPlugin anchorElem={floatingAnchorElem} />}
@@ -306,9 +307,12 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
             <ImagesPlugin
               onImageDoubleClick={config.onImageDoubleClick}
               onImageDragStart={config.onImageDragStart}
+              onUploadAsset={config.onUploadAsset}
+              resolveImageSrc={config.resolveImageSrc}
             />
             <LinkPlugin hasLinkAttributes={hasLinkAttributes} />
             <ClickableLinkPlugin disabled={isEditable} />
+            <AssetLinkPlugin onOpenAssetLink={config.onOpenAssetLink} />
             <HorizontalRulePlugin />
             <TabFocusPlugin />
             <TabIndentationPlugin maxIndent={7} />

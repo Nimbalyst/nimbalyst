@@ -32,6 +32,7 @@ import {
   hasCollabUnsyncedChanges,
   type RemoteUser,
 } from '../../store/atoms/collabEditor';
+import { CollabAssetService } from '../../services/CollabAssetService';
 
 interface CollaborativeTabEditorProps {
   /** The collab:// URI for this document */
@@ -160,6 +161,7 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
   const collabProviderRef = useRef<CollabLexicalProvider | null>(null);
   const isActiveRef = useRef(isActive);
   const cursorColor = useMemo(() => randomCursorColor(), []);
+  const assetService = useMemo(() => new CollabAssetService(collabConfig), [collabConfig]);
   // providerReady flips once from false->true. Using a ref + forceUpdate
   // avoids the render loop from useState. We only need one re-render to
   // mount MarkdownEditor, then never again.
@@ -282,6 +284,12 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [providerFactory, collabConfig.initialContent, collabConfig.userName, collabConfig.userId, cursorColor]);
 
+  const markdownConfig = useMemo(() => ({
+    onUploadAsset: (file: File) => assetService.uploadFile(file),
+    resolveImageSrc: (src: string) => assetService.resolveImageSrc(src),
+    onOpenAssetLink: (href: string) => assetService.openAssetLink(href),
+  }), [assetService]);
+
   // Create a minimal EditorHost for collaboration mode
   // Most operations are no-ops since content syncs via Y.Doc
   const editorHost = useMemo((): EditorHost => {
@@ -359,6 +367,12 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
     }
   }, [onManualSaveReady]);
 
+  useEffect(() => {
+    return () => {
+      assetService.dispose();
+    };
+  }, [assetService]);
+
   return (
     <div className="collaborative-tab-editor" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Connection status bar -- subscribes to Jotai atom, isolated re-renders */}
@@ -369,6 +383,7 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
         {providerReadyRef.current ? (
           <MarkdownEditor
             host={editorHost}
+            config={markdownConfig}
             onGetContent={onGetContentReady}
             collaborationConfig={collaborationMemoConfig}
           />

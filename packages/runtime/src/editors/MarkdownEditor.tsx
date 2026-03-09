@@ -15,7 +15,14 @@
  */
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { StravuEditor, type EditorConfig, type ConfigTheme, $convertFromEnhancedMarkdownString, getEditorTransformers } from '../editor';
+import {
+  StravuEditor,
+  type EditorConfig,
+  type ConfigTheme,
+  type UploadedEditorAsset,
+  $convertFromEnhancedMarkdownString,
+  getEditorTransformers,
+} from '../editor';
 import type { EditorHost } from '../extensions/editorHost';
 import { $getRoot } from 'lexical';
 
@@ -40,6 +47,15 @@ export interface MarkdownEditorConfig {
 
   /** Callback when user starts dragging an image */
   onImageDragStart?: (src: string, event: DragEvent) => void;
+
+  /** Upload a dropped/pasted asset and return the inserted editor payload. */
+  onUploadAsset?: (file: File) => Promise<UploadedEditorAsset>;
+
+  /** Resolve editor image sources to browser-openable URLs. */
+  resolveImageSrc?: (src: string) => Promise<string | null>;
+
+  /** Open an attachment link rendered in the editor. */
+  onOpenAssetLink?: (href: string) => Promise<void> | void;
 
   /** Callback to rename document */
   onRenameDocument?: () => void;
@@ -239,6 +255,9 @@ export function MarkdownEditor({
       documentHeader: config.documentHeader,
       onImageDoubleClick: config.onImageDoubleClick,
       onImageDragStart: config.onImageDragStart,
+      onUploadAsset: config.onUploadAsset,
+      resolveImageSrc: config.resolveImageSrc,
+      onOpenAssetLink: config.onOpenAssetLink,
       onViewHistory: handleViewHistory,
       onRenameDocument: config.onRenameDocument,
       onSwitchToAgentMode: config.onSwitchToAgentMode,
@@ -286,6 +305,9 @@ export function MarkdownEditor({
       config.documentHeader,
       config.onImageDoubleClick,
       config.onImageDragStart,
+      config.onUploadAsset,
+      config.resolveImageSrc,
+      config.onOpenAssetLink,
       config.onRenameDocument,
       config.onSwitchToAgentMode,
       config.onOpenSessionInChat,

@@ -7,12 +7,21 @@
  */
 
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
+import {$createLinkNode} from '@lexical/link';
 import {DRAG_DROP_PASTE} from '@lexical/rich-text';
-import {isMimeType} from '@lexical/utils';
-import {COMMAND_PRIORITY_HIGH, PASTE_COMMAND} from 'lexical';
+import {$wrapNodeInElement, isMimeType} from '@lexical/utils';
+import {
+  $createParagraphNode,
+  $createTextNode,
+  $insertNodes,
+  $isRootOrShadowRoot,
+  COMMAND_PRIORITY_HIGH,
+  LexicalEditor,
+} from 'lexical';
 import {useEffect} from 'react';
 
 import {INSERT_IMAGE_COMMAND} from '../ImagesPlugin';
+import type { UploadedEditorAsset } from '../../EditorConfig';
 
 const ACCEPTABLE_IMAGE_TYPES = [
   'image/',
@@ -62,7 +71,34 @@ async function processImageFile(file: File): Promise<string> {
   });
 }
 
-export default function DragDropPaste(): null {
+function insertUploadedAsset(
+  editor: LexicalEditor,
+  file: File,
+  asset: UploadedEditorAsset
+): void {
+  if (asset.kind === 'image') {
+    editor.dispatchCommand(INSERT_IMAGE_COMMAND, {
+      altText: asset.altText ?? file.name,
+      src: asset.src,
+    });
+    return;
+  }
+
+  editor.update(() => {
+    const linkNode = $createLinkNode(asset.src);
+    linkNode.append($createTextNode(asset.name ?? file.name));
+    $insertNodes([linkNode]);
+    if ($isRootOrShadowRoot(linkNode.getParentOrThrow())) {
+      $wrapNodeInElement(linkNode, $createParagraphNode).selectEnd();
+    }
+  });
+}
+
+export default function DragDropPaste({
+  uploadAsset,
+}: {
+  uploadAsset?: (file: File) => Promise<UploadedEditorAsset>;
+}): null {
   const [editor] = useLexicalComposerContext();
   useEffect(() => {
     // Handle DRAG_DROP_PASTE command that's dispatched by RichTextPlugin
@@ -73,6 +109,12 @@ export default function DragDropPaste(): null {
         (async () => {
           // Process each file
           for (const file of files) {
+            if (uploadAsset) {
+              const asset = await uploadAsset(file);
+              insertUploadedAsset(editor, file, asset);
+              continue;
+            }
+
             if (isMimeType(file, ACCEPTABLE_IMAGE_TYPES)) {
               const src = await processImageFile(file);
               editor.dispatchCommand(INSERT_IMAGE_COMMAND, {
@@ -86,6 +128,6 @@ export default function DragDropPaste(): null {
       },
       COMMAND_PRIORITY_HIGH,
     );
-  }, [editor]);
+  }, [editor, uploadAsset]);
   return null;
 }

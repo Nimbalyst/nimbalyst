@@ -162,10 +162,12 @@ export class DocumentSyncProvider {
   private queuedPendingUpdate: Uint8Array | null = null;
   private inflightPendingUpdate: Uint8Array | null = null;
   private pendingPersistTimer: ReturnType<typeof setTimeout> | null = null;
+  private replayAckTimer: ReturnType<typeof setTimeout> | null = null;
   private replayingClientUpdateId: string | null = null;
   private surfaceReplayStatus = false;
   private static readonly RECONNECT_BASE_MS = 1000;
   private static readonly RECONNECT_MAX_MS = 30_000;
+  private static readonly REPLAY_ACK_TIMEOUT_MS = 10_000;
 
   constructor(config: DocumentSyncConfig) {
     this.config = config;
@@ -265,6 +267,7 @@ export class DocumentSyncProvider {
    */
   disconnect(): void {
     this.cancelReconnect();
+    this.clearReplayAckTimer();
     this.connecting = false;
     this.suppressReconnect = true;
     this.requeueInflightPendingUpdate();
@@ -704,6 +707,10 @@ export class DocumentSyncProvider {
     }
   }
 
+  private getRoomId(): string {
+    return `org:${this.config.orgId}:doc:${this.config.documentId}`;
+  }
+
   private enqueuePendingLocalUpdate(update: Uint8Array): void {
     this.queuedPendingUpdate = this.queuedPendingUpdate
       ? Y.mergeUpdates([this.queuedPendingUpdate, update])
@@ -781,13 +788,23 @@ export class DocumentSyncProvider {
       } else {
         this.setStatus('connected');
       }
+      console.log(
+        '[DocumentSync] Replaying pending update for room:',
+        this.getRoomId(),
+        'clientUpdateId:',
+        clientUpdateId,
+        'bytes:',
+        pendingUpdate.length
+      );
       this.send({
         type: 'docUpdate',
         encryptedUpdate: encrypted,
         iv,
         clientUpdateId,
       });
+      this.scheduleReplayAckTimeout(clientUpdateId);
     } catch (err) {
+      this.clearReplayAckTimer();
       console.error('[DocumentSync] Failed to replay pending local update:', err);
       if (this.inflightPendingUpdate) {
         this.queuedPendingUpdate = this.queuedPendingUpdate
@@ -808,6 +825,15 @@ export class DocumentSyncProvider {
       return;
     }
 
+    console.log(
+      '[DocumentSync] Received docUpdateAck for room:',
+      this.getRoomId(),
+      'clientUpdateId:',
+      msg.clientUpdateId,
+      'sequence:',
+      msg.sequence
+    );
+    this.clearReplayAckTimer();
     this.finishReplayingPendingUpdate();
   }
 
@@ -840,6 +866,7 @@ export class DocumentSyncProvider {
   private handleDisconnect(): void {
     const shouldReconnect = !this.suppressReconnect;
     this.suppressReconnect = false;
+    this.clearReplayAckTimer();
     this.ws = null;
     this.synced = false;
     this.connecting = false;
@@ -877,6 +904,7 @@ export class DocumentSyncProvider {
   }
 
   private requeueInflightPendingUpdate(): void {
+    this.clearReplayAckTimer();
     if (!this.inflightPendingUpdate) {
       this.surfaceReplayStatus = false;
       return;
@@ -891,6 +919,7 @@ export class DocumentSyncProvider {
   }
 
   private finishReplayingPendingUpdate(): void {
+    this.clearReplayAckTimer();
     this.inflightPendingUpdate = null;
     this.replayingClientUpdateId = null;
     this.surfaceReplayStatus = false;
@@ -930,6 +959,52 @@ export class DocumentSyncProvider {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
+    }
+  }
+
+  private scheduleReplayAckTimeout(clientUpdateId: string): void {
+    this.clearReplayAckTimer();
+    this.replayAckTimer = setTimeout(() => {
+      this.replayAckTimer = null;
+
+      if (this.replayingClientUpdateId !== clientUpdateId) {
+        return;
+      }
+
+      console.warn(
+        '[DocumentSync] Timed out waiting for docUpdateAck, forcing reconnect for pending replay',
+        {
+          roomId: this.getRoomId(),
+          clientUpdateId,
+          hasQueuedPendingUpdate: !!this.queuedPendingUpdate,
+          hasInflightPendingUpdate: !!this.inflightPendingUpdate,
+          lastSeq: this.lastSeq,
+        }
+      );
+      this.setStatus('offline-unsynced');
+
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        try {
+          this.ws.close();
+        } catch (err) {
+          console.error('[DocumentSync] Failed to close WebSocket after replay timeout:', err);
+          this.requeueInflightPendingUpdate();
+          this.synced = false;
+          this.scheduleReconnect();
+        }
+        return;
+      }
+
+      this.requeueInflightPendingUpdate();
+      this.synced = false;
+      this.scheduleReconnect();
+    }, DocumentSyncProvider.REPLAY_ACK_TIMEOUT_MS);
+  }
+
+  private clearReplayAckTimer(): void {
+    if (this.replayAckTimer) {
+      clearTimeout(this.replayAckTimer);
+      this.replayAckTimer = null;
     }
   }
 

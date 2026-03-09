@@ -15,6 +15,13 @@ import type { Doc } from 'yjs';
  */
 export type Theme = 'light' | 'dark' | 'auto' | (string & {});
 
+export interface UploadedEditorAsset {
+  kind: 'image' | 'file';
+  src: string;
+  name?: string;
+  altText?: string;
+}
+
 
 /**
  * Removed features that are either incomplete, or not appropriate for an editor targeting markdown compatibility
@@ -124,6 +131,9 @@ export interface EditorConfig {
   // Image interaction callbacks (platform-specific)
   onImageDoubleClick?: (src: string, nodeKey: NodeKey) => void;
   onImageDragStart?: (src: string, event: DragEvent) => void;
+  onUploadAsset?: (file: File) => Promise<UploadedEditorAsset>;
+  resolveImageSrc?: (src: string) => Promise<string | null>;
+  onOpenAssetLink?: (href: string) => Promise<void> | void;
 
   // Document header - renders at the top of the editor scroll pane
   documentHeader?: ReactNode;

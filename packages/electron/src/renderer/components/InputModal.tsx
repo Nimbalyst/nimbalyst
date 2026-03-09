@@ -6,6 +6,7 @@ interface InputModalProps {
   placeholder: string;
   defaultValue?: string;
   suffix?: string;
+  confirmLabel?: string;
   onConfirm: (value: string) => void;
   onCancel: () => void;
 }
@@ -16,6 +17,7 @@ export function InputModal({
   placeholder,
   defaultValue = '',
   suffix,
+  confirmLabel = 'Create',
   onConfirm,
   onCancel
 }: InputModalProps) {
@@ -89,7 +91,7 @@ export function InputModal({
               className="input-modal-button input-modal-confirm nim-btn-primary px-4 py-1.5 text-sm"
               disabled={!value.trim()}
             >
-              Create
+              {confirmLabel}
             </button>
           </div>
         </form>

@@ -6,6 +6,7 @@ import {
   getCollabParentPath,
   joinCollabPath,
   normalizeCollabPath,
+  renameCollabDocumentPath,
 } from '../collabTree';
 import type { SharedDocument } from '../../../store/atoms/collabDocuments';
 
@@ -36,6 +37,11 @@ describe('collabTree', () => {
     expect(getCollabParentPath('Specs/Deprecated/Auth')).toBe('Specs/Deprecated');
     expect(getCollabParentPath('Specs')).toBeNull();
     expect(getCollabNodeName('Specs/Deprecated/Auth')).toBe('Auth');
+  });
+
+  it('renames a document while preserving its parent folder', () => {
+    expect(renameCollabDocumentPath('Specs/Deprecated/Auth', 'Legacy Auth')).toBe('Specs/Deprecated/Legacy Auth');
+    expect(renameCollabDocumentPath('Roadmap', 'Q2 Roadmap')).toBe('Q2 Roadmap');
   });
 
   it('builds nested folders from slash-delimited document titles', () => {

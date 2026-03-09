@@ -17,8 +17,8 @@ planStatus:
     - agent-tools
     - recovery
   created: "2026-03-07"
-  updated: "2026-03-07T00:00:00.000Z"
-  progress: 0
+  updated: "2026-03-08T00:00:00.000Z"
+  progress: 10
 ---
 # Collaborative Document MVP Completion
 
@@ -35,6 +35,12 @@ planStatus:
 - [ ] Add end-to-end tests for offline, reconnect, history, rename, and agent flows
 - [ ] Add observability for queue depth, replay success, sync failures, and recovery events
 
+### Recent Updates
+
+- 2026-03-08: Added sidebar rename for collaborative documents with a rename modal that preserves folder paths.
+- 2026-03-08: Sidebar create, rename, move, and delete operations now block when team sync is not fully connected instead of implying server success.
+- Remaining lifecycle work in this workstream is stable identity, share/create flow hardening, broader offline policy coverage, and test coverage.
+
 ## Goals
 
 1. Make collaborative documents safe enough for ongoing alpha use by eliminating silent data loss.
@@ -50,7 +56,7 @@ The current collaborative document path is functional for happy-path live editin
 - The collaborative editor intentionally skips autosave, history snapshots, and conflict UI.
 - Local Yjs updates are only sent while the WebSocket is open.
 - Reconnect only pushes local state automatically when the server has no prior state, which means edits made while disconnected to an existing document can be stranded.
-- Collaborative document rename exists at the protocol/index layer but is not exposed as a direct user action in the sidebar.
+- Collaborative document rename is now exposed in the sidebar, but the broader document lifecycle remains incomplete.
 - Existing document-history infrastructure is not wired to collaborative documents.
 - Agent-facing document tools operate on filesystem paths, not collaborative document identities.
 
@@ -71,7 +77,7 @@ This is sufficient for a prototype, but not for an alpha feature where users exp
 - No durable local outbox for offline collaborative edits.
 - No persisted recovery state for unsynced collaborative changes.
 - No version history or restore flow for collaborative documents.
-- No direct rename action in the collaborative document sidebar.
+- Rename now exists in the collaborative document sidebar, but lifecycle hardening is still incomplete.
 - No clear distinction between safe and unsafe editing states.
 - No collaborative document MCP tools.
 - No alpha ship bar or test matrix for failure scenarios.
@@ -104,6 +110,7 @@ Collaborative documents are MVP-complete when all of the following are true:
 - Full collaborator review-gate UI parity with AI diff review
 - Long-term archival and legal retention policy beyond MVP-safe defaults
 - Rich non-markdown collaborative document types
+- Binary attachments and embedded asset synchronization for collaborative documents (tracked separately in `plans/collab-document-attachments.md`)
 
 ## Workstream 1: Safety and Connection Truth
 
@@ -200,9 +207,21 @@ Make collaborative documents behave like normal documents for basic operations.
 - Protocol support for title updates already exists; this work is primarily UX, lifecycle policy, and identity hardening.
 - Current local optimistic updates for collaborative document index mutations should not imply server success when disconnected.
 
+### Status Update
+
+- Shipped on 2026-03-08:
+  - sidebar context-menu rename action
+  - keyboard-friendly rename modal
+  - sidebar metadata-operation blocking unless `TeamSync` is `connected`
+- Remaining:
+  - make move behavior more explicit and discoverable
+  - replace title-derived identity assumptions
+  - audit share/create flows for same-name collisions
+  - decide whether non-sidebar metadata entry points need the same offline policy
+
 ### Acceptance Criteria
 
-- [ ] Users can rename a collaborative document from the sidebar.
+- [x] Users can rename a collaborative document from the sidebar.
 - [ ] Users can move documents between folders without inconsistent local/server state.
 - [ ] Collaborative documents have stable IDs independent of title/path.
 - [ ] Same-named documents from different local origins do not collide.

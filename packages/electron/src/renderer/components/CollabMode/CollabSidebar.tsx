@@ -4,6 +4,7 @@ import { MaterialSymbol } from '@nimbalyst/runtime';
 import { InputModal } from '../InputModal';
 import {
   sharedDocumentsAtom,
+  teamSyncStatusAtom,
   removeSharedDocument,
   updateSharedDocumentTitle,
   type SharedDocument,
@@ -15,6 +16,7 @@ import {
   getCollabParentPath,
   joinCollabPath,
   normalizeCollabPath,
+  renameCollabDocumentPath,
   type CollabTreeNode,
 } from './collabTree';
 import { registerDocumentInIndex } from '../../store/atoms/collabDocuments';
@@ -31,6 +33,7 @@ export const CollabSidebar: React.FC<CollabSidebarProps> = ({
   activeDocumentId,
 }) => {
   const sharedDocuments = useAtomValue(sharedDocumentsAtom);
+  const teamSyncStatus = useAtomValue(teamSyncStatusAtom);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -42,6 +45,7 @@ export const CollabSidebar: React.FC<CollabSidebarProps> = ({
   const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null);
   const [isCreateDocumentOpen, setIsCreateDocumentOpen] = useState(false);
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
+  const [documentToRename, setDocumentToRename] = useState<SharedDocument | null>(null);
   const [hasLoadedState, setHasLoadedState] = useState(false);
   const [loadedWorkspacePath, setLoadedWorkspacePath] = useState<string | null>(null);
   const [draggedDocument, setDraggedDocument] = useState<{
@@ -77,6 +81,17 @@ export const CollabSidebar: React.FC<CollabSidebarProps> = ({
     [activeDocumentId, sharedDocuments]
   );
 
+  const canMutateMetadata = useCallback((actionLabel: string) => {
+    if (teamSyncStatus === 'connected') {
+      return true;
+    }
+
+    window.alert(
+      `Cannot ${actionLabel} while shared document sync is ${teamSyncStatus}. Reconnect to the team before changing shared document metadata.`
+    );
+    return false;
+  }, [teamSyncStatus]);
+
   // Close context menu on click outside or Escape
   useEffect(() => {
     if (!contextMenu) return;
@@ -100,6 +115,7 @@ export const CollabSidebar: React.FC<CollabSidebarProps> = ({
     setHasLoadedState(false);
     setLoadedWorkspacePath(null);
     setContextMenu(null);
+    setDocumentToRename(null);
     setSelectedFolderPath(null);
     setExpandedFolders(new Set());
     setCustomFolders([]);
@@ -188,12 +204,13 @@ export const CollabSidebar: React.FC<CollabSidebarProps> = ({
 
   const handleDelete = useCallback(() => {
     if (!contextMenu || contextMenu.node.type !== 'document') return;
+    if (!canMutateMetadata('delete this document')) return;
     const { document } = contextMenu.node;
     if (window.confirm(`Delete shared document "${document.title}"?`)) {
       removeSharedDocument(document.documentId);
     }
     setContextMenu(null);
-  }, [contextMenu]);
+  }, [canMutateMetadata, contextMenu]);
 
   const toggleFolder = useCallback((folderPath: string) => {
     setExpandedFolders((currentFolders) => {
@@ -238,6 +255,8 @@ export const CollabSidebar: React.FC<CollabSidebarProps> = ({
   }, [existingPaths, getCreationBaseFolder]);
 
   const handleCreateDocument = useCallback(async (documentName: string) => {
+    if (!canMutateMetadata('create documents')) return;
+
     const title = joinCollabPath(getCreationBaseFolder(), documentName);
     if (!title) return;
 
@@ -272,10 +291,48 @@ export const CollabSidebar: React.FC<CollabSidebarProps> = ({
     setIsCreateDocumentOpen(false);
     setContextMenu(null);
     onDocumentSelect(document);
-  }, [existingPaths, getCreationBaseFolder, onDocumentSelect]);
+  }, [canMutateMetadata, existingPaths, getCreationBaseFolder, onDocumentSelect]);
+
+  const handleRenameDocument = useCallback(async (documentName: string) => {
+    if (!documentToRename) return;
+    if (!canMutateMetadata('rename this document')) return;
+
+    const currentPath = getCollabDocumentPath(documentToRename);
+    const nextPath = renameCollabDocumentPath(currentPath, documentName);
+    if (!nextPath || nextPath === currentPath) {
+      setDocumentToRename(null);
+      setContextMenu(null);
+      return;
+    }
+
+    if (existingPaths.has(nextPath)) {
+      window.alert(`A document or folder named "${nextPath}" already exists.`);
+      return;
+    }
+
+    await updateSharedDocumentTitle(documentToRename.documentId, nextPath);
+
+    const parent = getCollabParentPath(nextPath);
+    if (parent) {
+      setExpandedFolders((currentFolders) => {
+        const next = new Set(currentFolders);
+        next.add(parent);
+        return next;
+      });
+    }
+
+    setSelectedFolderPath(parent);
+    setDocumentToRename(null);
+    setContextMenu(null);
+  }, [canMutateMetadata, documentToRename, existingPaths]);
 
   const moveDraggedDocument = useCallback(async (targetFolderPath: string | null) => {
     if (!draggedDocument) return;
+    if (!canMutateMetadata('move this document')) {
+      setDropTargetPath(null);
+      setDraggedDocument(null);
+      return;
+    }
 
     const nextPath = joinCollabPath(targetFolderPath, draggedDocument.name);
     if (!nextPath || nextPath === draggedDocument.sourcePath) {
@@ -306,7 +363,7 @@ export const CollabSidebar: React.FC<CollabSidebarProps> = ({
 
     setDropTargetPath(null);
     setDraggedDocument(null);
-  }, [draggedDocument, existingPaths]);
+  }, [canMutateMetadata, draggedDocument, existingPaths]);
 
   const canDropDocument = useCallback((targetFolderPath: string | null) => {
     if (!draggedDocument) return false;
@@ -567,6 +624,18 @@ export const CollabSidebar: React.FC<CollabSidebarProps> = ({
               </button>
               <button
                 type="button"
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded border-none bg-transparent cursor-pointer transition-colors text-left text-nim hover:bg-nim-hover"
+                onClick={() => {
+                  if (!contextDocument) return;
+                  setDocumentToRename(contextDocument);
+                  setContextMenu(null);
+                }}
+              >
+                <MaterialSymbol icon="edit" size={18} />
+                <span>Rename</span>
+              </button>
+              <button
+                type="button"
                 className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded border-none bg-transparent cursor-pointer transition-colors text-left text-nim-error hover:bg-nim-hover"
                 onClick={handleDelete}
               >
@@ -583,6 +652,7 @@ export const CollabSidebar: React.FC<CollabSidebarProps> = ({
         title="New Shared Document"
         placeholder="Document name"
         defaultValue=""
+        confirmLabel="Create"
         onConfirm={handleCreateDocument}
         onCancel={() => {
           setIsCreateDocumentOpen(false);
@@ -595,9 +665,23 @@ export const CollabSidebar: React.FC<CollabSidebarProps> = ({
         title="New Shared Folder"
         placeholder="Folder name"
         defaultValue=""
+        confirmLabel="Create"
         onConfirm={handleCreateFolder}
         onCancel={() => {
           setIsCreateFolderOpen(false);
+          setContextMenu(null);
+        }}
+      />
+
+      <InputModal
+        isOpen={documentToRename !== null}
+        title="Rename Shared Document"
+        placeholder="Document name"
+        defaultValue={documentToRename ? getCollabNodeName(getCollabDocumentPath(documentToRename)) : ''}
+        confirmLabel="Rename"
+        onConfirm={handleRenameDocument}
+        onCancel={() => {
+          setDocumentToRename(null);
           setContextMenu(null);
         }}
       />

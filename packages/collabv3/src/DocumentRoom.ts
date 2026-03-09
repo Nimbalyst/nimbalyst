@@ -35,6 +35,19 @@ interface ConnectionState {
   synced: boolean;
 }
 
+interface StoredDocumentAsset {
+  assetId: string;
+  r2Key: string;
+  ciphertextSize: number;
+  plaintextSize: number | null;
+  mimeType: string | null;
+  encryptedMetadata: string | null;
+  metadataIv: string | null;
+  createdBy: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 // WebSocket tag prefixes for hibernation recovery
 const TAG_USER = 'user:';
 const TAG_ORG = 'org:';
@@ -118,6 +131,22 @@ export class DocumentRoom implements DurableObject {
         value TEXT NOT NULL,
         updated_at INTEGER NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS document_assets (
+        asset_id TEXT PRIMARY KEY,
+        r2_key TEXT NOT NULL,
+        ciphertext_size INTEGER NOT NULL,
+        plaintext_size INTEGER,
+        mime_type TEXT,
+        encrypted_metadata TEXT,
+        metadata_iv TEXT,
+        created_by TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'ready'
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_document_assets_updated_at ON document_assets(updated_at);
     `);
 
     // Bootstrap TTL alarm for existing documents without one
@@ -147,6 +176,10 @@ export class DocumentRoom implements DurableObject {
       return this.handleWebSocketUpgrade(request);
     }
 
+    if (url.pathname.includes('/internal/assets/')) {
+      return this.handleInternalAssetRequest(request, url);
+    }
+
     if (url.pathname.endsWith('/status')) {
       return this.handleStatusRequest();
     }
@@ -161,6 +194,134 @@ export class DocumentRoom implements DurableObject {
     }
 
     return new Response('Expected WebSocket', { status: 400 });
+  }
+
+  private async handleInternalAssetRequest(request: Request, url: URL): Promise<Response> {
+    const auth = this.parseAuth(request);
+    if (!auth) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+
+    const match = url.pathname.match(/\/internal\/assets\/([^/]+)$/);
+    const assetId = match?.[1];
+    if (!assetId) {
+      return new Response('Missing asset ID', { status: 400 });
+    }
+
+    switch (request.method) {
+      case 'GET':
+        return this.handleInternalGetAsset(assetId);
+      case 'PUT':
+        return this.handleInternalPutAsset(request, auth, assetId);
+      case 'DELETE':
+        return this.handleInternalDeleteAsset(assetId);
+      default:
+        return new Response('Method not allowed', { status: 405 });
+    }
+  }
+
+  private handleInternalGetAsset(assetId: string): Response {
+    const sql = this.state.storage.sql;
+    const row = sql.exec<{
+      asset_id: string;
+      r2_key: string;
+      ciphertext_size: number;
+      plaintext_size: number | null;
+      mime_type: string | null;
+      encrypted_metadata: string | null;
+      metadata_iv: string | null;
+      created_by: string;
+      created_at: number;
+      updated_at: number;
+    }>(
+      `SELECT asset_id, r2_key, ciphertext_size, plaintext_size, mime_type,
+              encrypted_metadata, metadata_iv, created_by, created_at, updated_at
+       FROM document_assets
+       WHERE asset_id = ?`,
+      assetId
+    ).toArray()[0];
+
+    if (!row) {
+      return new Response('Not found', { status: 404 });
+    }
+
+    const payload: StoredDocumentAsset = {
+      assetId: row.asset_id,
+      r2Key: row.r2_key,
+      ciphertextSize: row.ciphertext_size,
+      plaintextSize: row.plaintext_size,
+      mimeType: row.mime_type,
+      encryptedMetadata: row.encrypted_metadata,
+      metadataIv: row.metadata_iv,
+      createdBy: row.created_by,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+
+    return new Response(JSON.stringify(payload), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  private async handleInternalPutAsset(
+    request: Request,
+    auth: AuthContext,
+    assetId: string
+  ): Promise<Response> {
+    const body = await request.json() as {
+      assetId?: string;
+      r2Key?: string;
+      ciphertextSize?: number;
+      plaintextSize?: number | null;
+      mimeType?: string | null;
+      encryptedMetadata?: string | null;
+      metadataIv?: string | null;
+    };
+
+    if (!body.r2Key || !Number.isFinite(body.ciphertextSize)) {
+      return new Response('Invalid asset payload', { status: 400 });
+    }
+
+    const sql = this.state.storage.sql;
+    const now = Date.now();
+    const existing = sql.exec<{ created_at: number; created_by: string }>(
+      `SELECT created_at, created_by FROM document_assets WHERE asset_id = ?`,
+      assetId
+    ).toArray()[0];
+
+    sql.exec(
+      `INSERT OR REPLACE INTO document_assets
+       (asset_id, r2_key, ciphertext_size, plaintext_size, mime_type,
+        encrypted_metadata, metadata_iv, created_by, created_at, updated_at, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready')`,
+      assetId,
+      body.r2Key,
+      body.ciphertextSize,
+      body.plaintextSize ?? null,
+      body.mimeType ?? null,
+      body.encryptedMetadata ?? null,
+      body.metadataIv ?? null,
+      existing?.created_by ?? auth.userId,
+      existing?.created_at ?? now,
+      now
+    );
+
+    this.setMetadataValue('updated_at', String(now));
+
+    return new Response(JSON.stringify({ success: true }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  private handleInternalDeleteAsset(assetId: string): Response {
+    const sql = this.state.storage.sql;
+    const now = Date.now();
+    sql.exec(`DELETE FROM document_assets WHERE asset_id = ?`, assetId);
+    this.setMetadataValue('updated_at', String(now));
+
+    return new Response(JSON.stringify({ success: true }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   /**
@@ -640,21 +801,25 @@ export class DocumentRoom implements DurableObject {
     }
 
     log.info('Document TTL expired, deleting data. Last activity:', lastActivity);
+    await this.deleteAllAssetBlobs();
     sql.exec(`DELETE FROM encrypted_updates`);
     sql.exec(`DELETE FROM key_envelopes`);
     sql.exec(`DELETE FROM snapshots`);
+    sql.exec(`DELETE FROM document_assets`);
     sql.exec(`DELETE FROM metadata`);
   }
 
   /**
    * Handle account deletion - purge all data and disconnect clients.
    */
-  private handleDeleteAccount(): Response {
+  private async handleDeleteAccount(): Promise<Response> {
     const sql = this.state.storage.sql;
 
+    await this.deleteAllAssetBlobs();
     sql.exec(`DELETE FROM encrypted_updates`);
     sql.exec(`DELETE FROM key_envelopes`);
     sql.exec(`DELETE FROM snapshots`);
+    sql.exec(`DELETE FROM document_assets`);
     sql.exec(`DELETE FROM metadata`);
 
     for (const [ws] of this.connections) {
@@ -677,13 +842,15 @@ export class DocumentRoom implements DurableObject {
    * Handle document deletion - purge all data and disconnect clients.
    * Called when a document is unshared from the TeamRoom index.
    */
-  private handleDeleteDocument(): Response {
+  private async handleDeleteDocument(): Promise<Response> {
     const sql = this.state.storage.sql;
     log.info('Document deletion requested, purging all data');
 
+    await this.deleteAllAssetBlobs();
     sql.exec(`DELETE FROM encrypted_updates`);
     sql.exec(`DELETE FROM key_envelopes`);
     sql.exec(`DELETE FROM snapshots`);
+    sql.exec(`DELETE FROM document_assets`);
     sql.exec(`DELETE FROM metadata`);
 
     for (const [ws] of this.connections) {
@@ -720,6 +887,10 @@ export class DocumentRoom implements DurableObject {
       `SELECT COUNT(*) as count FROM key_envelopes`
     ).toArray()[0]?.count ?? 0;
 
+    const assetCount = sql.exec<{ count: number }>(
+      `SELECT COUNT(*) as count FROM document_assets`
+    ).toArray()[0]?.count ?? 0;
+
     const maxSeq = sql.exec<{ max_seq: number | null }>(
       `SELECT MAX(sequence) as max_seq FROM encrypted_updates`
     ).toArray()[0]?.max_seq ?? 0;
@@ -731,9 +902,25 @@ export class DocumentRoom implements DurableObject {
         updateCount,
         snapshotCount,
         envelopeCount,
+        assetCount,
         maxSequence: maxSeq,
       }),
       { headers: { 'Content-Type': 'application/json' } }
     );
+  }
+
+  private async deleteAllAssetBlobs(): Promise<void> {
+    const sql = this.state.storage.sql;
+    const rows = sql.exec<{ r2_key: string }>(
+      `SELECT r2_key FROM document_assets WHERE r2_key IS NOT NULL`
+    ).toArray();
+
+    await Promise.all(rows.map(async ({ r2_key }) => {
+      try {
+        await this.env.DOCUMENT_ASSETS.delete(r2_key);
+      } catch (error) {
+        log.error('Failed to delete document asset blob', r2_key, error);
+      }
+    }));
   }
 }

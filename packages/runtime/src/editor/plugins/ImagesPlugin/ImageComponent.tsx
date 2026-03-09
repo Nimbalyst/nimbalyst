@@ -275,50 +275,79 @@ export default function ImageComponent({
   // Resolve image paths to absolute file:// URLs
   // Uses DOM traversal to find document path (stable per-editor instance)
   useEffect(() => {
-    // If it's already an absolute URL, use as-is
-    if (src.match(/^(https?|file|data):/)) {
-      setResolvedSrc(src);
-      return;
-    }
+    let cancelled = false;
 
-    // Handle .nimbalyst/assets/ paths via asset service
-    if (src.includes('.nimbalyst/assets/') && typeof window !== 'undefined' && (window as any).electronAPI) {
-      const match = src.match(/\.nimbalyst\/assets\/([a-f0-9]+)\./);
-      if (match) {
-        const hash = match[1];
-        (window as any).electronAPI.invoke('document-service:get-asset-path', hash)
-          .then((absolutePath: string | null) => {
-            if (absolutePath) {
-              const resolved = `file://${absolutePath}`;
-              imageCache.delete(src);
+    const resolveSrc = async () => {
+      const callbacks = getImagePluginCallbacks();
+      if (callbacks.resolveImageSrc) {
+        try {
+          const resolved = await callbacks.resolveImageSrc(src);
+          if (resolved) {
+            imageCache.delete(src);
+            if (!cancelled) {
               setResolvedSrc(resolved);
-            } else {
-              setResolvedSrc(src);
             }
-          })
-          .catch(() => {
-            setResolvedSrc(src);
-          });
+            return;
+          }
+        } catch (error) {
+          console.error('Failed to resolve image source', error);
+        }
+      }
+
+      // If it's already an absolute URL, use as-is
+      if (src.match(/^(https?|file|data|blob):/)) {
+        if (!cancelled) {
+          setResolvedSrc(src);
+        }
         return;
       }
-    }
 
-    // For relative paths, resolve using document path from DOM
-    // Wait for container to be mounted before trying to resolve
-    if (!containerMounted) {
-      return;
-    }
+      // Handle .nimbalyst/assets/ paths via asset service
+      if (src.includes('.nimbalyst/assets/') && typeof window !== 'undefined' && (window as any).electronAPI) {
+        const match = src.match(/\.nimbalyst\/assets\/([a-f0-9]+)\./);
+        if (match) {
+          const hash = match[1];
+          try {
+            const absolutePath = await (window as any).electronAPI.invoke('document-service:get-asset-path', hash);
+            if (!cancelled) {
+              if (absolutePath) {
+                imageCache.delete(src);
+                setResolvedSrc(`file://${absolutePath}`);
+              } else {
+                setResolvedSrc(src);
+              }
+            }
+          } catch {
+            if (!cancelled) {
+              setResolvedSrc(src);
+            }
+          }
+          return;
+        }
+      }
 
-    const documentPath = getDocumentPathFromDOM(containerRef.current);
-    if (documentPath) {
-      const lastSlash = documentPath.lastIndexOf('/');
-      const documentDir = lastSlash >= 0 ? documentPath.substring(0, lastSlash) : '';
-      const absolutePath = documentDir + '/' + src;
-      setResolvedSrc('file://' + absolutePath);
-    } else {
-      // Fallback to src as-is
-      setResolvedSrc(src);
-    }
+      if (!containerMounted) {
+        return;
+      }
+
+      const documentPath = getDocumentPathFromDOM(containerRef.current);
+      if (!cancelled) {
+        if (documentPath) {
+          const lastSlash = documentPath.lastIndexOf('/');
+          const documentDir = lastSlash >= 0 ? documentPath.substring(0, lastSlash) : '';
+          const absolutePath = documentDir + '/' + src;
+          setResolvedSrc('file://' + absolutePath);
+        } else {
+          setResolvedSrc(src);
+        }
+      }
+    };
+
+    void resolveSrc();
+
+    return () => {
+      cancelled = true;
+    };
   }, [src, containerMounted]);
 
   const $onEnter = useCallback(

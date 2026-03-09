@@ -15,6 +15,8 @@ export { IMAGE_TRANSFORMER } from './ImageTransformer';
 let imagePluginCallbacks: {
   onImageDoubleClick?: (src: string, nodeKey: NodeKey) => void;
   onImageDragStart?: (src: string, event: DragEvent) => void;
+  onUploadAsset?: (file: File) => Promise<{ kind: 'image' | 'file'; src: string; altText?: string }>;
+  resolveImageSrc?: (src: string) => Promise<string | null>;
 } = {};
 
 export function getImagePluginCallbacks() {
@@ -114,6 +116,23 @@ export function InsertImageUploadedDialogBody({
     if (!files || files.length === 0) return;
 
     const file = files[0];
+
+    const callbacks = getImagePluginCallbacks();
+    if (callbacks.onUploadAsset) {
+      try {
+        const uploaded = await callbacks.onUploadAsset(file);
+        if (uploaded.kind !== 'image') {
+          throw new Error('Expected image upload result');
+        }
+        setSrc(uploaded.src);
+        if (!altText) {
+          setAltText(uploaded.altText ?? file.name);
+        }
+        return;
+      } catch (error) {
+        console.error('Failed to upload image asset:', error);
+      }
+    }
 
     // Check if we have access to electron API for asset storage
     if (typeof window !== 'undefined' && (window as any).electronAPI) {
@@ -233,10 +252,14 @@ export default function ImagesPlugin({
   captionsEnabled,
   onImageDoubleClick,
   onImageDragStart,
+  onUploadAsset,
+  resolveImageSrc,
 }: {
   captionsEnabled?: boolean;
   onImageDoubleClick?: (src: string, nodeKey: NodeKey) => void;
   onImageDragStart?: (src: string, event: DragEvent) => void;
+  onUploadAsset?: (file: File) => Promise<{ kind: 'image' | 'file'; src: string; altText?: string }>;
+  resolveImageSrc?: (src: string) => Promise<string | null>;
 }): JSX.Element | null {
   const [editor] = useLexicalComposerContext();
 
@@ -249,6 +272,8 @@ export default function ImagesPlugin({
     imagePluginCallbacks = {
       onImageDoubleClick,
       onImageDragStart,
+      onUploadAsset,
+      resolveImageSrc,
     };
 
     return mergeRegister(
@@ -287,7 +312,7 @@ export default function ImagesPlugin({
         COMMAND_PRIORITY_HIGH,
       ),
     );
-  }, [captionsEnabled, editor]);
+  }, [captionsEnabled, editor, onImageDoubleClick, onImageDragStart, resolveImageSrc]);
 
   return null;
 }
