@@ -3,7 +3,8 @@
 [Nimbalyst](https://nimbalyst.com) is a free, local, interactive visual editor & session manager where builders maximize speed, bandwidth, and context with Codex and Claude Code by collaborating visually on files, sessions, and tasks:
 - Iterate with Codex and Claude Code on your sessions, markdown, mockups, diagrams, csv, Excalidraw, data models, MCP, and code. Approve the coding agent's changes in red/green WYSIWYG, edit, annotate, iterate visually. 
 - Manage multiple sessions in parallel and in kanban. Search, resume, link sessions to files and files to sessions. For developers we include git management, AI commit, workstreams, worktrees, and terminal.
-- Manage tasks. Keep track of your plans, bugs, todos, etc..  Have agent edit tasks and items, add them, move them, and execute them. Human see and edit this as well. 
+- Manage tasks. Keep track of your plans, bugs, todos, etc..  Have agent edit tasks and items, add them, move them, and execute them. Human see and edit this as well.
+- Mobile app. Start, manage, and respond to your Codex and Claude Code sessions while on the go.
 
 ![Version](https://img.shields.io/github/v/release/nimbalyst/nimbalyst)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
@@ -31,6 +32,12 @@
   - Use AI to git commit
   - Use embedded ghostty terminal
   - Leverage workstrees
+- Mobile app
+  - Session dashboard: see which agents need you and which are still working
+  - Reply to questions via text or voice, agents resume immediately
+  - Visual diff review: swipe through changes, tap to approve
+  - Queue next tasks: keep the pipeline full, don't let agents sit idle
+  - Push notifications: agents tell you when they need you
 - Open storage of content and status in markdown, workflow in / commands, and plain files on disk or in git
 
 ## ScreenShots
