@@ -327,6 +327,7 @@ The `known_error` event uses an `errorId` property to identify specific error co
 | `first_launch_claude_check` | `index.ts:114` | Very first app launch only - checks if Claude Code is installed | `hasClaudeInstalled` (boolean) | v0.47.2 (2025-12-10) |  |
 | `quit_confirmation_shown` | `index.ts:757` | User attempts quit with active AI session | `reason` (active_ai_session) | v0.45.25 (2025-11-14) |  |
 | `quit_confirmation_result` | `index.ts:774, 783` | User responds to quit confirmation dialog | `result` (quit_anyway/cancelled) | v0.45.25 (2025-11-14) |  |
+| `app_foregrounded` | `WindowHandlers.ts:172` | Any window gains focus (throttled to once per 30 minutes). Used for DAU tracking - counts users who actively bring Nimbalyst to the foreground, not those who leave it running in the background. | None | (pending release) |  |
 
 ### Account & Sync
 
@@ -368,8 +369,8 @@ Events from the iOS companion app. These events share the same PostHog project a
 
 ## Event Summary Statistics
 
-- **Total Events**: 117 unique event names
-- **Main Process Events**: 56 (via AnalyticsService)
+- **Total Events**: 118 unique event names
+- **Main Process Events**: 57 (via AnalyticsService)
 - **Renderer Process Events**: 53 (via usePostHog hook)
 - **Mobile Events**: 7 (via Capacitor AnalyticsService)
 - **File Operations**: 7 events
@@ -391,7 +392,7 @@ Events from the iOS companion app. These events share the same PostHog project a
 - **Permissions**: 4 events
 - **Auto-Update**: 6 events
 - **Voice Mode**: 3 events
-- **System/Infrastructure**: 12 events
+- **System/Infrastructure**: 13 events
 
 ## Super Properties (on every event)
 

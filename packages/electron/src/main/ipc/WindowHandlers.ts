@@ -7,6 +7,11 @@ import { getFolderContents } from '../utils/FileTree';
 import { writeFileSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { reportDesktopActivity, setWindowFocused, setScreenLocked, setIdleThresholdMs, attemptReconnect } from '../services/SyncManager';
+import { AnalyticsService } from '../services/analytics/AnalyticsService';
+
+/** Timestamp of last app_foregrounded event, used to throttle to once per 30 minutes */
+let lastForegroundedEventAt = 0;
+const FOREGROUND_THROTTLE_MS = 30 * 60 * 1000; // 30 minutes
 
 export function registerWindowHandlers() {
     // Get initial window state
@@ -164,10 +169,18 @@ export function registerWindowHandlers() {
         reportDesktopActivity();
     });
 
-    // Track window focus for sync presence
+    // Track window focus for sync presence and DAU analytics
     // Note: These are app-level events, not window-specific
     app.on('browser-window-focus', () => {
         setWindowFocused(true);
+
+        // Emit app_foregrounded for DAU tracking when a window gains focus,
+        // throttled to once per 30 minutes to keep event volume low
+        const now = Date.now();
+        if (now - lastForegroundedEventAt >= FOREGROUND_THROTTLE_MS) {
+            lastForegroundedEventAt = now;
+            AnalyticsService.getInstance().sendEvent('app_foregrounded');
+        }
     });
 
     app.on('browser-window-blur', () => {
