@@ -54,8 +54,8 @@ interface CollaborativeTabEditorProps {
 // Generate a random color for cursor display
 function randomCursorColor(): string {
   const colors = [
-    '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
-    '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F',
+    '#E05555', '#2BA89A', '#3A8FD6', '#D97706',
+    '#9B59B6', '#E06B8F', '#3B82F6', '#16A34A',
   ];
   return colors[Math.floor(Math.random() * colors.length)];
 }
