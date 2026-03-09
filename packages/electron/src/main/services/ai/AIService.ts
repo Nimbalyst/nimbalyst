@@ -4928,34 +4928,27 @@ export class AIService {
     // Get slash commands from active claude-code provider
     safeHandle('ai:getSlashCommands', async (event, sessionId?: string) => {
       try {
-
-        // Get provider from session
+        // Try the specific session's provider first
         let provider: AIProvider | undefined;
         if (sessionId) {
           provider = ProviderFactory.getProvider('claude-code', sessionId) ?? undefined;
         }
 
-        // Check if provider has getSlashCommands method
-        if (provider) {
+        if (provider && 'getSlashCommands' in provider && typeof (provider as any).getSlashCommands === 'function') {
+          const commands = (provider as any).getSlashCommands();
+          const skills = 'getSkills' in provider && typeof (provider as any).getSkills === 'function'
+            ? (provider as any).getSkills()
+            : [];
 
-          if ('getSlashCommands' in provider && typeof (provider as any).getSlashCommands === 'function') {
-            const commands = (provider as any).getSlashCommands();
-            const skills = 'getSkills' in provider && typeof (provider as any).getSkills === 'function'
-              ? (provider as any).getSkills()
-              : [];
-
-            // If commands array is empty, return empty array
-            if (commands.length === 0 && skills.length === 0) {
-              return { success: true, commands: [], skills: [] };
-            }
-
+          if (commands.length > 0 || skills.length > 0) {
             return { success: true, commands, skills };
-          } else {
           }
         }
 
-        // No provider found - return empty commands
-        return { success: true, commands: [], skills: [] };
+        // Fall back to static cache (populated by any previous session's init chunk)
+        const cachedCommands = ClaudeCodeProvider.getCachedSdkSlashCommands();
+        const cachedSkills = ClaudeCodeProvider.getCachedSdkSkills();
+        return { success: true, commands: cachedCommands, skills: cachedSkills };
       } catch (error) {
         console.error('[AIService] Error getting slash commands:', error);
         return { success: false, commands: [], skills: [], error: error instanceof Error ? error.message : 'Unknown error' };

@@ -63,43 +63,43 @@ export function AgenticInput({
     }
   }, [value]);
 
-  // Fetch slash commands on mount and when workspace changes
-  useEffect(() => {
+  // Fetch slash commands from IPC (SDK commands + local commands)
+  const fetchSlashCommands = useCallback(async () => {
     if (!workspacePath) return;
-
-    const fetchSlashCommands = async () => {
+    try {
+      // Get SDK commands from ClaudeCodeProvider if available
+      let sdkCommands: string[] = [];
+      let sdkSkills: string[] = [];
       try {
-        // Get SDK commands from ClaudeCodeProvider if available
-        let sdkCommands: string[] = [];
-        let sdkSkills: string[] = [];
-        try {
-          const sdkResult = await window.electronAPI.invoke('ai:getSlashCommands', sessionId);
-          if (sdkResult?.success && Array.isArray(sdkResult.commands)) {
-            sdkCommands = sdkResult.commands;
-            sdkSkills = Array.isArray(sdkResult.skills) ? sdkResult.skills : [];
-            // console.log('[AgenticInput] Got SDK commands from provider:', sdkCommands);
-          }
-        } catch (sdkError) {
-          console.warn('[AgenticInput] Failed to get SDK commands:', sdkError);
+        const sdkResult = await window.electronAPI.invoke('ai:getSlashCommands', sessionId);
+        if (sdkResult?.success && Array.isArray(sdkResult.commands)) {
+          sdkCommands = sdkResult.commands;
+          sdkSkills = Array.isArray(sdkResult.skills) ? sdkResult.skills : [];
+          // console.log('[AgenticInput] Got SDK commands from provider:', sdkCommands);
         }
-
-        // Fetch all commands (built-in + custom)
-        const commands = await window.electronAPI.invoke('slash-command:list', {
-          workspacePath,
-          sdkCommands,
-          sdkSkills,
-        });
-
-        setAllSlashCommands(commands || []);
-        // console.log('[AgenticInput] Loaded slash commands:', commands);
-      } catch (error) {
-        console.error('[AgenticInput] Failed to load slash commands:', error);
-        setAllSlashCommands([]);
+      } catch (sdkError) {
+        console.warn('[AgenticInput] Failed to get SDK commands:', sdkError);
       }
-    };
 
+      // Fetch all commands (built-in + custom)
+      const commands = await window.electronAPI.invoke('slash-command:list', {
+        workspacePath,
+        sdkCommands,
+        sdkSkills,
+      });
+
+      setAllSlashCommands(commands || []);
+      // console.log('[AgenticInput] Loaded slash commands:', commands?.length, 'kinds:', [...new Set(commands?.map((c: any) => `${c.kind}:${c.source}`) || [])]);
+    } catch (error) {
+      console.error('[AgenticInput] Failed to load slash commands:', error);
+      setAllSlashCommands([]);
+    }
+  }, [workspacePath, sessionId]);
+
+  // Fetch on mount and when workspace/session changes
+  useEffect(() => {
     fetchSlashCommands();
-  }, [workspacePath, sessionId]); // Refetch when session changes
+  }, [fetchSlashCommands]);
 
   // Get icon for command based on name and source
   const getCommandIcon = (cmd: any): string => {
@@ -152,8 +152,17 @@ export function AgenticInput({
 
   // Filter and sort slash commands based on query
   const filterSlashCommands = useCallback((query: string, scope: SlashTypeaheadScope) => {
+    // console.log('[AgenticInput] filterSlashCommands scope:', scope, 'query:', query, 'total:', allSlashCommands.length);
     const filtered = allSlashCommands
-      .filter(cmd => scope === 'commands' ? cmd.kind !== 'skill' : cmd.kind === 'skill')
+      .filter(cmd => {
+        if (scope === 'commands') {
+          // At position 0: show built-in commands and project/user commands, not skills
+          return cmd.kind !== 'skill';
+        }
+        // Mid-prompt skills scope: show skills AND project/user commands
+        // (the SDK treats .claude/commands/ entries as invocable skills too)
+        return cmd.source !== 'builtin';
+      })
       .map(cmd => ({
         cmd,
         score: scoreCommand(cmd.name, query)
@@ -205,8 +214,11 @@ export function AgenticInput({
           setSelectedIndex(0);
         }
       } else if (match.trigger === '/') {
-        // Slash command - filter from already-loaded commands
-        // (Now uses static fallback so commands are always available)
+        // Re-fetch when typeahead first opens to pick up SDK skills
+        // that arrive after the session initializes
+        if (match.query === '') {
+          fetchSlashCommands();
+        }
         const slashScope = getSlashTypeaheadScope(match);
         if (slashScope) {
           filterSlashCommands(match.query, slashScope);
@@ -221,7 +233,7 @@ export function AgenticInput({
       setSelectedOption(null);
       setSlashCommandOptions([]);
     }
-  }, [value, cursorPosition, onFileMentionSearch, filterSlashCommands, allSlashCommands]);
+  }, [value, cursorPosition, onFileMentionSearch, filterSlashCommands, fetchSlashCommands, allSlashCommands]);
 
   // Update cursor position on selection change
   const handleSelectionChange = useCallback(() => {

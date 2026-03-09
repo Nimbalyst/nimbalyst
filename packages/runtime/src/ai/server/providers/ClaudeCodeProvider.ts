@@ -126,6 +126,12 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   private currentMode?: 'planning' | 'agent'; // Track session mode for prompt customization and tool filtering
   private slashCommands: string[] = []; // Available slash commands from SDK
   private skills: string[] = []; // Available user-invocable skills from SDK
+
+  // Static cache of SDK-reported skills/commands so they survive across provider instances.
+  // Once any session receives the init chunk, new sessions can use the cached list as a
+  // fallback before their own init chunk arrives.
+  private static cachedSdkSkills: string[] = [];
+  private static cachedSdkSlashCommands: string[] = [];
   private markMessagesAsHidden: boolean = false; // Flag to mark next messages as hidden
   private helperMethod: ClaudeHelperMethod = 'electron'; // Track which helper method is being used
 
@@ -1640,9 +1646,11 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
               // Capture available slash commands
               if (chunk.slash_commands && Array.isArray(chunk.slash_commands)) {
                 this.slashCommands = chunk.slash_commands;
+                ClaudeCodeProvider.cachedSdkSlashCommands = chunk.slash_commands;
               }
               if (chunk.skills && Array.isArray(chunk.skills)) {
                 this.skills = chunk.skills;
+                ClaudeCodeProvider.cachedSdkSkills = chunk.skills;
               }
 
               // Track session initialization with MCP, slash commands, agents, skills, and plugins counts
@@ -3246,17 +3254,32 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   }
 
   /**
-   * Get available slash commands discovered from the SDK
+   * Get available slash commands discovered from the SDK.
+   * Falls back to static cache from a previous session if this provider hasn't initialized yet.
    */
   getSlashCommands(): string[] {
-    return [...this.slashCommands];
+    const commands = this.slashCommands.length > 0 ? this.slashCommands : ClaudeCodeProvider.cachedSdkSlashCommands;
+    return [...commands];
   }
 
   /**
    * Get available skills discovered from the SDK init payload.
+   * Falls back to static cache from a previous session if this provider hasn't initialized yet.
    */
   getSkills(): string[] {
-    return [...this.skills];
+    const skills = this.skills.length > 0 ? this.skills : ClaudeCodeProvider.cachedSdkSkills;
+    return [...skills];
+  }
+
+  /**
+   * Static accessors for the SDK cache - used by AIService when no provider instance exists.
+   */
+  static getCachedSdkSlashCommands(): string[] {
+    return [...ClaudeCodeProvider.cachedSdkSlashCommands];
+  }
+
+  static getCachedSdkSkills(): string[] {
+    return [...ClaudeCodeProvider.cachedSdkSkills];
   }
 
   /**

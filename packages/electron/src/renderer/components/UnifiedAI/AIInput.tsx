@@ -340,42 +340,41 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       return () => cancelAnimationFrame(rafId);
     }, [value, userSetHeight]);
 
-    // Fetch slash commands on mount and when workspace changes (if enabled)
-    useEffect(() => {
+    // Fetch slash commands from IPC (SDK commands + local commands)
+    const fetchSlashCommands = useCallback(async () => {
       if (!enableSlashCommands || !workspacePath) return;
-
-      const fetchSlashCommands = async () => {
+      try {
+        // Get SDK commands from ClaudeCodeProvider if available
+        let sdkCommands: string[] = [];
+        let sdkSkills: string[] = [];
         try {
-          // Get SDK commands from ClaudeCodeProvider if available
-          let sdkCommands: string[] = [];
-          let sdkSkills: string[] = [];
-          try {
-            const sdkResult = await window.electronAPI.invoke('ai:getSlashCommands', sessionId);
-            if (sdkResult?.success && Array.isArray(sdkResult.commands)) {
-              sdkCommands = sdkResult.commands;
-              sdkSkills = Array.isArray(sdkResult.skills) ? sdkResult.skills : [];
-              // console.log('[AIInput] Got SDK commands from provider:', sdkCommands);
-            }
-          } catch (sdkError) {
-            console.warn('[AIInput] Failed to get SDK commands:', sdkError);
+          const sdkResult = await window.electronAPI.invoke('ai:getSlashCommands', sessionId);
+          if (sdkResult?.success && Array.isArray(sdkResult.commands)) {
+            sdkCommands = sdkResult.commands;
+            sdkSkills = Array.isArray(sdkResult.skills) ? sdkResult.skills : [];
           }
-
-          // Fetch all commands (built-in + custom)
-          const commands = await window.electronAPI.invoke('slash-command:list', {
-            workspacePath,
-            sdkCommands,
-            sdkSkills,
-          });
-
-          setAllSlashCommands(commands || []);
-        } catch (error) {
-          console.error('[AIInput] Failed to load slash commands:', error);
-          setAllSlashCommands([]);
+        } catch (sdkError) {
+          console.warn('[AIInput] Failed to get SDK commands:', sdkError);
         }
-      };
 
-      fetchSlashCommands();
+        // Fetch all commands (built-in + custom)
+        const commands = await window.electronAPI.invoke('slash-command:list', {
+          workspacePath,
+          sdkCommands,
+          sdkSkills,
+        });
+
+        setAllSlashCommands(commands || []);
+      } catch (error) {
+        console.error('[AIInput] Failed to load slash commands:', error);
+        setAllSlashCommands([]);
+      }
     }, [workspacePath, sessionId, enableSlashCommands]);
+
+    // Fetch on mount and when workspace/session changes
+    useEffect(() => {
+      fetchSlashCommands();
+    }, [fetchSlashCommands]);
 
     // Get icon for command based on name and source
     const getCommandIcon = (cmd: any): string => {
@@ -431,7 +430,15 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     const filterSlashCommands = useCallback((query: string, scope: SlashTypeaheadScope) => {
       const hasQuery = query.length > 0;
       const filtered = allSlashCommands
-        .filter(cmd => scope === 'commands' ? cmd.kind !== 'skill' : cmd.kind === 'skill')
+        .filter(cmd => {
+          if (scope === 'commands') {
+            // At position 0: show built-in commands and project/user commands, not skills
+            return cmd.kind !== 'skill';
+          }
+          // Mid-prompt skills scope: show skills AND project/user commands
+          // (the SDK treats .claude/commands/ entries as invocable skills too)
+          return cmd.source !== 'builtin';
+        })
         .map(cmd => ({
           cmd,
           score: scoreCommand(cmd.name, query)
@@ -508,6 +515,11 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
         setCursorPosition(pos);
 
         if (match.trigger === '/' && enableSlashCommands) {
+          // Re-fetch when typeahead first opens to pick up SDK skills
+          // that arrive after the session initializes
+          if (match.query === '') {
+            fetchSlashCommands();
+          }
           const slashScope = getSlashTypeaheadScope(match);
           if (slashScope) {
             filterSlashCommands(match.query, slashScope);
