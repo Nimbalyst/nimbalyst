@@ -230,8 +230,14 @@ function categorizeError(error: unknown): string {
 // Global error handler
 if (typeof window !== 'undefined') {
   window.addEventListener('error', (event) => {
-    const message = event.error?.message || event.message;
+    const message = event.error?.message || event.message || 'Unknown error';
     const stack = event.error?.stack || '';
+
+    // Skip errors with no meaningful message (e.g., DOM Event objects passed as errors)
+    if (!message || message === 'undefined' || message === 'null') {
+      console.debug('[ErrorNotificationService] Ignoring error with empty message:', event.error);
+      return;
+    }
 
     // Ignore benign ResizeObserver errors from virtualization libraries (virtua)
     // This error occurs when ResizeObserver callbacks trigger layout changes that cause more resize events

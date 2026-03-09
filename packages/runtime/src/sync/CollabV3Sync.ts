@@ -1995,11 +1995,16 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         }
       };
 
-      ws.onerror = (err) => {
+      ws.onerror = (event) => {
         if (!resolved) {
           clearTimeout(timeout);
           resolved = true;
-          reject(err);
+          // WebSocket onerror receives a DOM Event, not an Error object.
+          // Extract meaningful info to avoid "Uncaught Error: undefined" dialogs.
+          const errorInfo = typeof ErrorEvent !== 'undefined' && event instanceof ErrorEvent
+            ? event.message || 'WebSocket error'
+            : 'WebSocket connection error';
+          reject(new Error(`[CollabV3] ${errorInfo} for session ${sessionId}`));
         }
       };
 
@@ -2204,9 +2209,10 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       indexWs.send(JSON.stringify(msg));
     }
 
-    // Sync messages if requested
+    // Sync messages if requested (fire-and-forget, catch errors to avoid unhandled rejections)
     if (options?.syncMessages === true) {
-      doBatchSyncSessionMessages(sessionsData, options.messageSyncRequests, options.getMessagesForSync);
+      doBatchSyncSessionMessages(sessionsData, options.messageSyncRequests, options.getMessagesForSync)
+        .catch(err => console.warn('[CollabV3] Batch message sync failed:', err?.message || err));
     }
   }
 
