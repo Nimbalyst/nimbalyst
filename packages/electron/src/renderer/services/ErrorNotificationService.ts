@@ -230,10 +230,11 @@ function categorizeError(error: unknown): string {
 // Global error handler
 if (typeof window !== 'undefined') {
   window.addEventListener('error', (event) => {
-    const message = event.error?.message || event.message || 'Unknown error';
+    const message = event.error?.message || event.message;
     const stack = event.error?.stack || '';
 
-    // Skip errors with no meaningful message (e.g., DOM Event objects passed as errors)
+    // Skip errors with no meaningful message (e.g., DOM Event objects passed as errors,
+    // or WebSocket errors that produce empty/undefined error events)
     if (!message || message === 'undefined' || message === 'null') {
       console.debug('[ErrorNotificationService] Ignoring error with empty message:', event.error);
       return;
