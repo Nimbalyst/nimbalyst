@@ -1051,5 +1051,253 @@ export function registerExtensionHandlers(): void {
     }
   });
 
+  // Execute a shell command on behalf of an extension (requires filesystem permission)
+  safeHandle('extension:exec', async (_event, params: {
+    extensionId: string;
+    command: string;
+    cwd: string;
+    timeout?: number;
+    env?: Record<string, string>;
+    maxBuffer?: number;
+  }) => {
+    const { extensionId, command, cwd, timeout = 60000, env, maxBuffer = 10 * 1024 * 1024 } = params;
+
+    // Find extension manifest by scanning extension directories
+    let hasFilesystemPermission = false;
+    const extensionDirs = await getAllExtensionDirectories();
+    for (const extDir of extensionDirs) {
+      let subdirs;
+      try {
+        subdirs = await fs.readdir(extDir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const subdir of subdirs) {
+        let isDir = subdir.isDirectory();
+        if (!isDir && subdir.isSymbolicLink()) {
+          try {
+            const stat = await fs.stat(path.join(extDir, subdir.name));
+            isDir = stat.isDirectory();
+          } catch { continue; }
+        }
+        if (!isDir) continue;
+        const manifestPath = path.join(extDir, subdir.name, 'manifest.json');
+        try {
+          const manifestJson = await fs.readFile(manifestPath, 'utf-8');
+          const manifest = JSON.parse(manifestJson);
+          if (manifest.id === extensionId) {
+            hasFilesystemPermission = !!manifest.permissions?.filesystem;
+            break;
+          }
+        } catch { continue; }
+      }
+      if (hasFilesystemPermission) break;
+    }
+
+    if (!hasFilesystemPermission) {
+      return { success: false, stdout: '', stderr: `Extension ${extensionId} not found or lacks filesystem permission`, exitCode: -1 };
+    }
+
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+
+    try {
+      const { stdout, stderr } = await execAsync(command, {
+        cwd,
+        timeout,
+        maxBuffer,
+        env: env ? { ...process.env, ...env } : process.env,
+      });
+      return { success: true, stdout, stderr, exitCode: 0 };
+    } catch (execError: unknown) {
+      const err = execError as { stdout?: string; stderr?: string; code?: number; message?: string };
+      return {
+        success: false,
+        stdout: err.stdout || '',
+        stderr: err.stderr || err.message || '',
+        exitCode: err.code || 1,
+      };
+    }
+  });
+
+  // ============================================================================
+  // Extension File Storage (sandboxed file system for extensions)
+  // ============================================================================
+
+  // Get the base path for an extension's data directory
+  safeHandle('extension:file-storage:get-base-path', async (_event, params: {
+    extensionId: string;
+    workspacePath: string;
+    scope: 'workspace' | 'global';
+  }) => {
+    const basePath = await getExtensionDataPath(params.extensionId, params.workspacePath, params.scope);
+    await fs.mkdir(basePath, { recursive: true });
+    return basePath;
+  });
+
+  // Write a file (string or base64-encoded binary)
+  safeHandle('extension:file-storage:write', async (_event, params: {
+    extensionId: string;
+    workspacePath: string;
+    relativePath: string;
+    data: string;
+    encoding: 'utf-8' | 'base64';
+  }) => {
+    const basePath = await getExtensionDataPath(params.extensionId, params.workspacePath, 'workspace');
+    const fullPath = resolveSandboxedPath(basePath, params.relativePath);
+
+    // Check quota (default 500MB per extension)
+    const usage = await getDirectorySize(path.join(getExtensionDataRoot(), params.extensionId));
+    const limitBytes = 500 * 1024 * 1024;
+    if (usage > limitBytes) {
+      throw new Error(`Extension ${params.extensionId} has exceeded its storage quota (${Math.round(usage / 1024 / 1024)}MB / ${Math.round(limitBytes / 1024 / 1024)}MB)`);
+    }
+
+    await fs.mkdir(path.dirname(fullPath), { recursive: true });
+    if (params.encoding === 'base64') {
+      await fs.writeFile(fullPath, Buffer.from(params.data, 'base64'));
+    } else {
+      await fs.writeFile(fullPath, params.data, 'utf-8');
+    }
+  });
+
+  // Read a file as text
+  safeHandle('extension:file-storage:read-text', async (_event, params: {
+    extensionId: string;
+    workspacePath: string;
+    relativePath: string;
+  }) => {
+    const basePath = await getExtensionDataPath(params.extensionId, params.workspacePath, 'workspace');
+    const fullPath = resolveSandboxedPath(basePath, params.relativePath);
+    return await fs.readFile(fullPath, 'utf-8');
+  });
+
+  // Read a file as base64
+  safeHandle('extension:file-storage:read', async (_event, params: {
+    extensionId: string;
+    workspacePath: string;
+    relativePath: string;
+  }) => {
+    const basePath = await getExtensionDataPath(params.extensionId, params.workspacePath, 'workspace');
+    const fullPath = resolveSandboxedPath(basePath, params.relativePath);
+    const buffer = await fs.readFile(fullPath);
+    return buffer.toString('base64');
+  });
+
+  // Check if a file exists
+  safeHandle('extension:file-storage:exists', async (_event, params: {
+    extensionId: string;
+    workspacePath: string;
+    relativePath: string;
+  }) => {
+    const basePath = await getExtensionDataPath(params.extensionId, params.workspacePath, 'workspace');
+    const fullPath = resolveSandboxedPath(basePath, params.relativePath);
+    try {
+      await fs.access(fullPath);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+
+  // Delete a file or directory
+  safeHandle('extension:file-storage:delete', async (_event, params: {
+    extensionId: string;
+    workspacePath: string;
+    relativePath: string;
+  }) => {
+    const basePath = await getExtensionDataPath(params.extensionId, params.workspacePath, 'workspace');
+    const fullPath = resolveSandboxedPath(basePath, params.relativePath);
+    await fs.rm(fullPath, { recursive: true, force: true });
+  });
+
+  // List files in a directory
+  safeHandle('extension:file-storage:list', async (_event, params: {
+    extensionId: string;
+    workspacePath: string;
+    relativePath?: string;
+  }) => {
+    const basePath = await getExtensionDataPath(params.extensionId, params.workspacePath, 'workspace');
+    const fullPath = params.relativePath ? resolveSandboxedPath(basePath, params.relativePath) : basePath;
+    await fs.mkdir(fullPath, { recursive: true });
+    const entries = await fs.readdir(fullPath);
+    return entries;
+  });
+
+  // Get storage usage
+  safeHandle('extension:file-storage:usage', async (_event, params: {
+    extensionId: string;
+  }) => {
+    const extRoot = path.join(getExtensionDataRoot(), params.extensionId);
+    const usedBytes = await getDirectorySize(extRoot);
+    const limitBytes = 500 * 1024 * 1024; // 500MB default
+    return { usedBytes, limitBytes };
+  });
+
   logger.main.info('[ExtensionHandlers] Extension handlers registered');
+}
+
+// ============================================================================
+// Extension File Storage helpers
+// ============================================================================
+
+/** Get root directory for all extension data */
+function getExtensionDataRoot(): string {
+  return path.join(app.getPath('userData'), 'extension-data');
+}
+
+/** Compute the data directory path for an extension */
+async function getExtensionDataPath(
+  extensionId: string,
+  workspacePath: string,
+  scope: 'workspace' | 'global'
+): Promise<string> {
+  const root = getExtensionDataRoot();
+
+  if (scope === 'global') {
+    return path.join(root, extensionId, 'global');
+  }
+
+  // Hash the workspace path for a stable, filesystem-safe directory name
+  const crypto = await import('crypto');
+  const hash = crypto.createHash('sha256').update(workspacePath).digest('hex').substring(0, 16);
+  return path.join(root, extensionId, 'workspaces', hash);
+}
+
+/**
+ * Resolve a relative path within a sandbox directory.
+ * Throws if the resolved path escapes the sandbox.
+ */
+function resolveSandboxedPath(basePath: string, relativePath: string): string {
+  // Normalize and resolve
+  const resolved = path.resolve(basePath, relativePath);
+  const normalizedBase = path.resolve(basePath);
+
+  // Ensure the resolved path is within the base directory
+  if (!resolved.startsWith(normalizedBase + path.sep) && resolved !== normalizedBase) {
+    throw new Error(`Path traversal blocked: ${relativePath} resolves outside sandbox`);
+  }
+
+  return resolved;
+}
+
+/** Calculate total size of a directory recursively */
+async function getDirectorySize(dirPath: string): Promise<number> {
+  let totalSize = 0;
+  try {
+    const entries = await fs.readdir(dirPath, { withFileTypes: true });
+    for (const entry of entries) {
+      const entryPath = path.join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        totalSize += await getDirectorySize(entryPath);
+      } else {
+        const stat = await fs.stat(entryPath);
+        totalSize += stat.size;
+      }
+    }
+  } catch {
+    // Directory doesn't exist yet
+  }
+  return totalSize;
 }

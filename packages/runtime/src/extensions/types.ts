@@ -52,6 +52,9 @@ export type {
   PanelExport,
   SettingsPanelProps,
   ExtensionStorage,
+  ExtensionFileStorage,
+  ExecOptions,
+  ExecResult,
   ThemeContribution,
   ThemeColorKey,
 } from '@nimbalyst/extension-sdk';

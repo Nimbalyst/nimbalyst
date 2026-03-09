@@ -48,6 +48,9 @@ export type {
   PanelExport,
   SettingsPanelProps,
   ExtensionStorage,
+  ExtensionFileStorage,
+  ExecOptions,
+  ExecResult,
   // Theme types
   ThemeContribution,
   ThemeColorKey,

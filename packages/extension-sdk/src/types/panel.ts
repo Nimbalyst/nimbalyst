@@ -297,6 +297,133 @@ export interface PanelHost {
    * Automatically scoped to this extension.
    */
   readonly storage: ExtensionStorage;
+
+  // ============ FILE STORAGE ============
+
+  /**
+   * Sandboxed file storage for this extension.
+   * Provides a dedicated directory for storing files (screenshots, reports, etc.).
+   * All paths are relative to the extension's data directory.
+   *
+   * Requires the extension to declare `"filesystem": true` permission in manifest.json.
+   */
+  readonly files: ExtensionFileStorage;
+
+  // ============ SUBPROCESS ============
+
+  /**
+   * Execute a shell command in the workspace context.
+   *
+   * Requires the extension to declare `"filesystem": true` permission in manifest.json.
+   * Commands execute in the workspace directory with inherited environment.
+   *
+   * @param command Shell command to execute
+   * @param options Execution options
+   * @returns Promise resolving to exec result with stdout, stderr, and exit code
+   */
+  exec(command: string, options?: ExecOptions): Promise<ExecResult>;
+}
+
+/**
+ * Options for PanelHost.exec() subprocess execution.
+ */
+export interface ExecOptions {
+  /** Working directory (defaults to workspace root) */
+  cwd?: string;
+  /** Environment variables to merge with process.env */
+  env?: Record<string, string>;
+  /** Timeout in milliseconds (default: 60000) */
+  timeout?: number;
+  /** Max buffer size for stdout/stderr in bytes (default: 10MB) */
+  maxBuffer?: number;
+}
+
+/**
+ * Result from PanelHost.exec() subprocess execution.
+ */
+export interface ExecResult {
+  success: boolean;
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+}
+
+// ============================================================================
+// ExtensionFileStorage (sandboxed file system access)
+// ============================================================================
+
+/**
+ * Sandboxed file storage for extensions.
+ *
+ * Provides a dedicated directory per extension for storing files like
+ * screenshots, reports, traces, and other artifacts. All operations are
+ * confined to the extension's data directory -- path traversal is blocked.
+ *
+ * Two scopes are available:
+ * - **Workspace**: per-project data (test results, screenshots for this project)
+ * - **Global**: shared across all projects (cached downloads, config)
+ *
+ * Directory layout:
+ * ```
+ * <userData>/extension-data/<extensionId>/
+ *   global/              # getGlobalBasePath()
+ *   workspaces/<hash>/   # getBasePath() (workspace-scoped)
+ * ```
+ */
+export interface ExtensionFileStorage {
+  /**
+   * Absolute path to the workspace-scoped data directory.
+   * Use this when you need to pass a path to external tools (e.g. Playwright output dir).
+   */
+  getBasePath(): Promise<string>;
+
+  /**
+   * Absolute path to the global (workspace-independent) data directory.
+   */
+  getGlobalBasePath(): Promise<string>;
+
+  /**
+   * Write a file. Creates parent directories as needed.
+   * @param relativePath Path relative to workspace base dir
+   * @param data String or binary data
+   */
+  write(relativePath: string, data: string | Uint8Array): Promise<void>;
+
+  /**
+   * Read a file as a UTF-8 string.
+   * @param relativePath Path relative to workspace base dir
+   */
+  readText(relativePath: string): Promise<string>;
+
+  /**
+   * Read a file as binary data.
+   * @param relativePath Path relative to workspace base dir
+   */
+  read(relativePath: string): Promise<Uint8Array>;
+
+  /**
+   * Check if a file or directory exists.
+   * @param relativePath Path relative to workspace base dir
+   */
+  exists(relativePath: string): Promise<boolean>;
+
+  /**
+   * Delete a file or directory.
+   * @param relativePath Path relative to workspace base dir
+   */
+  delete(relativePath: string): Promise<void>;
+
+  /**
+   * List files and directories at a path.
+   * @param relativePath Path relative to workspace base dir (default: root)
+   * @returns Array of entry names
+   */
+  list(relativePath?: string): Promise<string[]>;
+
+  /**
+   * Get disk usage for this extension's data directory.
+   */
+  getUsage(): Promise<{ usedBytes: number; limitBytes: number }>;
 }
 
 // ============================================================================

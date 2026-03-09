@@ -5,7 +5,8 @@
  * Handles communication between panels and the host application.
  */
 
-import type { PanelHost, PanelAIContext, ExtensionStorage } from '@nimbalyst/runtime';
+import type { PanelHost, PanelAIContext, ExtensionStorage, ExtensionFileStorage, ExecOptions, ExecResult } from '@nimbalyst/runtime';
+import { ExtensionFileStorageImpl } from './ExtensionFileStorageImpl';
 
 // ============================================================================
 // Types
@@ -81,6 +82,7 @@ class PanelHostImpl implements PanelHost {
   readonly workspacePath: string;
   readonly ai?: PanelAIContext;
   readonly storage: ExtensionStorage;
+  readonly files: ExtensionFileStorage;
 
   private _theme: string;
   private _isSettingsOpen = false;
@@ -97,6 +99,7 @@ class PanelHostImpl implements PanelHost {
     this._theme = options.theme;
     this.workspacePath = options.workspacePath;
     this.storage = options.storage;
+    this.files = new ExtensionFileStorageImpl(options.extensionId, options.workspacePath);
 
     this.onOpenFile = options.onOpenFile;
     this.onOpenPanel = options.onOpenPanel;
@@ -147,6 +150,27 @@ class PanelHostImpl implements PanelHost {
 
   closeSettings(): void {
     this._isSettingsOpen = false;
+  }
+
+  async exec(command: string, options?: ExecOptions): Promise<ExecResult> {
+    try {
+      const result = await window.electronAPI.invoke('extension:exec', {
+        extensionId: this.extensionId,
+        command,
+        cwd: options?.cwd || this.workspacePath,
+        timeout: options?.timeout || 60000,
+        env: options?.env,
+        maxBuffer: options?.maxBuffer || 10 * 1024 * 1024,
+      });
+      return result as ExecResult;
+    } catch (error) {
+      return {
+        success: false,
+        stdout: '',
+        stderr: error instanceof Error ? error.message : String(error),
+        exitCode: -1,
+      };
+    }
   }
 
   /**
