@@ -26,7 +26,8 @@ import {
   REJECT_DIFF_COMMAND,
   CLEAR_DIFF_TAG_COMMAND,
   INCREMENTAL_APPROVAL_COMMAND,
-  $hasDiffNodes
+  $hasDiffNodes,
+  $approveDiffs
 } from '@nimbalyst/runtime';
 import { $getRoot, $getSelection, $isRangeSelection, SKIP_SCROLL_INTO_VIEW_TAG, COMMAND_PRIORITY_LOW } from 'lexical';
 import { DocumentHeaderContainer } from '@nimbalyst/runtime/plugins/TrackerPlugin/documentHeader';
@@ -826,11 +827,24 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       return;
     }
 
-    // Log stack trace to see what's calling this
-    // console.trace('[TabEditor] handleManualSave called for:', fileName);
+    // If in diff mode (e.g. tab being closed), approve all diffs first so we
+    // save clean content without diff markers. This prevents data loss when
+    // the user closes a tab or the app quits while diffs are showing.
+    // We call $approveDiffs directly (not via command) to avoid triggering the
+    // CLEAR_DIFF_TAG_COMMAND chain which would double-save.
+    if (pendingAIEditTagRef.current && editorRef.current && typeof editorRef.current.update === 'function') {
+      logger.ui.info(`[TabEditor] Approving diffs before manual save for ${fileName}`);
+      editorRef.current.update(() => {
+        $approveDiffs();
+      });
+      // Clear the pending tag since we've accepted everything
+      const { tagId, filePath: tagFilePath } = pendingAIEditTagRef.current;
+      window.electronAPI.invoke('history:update-tag-status', tagFilePath, tagId, 'reviewed');
+      setPendingAIEditTag(null);
+    }
 
     const currentContent = getContentFnRef.current();
-    await saveWithHistory(currentContent, 'manual');
+    await saveWithHistory(currentContent, 'manual', true);
   }, [saveWithHistory, fileName]);
 
   // Autosave timer
@@ -843,8 +857,25 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
       // Skip if in diff mode - user should approve/reject AI changes first
       // This prevents false-positive autosaves from WYSIWYG rendering differences
+      // BUT: if the user has manually resolved all diffs (e.g. deleted diff content),
+      // clear diff mode so autosave can resume
       if (pendingAIEditTagRef.current) {
-        return;
+        if (editorRef.current && typeof editorRef.current.getEditorState === 'function') {
+          const hasDiffs = editorRef.current.getEditorState().read(() => {
+            return $hasDiffNodes(editorRef.current!);
+          });
+          if (!hasDiffs) {
+            logger.ui.info(`[TabEditor] No diffs remaining in diff mode for ${fileName}, clearing pending tag`);
+            const { tagId, filePath: tagFilePath } = pendingAIEditTagRef.current;
+            window.electronAPI.invoke('history:update-tag-status', tagFilePath, tagId, 'reviewed');
+            setPendingAIEditTag(null);
+            // Fall through to save below
+          } else {
+            return;
+          }
+        } else {
+          return;
+        }
       }
 
       // Skip if we're in the process of applying a diff
