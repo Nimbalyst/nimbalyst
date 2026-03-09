@@ -166,6 +166,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
 
     // Suppress typeahead re-trigger after a selection (prevents menu from reopening)
     const justSelectedRef = useRef(false);
+    const lastSlashValueRef = useRef<string | null>(null);
 
     // Voice mode state - derived from centralized atom
     const voiceActiveSessionId = useAtomValue(voiceActiveSessionIdAtom);
@@ -515,18 +516,18 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
         setCursorPosition(pos);
 
         if (match.trigger === '/' && enableSlashCommands) {
-          // Re-fetch when typeahead first opens to pick up SDK skills
-          // that arrive after the session initializes
-          if (match.query === '') {
-            fetchSlashCommands();
-          }
           const slashScope = getSlashTypeaheadScope(match);
           if (slashScope) {
             filterSlashCommands(match.query, slashScope);
           } else {
             setSlashCommandOptions([]);
           }
-          setSelectedIndex(0);
+          // Only reset selection when the input value changed (user typed),
+          // not when allSlashCommands updated from an async re-fetch
+          if (lastSlashValueRef.current !== value) {
+            lastSlashValueRef.current = value;
+            setSelectedIndex(0);
+          }
           return undefined;
         }
 
@@ -541,6 +542,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
 
         return () => clearTimeout(timerId);
       } else {
+        lastSlashValueRef.current = null;
         setTypeaheadMatch(null);
         setSelectedIndex(null);
         setSelectedOption(null);
@@ -548,6 +550,15 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       }
       return undefined;
     }, [value, workspacePath, searchFileMention, searchSessionMention, sessionId, filterSlashCommands, enableSlashCommands]);
+
+    // Re-fetch slash commands when the / typeahead opens to pick up SDK skills
+    // that arrive after the session initializes. Uses a separate effect to avoid
+    // resetting selectedIndex when the fetch resolves.
+    useEffect(() => {
+      if (typeaheadMatch?.trigger === '/' && enableSlashCommands) {
+        fetchSlashCommands();
+      }
+    }, [typeaheadMatch?.trigger, enableSlashCommands, fetchSlashCommands]);
 
     // Auto-select first option when file/session mention results arrive
     useEffect(() => {

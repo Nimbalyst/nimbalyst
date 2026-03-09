@@ -44,6 +44,7 @@ export function AgenticInput({
   onAttachmentRemove
 }: AgenticInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastSlashValueRef = useRef<string | null>(null);
   const [typeaheadMatch, setTypeaheadMatch] = useState<TriggerMatch | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [selectedOption, setSelectedOption] = useState<TypeaheadOption | null>(null);
@@ -214,26 +215,35 @@ export function AgenticInput({
           setSelectedIndex(0);
         }
       } else if (match.trigger === '/') {
-        // Re-fetch when typeahead first opens to pick up SDK skills
-        // that arrive after the session initializes
-        if (match.query === '') {
-          fetchSlashCommands();
-        }
         const slashScope = getSlashTypeaheadScope(match);
         if (slashScope) {
           filterSlashCommands(match.query, slashScope);
         }
 
-        // Auto-select first option
-        setSelectedIndex(0);
+        // Only reset selection when the input value changed (user typed),
+        // not when allSlashCommands updated from an async re-fetch
+        if (lastSlashValueRef.current !== value) {
+          lastSlashValueRef.current = value;
+          setSelectedIndex(0);
+        }
       }
     } else {
+      lastSlashValueRef.current = null;
       setTypeaheadMatch(null);
       setSelectedIndex(null);
       setSelectedOption(null);
       setSlashCommandOptions([]);
     }
   }, [value, cursorPosition, onFileMentionSearch, filterSlashCommands, fetchSlashCommands, allSlashCommands]);
+
+  // Re-fetch slash commands when the / typeahead opens to pick up SDK skills
+  // that arrive after the session initializes. Separate effect to avoid
+  // resetting selectedIndex when the fetch resolves.
+  useEffect(() => {
+    if (typeaheadMatch?.trigger === '/') {
+      fetchSlashCommands();
+    }
+  }, [typeaheadMatch?.trigger, fetchSlashCommands]);
 
   // Update cursor position on selection change
   const handleSelectionChange = useCallback(() => {
