@@ -66,8 +66,17 @@ public final class AnalyticsManager: Sendable {
 
     /// Called after QR pairing to adopt desktop's analytics ID.
     /// This links mobile and desktop events to the same user in PostHog.
+    ///
+    /// Uses alias() to merge the mobile person with the desktop person,
+    /// then identify() to switch future events to the desktop's distinct_id.
+    /// Without alias(), PostHog won't merge two already-identified users.
     public func setDistinctIdFromPairing(_ analyticsId: String?) {
         guard let analyticsId, !analyticsId.isEmpty else { return }
+
+        if initialized {
+            // Alias merges the current mobile identity with the desktop identity
+            PostHogSDK.shared.alias(analyticsId)
+        }
 
         try? KeychainManager.storeAnalyticsId(analyticsId)
         if initialized {
