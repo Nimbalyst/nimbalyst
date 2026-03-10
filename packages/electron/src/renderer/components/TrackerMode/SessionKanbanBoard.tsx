@@ -28,6 +28,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAtomValue, useSetAtom } from 'jotai';
+import { usePostHog } from 'posthog-js/react';
 import { MaterialSymbol, ProviderIcon, RichTranscriptView } from '@nimbalyst/runtime';
 import type { SessionMeta } from '@nimbalyst/runtime';
 import type { Message } from '@nimbalyst/runtime/ai/server/types';
@@ -944,6 +945,7 @@ function UnphasedColumn({ sessions, onSelect, onArchive, onRename, onDropToPhase
 // ============================================================
 
 function SessionKanbanToolbar({ selectedCount, onClearSelection }: { selectedCount: number; onClearSelection: () => void }) {
+  const posthog = usePostHog();
   const filter = useAtomValue(sessionKanbanFilterAtom);
   const setFilter = useSetAtom(sessionKanbanFilterAtom);
   const totalCount = useAtomValue(sessionKanbanTotalCountAtom);
@@ -953,6 +955,7 @@ function SessionKanbanToolbar({ selectedCount, onClearSelection }: { selectedCou
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
+  const searchDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Filter tags for the dropdown: match query, exclude already-active tags
   const filteredTags = useMemo(() => {
@@ -964,12 +967,17 @@ function SessionKanbanToolbar({ selectedCount, onClearSelection }: { selectedCou
 
   const addTag = useCallback((tag: string) => {
     if (!filter.tags.includes(tag)) {
-      setFilter({ ...filter, tags: [...filter.tags, tag] });
+      const newTags = [...filter.tags, tag];
+      setFilter({ ...filter, tags: newTags });
+      posthog?.capture('kanban_filter_applied', {
+        filterType: 'tag',
+        activeTagCount: newTags.length,
+      });
     }
     setTagQuery('');
     setShowTagDropdown(false);
     setHighlightedIndex(0);
-  }, [filter, setFilter]);
+  }, [filter, setFilter, posthog]);
 
   const removeTag = useCallback((tag: string) => {
     setFilter({ ...filter, tags: filter.tags.filter(t => t !== tag) });
@@ -991,8 +999,18 @@ function SessionKanbanToolbar({ selectedCount, onClearSelection }: { selectedCou
       setFilter({ ...filter, search: value });
       setShowTagDropdown(false);
       setTagQuery('');
+      // Debounced search tracking
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+      if (value.trim()) {
+        searchDebounceRef.current = setTimeout(() => {
+          posthog?.capture('kanban_filter_applied', {
+            filterType: 'search',
+            activeTagCount: filter.tags.length,
+          });
+        }, 1000);
+      }
     }
-  }, [filter, setFilter]);
+  }, [filter, setFilter, posthog]);
 
   // Keyboard navigation for tag dropdown
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -1214,6 +1232,7 @@ interface SessionKanbanBoardProps {
 }
 
 export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessionSelect, onSessionOpen }) => {
+  const posthog = usePostHog();
   const grouped = useAtomValue(sessionsByPhaseAtom);
   const setPhase = useSetAtom(setSessionPhaseAtom);
   const updateSessionStore = useSetAtom(updateSessionStoreAtom);
@@ -1244,14 +1263,19 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
   const toggleCollapse = useCallback((columnKey: SessionPhaseKey) => {
     setCollapsedColumns(prev => {
       const next = new Set(prev);
+      const willCollapse = !next.has(columnKey);
       if (next.has(columnKey)) {
         next.delete(columnKey);
       } else {
         next.add(columnKey);
       }
+      posthog?.capture('kanban_column_collapsed', {
+        action: willCollapse ? 'collapsed' : 'expanded',
+        column: columnKey,
+      });
       return next;
     });
-  }, []);
+  }, [posthog]);
 
   // Flat list of all visible session IDs in board order (for shift-select ranges)
   const flatSessionIds = useMemo(() => {
@@ -1310,26 +1334,41 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
   }, [navigationGrid]);
 
   const handleSelect = useCallback((sessionId: string) => {
+    posthog?.capture('kanban_card_opened', {
+      cardType: getCardType(registry.get(sessionId)),
+    });
     if (onSessionOpen) {
       onSessionOpen(sessionId);
     } else {
       onSessionSelect?.(sessionId);
     }
-  }, [onSessionSelect, onSessionOpen]);
+  }, [onSessionSelect, onSessionOpen, posthog, registry]);
 
   const handleDrop = useCallback((sessionIds: string[], phase: SessionPhase) => {
     for (const id of sessionIds) {
       setPhase({ sessionId: id, phase });
     }
+    posthog?.capture('kanban_card_phase_changed', {
+      method: 'drag',
+      toPhase: phase,
+      cardCount: sessionIds.length,
+      cardType: sessionIds.length === 1 ? getCardType(registry.get(sessionIds[0])) : 'mixed',
+    });
     setSelectedIds(new Set());
-  }, [setPhase]);
+  }, [setPhase, posthog, registry]);
 
   const handleRemovePhase = useCallback((sessionIds: string[]) => {
     for (const id of sessionIds) {
       setPhase({ sessionId: id, phase: null });
     }
+    posthog?.capture('kanban_card_phase_changed', {
+      method: 'drag',
+      toPhase: 'unphased',
+      cardCount: sessionIds.length,
+      cardType: sessionIds.length === 1 ? getCardType(registry.get(sessionIds[0])) : 'mixed',
+    });
     setSelectedIds(new Set());
-  }, [setPhase]);
+  }, [setPhase, posthog, registry]);
 
   const cleanupWorktreeSessions = useCallback((worktreeId: string) => {
     const worktreeSessions = Array.from(registry.values()).filter(s => s.worktreeId === worktreeId);
@@ -1340,6 +1379,10 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
 
   // Archive sessions, routing worktree sessions to the worktree archive dialog
   const handleArchive = useCallback(async (sessionIds: string[]) => {
+    posthog?.capture('kanban_card_archived', {
+      cardCount: sessionIds.length,
+      cardType: sessionIds.length === 1 ? getCardType(registry.get(sessionIds[0])) : 'mixed',
+    });
     for (const sessionId of sessionIds) {
       const session = registry.get(sessionId);
       if (session?.worktreeId) {
@@ -1393,7 +1436,7 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
     }
 
     setSelectedIds(new Set());
-  }, [updateSessionStore, setPhase, registry, showArchiveWorktreeDialog, workspacePath, cleanupWorktreeSessions]);
+  }, [updateSessionStore, setPhase, registry, showArchiveWorktreeDialog, workspacePath, cleanupWorktreeSessions, posthog]);
 
   // Single-session archive wrapper for context menu
   const handleArchiveSingle = useCallback((sessionId: string) => {
@@ -1475,8 +1518,12 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
 
   // Toggle peek for a specific card
   const handlePeekToggle = useCallback((sessionId: string) => {
+    const willOpen = peekCardId !== sessionId;
     setPeekCardId(prev => prev === sessionId ? null : sessionId);
-  }, []);
+    posthog?.capture('kanban_card_peeked', {
+      action: willOpen ? 'opened' : 'closed',
+    });
+  }, [peekCardId, posthog]);
 
   // Move focus (and peek if peek is open) to a new card
   const moveFocusTo = useCallback((nextId: string) => {
@@ -1603,6 +1650,12 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
         for (const id of ids) {
           setPhase({ sessionId: id, phase: phaseKeys[nextPhaseIdx] });
         }
+        posthog?.capture('kanban_card_phase_changed', {
+          method: 'keyboard',
+          toPhase: phaseKeys[nextPhaseIdx],
+          cardCount: ids.length,
+          cardType: ids.length === 1 ? getCardType(registry.get(ids[0])) : 'mixed',
+        });
       }
       return;
     }
@@ -1617,15 +1670,27 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
         for (const id of ids) {
           setPhase({ sessionId: id, phase: phaseKeys[currentPhaseIdx - 1] });
         }
+        posthog?.capture('kanban_card_phase_changed', {
+          method: 'keyboard',
+          toPhase: phaseKeys[currentPhaseIdx - 1],
+          cardCount: ids.length,
+          cardType: ids.length === 1 ? getCardType(registry.get(ids[0])) : 'mixed',
+        });
       } else if (currentPhaseIdx === 0) {
         const ids = getActionIds();
         for (const id of ids) {
           setPhase({ sessionId: id, phase: null });
         }
+        posthog?.capture('kanban_card_phase_changed', {
+          method: 'keyboard',
+          toPhase: 'unphased',
+          cardCount: ids.length,
+          cardType: ids.length === 1 ? getCardType(registry.get(ids[0])) : 'mixed',
+        });
       }
       return;
     }
-  }, [focusedCardId, peekCardId, selectedIds, flatSessionIds, findPosition, findColumnIndex, getSessionAtPosition, navigationGrid, handleSelect, handlePeekToggle, setPhase, moveFocusTo, getActionIds]);
+  }, [focusedCardId, peekCardId, selectedIds, flatSessionIds, findPosition, findColumnIndex, getSessionAtPosition, navigationGrid, handleSelect, handlePeekToggle, setPhase, moveFocusTo, getActionIds, posthog, registry]);
 
   // Clear focus/peek/selection when grouped data changes and cards are gone
   useEffect(() => {

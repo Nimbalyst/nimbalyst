@@ -101,6 +101,17 @@ All events include `$session_id` property automatically. Dev users are marked wi
 | `markdown_view_mode_switched` | `TabEditor.tsx:1556, 1606` | User switches between rich text (lexical) and raw markdown (monaco) view modes | `fromMode` (lexical/monaco)<br/>`toMode` (lexical/monaco) | v0.48.13 (2025-12-17) |  |
 | `session_view_mode_switched` | `SessionHistory.tsx` | User switches between list and kanban views for session history | `fromMode` (list/card/kanban)<br/>`toMode` (list/card/kanban) | (pending release) |  |
 
+### Session Kanban Board
+
+| Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
+| --- | --- | --- | --- | --- | --- |
+| `kanban_card_phase_changed` | `SessionKanbanBoard.tsx` | Card moved between phase columns via drag-drop or Cmd+Arrow keyboard shortcut | `method` (drag/keyboard)<br/>`toPhase` (backlog/planning/implementing/validating/complete/unphased)<br/>`cardCount` (number of cards moved)<br/>`cardType` (session/workstream/worktree/mixed) | (pending release) |  |
+| `kanban_card_opened` | `SessionKanbanBoard.tsx` | User opens a session from the kanban board (Enter key or double-click) | `cardType` (session/workstream/worktree) | (pending release) |  |
+| `kanban_card_peeked` | `SessionKanbanBoard.tsx` | User toggles transcript peek on a kanban card (Space key or hover) | `action` (opened/closed) | (pending release) |  |
+| `kanban_card_archived` | `SessionKanbanBoard.tsx` | User archives card(s) from the kanban board via drag to archive gutter or context menu | `cardCount` (number of cards archived)<br/>`cardType` (session/workstream/worktree/mixed) | (pending release) |  |
+| `kanban_filter_applied` | `SessionKanbanBoard.tsx` | User applies a tag filter or searches on the kanban board | `filterType` (tag/search)<br/>`activeTagCount` (number of active tag filters) | (pending release) |  |
+| `kanban_column_collapsed` | `SessionKanbanBoard.tsx` | User collapses or expands a kanban phase column | `action` (collapsed/expanded)<br/>`column` (backlog/planning/implementing/validating/complete) | (pending release) |  |
+
 ### File History
 
 | Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
@@ -357,13 +368,14 @@ Events from the iOS companion app. These events share the same PostHog project a
 
 ## Event Summary Statistics
 
-- **Total Events**: 111 unique event names
+- **Total Events**: 117 unique event names
 - **Main Process Events**: 56 (via AnalyticsService)
-- **Renderer Process Events**: 47 (via usePostHog hook)
+- **Renderer Process Events**: 53 (via usePostHog hook)
 - **Mobile Events**: 7 (via Capacitor AnalyticsService)
 - **File Operations**: 7 events
 - **Workspace Operations**: 4 events
 - **Navigation & Editor Mode**: 4 events
+- **Session Kanban Board**: 6 events
 - **File History**: 2 events
 - **AI-Related**: 23 events
 - **Blitz Mode**: 1 event
