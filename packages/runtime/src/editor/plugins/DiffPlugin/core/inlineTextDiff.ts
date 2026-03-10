@@ -49,11 +49,31 @@ export function $applyInlineTextDiff(
 
     // Check if this is a pure formatting change (text is identical)
     if (sourceText === targetText) {
-      // console.log('[inlineTextDiff] Pure formatting change detected:', {
-      //   text: sourceText,
-      //   sourceChildren: sourceChildren.length,
-      //   targetChildren: targetChildren.length,
-      // });
+      // Before marking as a formatting change, check if children are actually identical
+      // (same count, same text, same format). If so, there's no change at all -
+      // just rebuild the children without diff markers. This prevents false positives
+      // where bold list items show as changed even when they haven't been modified.
+      let childrenIdentical = sourceChildren.length === targetChildren.length;
+      if (childrenIdentical) {
+        for (let i = 0; i < sourceChildren.length; i++) {
+          const s = sourceChildren[i] as SerializedTextNode;
+          const t = targetChildren[i] as SerializedTextNode;
+          if (s.text !== t.text || (s.format || 0) !== (t.format || 0)) {
+            childrenIdentical = false;
+            break;
+          }
+        }
+      }
+
+      if (childrenIdentical) {
+        // Children are identical - no formatting change, just rebuild without markers
+        for (const targetChild of targetChildren) {
+          const node = $parseSerializedNode(targetChild);
+          containerNode.append(node);
+        }
+        return;
+      }
+
       // Pure formatting change - use full replacement approach for proper accept/reject
       // This ensures reject can revert to original formatting
       for (const sourceChild of sourceChildren) {
