@@ -61,8 +61,10 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
   onDelete,
 }) => {
   const [showPhaseSubmenu, setShowPhaseSubmenu] = useState(false);
+  const [submenuFlipped, setSubmenuFlipped] = useState(false);
   const [adjustedPosition, setAdjustedPosition] = useState<{ x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const submenuParentRef = useRef<HTMLDivElement>(null);
   const setSessionPhase = useSetAtom(setSessionPhaseAtom);
 
   // Share state
@@ -193,8 +195,17 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
       )}
       {/* Set Phase submenu */}
       <div
+        ref={submenuParentRef}
         className="relative"
-        onMouseEnter={() => setShowPhaseSubmenu(true)}
+        onMouseEnter={() => {
+          // Check if submenu would overflow right edge
+          if (submenuParentRef.current) {
+            const rect = submenuParentRef.current.getBoundingClientRect();
+            const submenuWidth = 150; // min-w-[140px] + padding
+            setSubmenuFlipped(rect.right + submenuWidth > window.innerWidth);
+          }
+          setShowPhaseSubmenu(true);
+        }}
         onMouseLeave={() => setShowPhaseSubmenu(false)}
       >
         <button
@@ -209,7 +220,7 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
           <MaterialSymbol icon="chevron_right" size={12} />
         </button>
         {showPhaseSubmenu && (
-          <div className="absolute left-full top-0 ml-0.5 min-w-[140px] p-1 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] z-[1001]">
+          <div className={`absolute top-0 min-w-[140px] p-1 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] z-[1001] ${submenuFlipped ? 'right-full mr-0.5' : 'left-full ml-0.5'}`}>
             {SESSION_PHASE_COLUMNS.map((col) => (
               <button
                 key={col.value}

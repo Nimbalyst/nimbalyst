@@ -603,8 +603,8 @@ function SessionKanbanCard({ session, onSelect, onArchive, onRename, phaseColor,
         />
       )}
 
-      {/* Context Menu */}
-      {showContextMenu && (
+      {/* Context Menu - portaled to escape opacity-65 on Complete column */}
+      {showContextMenu && createPortal(
         <SessionContextMenu
           sessionId={session.id}
           title={session.title}
@@ -616,7 +616,8 @@ function SessionKanbanCard({ session, onSelect, onArchive, onRename, phaseColor,
           phase={session.phase}
           onRename={onRename ? () => { setRenameValue(session.title); setIsRenaming(true); } : undefined}
           onArchive={onArchive ? () => onArchive(session.id) : undefined}
-        />
+        />,
+        document.body,
       )}
     </>
   );
