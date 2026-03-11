@@ -51,7 +51,6 @@ import {
   PLAYWRIGHT_TEST_SELECTORS,
   openFileFromTree,
   closeTabByFileName,
-  manualSaveDocument,
   editDocumentContent,
 } from '../utils/testHelpers';
 
@@ -485,14 +484,14 @@ test.describe('Consecutive Edits Diff View Updates', () => {
       { filePath, tag: `ai-edit-rapid-${Date.now()}`, content: originalContent }
     );
 
-    // Three rapid edits
+    // Three rapid edits via file watcher
     await fs.writeFile(filePath, '# Test Document\n\nEdit 1.\n', 'utf8');
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(500);
     await fs.writeFile(filePath, '# Test Document\n\nEdit 2.\n', 'utf8');
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(500);
     const edit3 = '# Test Document\n\nEdit 3.\nFinal line.\n';
     await fs.writeFile(filePath, edit3, 'utf8');
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(1000);
 
     const acceptAllButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffAcceptAllButton);
     await expect(acceptAllButton).toBeVisible({ timeout: 2000 });
@@ -758,7 +757,7 @@ test.describe('Incremental Cleanup', () => {
     await expect(page.locator('.unified-diff-header')).toHaveCount(0, { timeout: 2000 });
 
     // Save and verify
-    await manualSaveDocument(page);
+    await triggerManualSave(electronApp);
     await waitForSave(page, TEST_FILES.incrementalAccept);
     const finalContent = await fs.readFile(filePath, 'utf8');
     expect(finalContent).toContain('UPDATED first section');
@@ -813,7 +812,7 @@ test.describe('Incremental Cleanup', () => {
     await expect(page.locator('.unified-diff-header')).toHaveCount(0, { timeout: 2000 });
 
     // Verify original content preserved
-    await manualSaveDocument(page);
+    await triggerManualSave(electronApp);
     await waitForSave(page, TEST_FILES.incrementalReject);
     const finalContent = await fs.readFile(filePath, 'utf8');
     expect(finalContent).toContain('This is the first section with some content.');

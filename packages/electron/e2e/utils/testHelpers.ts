@@ -597,21 +597,26 @@ export async function waitForWorkspaceReady(page: Page): Promise<void> {
 }
 
 /**
- * Open a file from the file tree and wait for it to load
+ * Open a file by path using the app's internal file selection handler.
+ * Works regardless of file tree virtualization or scroll position.
+ *
+ * The fileName can be just the filename (resolved against workspace) or a full path.
  */
 export async function openFileFromTree(
   page: Page,
   fileName: string
 ): Promise<void> {
-  // Wait for file tree to be visible and find the file
-  const fileItem = page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: fileName }).first();
-  await fileItem.waitFor({ state: 'visible', timeout: 5000 });
-
-  // Click file in tree
-  await fileItem.click();
+  // Resolve to absolute path if needed, then open via the app's own handler
+  await page.evaluate(async (name) => {
+    const workspace = (window as any).__workspacePath;
+    const isAbsolute = name.startsWith('/');
+    const fullPath = isAbsolute ? name : `${workspace}/${name}`;
+    await (window as any).__handleWorkspaceFileSelect(fullPath);
+  }, fileName);
 
   // Wait for tab to become active
-  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.tab, { hasText: fileName }))
+  const displayName = fileName.includes('/') ? fileName.split('/').pop()! : fileName;
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.tab, { hasText: displayName }))
     .toBeVisible({ timeout: TEST_TIMEOUTS.TAB_SWITCH });
 }
 

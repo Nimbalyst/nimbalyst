@@ -790,6 +790,16 @@ export default function App() {
     aiToolService.setHandleWorkspaceFileSelectFunction(handleWorkspaceFileSelect);
   }, [handleWorkspaceFileSelect]);
 
+  // Expose for E2E tests (same pattern as __editorRegistry)
+  useEffect(() => {
+    (window as any).__handleWorkspaceFileSelect = handleWorkspaceFileSelect;
+    (window as any).__workspacePath = workspacePath;
+    return () => {
+      delete (window as any).__handleWorkspaceFileSelect;
+      delete (window as any).__workspacePath;
+    };
+  }, [handleWorkspaceFileSelect, workspacePath]);
+
   // Subscribe to openFileRequestAtom (breadcrumb clicks from any mode)
   useEffect(() => {
     const unsub = store.sub(openFileRequestAtom, () => {
