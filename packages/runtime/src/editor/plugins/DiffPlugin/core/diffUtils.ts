@@ -268,7 +268,7 @@ function _applyMarkdownEdits(
   for (const replacement of replacements) {
     const {oldText, newText} = resolveReplacementTexts(replacement);
     // Normalize whitespace for matching
-    const normalizedOriginal = normalizeWhitespace(originalMarkdown);
+    const normalizedOriginal = normalizeWhitespace(newMarkdown);
     const normalizedOldText = normalizeWhitespace(oldText);
 
     // Debug: Replacement attempt details
@@ -279,7 +279,7 @@ function _applyMarkdownEdits(
     // console.log('  Normalized match found:', normalizedOriginal.includes(normalizedOldText));
 
     // Try exact match first
-    if (originalMarkdown.includes(oldText)) {
+    if (newMarkdown.includes(oldText)) {
       // console.log('  ✅ Using exact match replacement');
       // Apply the replacement - replace all occurrences
       newMarkdown = newMarkdown.replace(
@@ -295,7 +295,7 @@ function _applyMarkdownEdits(
 
       // Try to find the corresponding position in the original text
       // This is a best-effort approach
-      const lines = originalMarkdown.split(/\r?\n/);
+      const lines = newMarkdown.split(/\r?\n/);
       const normalizedLines = lines.map(line => line.trimEnd());
 
       // Reconstruct with normalized matching
@@ -312,7 +312,7 @@ function _applyMarkdownEdits(
 
         if (!found && normalizedIndex >= lineStart && normalizedIndex < lineEnd + 1) {
           // This is where the replacement starts
-          const beforeReplacement = originalMarkdown.substring(0, currentPos);
+          const beforeReplacement = newMarkdown.substring(0, currentPos);
 
           // Find the end of the replacement in the original
           let endPos = currentPos;
@@ -324,7 +324,7 @@ function _applyMarkdownEdits(
             }
           }
 
-          const afterReplacement = originalMarkdown.substring(endPos);
+           const afterReplacement = newMarkdown.substring(endPos);
           newMarkdown = beforeReplacement + newText + afterReplacement;
           found = true;
           break;
