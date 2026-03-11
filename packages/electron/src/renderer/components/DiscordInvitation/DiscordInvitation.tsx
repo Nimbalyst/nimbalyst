@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react';
 import { usePostHog } from 'posthog-js/react';
-import { useTheme } from '../../hooks/useTheme';
 
 export interface DiscordInvitationProps {
   isOpen: boolean;
@@ -80,8 +79,7 @@ export const DiscordInvitation: React.FC<DiscordInvitationProps> = ({
   onDismiss
 }) => {
   const posthog = usePostHog();
-  const { theme } = useTheme();
-  const logoSrc = theme === 'dark' ? './nimbalyst-logo-dark.svg' : './nimbalyst-logo.png';
+  const logoSrc = new URL('/nimbalyst-logo.png', import.meta.url).href;
 
   // Map social link names to their channel identifiers
   const channelMap = useMemo(() => ({
