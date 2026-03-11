@@ -29,6 +29,8 @@ import {
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
+test.describe.configure({ mode: 'serial' });
+
 let electronApp: ElectronApplication;
 let page: Page;
 let workspaceDir: string;

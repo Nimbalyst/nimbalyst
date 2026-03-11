@@ -29,11 +29,9 @@ test.describe('Extension Loading', () => {
   const consoleLogs: string[] = [];
   const consoleErrors: string[] = [];
 
-  test.beforeEach(async () => {
-    // Clear log arrays
-    consoleLogs.length = 0;
-    consoleErrors.length = 0;
+  test.describe.configure({ mode: 'serial' });
 
+  test.beforeAll(async () => {
     // Create temp workspace with a .prisma file
     workspaceDir = await createTempWorkspace();
 
@@ -115,7 +113,7 @@ model User {
     await waitForAppReady(page);
   });
 
-  test.afterEach(async () => {
+  test.afterAll(async () => {
     await electronApp?.close();
     await fs.rm(workspaceDir, { recursive: true, force: true }).catch(() => undefined);
     await fs.rm(path.join(os.tmpdir(), 'nimbalyst-test-extensions'), {

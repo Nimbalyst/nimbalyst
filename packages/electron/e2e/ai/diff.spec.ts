@@ -1,10 +1,15 @@
 /**
- * Diff Behavior E2E Tests (Consolidated)
+ * Diff E2E Tests (Consolidated)
  *
  * Tests diff approval workflows, tab targeting, consecutive edits, baseline tracking,
- * and cleanup behavior. Uses synthetic AI simulation (no real API calls).
+ * cleanup behavior, complex structures, streaming scenarios, and edge cases.
+ * Uses synthetic AI simulation (no real API calls).
  *
  * Consolidated from:
+ * - diff-behavior.spec.ts (tab targeting, consecutive edits, group approval, baseline, cleanup)
+ * - diff-reliability.spec.ts (complex structures, streaming, edge cases)
+ *
+ * Original sources:
  * - ai-tool-simulator.spec.ts (tab targeting)
  * - ai-turn-end-snapshots.spec.ts (consecutive edits with pre-edit tags)
  * - consecutive-edits-diff-update.spec.ts (diff view updates on consecutive edits)
@@ -13,9 +18,7 @@
  * - incremental-baseline-tracking.spec.ts (baseline shifts after acceptance)
  * - incremental-diff-cleanup.spec.ts (tag cleanup after incremental accept/reject)
  * - reject-then-accept-all.spec.ts (rejected diffs stay rejected on Accept All)
- *
- * For complex diff edge cases (nested lists, tables, code blocks, streaming),
- * see diff-reliability.spec.ts.
+ * - Various diff-reliability edge case files
  */
 
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
@@ -31,6 +34,7 @@ import {
 } from '../helpers';
 import {
   simulateApplyDiff,
+  simulateStreamContent,
   setupAIApiForTesting,
   acceptDiffs,
   verifyEditorContains,
@@ -40,6 +44,7 @@ import {
   queryTags,
   getDiffBaseline,
   countTagsByType,
+  triggerManualSave,
   waitForSave,
 } from '../utils/aiToolSimulator';
 import {
@@ -52,6 +57,7 @@ import {
 
 // All test files created upfront to avoid state conflicts
 const TEST_FILES = {
+  // --- Behavior tests ---
   // Tab targeting
   tabFirst: 'tab-first.md',
   tabSecond: 'tab-second.md',
@@ -77,10 +83,31 @@ const TEST_FILES = {
   incrementalBaseline: 'incremental-baseline.md',
   // Reject then accept all
   rejectThenAccept: 'reject-then-accept.md',
+
+  // --- Reliability tests ---
+  // Complex Structures
+  nestedList: 'nested-list.md',
+  tableRow: 'table-row.md',
+  codeBlock: 'code-block.md',
+  mixedContent: 'mixed-content.md',
+  deeplyNested: 'deeply-nested.md',
+  whitespace: 'whitespace.md',
+  // Streaming Scenarios
+  streamingList: 'streaming-list.md',
+  streamingMiddle: 'streaming-middle.md',
+  streamingComplex: 'streaming-complex.md',
+  streamingRapid: 'streaming-rapid.md',
+  // Edge Cases
+  emptyDoc: 'empty-doc.md',
+  longLines: 'long-lines.md',
+  specialChars: 'special-chars.md',
+  formatting: 'formatting.md',
+  multipleEdits: 'multiple-edits.md',
 };
 
 // Content templates
-const SIMPLE_CONTENT = '# Test Document\n\nOriginal content.\n';
+const SIMPLE_CONTENT = '# Test\n\nOriginal content.\n';
+const INITIAL_CONTENT = '# Test\n\nInitial content.\n';
 const MULTI_SECTION_CONTENT = `# Document Title
 
 ## Section One
@@ -127,6 +154,7 @@ test.beforeAll(async () => {
 
   // Create all test files upfront
   const fileContents: Record<string, string> = {
+    // Behavior test files
     [TEST_FILES.tabFirst]: createTestMarkdown({
       'First Document': 'This is the first test document.',
       'Section One': 'Content in section one.',
@@ -157,6 +185,23 @@ This is the third paragraph.
     [TEST_FILES.incrementalMixed]: MULTI_SECTION_CONTENT,
     [TEST_FILES.incrementalBaseline]: MULTI_SECTION_CONTENT,
     [TEST_FILES.rejectThenAccept]: THREE_SECTION_CONTENT,
+
+    // Reliability test files
+    [TEST_FILES.nestedList]: INITIAL_CONTENT,
+    [TEST_FILES.tableRow]: INITIAL_CONTENT,
+    [TEST_FILES.codeBlock]: INITIAL_CONTENT,
+    [TEST_FILES.mixedContent]: INITIAL_CONTENT,
+    [TEST_FILES.deeplyNested]: INITIAL_CONTENT,
+    [TEST_FILES.whitespace]: INITIAL_CONTENT,
+    [TEST_FILES.streamingList]: INITIAL_CONTENT,
+    [TEST_FILES.streamingMiddle]: INITIAL_CONTENT,
+    [TEST_FILES.streamingComplex]: INITIAL_CONTENT,
+    [TEST_FILES.streamingRapid]: INITIAL_CONTENT,
+    [TEST_FILES.emptyDoc]: INITIAL_CONTENT,
+    [TEST_FILES.longLines]: INITIAL_CONTENT,
+    [TEST_FILES.specialChars]: INITIAL_CONTENT,
+    [TEST_FILES.formatting]: INITIAL_CONTENT,
+    [TEST_FILES.multipleEdits]: INITIAL_CONTENT,
   };
 
   for (const [fileName, content] of Object.entries(fileContents)) {
@@ -187,7 +232,6 @@ test.afterAll(async () => {
 // ============================================================
 // TAB TARGETING
 // Tests that diffs and streaming target the correct tab
-// (from ai-tool-simulator.spec.ts)
 // ============================================================
 
 test.describe('Tab Targeting', () => {
@@ -288,7 +332,6 @@ test.describe('Tab Targeting', () => {
 // CONSECUTIVE EDITS VIA FILE WATCHER
 // Tests that diff mode activates and persists through consecutive
 // disk writes (simulating what Claude Code's Edit tool does)
-// (from ai-turn-end-snapshots.spec.ts)
 // ============================================================
 
 test.describe('Consecutive Edits via File Watcher', () => {
@@ -380,7 +423,6 @@ test.describe('Consecutive Edits via File Watcher', () => {
 // CONSECUTIVE EDITS DIFF VIEW UPDATES
 // Tests that the diff view correctly updates when multiple edits
 // are written to disk while diff mode is active
-// (from consecutive-edits-diff-update.spec.ts)
 // ============================================================
 
 test.describe('Consecutive Edits Diff View Updates', () => {
@@ -511,7 +553,6 @@ test.describe('Consecutive Edits Diff View Updates', () => {
 // ============================================================
 // MANUAL DELETE CLEANUP
 // Tests CLEAR_DIFF_TAG_COMMAND when user manually deletes diff content
-// (from diff-edge-case-cleanup.spec.ts)
 // ============================================================
 
 test.describe('Manual Delete Cleanup', () => {
@@ -573,7 +614,6 @@ test.describe('Manual Delete Cleanup', () => {
 // ============================================================
 // GROUP APPROVAL
 // Tests individual diff group approval
-// (from diff-group-approval.spec.ts)
 // ============================================================
 
 test.describe('Group Approval', () => {
@@ -620,7 +660,6 @@ test.describe('Group Approval', () => {
 // ============================================================
 // BASELINE TRACKING
 // Tests that subsequent AI edits use accepted state as baseline
-// (from incremental-baseline-tracking.spec.ts)
 // ============================================================
 
 test.describe('Baseline Tracking', () => {
@@ -686,7 +725,6 @@ test.describe('Baseline Tracking', () => {
 // ============================================================
 // INCREMENTAL CLEANUP
 // Tests tag cleanup after incremental accept/reject workflows
-// (from incremental-diff-cleanup.spec.ts)
 // ============================================================
 
 test.describe('Incremental Cleanup', () => {
@@ -846,7 +884,6 @@ test.describe('Incremental Cleanup', () => {
 // ============================================================
 // REJECT THEN ACCEPT ALL
 // Tests that rejected diffs stay rejected when using Accept All
-// (from reject-then-accept-all.spec.ts)
 // ============================================================
 
 test.describe('Reject Then Accept All', () => {
@@ -915,5 +952,516 @@ test.describe('Reject Then Accept All', () => {
     expect(contentAfterReopen).toContain('THIRD CHANGE');
 
     await closeTabByFileName(page, TEST_FILES.rejectThenAccept);
+  });
+});
+
+// ============================================================================
+// COMPLEX STRUCTURES
+// Tests the DiffPlugin's ability to handle various complex markdown structures
+// ============================================================================
+
+test.describe('Complex Structures', () => {
+  test('should handle nested list edits', async () => {
+    const filePath = path.join(workspaceDir, TEST_FILES.nestedList);
+    const content = `# Shopping List
+
+- Fruits
+  - Apples
+  - Bananas
+  - Oranges
+- Vegetables
+  - Carrots
+  - Broccoli
+`;
+
+    await fs.writeFile(filePath, content, 'utf8');
+    await openFileFromTree(page, TEST_FILES.nestedList);
+    await waitForEditorReady(page);
+
+    // Try to add a nested item
+    const result = await simulateApplyDiff(page, filePath, [
+      { oldText: '  - Oranges', newText: '  - Oranges\n  - Grapes' }
+    ]);
+
+    expect(result.success).toBe(true);
+
+    // Wait for unified diff header to appear
+    await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffHeader, { timeout: 5000 });
+
+    // Accept the suggested changes
+    await page.locator(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffAcceptAllButton).click();
+
+    // Wait for diff header to disappear
+    await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffHeader, { state: 'hidden', timeout: 5000 });
+
+    // Save the document
+    await triggerManualSave(electronApp);
+    await waitForSave(page, TEST_FILES.nestedList);
+
+    // Verify the change was applied to disk
+    const updatedContent = await fs.readFile(filePath, 'utf8');
+    expect(updatedContent).toContain('Grapes');
+
+    await closeTabByFileName(page, TEST_FILES.nestedList);
+  });
+
+  test('should handle table row additions', async () => {
+    const filePath = path.join(workspaceDir, TEST_FILES.tableRow);
+    const content = `# Data Table
+
+| Name | Age | City |
+|------|-----|------|
+| Alice | 30 | NYC |
+| Bob | 25 | LA |
+`;
+
+    await fs.writeFile(filePath, content, 'utf8');
+    await openFileFromTree(page, TEST_FILES.tableRow);
+    await waitForEditorReady(page);
+
+    // Add a new row
+    const result = await simulateApplyDiff(page, filePath, [
+      {
+        oldText: '| Bob | 25 | LA |',
+        newText: '| Bob | 25 | LA |\n| Charlie | 35 | SF |'
+      }
+    ]);
+
+    expect(result.success).toBe(true);
+
+    await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffHeader, { timeout: 5000 });
+
+    // Accept (table diffs may require clicking twice due to a known Lexical bug)
+    await page.locator(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffAcceptAllButton).click();
+    await page.waitForTimeout(300);
+
+    // Click again if header is still visible (table diff bug workaround)
+    const headerStillVisible = await page.locator(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffHeader).isVisible();
+    if (headerStillVisible) {
+      await page.locator(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffAcceptAllButton).click();
+    }
+
+    await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffHeader, { state: 'hidden', timeout: 5000 });
+
+    await triggerManualSave(electronApp);
+    await waitForSave(page, TEST_FILES.tableRow);
+
+    const updatedContent = await fs.readFile(filePath, 'utf8');
+    expect(updatedContent).toContain('Charlie');
+
+    await closeTabByFileName(page, TEST_FILES.tableRow);
+  });
+
+  test('should handle code block modifications', async () => {
+    const filePath = path.join(workspaceDir, TEST_FILES.codeBlock);
+    const content = `# Code Example
+
+\`\`\`javascript
+function hello() {
+  console.log("Hello");
+}
+\`\`\`
+`;
+
+    await fs.writeFile(filePath, content, 'utf8');
+    await openFileFromTree(page, TEST_FILES.codeBlock);
+    await waitForEditorReady(page);
+
+    const result = await simulateApplyDiff(page, filePath, [
+      {
+        oldText: '  console.log("Hello");',
+        newText: '  console.log("Hello");\n  console.log("World");'
+      }
+    ]);
+
+    expect(result.success).toBe(true);
+
+    await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffHeader, { timeout: 5000 });
+    await page.locator(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffAcceptAllButton).click();
+    await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffHeader, { state: 'hidden', timeout: 5000 });
+
+    await triggerManualSave(electronApp);
+    await waitForSave(page, TEST_FILES.codeBlock);
+
+    const updatedContent = await fs.readFile(filePath, 'utf8');
+    expect(updatedContent).toContain('World');
+
+    await closeTabByFileName(page, TEST_FILES.codeBlock);
+  });
+
+  test('should handle mixed content type sections', async () => {
+    const filePath = path.join(workspaceDir, TEST_FILES.mixedContent);
+    const content = `# Mixed Content
+
+Some text here.
+
+- List item 1
+- List item 2
+
+\`\`\`python
+def foo():
+    pass
+\`\`\`
+
+More text here.
+`;
+
+    await fs.writeFile(filePath, content, 'utf8');
+    await openFileFromTree(page, TEST_FILES.mixedContent);
+    await waitForEditorReady(page);
+
+    const result = await simulateApplyDiff(page, filePath, [
+      { oldText: '- List item 2', newText: '- List item 2\n- List item 3' },
+      { oldText: 'More text here.', newText: 'More text here with additions.' }
+    ]);
+
+    expect(result.success).toBe(true);
+
+    await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffHeader, { timeout: 5000 });
+    await page.locator(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffAcceptAllButton).click();
+    await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffHeader, { state: 'hidden', timeout: 5000 });
+
+    await triggerManualSave(electronApp);
+    await waitForSave(page, TEST_FILES.mixedContent);
+
+    const updatedContent = await fs.readFile(filePath, 'utf8');
+    expect(updatedContent).toContain('List item 3');
+    expect(updatedContent).toContain('with additions');
+
+    await closeTabByFileName(page, TEST_FILES.mixedContent);
+  });
+
+  test('should handle deeply nested structures', async () => {
+    const filePath = path.join(workspaceDir, TEST_FILES.deeplyNested);
+    const content = `# Nested Structure
+
+- Level 1
+  - Level 2
+    - Level 3
+      - Level 4
+        - Level 5
+`;
+
+    await fs.writeFile(filePath, content, 'utf8');
+    await openFileFromTree(page, TEST_FILES.deeplyNested);
+    await waitForEditorReady(page);
+
+    const result = await simulateApplyDiff(page, filePath, [
+      { oldText: '        - Level 5', newText: '        - Level 5 Modified' }
+    ]);
+
+    expect(result.success).toBe(true);
+
+    await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffHeader, { timeout: 5000 });
+    await page.locator(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffAcceptAllButton).click();
+    await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffHeader, { state: 'hidden', timeout: 5000 });
+
+    await triggerManualSave(electronApp);
+    await waitForSave(page, TEST_FILES.deeplyNested);
+
+    const updatedContent = await fs.readFile(filePath, 'utf8');
+    expect(updatedContent).toContain('Level 5 Modified');
+
+    await closeTabByFileName(page, TEST_FILES.deeplyNested);
+  });
+
+  test('should handle whitespace-sensitive changes', async () => {
+    const filePath = path.join(workspaceDir, TEST_FILES.whitespace);
+    const content = `# Whitespace Test
+
+This is a paragraph with    multiple    spaces.
+
+Another paragraph.
+`;
+
+    await fs.writeFile(filePath, content, 'utf8');
+    await openFileFromTree(page, TEST_FILES.whitespace);
+    await waitForEditorReady(page);
+
+    const result = await simulateApplyDiff(page, filePath, [
+      {
+        oldText: 'This is a paragraph with    multiple    spaces.',
+        newText: 'This is a paragraph with single spaces.'
+      }
+    ]);
+
+    expect(result.success).toBe(true);
+
+    await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffHeader, { timeout: 5000 });
+    await page.locator(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffAcceptAllButton).click();
+    await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffHeader, { state: 'hidden', timeout: 5000 });
+
+    await triggerManualSave(electronApp);
+    await waitForSave(page, TEST_FILES.whitespace);
+
+    const updatedContent = await fs.readFile(filePath, 'utf8');
+    expect(updatedContent).toContain('single spaces');
+
+    await closeTabByFileName(page, TEST_FILES.whitespace);
+  });
+});
+
+// ============================================================================
+// STREAMING SCENARIOS
+// ============================================================================
+
+test.describe('Streaming Scenarios', () => {
+  test('should handle streaming list additions', async () => {
+    const filePath = path.join(workspaceDir, TEST_FILES.streamingList);
+    const content = `# Task List
+
+- Task 1
+- Task 2
+`;
+
+    await fs.writeFile(filePath, content, 'utf8');
+    await openFileFromTree(page, TEST_FILES.streamingList);
+    await waitForEditorReady(page);
+
+    await simulateStreamContent(page, '\n- Task 3\n- Task 4', { insertAtEnd: true });
+
+    await triggerManualSave(electronApp);
+    await waitForSave(page, TEST_FILES.streamingList);
+
+    const updatedContent = await fs.readFile(filePath, 'utf8');
+    expect(updatedContent).toContain('Task 3');
+    expect(updatedContent).toContain('Task 4');
+
+    await closeTabByFileName(page, TEST_FILES.streamingList);
+  });
+
+  test('should handle streaming into middle of document', async () => {
+    const filePath = path.join(workspaceDir, TEST_FILES.streamingMiddle);
+    const content = `# Section 1
+
+Content 1
+
+# Section 2
+
+Content 2
+`;
+
+    await fs.writeFile(filePath, content, 'utf8');
+    await openFileFromTree(page, TEST_FILES.streamingMiddle);
+    await waitForEditorReady(page);
+
+    await simulateStreamContent(
+      page,
+      '\n\nNew paragraph in section 1',
+      { insertAfter: 'Content 1' }
+    );
+
+    await triggerManualSave(electronApp);
+    await waitForSave(page, TEST_FILES.streamingMiddle);
+
+    const updatedContent = await fs.readFile(filePath, 'utf8');
+    expect(updatedContent).toContain('New paragraph in section 1');
+
+    await closeTabByFileName(page, TEST_FILES.streamingMiddle);
+  });
+
+  test('should handle streaming complex markdown structures', async () => {
+    const filePath = path.join(workspaceDir, TEST_FILES.streamingComplex);
+    const content = `# Document
+
+Initial content.
+`;
+
+    await fs.writeFile(filePath, content, 'utf8');
+    await openFileFromTree(page, TEST_FILES.streamingComplex);
+    await waitForEditorReady(page);
+
+    const complexContent = `
+
+## New Section
+
+This is a paragraph.
+
+- List item 1
+- List item 2
+
+\`\`\`javascript
+console.log("code");
+\`\`\`
+`;
+
+    await simulateStreamContent(page, complexContent, { insertAtEnd: true });
+
+    await triggerManualSave(electronApp);
+    await waitForSave(page, TEST_FILES.streamingComplex);
+
+    const updatedContent = await fs.readFile(filePath, 'utf8');
+    expect(updatedContent).toContain('New Section');
+    expect(updatedContent).toContain('List item 1');
+    expect(updatedContent).toContain('console.log');
+
+    await closeTabByFileName(page, TEST_FILES.streamingComplex);
+  });
+
+  test('should handle rapid successive streaming operations', async () => {
+    const filePath = path.join(workspaceDir, TEST_FILES.streamingRapid);
+    const content = `# Notes
+
+`;
+
+    await fs.writeFile(filePath, content, 'utf8');
+    await openFileFromTree(page, TEST_FILES.streamingRapid);
+    await waitForEditorReady(page);
+
+    for (let i = 1; i <= 5; i++) {
+      await simulateStreamContent(page, `\n- Note ${i}`, { insertAtEnd: true });
+      await page.waitForTimeout(100);
+    }
+
+    await triggerManualSave(electronApp);
+    await waitForSave(page, TEST_FILES.streamingRapid);
+
+    const updatedContent = await fs.readFile(filePath, 'utf8');
+    for (let i = 1; i <= 5; i++) {
+      expect(updatedContent).toContain(`Note ${i}`);
+    }
+
+    await closeTabByFileName(page, TEST_FILES.streamingRapid);
+  });
+});
+
+// ============================================================================
+// EDGE CASES
+// ============================================================================
+
+test.describe('Edge Cases', () => {
+  test('should handle empty document edits', async () => {
+    const filePath = path.join(workspaceDir, TEST_FILES.emptyDoc);
+
+    await fs.writeFile(filePath, '', 'utf8');
+    await openFileFromTree(page, TEST_FILES.emptyDoc);
+    await waitForEditorReady(page);
+
+    await simulateStreamContent(page, '# New Document\n\nFirst content.', { insertAtEnd: true });
+
+    await triggerManualSave(electronApp);
+    await waitForSave(page, TEST_FILES.emptyDoc);
+
+    const updatedContent = await fs.readFile(filePath, 'utf8');
+    expect(updatedContent).toContain('New Document');
+
+    await closeTabByFileName(page, TEST_FILES.emptyDoc);
+  });
+
+  test('should handle very long lines', async () => {
+    const filePath = path.join(workspaceDir, TEST_FILES.longLines);
+    const longLine = 'A'.repeat(500);
+    const content = `# Long Lines\n\n${longLine}\n`;
+
+    await fs.writeFile(filePath, content, 'utf8');
+    await openFileFromTree(page, TEST_FILES.longLines);
+    await waitForEditorReady(page);
+
+    const result = await simulateApplyDiff(page, filePath, [
+      { oldText: longLine, newText: longLine + ' Modified' }
+    ]);
+
+    expect(result.success).toBe(true);
+
+    await closeTabByFileName(page, TEST_FILES.longLines);
+  });
+
+  test('should handle special characters in content', async () => {
+    const filePath = path.join(workspaceDir, TEST_FILES.specialChars);
+    const content = `# Special Characters
+
+Text with *asterisks* and _underscores_ and [brackets].
+
+More text with \`backticks\` and |pipes|.
+`;
+
+    await fs.writeFile(filePath, content, 'utf8');
+    await openFileFromTree(page, TEST_FILES.specialChars);
+    await waitForEditorReady(page);
+
+    const result = await simulateApplyDiff(page, filePath, [
+      {
+        oldText: 'More text with `backticks` and |pipes|.',
+        newText: 'More text with `backticks` and |pipes| and ~tildes~.'
+      }
+    ]);
+
+    expect(result.success).toBe(true);
+
+    await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffHeader, { timeout: 5000 });
+    await page.locator(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffAcceptAllButton).click();
+    await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffHeader, { state: 'hidden', timeout: 5000 });
+
+    await triggerManualSave(electronApp);
+    await waitForSave(page, TEST_FILES.specialChars);
+
+    const updatedContent = await fs.readFile(filePath, 'utf8');
+    expect(updatedContent).toContain('tildes');
+
+    await closeTabByFileName(page, TEST_FILES.specialChars);
+  });
+
+  test('should handle formatting boundaries', async () => {
+    const filePath = path.join(workspaceDir, TEST_FILES.formatting);
+    const content = `# Formatting
+
+**Bold text** followed by *italic text* and ~~strikethrough~~.
+`;
+
+    await fs.writeFile(filePath, content, 'utf8');
+    await openFileFromTree(page, TEST_FILES.formatting);
+    await waitForEditorReady(page);
+
+    const result = await simulateApplyDiff(page, filePath, [
+      {
+        oldText: '**Bold text** followed by *italic text*',
+        newText: '**Bold text** followed by *italic text* and `code`'
+      }
+    ]);
+
+    expect(result.success).toBe(true);
+
+    await closeTabByFileName(page, TEST_FILES.formatting);
+  });
+
+  test('should handle multiple simultaneous edits', async () => {
+    const filePath = path.join(workspaceDir, TEST_FILES.multipleEdits);
+    const content = `# Multiple Sections
+
+## Section A
+Content A
+
+## Section B
+Content B
+
+## Section C
+Content C
+`;
+
+    await fs.writeFile(filePath, content, 'utf8');
+    await openFileFromTree(page, TEST_FILES.multipleEdits);
+    await waitForEditorReady(page);
+
+    const result = await simulateApplyDiff(page, filePath, [
+      { oldText: 'Content A', newText: 'Content A Modified' },
+      { oldText: 'Content B', newText: 'Content B Modified' },
+      { oldText: 'Content C', newText: 'Content C Modified' }
+    ]);
+
+    expect(result.success).toBe(true);
+
+    await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffHeader, { timeout: 5000 });
+    await page.locator(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffAcceptAllButton).click();
+    await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffHeader, { state: 'hidden', timeout: 5000 });
+
+    await triggerManualSave(electronApp);
+    await waitForSave(page, TEST_FILES.multipleEdits);
+
+    const updatedContent = await fs.readFile(filePath, 'utf8');
+    expect(updatedContent).toContain('Content A Modified');
+    expect(updatedContent).toContain('Content B Modified');
+    expect(updatedContent).toContain('Content C Modified');
+
+    await closeTabByFileName(page, TEST_FILES.multipleEdits);
   });
 });

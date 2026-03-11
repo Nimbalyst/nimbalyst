@@ -36,6 +36,8 @@ import {
   getTabByFileName,
 } from '../utils/testHelpers';
 
+test.describe.configure({ mode: 'serial' });
+
 let electronApp: ElectronApplication;
 let page: Page;
 let workspaceDir: string;

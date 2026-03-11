@@ -31,6 +31,8 @@ import { switchToAgentMode } from '../utils/testHelpers';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
+test.describe.configure({ mode: 'serial' });
+
 let app: ElectronApplication;
 let page: Page;
 let workspacePath: string;

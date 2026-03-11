@@ -9,6 +9,8 @@ import {
 import path from 'path';
 import fs from 'fs/promises';
 
+test.describe.configure({ mode: 'serial' });
+
 // Counter for unique versions to avoid reminder suppression conflicts between tests
 let testVersionCounter = 0;
 

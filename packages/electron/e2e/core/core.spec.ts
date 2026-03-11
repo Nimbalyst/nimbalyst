@@ -1,10 +1,12 @@
 /**
- * Core app functionality tests: startup, mode switching, context-aware new.
+ * Core app functionality tests: startup, mode switching, context-aware new,
+ * tab management, and find/replace.
  *
  * Consolidated from:
  * - app-startup.spec.ts (basic app launch, file tree, editing, saving)
  * - mode-switching.spec.ts (agent/files mode switching)
  * - context-aware-new.spec.ts (Cmd+N behavior per mode)
+ * - tabs.spec.ts (tab management, content isolation, find/replace bar)
  *
  * All tests share a single Electron app instance with beforeAll/afterAll.
  */
@@ -17,6 +19,7 @@ import {
   TEST_TIMEOUTS,
   waitForAppReady,
   dismissProjectTrustToast,
+  getKeyboardShortcut,
   ACTIVE_EDITOR_SELECTOR,
   ACTIVE_FILE_TAB_SELECTOR,
 } from '../helpers';
@@ -24,6 +27,7 @@ import {
   openFileFromTree,
   switchToAgentMode,
   dismissAPIKeyDialog,
+  closeTabByFileName,
   PLAYWRIGHT_TEST_SELECTORS,
 } from '../utils/testHelpers';
 import * as fs from 'fs/promises';
@@ -44,6 +48,15 @@ test.beforeAll(async () => {
   // Files for context-aware-new tests
   await fs.writeFile(path.join(workspaceDir, 'agent-mode-test.md'), '# Agent Mode Test\n\nTest content for agent mode.\n', 'utf8');
   await fs.writeFile(path.join(workspaceDir, 'files-mode-test.md'), '# Files Mode Test\n\nTest content for files mode.\n', 'utf8');
+
+  // Files for tab management tests
+  await fs.writeFile(path.join(workspaceDir, 'content-alpha.md'), '# Alpha Document\n\nThis is the alpha file.\n', 'utf8');
+  await fs.writeFile(path.join(workspaceDir, 'content-beta.md'), '# Beta Document\n\nThis is the beta file.\n', 'utf8');
+  await fs.writeFile(path.join(workspaceDir, 'no-reload-file.md'), '# No Reload File\n\nContent for no-reload test.\n', 'utf8');
+
+  // Files for find/replace tests
+  await fs.writeFile(path.join(workspaceDir, 'find-test-1.md'), '# Test Document 1\n\nThis is a test document with some searchable content.\n\nThe word "test" appears multiple times.\n\nAnother test here.\n', 'utf8');
+  await fs.writeFile(path.join(workspaceDir, 'find-test-2.md'), '# Test Document 2\n\nThis is a test document with some searchable content.\n\nThe word "test" appears multiple times.\n\nAnother test here.\n', 'utf8');
 
   electronApp = await launchElectronApp({
     workspace: workspaceDir,
@@ -224,4 +237,146 @@ test('Cmd+N should open new file dialog in files mode', async () => {
 
   await page.keyboard.press('Escape');
   await page.waitForTimeout(300);
+});
+
+// ========================================================================
+// Tab Management tests (from tabs.spec.ts)
+// ========================================================================
+
+test('should preserve each file content independently when switching tabs', async () => {
+  // Make sure we're in files mode
+  const filesButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.filesModeButton);
+  await filesButton.click();
+  await page.waitForTimeout(300);
+
+  const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
+
+  // Open content-alpha.md
+  await page.locator('.file-tree-name', { hasText: 'content-alpha.md' }).click();
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('content-alpha.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+
+  // Add unique marker to alpha
+  const alphaMarker = `alpha-marker-${Date.now()}`;
+  await editor.click();
+  await page.keyboard.press(getKeyboardShortcut('Mod+End'));
+  await page.keyboard.type(`\n\n${alphaMarker}`);
+
+  let editorText = await editor.innerText();
+  expect(editorText).toContain('Alpha Document');
+  expect(editorText).toContain(alphaMarker);
+
+  // Switch to content-beta.md
+  await page.locator('.file-tree-name', { hasText: 'content-beta.md' }).click();
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('content-beta.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+  await page.waitForTimeout(TEST_TIMEOUTS.DEFAULT_WAIT);
+
+  editorText = await editor.innerText();
+  expect(editorText).toContain('Beta Document');
+  expect(editorText).not.toContain('Alpha Document');
+  expect(editorText).not.toContain(alphaMarker);
+
+  // Switch back to alpha
+  await page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: 'content-alpha.md' }) }).click();
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('content-alpha.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+  await page.waitForTimeout(TEST_TIMEOUTS.DEFAULT_WAIT);
+
+  editorText = await editor.innerText();
+  expect(editorText).toContain('Alpha Document');
+  expect(editorText).toContain(alphaMarker);
+  expect(editorText).not.toContain('Beta Document');
+
+  await closeTabByFileName(page, 'content-alpha.md');
+  await closeTabByFileName(page, 'content-beta.md');
+});
+
+test('should not reload tab when clicking on already active tab', async () => {
+  await page.locator('.file-tree-name', { hasText: 'no-reload-file.md' }).click();
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('no-reload-file.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+
+  const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
+  await editor.click();
+
+  const marker = `no-reload-test-${Date.now()}`;
+  await page.keyboard.type(marker);
+
+  const activeTab = page.locator('.tab.active', { has: page.locator('.tab-title', { hasText: 'no-reload-file.md' }) });
+  await activeTab.click();
+
+  const editorText = await editor.innerText();
+  expect(editorText).toContain(marker);
+  await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('no-reload-file.md');
+
+  await closeTabByFileName(page, 'no-reload-file.md');
+});
+
+// ========================================================================
+// Find/Replace tests (from tabs.spec.ts / find-replace-bar.spec.ts)
+// ========================================================================
+
+test('should open search/replace bar with Cmd+F and close with Escape', async () => {
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'find-test-1.md' }).click();
+  await expect(
+    page.locator(PLAYWRIGHT_TEST_SELECTORS.tab).filter({ hasText: 'find-test-1.md' })
+  ).toBeVisible({ timeout: TEST_TIMEOUTS.TAB_SWITCH });
+  await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.contentEditable, {
+    timeout: TEST_TIMEOUTS.EDITOR_LOAD,
+  });
+
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.searchReplaceBar)).not.toBeVisible();
+
+  await electronApp.evaluate(({ BrowserWindow }) => {
+    const focused = BrowserWindow.getFocusedWindow();
+    if (focused) {
+      focused.webContents.send('menu:find');
+    }
+  });
+
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.searchReplaceBar)).toBeVisible({
+    timeout: 1000,
+  });
+
+  const searchInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.searchInput);
+  await expect(searchInput).toBeFocused();
+
+  await searchInput.press('Escape');
+
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.searchReplaceBar)).not.toBeVisible({
+    timeout: 1000,
+  });
+
+  await closeTabByFileName(page, 'find-test-1.md');
+});
+
+test('should allow typing multiple characters in search box without losing focus', async () => {
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'find-test-2.md' }).click();
+  await expect(
+    page.locator(PLAYWRIGHT_TEST_SELECTORS.tab).filter({ hasText: 'find-test-2.md' })
+  ).toBeVisible({ timeout: TEST_TIMEOUTS.TAB_SWITCH });
+  await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.contentEditable, {
+    timeout: TEST_TIMEOUTS.EDITOR_LOAD,
+  });
+
+  await electronApp.evaluate(({ BrowserWindow }) => {
+    const focused = BrowserWindow.getFocusedWindow();
+    if (focused) {
+      focused.webContents.send('menu:find');
+    }
+  });
+
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.searchReplaceBar)).toBeVisible();
+
+  const searchInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.searchInput);
+  await expect(searchInput).toBeFocused();
+
+  await searchInput.type('test');
+
+  await expect(searchInput).toHaveValue('test');
+  await expect(searchInput).toBeFocused();
+
+  const matchCounter = page.locator(PLAYWRIGHT_TEST_SELECTORS.matchCounter);
+  await expect(matchCounter).toContainText('of');
+
+  await searchInput.press('Escape');
+
+  await closeTabByFileName(page, 'find-test-2.md');
 });

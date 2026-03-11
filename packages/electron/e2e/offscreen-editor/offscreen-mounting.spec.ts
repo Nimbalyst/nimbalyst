@@ -16,7 +16,9 @@ test.describe('Offscreen Editor Mounting', () => {
   let workspaceDir: string;
   let testDiagramPath: string;
 
-  test.beforeEach(async () => {
+  test.describe.configure({ mode: 'serial' });
+
+  test.beforeAll(async () => {
     workspaceDir = await createTempWorkspace();
 
     // Create a test Excalidraw file BEFORE launching app
@@ -42,7 +44,7 @@ test.describe('Offscreen Editor Mounting', () => {
     await waitForAppReady(page);
   });
 
-  test.afterEach(async () => {
+  test.afterAll(async () => {
     await electronApp?.close();
     await fs.rm(workspaceDir, { recursive: true, force: true });
   });

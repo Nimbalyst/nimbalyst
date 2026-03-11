@@ -34,6 +34,7 @@ import * as path from 'path';
 
 const SCREENSHOT_DIR = path.resolve(__dirname, '../../../../e2e_test_output/permissions');
 
+test.describe.configure({ mode: 'serial' });
 test.setTimeout(120000);
 
 let electronApp: ElectronApplication;

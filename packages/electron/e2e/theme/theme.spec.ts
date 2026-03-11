@@ -11,6 +11,8 @@ import { openFileFromTree, PLAYWRIGHT_TEST_SELECTORS } from '../utils/testHelper
 import path from 'path';
 import fs from 'fs/promises';
 
+test.describe.configure({ mode: 'serial' });
+
 // Consolidated theme tests from:
 // - theme-switching.spec.ts
 // - lexical-list-styling.spec.ts

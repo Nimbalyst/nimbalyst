@@ -15,7 +15,7 @@ Run E2E tests in a dev container if ANY of the following are true:
 
 If none of the above are true, run E2E tests normally.
 
-**ALWAYS use the `/e2e-devcontainer` command when running E2E tests in a dev container.**
+**ALWAYS use the \****`/e2e-devcontainer`**\*\* command when running E2E tests in a dev container.**
 
 ### Running Targeted Tests
 
@@ -27,7 +27,7 @@ You may use the `e2e-runner` agent to run **targeted E2E tests** related to the 
 ### Test Execution Rules
 
 **CRITICAL**: When fixing E2E tests, follow this workflow:
-1. **Run tests ONCE with `--max-failures=1`** to find the first failure
+1. **Run tests ONCE with \****`--max-failures=1`** to find the first failure
 2. **Read the error output** - do NOT run tests again to "verify" the error you just saw
 3. **Fix the issue** based on the error
 4. **Run tests ONCE again** to verify the fix
@@ -64,10 +64,53 @@ npx playwright install --with-deps
 
 ## Running Tests
 
-- `npm run test:e2e` runs every Playwright project defined in `playwright.config.ts`.
-- `npm run test:e2e -- --project=electron` executes only the Electron scenario.
-- `npx playwright test e2e/ai/diff-reliability.spec.ts` runs a specific test file.
-- `npx playwright test e2e/ai/diff-reliability.spec.ts:55` runs a specific test by line number.
+All commands below should be run from `packages/electron/`.
+
+### Quick Reference
+
+```bash
+# Smoke test (1 file, ~15s) - run after any UI change
+npx playwright test e2e/smoke/visual-smoke.spec.ts
+
+# Core tests (~5 files, ~1 min) - run before pushing
+npx playwright test e2e/core/ e2e/files/ e2e/editors/
+
+# Full suite (~29 files, ~5 min) - run before releases
+npx playwright test
+
+# Single file
+npx playwright test e2e/ai/diff.spec.ts
+
+# Single test by line number
+npx playwright test e2e/ai/diff.spec.ts:55
+
+# With failure details
+npx playwright test --reporter=line
+```
+
+### What to Run and When
+
+| Scenario | Command | Time |
+| --- | --- | --- |
+| Quick sanity check | `npx playwright test e2e/smoke/` | ~15s |
+| Working on editors | `npx playwright test e2e/editors/` | ~1 min |
+| Working on AI features | `npx playwright test e2e/ai/` | ~1 min |
+| Working on file operations | `npx playwright test e2e/files/` | ~30s |
+| Before pushing a PR | `npx playwright test e2e/core/ e2e/files/ e2e/editors/ e2e/smoke/` | ~2 min |
+| Before a release | `npx playwright test` (full suite) | ~5 min |
+
+### Pre-Release Checklist
+
+1. Make sure `npm run dev` is running (tests connect to the dev server on port 5273)
+2. Run the full suite: `npx playwright test --reporter=line`
+3. Review failures - known flaky tests are documented in the [e2e-test-inventory.md](./../nimbalyst-local/plans/e2e-test-inventory.md)
+4. Fix any new failures before releasing
+
+### Important Constraints
+
+- **One file at a time**: Each spec file launches its own Electron instance. The PGLite database only allows one connection, so Playwright must run with `workers: 1` (configured in `playwright.config.ts`).
+- **Dev server required**: Tests expect the Vite dev server running on port 5273. Start it with `npm run dev` in `packages/electron/`.
+- **No parallel execution**: Never use `--workers=N` with N > 1.
 
 > **Build first:** make sure `npm run build --workspace @nimbalyst/electron` has been executed so `packages/electron/out/main/index.js` exists before launching the Electron project.
 
@@ -75,15 +118,27 @@ Artifacts (traces, screenshots, videos) are captured on the first retry or failu
 
 ## Test File Organization
 
-Tests are organized by feature area under `packages/electron/e2e/`:
+Tests are organized by feature area under `packages/electron/e2e/` (29 spec files total):
 
-- `e2e/ai/` - AI-related tests (diff reliability, file mentions, etc.)
-- `e2e/core/` - Core app functionality (window restore, workspace tabs, etc.)
-- `e2e/editors/` - Editor-specific tests (one consolidated file per editor type)
-- `e2e/files/` - File operations (manual save, autosave, file watching, etc.)
-- `e2e/tabs/` - Tab management (reordering, autosave navigation, etc.)
-- `e2e/theme/` - Theme switching tests
-- `e2e/plugins/` - Plugin-specific tests
+- `e2e/ai/` - AI features: diff application, session management, input attachments, real AI calls
+- `e2e/core/` - Core app: tabs, find/replace, content isolation, workspace state persistence
+- `e2e/editors/` - One consolidated file per editor type: csv, datamodellm, excalidraw, markdown, mockup, monaco
+- `e2e/extensions/` - Extension loading and lifecycle
+- `e2e/files/` - File operations: save, autosave, file tree, file watching, filtering
+- `e2e/history/` - Document history and restore
+- `e2e/images/` - Image paste handling
+- `e2e/interactive-prompts/` - AskUserQuestion and other interactive prompts
+- `e2e/offscreen-editor/` - Offscreen editor mounting
+- `e2e/permissions/` - Tool permissions, trust model, screenshot verification
+- `e2e/smoke/` - Visual smoke test (fast sanity check)
+- `e2e/terminal/` - Terminal functionality
+- `e2e/theme/` - Theme switching
+- `e2e/tracker/` - Tracker items and collaborative sync
+- `e2e/update/` - Auto-update toast
+- `e2e/walkthroughs/` - Walkthrough system
+- `e2e/worktree/` - Git worktree integration
+
+See the full inventory with test counts and status at `nimbalyst-local/plans/e2e-test-inventory.md`.
 
 ## Test Consolidation (Performance Critical)
 
@@ -164,7 +219,7 @@ For these, use `beforeEach`/`afterEach` but keep them in separate spec files.
 
 ### CRITICAL: Worker Restart on Test Failure
 
-**Playwright restarts the worker process when a test fails, which re-runs `beforeAll`.**
+**Playwright restarts the worker process when a test fails, which re-runs \****`beforeAll`**\*\*.**
 
 This is documented Playwright behavior ([GitHub Issue #34249](https://github.com/microsoft/playwright/issues/34249)). When a test fails:
 1. Playwright terminates the current worker
@@ -172,13 +227,13 @@ This is documented Playwright behavior ([GitHub Issue #34249](https://github.com
 3. `beforeAll` runs again in the new worker
 4. This creates a NEW app instance with a NEW workspace
 
-**This means failing tests will still cause app restarts, even with proper `beforeAll`/`afterAll` structure.**
+**This means failing tests will still cause app restarts, even with proper \****`beforeAll`***\*/****`afterAll`**\*\* structure.**
 
 #### Implications for Test Development
 
 1. **Fix tests one at a time** - When working on a consolidated test file, get the FIRST test passing before moving to the next. A failing test will cause all subsequent tests to start fresh app instances.
 
-2. **Use `test.describe.configure({ mode: 'serial' })` for debugging** - This prevents worker restarts within the serial group, but tests will still restart if they timeout.
+2. **Use \****`test.describe.configure({ mode: 'serial' })`**\*\* for debugging** - This prevents worker restarts within the serial group, but tests will still restart if they timeout.
 
 3. **Don't rely on shared state across failing tests** - If test A fails, test B will get a fresh app, not the state left by test A.
 
@@ -240,7 +295,7 @@ Use comments (like `// ============ Section Name ============`) instead of `test
 ### Consolidation Examples
 
 | Before | After | Savings |
-|--------|-------|---------|
+| --- | --- | --- |
 | `markdown/autosave.spec.ts`, `markdown/dirty-close.spec.ts`, etc. (5 files) | `markdown.spec.ts` (1 file) | 4 app launches (~16-20s) |
 | `csv/autosave.spec.ts`, `csv/keyboard-nav.spec.ts`, etc. (8 files) | `csv.spec.ts` (1 file) | 7 app launches (~28-35s) |
 
@@ -448,7 +503,7 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
 
 **CRITICAL: Always create test files BEFORE launching the app!** Tests will fail if files are created after the app starts because the file tree won't be populated.
 
-**Use `beforeAll` to share the app instance** - see the [Test Consolidation](#test-consolidation-performance-critical) section above. Only use `beforeEach` when tests CANNOT share app state (e.g., tests for app startup, session restore, or permission mode switching).
+**Use \****`beforeAll`**\*\* to share the app instance** - see the [Test Consolidation](#test-consolidation-performance-critical) section above. Only use `beforeEach` when tests CANNOT share app state (e.g., tests for app startup, session restore, or permission mode switching).
 
 ```typescript
 // GOOD: Consolidated pattern - one app for all tests in the file
@@ -872,7 +927,7 @@ Common CSS selectors used in tests:
 
 ```bash
 npx playwright test --ui
-npx playwright test e2e/ai/diff-reliability.spec.ts --ui
+npx playwright test e2e/ai/diff.spec.ts --ui
 ```
 
 ### Run in headed mode
@@ -884,7 +939,7 @@ npx playwright test --headed
 ### Debug specific test
 
 ```bash
-npx playwright test e2e/ai/diff-reliability.spec.ts:55 --headed --debug
+npx playwright test e2e/ai/diff.spec.ts:55 --headed --debug
 ```
 
 ### View test report
@@ -1076,7 +1131,7 @@ This structure makes it easy to:
 ## Conventions
 
 - Electron specs live under `packages/electron/e2e/` and use TypeScript (`.ts`) extension.
-- **Use `beforeAll`/`afterAll` by default** - Share app instance across tests for performance. Only use `beforeEach` when tests cannot share state.
+- **Use \****`beforeAll`***\*/****`afterAll`**\*\* by default** - Share app instance across tests for performance. Only use `beforeEach` when tests cannot share state.
 - Keep specs self-cleaning: temporary files and launched apps must be disposed in `test.afterAll()` (or `test.afterEach()` if using per-test isolation).
 - Prefer Playwright locators over raw selectors to benefit from auto-waiting and improved error messages.
 - Always create test files BEFORE launching the app to ensure file tree is populated.
@@ -1097,11 +1152,11 @@ This structure makes it easy to:
 8. **Not using test helpers** - Check `testHelpers.ts` before writing repetitive code. The utility probably already exists.
 9. **Repeating complex operations** - If you're copying code between tests, extract it to a utility function.
 10. **Not creating markdown files** - Tests that wait for an editor MUST create and open a markdown file first. See "The Fixture Error" section below.
-11. **Using `beforeEach` when `beforeAll` works** - Each app launch costs 4-5 seconds. Use `beforeAll` to share the app unless tests truly cannot share state (e.g., testing startup, session restore, or permission mode switching).
+11. **Using \****`beforeEach`***\* when \****`beforeAll`**\*\* works** - Each app launch costs 4-5 seconds. Use `beforeAll` to share the app unless tests truly cannot share state (e.g., testing startup, session restore, or permission mode switching).
 12. **Using excessively long timeouts** - The app is very fast (sub-second for most operations). Use short timeouts (500-1000ms) by default. Long timeouts (5s+) mask real bugs and slow down test failures. Only use longer timeouts for operations that genuinely take time (e.g., AI API calls).
 13. **Using wrong selectors for buttons** - When clicking buttons fails silently, add `data-testid` attributes to the component rather than trying different CSS selectors. Example: `data-testid="diff-keep-all"` is more reliable than `.unified-diff-header-button-accept`.
 14. **Known Lexical table diff bug** - Table diffs in Lexical may require clicking "Keep All" twice. Use a workaround pattern: click once, wait briefly, check if header is still visible, click again if needed.
-15. **NEVER use `.first()` to "fix" ambiguous selectors** - If a locator resolves to multiple elements and you slap `.first()` on it, you are hiding a broken selector. The test will silently target the wrong element when the DOM order changes. **Fix the selector instead.** Add a `data-testid` attribute to the component, scope to a specific parent, or use a more specific selector. The only acceptable use of `.first()` is when you genuinely want the first of a known set (e.g., `messages.first()` to check the first message in a list). If your `.first()` exists because Playwright threw a "strict mode violation", your selector is wrong -- fix it.
+15. **NEVER use \****`.first()`**\*\* to "fix" ambiguous selectors** - If a locator resolves to multiple elements and you slap `.first()` on it, you are hiding a broken selector. The test will silently target the wrong element when the DOM order changes. **Fix the selector instead.** Add a `data-testid` attribute to the component, scope to a specific parent, or use a more specific selector. The only acceptable use of `.first()` is when you genuinely want the first of a known set (e.g., `messages.first()` to check the first message in a list). If your `.first()` exists because Playwright threw a "strict mode violation", your selector is wrong -- fix it.
 
 ## The Fixture Error Pattern
 

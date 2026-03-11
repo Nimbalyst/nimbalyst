@@ -31,6 +31,8 @@ import * as path from 'path';
 // Walkthrough-specific helpers
 const SELECTORS = PLAYWRIGHT_TEST_SELECTORS;
 
+test.describe.configure({ mode: 'serial' });
+
 test.describe('Walkthrough System', () => {
   let electronApp: ElectronApplication;
   let page: Page;

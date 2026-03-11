@@ -43,6 +43,8 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 
+test.describe.configure({ mode: 'serial' });
+
 // Use port 8792 to avoid conflicts with dev (8790) and unit integration tests (8791)
 const WRANGLER_PORT = 8792;
 const TEST_ORG_ID = 'e2e-test-org';

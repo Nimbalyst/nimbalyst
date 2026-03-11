@@ -1,11 +1,13 @@
 /**
- * Consolidated file tests covering save, watcher, filtering, and file operations.
+ * Consolidated file tests covering save, watcher, filtering, file operations,
+ * and file tree behavior (scroll stability, breadcrumb reveal).
  *
  * From:
  * - file-save-comprehensive.spec.ts
  * - file-watcher-updates.spec.ts
  * - file-operations-while-open.spec.ts
  * - file-tree-filtering.spec.ts
+ * - file-tree-behavior.spec.ts (scroll stability, breadcrumb reveal)
  */
 
 import { test, expect } from '@playwright/test';
@@ -21,6 +23,8 @@ import {
 import { openFileFromTree, PLAYWRIGHT_TEST_SELECTORS } from '../utils/testHelpers';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+
+test.describe.configure({ mode: 'serial' });
 
 let electronApp: ElectronApplication;
 let page: Page;
@@ -51,6 +55,21 @@ test.beforeAll(async () => {
   await fs.writeFile(path.join(workspacePath, 'filter-data.json'), '{"test": true}\n', 'utf8');
   await fs.writeFile(path.join(workspacePath, 'filter-readme.txt'), 'Plain text file\n', 'utf8');
   await fs.writeFile(path.join(workspacePath, 'filter-image.png'), Buffer.from('fake-png-data'), 'utf8');
+
+  // --- Files for file-tree-behavior (scroll stability) tests ---
+  // Create directories to fill the tree (enough items to require scrolling)
+  for (let i = 0; i < 20; i++) {
+    const name = `dir-${String(i).padStart(2, '0')}`;
+    const dirPath = path.join(workspacePath, name);
+    await fs.mkdir(dirPath, { recursive: true });
+    await fs.writeFile(path.join(dirPath, 'inner.md'), `# ${name}\n`, 'utf8');
+  }
+  const srcDir = path.join(workspacePath, 'src');
+  await fs.mkdir(srcDir, { recursive: true });
+  await fs.writeFile(path.join(srcDir, 'app.ts'), 'const x = 1;\n', 'utf8');
+  const targetDir = path.join(workspacePath, 'zzz-deep');
+  await fs.mkdir(targetDir, { recursive: true });
+  await fs.writeFile(path.join(targetDir, 'target.md'), '# Target\n', 'utf8');
 
   electronApp = await launchElectronApp({
     workspace: workspacePath,
@@ -511,4 +530,154 @@ test('should persist filter settings after page reload', async () => {
   // Verify filter persisted
   await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'filter-doc.md' })).toBeVisible();
   await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'filter-script.js' })).toHaveCount(0);
+});
+
+// ========================================================================
+// File Tree Behavior tests (from file-tree-behavior.spec.ts)
+// ========================================================================
+
+/**
+ * Helper: get the Virtuoso scroller element (or fallback to the container).
+ */
+async function getTreeScroller(p: Page) {
+  const virtuosoScroller = p.locator('.file-tree-container [data-testid="virtuoso-scroller"]').first();
+  const exists = await virtuosoScroller.count();
+  return exists > 0
+    ? virtuosoScroller
+    : p.locator('.file-tree-container').first();
+}
+
+test('expanding a directory after opening a file does not scroll back', async () => {
+  test.setTimeout(30000);
+
+  // Reset filter to All Files first
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeFilterButton).click();
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.filterMenuAllFiles).click();
+  await page.waitForTimeout(500);
+
+  // 1. Wait for tree to load
+  await expect(
+    page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'dir-00' })
+  ).toBeVisible({ timeout: TEST_TIMEOUTS.FILE_TREE_LOAD });
+
+  // 2. Expand zzz-deep and open target.md via the tree (scrolls tree down)
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'zzz-deep' }).click();
+  await page.waitForTimeout(500);
+  await openFileFromTree(page, 'target.md');
+
+  await expect(
+    page.locator(PLAYWRIGHT_TEST_SELECTORS.tabTitle, { hasText: 'target.md' })
+  ).toBeVisible({ timeout: TEST_TIMEOUTS.TAB_SWITCH });
+
+  // 3. Scroll to the top of the file tree
+  const scroller = await getTreeScroller(page);
+  await scroller.evaluate(el => { el.scrollTop = 0; });
+  await page.waitForTimeout(300);
+
+  await expect(
+    page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'dir-00' })
+  ).toBeVisible({ timeout: 2000 });
+
+  // 4. Click dir-00 to expand it - this changes visibleNodes
+  const scrollBefore = await scroller.evaluate(el => el.scrollTop);
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'dir-00' }).click();
+  await page.waitForTimeout(800);
+
+  // 5. Scroll should NOT have jumped hundreds of pixels down to target.md
+  const scrollAfter = await scroller.evaluate(el => el.scrollTop);
+  const scrollDelta = Math.abs(scrollAfter - scrollBefore);
+  expect(scrollDelta).toBeLessThan(100);
+
+  await expect(
+    page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'dir-00' })
+  ).toBeVisible({ timeout: 1000 });
+});
+
+test('expanding a directory after breadcrumb reveal does not scroll back', async () => {
+  test.setTimeout(30000);
+
+  // 1. Open src/app.ts via the tree so it has a breadcrumb
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'src' }).click();
+  await page.waitForTimeout(500);
+  await openFileFromTree(page, 'app.ts');
+
+  await expect(
+    page.locator(PLAYWRIGHT_TEST_SELECTORS.tabTitle, { hasText: 'app.ts' })
+  ).toBeVisible({ timeout: TEST_TIMEOUTS.TAB_SWITCH });
+
+  // 2. Click the breadcrumb filename to trigger a reveal (sets revealRequestAtom)
+  const breadcrumbFilename = page.locator('.breadcrumb-filename', { hasText: 'app.ts' });
+  const breadcrumbExists = await breadcrumbFilename.count();
+  if (breadcrumbExists === 0) {
+    test.skip();
+    return;
+  }
+  await breadcrumbFilename.click({ force: true });
+  await page.waitForTimeout(500);
+
+  // 3. Scroll the tree to the top
+  const scroller = await getTreeScroller(page);
+  await scroller.evaluate(el => { el.scrollTop = 0; });
+  await page.waitForTimeout(300);
+
+  await expect(
+    page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'dir-00' })
+  ).toBeVisible({ timeout: 2000 });
+
+  // 4. Expand dir-00
+  const scrollBefore = await scroller.evaluate(el => el.scrollTop);
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'dir-00' }).click();
+  await page.waitForTimeout(800);
+
+  // 5. Verify no scroll jump
+  const scrollAfter = await scroller.evaluate(el => el.scrollTop);
+  const scrollDelta = Math.abs(scrollAfter - scrollBefore);
+  expect(scrollDelta).toBeLessThan(100);
+
+  await expect(
+    page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'dir-00' })
+  ).toBeVisible({ timeout: 1000 });
+});
+
+test('breadcrumb reveal clears filter and scrolls to file', async () => {
+  test.setTimeout(30000);
+
+  // 1. Ensure filter is set to "All Files" first (clean state)
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeFilterButton).click();
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.filterMenuAllFiles).click();
+  await page.waitForTimeout(500);
+
+  // 2. Open src/app.ts
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'src' }).click();
+  await page.waitForTimeout(500);
+  await openFileFromTree(page, 'app.ts');
+
+  // 3. Set filter to "Markdown Only" (hides .ts files)
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeFilterButton).click();
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.filterMenuMarkdownOnly).click();
+  await page.waitForTimeout(500);
+
+  // src folder and app.ts should be hidden by the filter
+  await expect(
+    page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'app.ts' })
+  ).toHaveCount(0, { timeout: 2000 });
+
+  // 4. Click the breadcrumb filename to trigger reveal
+  const breadcrumbFilename = page.locator('.breadcrumb-filename', { hasText: 'app.ts' });
+  await expect(breadcrumbFilename).toBeVisible({ timeout: 2000 });
+  await breadcrumbFilename.click({ force: true });
+
+  // 5. Filter should clear and file should become visible in tree
+  await expect(
+    page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'app.ts' })
+  ).toBeVisible({ timeout: 5000 });
+
+  // 6. Filter indicator should be gone (filter cleared to "all")
+  const filterButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeFilterButton);
+  await expect(filterButton.locator('.filter-active-indicator')).toHaveCount(0, { timeout: 2000 });
+
+  // Reset filter to All Files for subsequent tests
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeFilterButton).click();
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.filterMenuAllFiles).click();
+  await page.waitForTimeout(300);
 });

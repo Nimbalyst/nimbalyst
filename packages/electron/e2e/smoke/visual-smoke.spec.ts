@@ -34,6 +34,8 @@ import * as path from 'path';
 const SELECTORS = PLAYWRIGHT_TEST_SELECTORS;
 const SCREENSHOT_DIR = 'e2e/smoke/screenshots';
 
+test.describe.configure({ mode: 'serial' });
+
 test.describe('Visual Smoke Test', () => {
   let electronApp: ElectronApplication;
   let page: Page;

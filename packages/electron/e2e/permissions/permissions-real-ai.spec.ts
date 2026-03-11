@@ -1,13 +1,11 @@
 /**
- * E2E tests for WebFetch and WebSearch permission checks.
+ * Permission tests requiring real AI API (skipped in CI).
  *
- * Tests share a single app instance for performance. Each test uses a separate file
- * to avoid interference between tests. Tests must run serially since they share
- * the same workspace and app state.
+ * From:
+ * - webfetch-permissions.spec.ts (WebFetch/WebSearch Allow Always flow)
+ * - outside-path-permissions.spec.ts (outside workspace file access permission)
  *
- * Tests that in Smart Permissions mode:
- * - WebFetch requests trigger permission confirmation and "Always" saves URL patterns
- * - WebSearch requests trigger permission confirmation and "Always" saves tool patterns
+ * All tests share a single Electron app instance with beforeAll/afterAll.
  */
 
 import { test, expect } from '@playwright/test';
@@ -22,7 +20,6 @@ import {
 import {
   PLAYWRIGHT_TEST_SELECTORS,
   dismissAPIKeyDialog,
-  closeTabByFileName,
   trustWorkspaceSmartPermissions,
   switchToAgentMode,
   submitChatPrompt,
@@ -32,34 +29,35 @@ import {
 } from '../utils/testHelpers';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as os from 'os';
 
 // Skip entire file in CI - requires real AI API
 test.skip(() => !process.env.ANTHROPIC_API_KEY, 'Requires ANTHROPIC_API_KEY - not for CI');
 
-// Increase timeout for AI-related tests
 test.setTimeout(90000);
 
-// Tests must run serially since they share the app instance
 test.describe.configure({ mode: 'serial' });
 
 let electronApp: ElectronApplication;
 let page: Page;
 let workspaceDir: string;
+let outsideDir: string;
+let outsideFilePath: string;
 
 test.beforeAll(async () => {
   workspaceDir = await createTempWorkspace();
+  outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'nimbalyst-outside-'));
 
-  // Create all test files upfront - each test uses a separate file
+  // Create test files
   await fs.writeFile(
-    path.join(workspaceDir, 'webfetch-test.md'),
-    '# WebFetch Test Document\n\nTest content for webfetch permission tests.\n',
+    path.join(workspaceDir, 'test.md'),
+    '# Test Document\n\nTest content.\n',
     'utf8'
   );
-  await fs.writeFile(
-    path.join(workspaceDir, 'websearch-test.md'),
-    '# WebSearch Test Document\n\nTest content for websearch permission tests.\n',
-    'utf8'
-  );
+
+  // Create file OUTSIDE workspace for outside-path test
+  outsideFilePath = path.join(outsideDir, 'secret.txt');
+  await fs.writeFile(outsideFilePath, 'This is a secret file outside the workspace.\n', 'utf8');
 
   electronApp = await launchElectronApp({ workspace: workspaceDir, permissionMode: 'none' });
   page = await electronApp.firstWindow();
@@ -69,12 +67,16 @@ test.beforeAll(async () => {
   await dismissAPIKeyDialog(page);
   await dismissProjectTrustToast(page);
 
-  // Trust with Smart Permissions (not Always Allow)
+  // Trust with Smart Permissions
   await trustWorkspaceSmartPermissions(page);
+
+  // Switch to agent mode for all tests
+  await switchToAgentMode(page);
+  await page.waitForTimeout(1000);
 });
 
 test.afterAll(async () => {
-  // Cancel any active AI request to avoid the "AI session running" quit dialog
+  // Cancel any active AI request
   try {
     const cancelButton = page.locator('button.ai-cancel-button, [aria-label="Cancel"]');
     if (await cancelButton.isVisible({ timeout: 500 }).catch(() => false)) {
@@ -82,68 +84,47 @@ test.afterAll(async () => {
       await page.waitForTimeout(500);
     }
   } catch {
-    // No cancel button visible, that's fine
+    // No cancel button visible
   }
 
   await electronApp?.close();
-
-  if (workspaceDir) {
-    await fs.rm(workspaceDir, { recursive: true, force: true }).catch(() => {});
-  }
+  await fs.rm(workspaceDir, { recursive: true, force: true }).catch(() => {});
+  await fs.rm(outsideDir, { recursive: true, force: true }).catch(() => {});
 });
 
-test('webfetch: Allow Always saves pattern and subsequent requests pass without asking', async () => {
-  // Switch to agent mode
-  await switchToAgentMode(page);
-  await page.waitForTimeout(1000);
+// ============================================================================
+// WebFetch Permission Tests (from webfetch-permissions.spec.ts)
+// ============================================================================
 
-  // First request: Ask the agent to fetch a web page
+test('webfetch: Allow Always saves pattern and subsequent requests pass without asking', async () => {
   await submitChatPrompt(page, 'Fetch https://example.com and tell me the page title');
 
-  // Wait for the permission confirmation dialog to appear
   const permissionConfirmation = page.locator(PLAYWRIGHT_TEST_SELECTORS.permissionConfirmation);
   await expect(permissionConfirmation).toBeVisible({ timeout: 30000 });
 
-  // Verify the dialog shows WebFetch-related info
   await expect(permissionConfirmation.locator(PLAYWRIGHT_TEST_SELECTORS.permissionConfirmationTitle))
     .toContainText('permission');
 
-  // Verify the command/URL is shown
   const commandText = await permissionConfirmation.locator(PLAYWRIGHT_TEST_SELECTORS.permissionConfirmationCommand).textContent();
   expect(commandText).toBeTruthy();
   expect(commandText?.toLowerCase()).toContain('example.com');
 
-  // Click "Allow Always" to save the pattern
   const allowAlwaysButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.permissionConfirmationAllowAlwaysButton);
   await expect(allowAlwaysButton).toBeVisible();
   await allowAlwaysButton.click();
 
-  // Wait for the dialog to close and the request to complete
   await expect(permissionConfirmation).not.toBeVisible({ timeout: 5000 });
-
-  // Wait for the AI to finish responding (look for the response to complete)
-  // The AI should successfully fetch example.com now
   await page.waitForTimeout(3000);
 
-  // Second request: Ask to fetch the same domain again - should NOT ask for permission
   await submitChatPrompt(page, 'Fetch https://example.com/about and summarize it');
-
-  // Wait a bit for the request to be processed
   await page.waitForTimeout(5000);
 
-  // The permission dialog should NOT appear this time since we clicked "Allow Always"
-  // If it does appear within 3 seconds, the test fails
   const dialogAppeared = await permissionConfirmation.isVisible().catch(() => false);
   expect(dialogAppeared).toBe(false);
 
-  // Navigate to Agent Permissions settings and verify the URL pattern was saved
   await openAgentPermissionsSettings(page);
-
-  // Get all allowed URL patterns from the settings panel
   const allowedPatterns = await getAllowedUrlPatterns(page);
-  console.log('Allowed URL patterns:', allowedPatterns);
-
-  // Verify example.com is in the list
+  // console.log('Allowed URL patterns:', allowedPatterns);
   const hasExampleDomain = allowedPatterns.some(pattern =>
     pattern.toLowerCase().includes('example.com')
   );
@@ -151,58 +132,62 @@ test('webfetch: Allow Always saves pattern and subsequent requests pass without 
 });
 
 test('websearch: Allow Always saves pattern and subsequent requests pass without asking', async () => {
-  // Switch to agent mode
   await switchToAgentMode(page);
   await page.waitForTimeout(1000);
 
-  // First request: Ask the agent to search the web
   await submitChatPrompt(page, 'Search the web for "Anthropic Claude latest news"');
 
-  // Wait for the permission confirmation dialog to appear
   const permissionConfirmation = page.locator(PLAYWRIGHT_TEST_SELECTORS.permissionConfirmation);
   await expect(permissionConfirmation).toBeVisible({ timeout: 30000 });
 
-  // Verify the dialog shows permission-related info
   await expect(permissionConfirmation.locator(PLAYWRIGHT_TEST_SELECTORS.permissionConfirmationTitle))
     .toContainText('permission');
 
-  // Verify the command shows it's a search (the rawCommand includes "search")
   const commandText = await permissionConfirmation.locator(PLAYWRIGHT_TEST_SELECTORS.permissionConfirmationCommand).textContent();
   expect(commandText).toBeTruthy();
   expect(commandText?.toLowerCase()).toContain('search');
 
-  // Click "Allow Always" to save the pattern
   const allowAlwaysButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.permissionConfirmationAllowAlwaysButton);
   await expect(allowAlwaysButton).toBeVisible();
   await allowAlwaysButton.click();
 
-  // Wait for the dialog to close and the request to complete
   await expect(permissionConfirmation).not.toBeVisible({ timeout: 5000 });
-
-  // Wait for the AI to finish responding
   await page.waitForTimeout(3000);
 
-  // Second request: Ask to search again - should NOT ask for permission
   await submitChatPrompt(page, 'Search for "TypeScript 5.0 features"');
-
-  // Wait a bit for the request to be processed
   await page.waitForTimeout(5000);
 
-  // The permission dialog should NOT appear this time since we clicked "Allow Always"
-  // If it does appear within 3 seconds, the test fails
   const dialogAppeared = await permissionConfirmation.isVisible().catch(() => false);
   expect(dialogAppeared).toBe(false);
 
-  // Navigate to Agent Permissions settings and verify the tool pattern was saved
   await openAgentPermissionsSettings(page);
-
-  // Get all allowed tool patterns from the settings panel
   const allowedPatterns = await getAllowedToolPatterns(page);
-  console.log('Allowed tool patterns:', allowedPatterns);
-
-  // Verify "Search the web" (the displayName for websearch) is in the list
+  // console.log('Allowed tool patterns:', allowedPatterns);
   const hasWebSearchPattern = allowedPatterns.some(pattern =>
     pattern.toLowerCase().includes('search') && pattern.toLowerCase().includes('web')
   );
   expect(hasWebSearchPattern).toBe(true);
+});
+
+// ============================================================================
+// Outside Path Permission Tests (from outside-path-permissions.spec.ts)
+// ============================================================================
+
+test('smart permissions: accessing file outside workspace triggers permission request', async () => {
+  await switchToAgentMode(page);
+  await page.waitForTimeout(1000);
+
+  await submitChatPrompt(page, `Read the file at ${outsideFilePath} and tell me what it says`);
+
+  const permissionConfirmation = page.locator(PLAYWRIGHT_TEST_SELECTORS.permissionConfirmation);
+  await expect(permissionConfirmation).toBeVisible({ timeout: TEST_TIMEOUTS.VERY_LONG });
+
+  await expect(permissionConfirmation.locator(PLAYWRIGHT_TEST_SELECTORS.permissionConfirmationTitle))
+    .toContainText('permission');
+
+  const commandText = await permissionConfirmation.locator(PLAYWRIGHT_TEST_SELECTORS.permissionConfirmationCommand).textContent();
+  expect(commandText).toBeTruthy();
+
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.permissionConfirmationDenyButton)).toBeVisible();
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.permissionConfirmationAllowOnceButton)).toBeVisible();
 });
