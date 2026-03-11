@@ -35,10 +35,17 @@ export class SessionStateManager extends EventEmitter {
   }
 
   /**
-   * Set the database worker (called after initialization)
+   * Set the database worker (called after initialization).
+   * Also runs stale session recovery since the database is now available.
    */
   setDatabase(database: DatabaseWorker): void {
     this.database = database;
+    // Recover stale sessions now that the database is available.
+    // initialize() may have already run (and skipped recovery because database was null),
+    // so we need to run recovery here.
+    this.recoverStaleSessions().catch(error => {
+      console.error('[SessionStateManager] Failed to recover stale sessions on setDatabase:', error);
+    });
   }
 
   /**
@@ -155,7 +162,10 @@ export class SessionStateManager extends EventEmitter {
   async endSession(sessionId: string): Promise<void> {
     const state = this.activeSessions.get(sessionId);
     if (!state) {
-      console.warn(`[SessionStateManager] Cannot end unknown session: ${sessionId}`);
+      // Session not in memory (e.g., app restarted while session was running).
+      // Still update the database to ensure it's not left as 'running'.
+      console.warn(`[SessionStateManager] endSession called for session not in activeSessions: ${sessionId}, updating DB directly`);
+      await this.updateDatabase(sessionId, 'idle');
       return;
     }
 
@@ -303,18 +313,23 @@ export class SessionStateManager extends EventEmitter {
 
       for (const row of result.rows) {
         const sessionId = row.id;
+
+        // Skip sessions that are actively tracked in memory (currently running this app session)
+        if (this.activeSessions.has(sessionId)) {
+          continue;
+        }
+
         const lastActivity = row.last_activity ? new Date(row.last_activity).getTime() : 0;
         const elapsed = now - lastActivity;
 
         if (elapsed > STALE_THRESHOLD_MS) {
-          // Mark as interrupted
-          await this.updateDatabase(sessionId, 'interrupted');
-          console.log(`[SessionStateManager] Marked stale session as interrupted: ${sessionId}`);
+          await this.updateDatabase(sessionId, 'idle');
+          console.log(`[SessionStateManager] Marked stale session as idle: ${sessionId} (inactive for ${Math.round(elapsed / 1000)}s)`);
         } else {
-          // Recent activity - could still be active, but we'll mark as interrupted to be safe
+          // Recent activity - could still be active, but we'll mark as idle to be safe
           // since the app just started and we don't know the real state
-          await this.updateDatabase(sessionId, 'interrupted');
-          console.log(`[SessionStateManager] Marked recently active session as interrupted: ${sessionId}`);
+          await this.updateDatabase(sessionId, 'idle');
+          console.log(`[SessionStateManager] Marked recently active session as idle: ${sessionId}`);
         }
       }
     } catch (error) {
