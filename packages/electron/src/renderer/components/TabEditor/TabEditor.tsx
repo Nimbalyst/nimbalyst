@@ -283,6 +283,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const hasInitialContentSyncRef = useRef<boolean>(false);
   const pendingAIEditTagRef = useRef<{tagId: string, sessionId: string, filePath: string} | null>(null);
   const isApplyingDiffRef = useRef<boolean>(false); // Track programmatic diff application
+  const isClearingDiffTagRef = useRef<boolean>(false); // Guard against pending-cleared reload race
   const editorHostFileChangeCallbackRef = useRef<((newContent: string) => void) | null>(null); // For EditorHost file change subscription
   const diffRequestCallbackRef = useRef<((config: DiffConfig) => void) | null>(null); // For EditorHost diff request subscription
   const diffClearedCallbackRef = useRef<(() => void) | null>(null); // For EditorHost diff cleared subscription
@@ -1435,6 +1436,11 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       // Check if this file was in the list of cleared files
       const normalizedFilePath = normalizePathForCompare(filePath);
       if (data.clearedFiles.some(f => normalizePathForCompare(f) === normalizedFilePath)) {
+        if (isClearingDiffTagRef.current) {
+          logger.ui.info('[TabEditor] Skipping onPendingCleared reload during local diff clear flow:', filePath);
+          return;
+        }
+
         logger.ui.info('[TabEditor] Pending tag cleared for this file, exiting diff mode:', filePath);
 
         // Clear pending tag ref
@@ -1637,6 +1643,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
     // Handle clearing diff tag without accept/reject (for incremental operations)
     const handleClearDiffTag = async () => {
+      isClearingDiffTagRef.current = true;
       try {
         if (!pendingAIEditTagRef.current) {
           logger.ui.warn('[TabEditor] handleClearDiffTag called but no pendingAIEditTagRef');
@@ -1700,6 +1707,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           }
       } catch (error) {
         logger.ui.error(`[TabEditor] Failed to clear diff tag:`, error);
+      } finally {
+        isClearingDiffTagRef.current = false;
       }
     };
 
