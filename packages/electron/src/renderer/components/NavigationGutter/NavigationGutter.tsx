@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { usePostHog } from 'posthog-js/react';
 import { useAtomValue } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
@@ -83,6 +83,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
 }) => {
   const posthog = usePostHog();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuButtonRef = useRef<HTMLButtonElement>(null);
 
   const handleNavigateSettings = useCallback((scope: SettingsScope, category?: SettingsCategory) => {
     if (onNavigateSettings) {
@@ -503,16 +504,18 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
           </button>
         </HelpTooltip>
 
-        <div className="relative">
+        <div>
           {userMenuOpen && (
             <UserMenuPopover
               onNavigateSettings={handleNavigateSettings}
               onClose={() => setUserMenuOpen(false)}
               isProjectConnected={isProjectConnected}
+              anchorEl={userMenuButtonRef.current}
             />
           )}
           <HelpTooltip testId="gutter-user-button" placement="right">
             <button
+              ref={userMenuButtonRef}
               className={`nav-button relative w-9 h-9 flex items-center justify-center border-none rounded-md cursor-pointer transition-all duration-150 p-0 active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${userMenuOpen ? 'bg-nim-tertiary text-nim' : 'bg-transparent text-nim-muted hover:bg-nim-tertiary hover:text-nim'}`}
               onClick={() => setUserMenuOpen(!userMenuOpen)}
               aria-label="User menu"

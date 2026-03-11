@@ -4,7 +4,7 @@
  * Shows both session (5-hour) and weekly usage with progress bars and reset times.
  */
 
-import React, { useEffect, useRef, RefObject, useLayoutEffect } from 'react';
+import React, { useEffect, RefObject } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import {
@@ -14,6 +14,7 @@ import {
   formatResetTime,
   setCodexUsageIndicatorEnabledAtom,
 } from '../../store/atoms/codexUsageAtoms';
+import { useFloatingMenu, FloatingPortal } from '../../hooks/useFloatingMenu';
 
 interface CodexUsagePopoverProps {
   anchorRef: RefObject<HTMLElement>;
@@ -100,50 +101,20 @@ export const CodexUsagePopover: React.FC<CodexUsagePopoverProps> = ({
   const sessionColor = useAtomValue(codexUsageSessionColorAtom);
   const weeklyColor = useAtomValue(codexUsageWeeklyColorAtom);
   const setUsageIndicatorEnabled = useSetAtom(setCodexUsageIndicatorEnabledAtom);
-  const popoverRef = useRef<HTMLDivElement>(null);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
-  const [alignBottom, setAlignBottom] = React.useState(false);
 
+  const menu = useFloatingMenu({
+    placement: 'right-end',
+    open: true,
+    onOpenChange: (open) => { if (!open) onClose(); },
+  });
+
+  // Set the anchor element as the position reference
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        popoverRef.current &&
-        !popoverRef.current.contains(event.target as Node) &&
-        anchorRef.current &&
-        !anchorRef.current.contains(event.target as Node)
-      ) {
-        onClose();
-      }
-    };
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleEscape);
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [anchorRef, onClose]);
-
-  useLayoutEffect(() => {
-    if (!popoverRef.current || !anchorRef.current) return;
-    const measure = () => {
-      if (!popoverRef.current || !anchorRef.current) return;
-      const popoverRect = popoverRef.current.getBoundingClientRect();
-      const anchorRect = anchorRef.current.getBoundingClientRect();
-      const margin = 12;
-      const fitsBelow = anchorRect.top + popoverRect.height <= window.innerHeight - margin;
-      setAlignBottom(!fitsBelow);
-    };
-    const frame = window.requestAnimationFrame(measure);
-    return () => window.cancelAnimationFrame(frame);
-  }, [anchorRef, usage, isRefreshing]);
+    if (anchorRef.current) {
+      menu.refs.setReference(anchorRef.current);
+    }
+  }, [anchorRef, menu.refs]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -161,99 +132,102 @@ export const CodexUsagePopover: React.FC<CodexUsagePopoverProps> = ({
   const limitsAvailable = usage.limitsAvailable ?? true;
 
   // Determine window durations from the data
-  // Codex primary is typically 300 minutes (5 hours), secondary is 10080 minutes (7 days)
   const sessionWindowMs = 5 * 60 * 60 * 1000; // 5 hours
   const weeklyWindowMs = 7 * 24 * 60 * 60 * 1000; // 7 days
 
   return (
-    <div
-      ref={popoverRef}
-      className={`absolute left-full ${alignBottom ? 'bottom-0' : 'top-0'} ml-3 w-60 bg-nim-secondary border border-nim rounded-lg shadow-lg z-50 max-h-[calc(100vh-16px)] overflow-y-auto`}
-      data-testid="codex-usage-popover"
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-nim">
-        <div className="flex items-center gap-2">
-          {/* OpenAI-style icon */}
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            className="text-emerald-500"
-          >
-            <path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zM13.26 22.43a4.476 4.476 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646zM2.34 7.896a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855l-5.833-3.387L15.119 7.2a.076.076 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667zm2.01-3.023l-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.795.795 0 0 0-.393.681zm1.097-2.365l2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5z" />
-          </svg>
-          <span className="text-[14px] font-semibold text-nim">Codex Usage</span>
+    <FloatingPortal>
+      <div
+        ref={menu.refs.setFloating}
+        style={menu.floatingStyles}
+        {...menu.getFloatingProps()}
+        className="w-60 bg-nim-secondary border border-nim rounded-lg shadow-lg z-50 overflow-y-auto"
+        data-testid="codex-usage-popover"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-nim">
+          <div className="flex items-center gap-2">
+            {/* OpenAI-style icon */}
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              className="text-emerald-500"
+            >
+              <path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zM13.26 22.43a4.476 4.476 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646zM2.34 7.896a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855l-5.833-3.387L15.119 7.2a.076.076 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667zm2.01-3.023l-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.795.795 0 0 0-.393.681zm1.097-2.365l2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5z" />
+            </svg>
+            <span className="text-[14px] font-semibold text-nim">Codex Usage</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="p-1 rounded hover:bg-nim-tertiary text-nim-muted hover:text-nim transition-colors disabled:opacity-50"
+              aria-label="Refresh usage"
+            >
+              <MaterialSymbol icon="refresh" size={14} className={isRefreshing ? 'animate-spin' : ''} />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1 rounded hover:bg-nim-tertiary text-nim-muted hover:text-nim transition-colors"
+              aria-label="Close"
+            >
+              <MaterialSymbol icon="close" size={14} />
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-1">
+
+        {/* Content */}
+        <div className="px-4 py-3">
+          {usage.error ? (
+            <div className="text-[13px] text-nim-error">{usage.error}</div>
+          ) : (
+            <>
+              {!limitsAvailable && (
+                <div className="mb-3 text-[12px] text-nim-muted">
+                  Usage detected, but Codex limits are unavailable in recent session data.
+                </div>
+              )}
+              <UsageSection
+                title="Session"
+                subtitle="5-hour window"
+                utilization={usage.fiveHour.utilization}
+                resetsAt={usage.fiveHour.resetsAt}
+                color={sessionColor as 'green' | 'yellow' | 'red' | 'muted'}
+                windowDurationMs={sessionWindowMs}
+              />
+              <UsageSection
+                title="Weekly"
+                subtitle="7-day window"
+                utilization={usage.sevenDay.utilization}
+                resetsAt={usage.sevenDay.resetsAt}
+                color={weeklyColor as 'green' | 'yellow' | 'red' | 'muted'}
+                windowDurationMs={weeklyWindowMs}
+              />
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 py-2 border-t border-nim flex items-center justify-between">
+          {usage.lastUpdated && (
+            <span className="text-[10px] text-nim-faint">
+              Updated {formatLastUpdated(usage.lastUpdated)}
+            </span>
+          )}
           <button
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            className="p-1 rounded hover:bg-nim-tertiary text-nim-muted hover:text-nim transition-colors disabled:opacity-50"
-            aria-label="Refresh usage"
+            onClick={() => {
+              setUsageIndicatorEnabled(false);
+              onClose();
+            }}
+            className="text-[11px] text-nim-muted hover:text-nim transition-colors"
           >
-            <MaterialSymbol icon="refresh" size={14} className={isRefreshing ? 'animate-spin' : ''} />
-          </button>
-          <button
-            onClick={onClose}
-            className="p-1 rounded hover:bg-nim-tertiary text-nim-muted hover:text-nim transition-colors"
-            aria-label="Close"
-          >
-            <MaterialSymbol icon="close" size={14} />
+            Disable
           </button>
         </div>
       </div>
-
-      {/* Content */}
-      <div className="px-4 py-3">
-        {usage.error ? (
-          <div className="text-[13px] text-nim-error">{usage.error}</div>
-        ) : (
-          <>
-            {!limitsAvailable && (
-              <div className="mb-3 text-[12px] text-nim-muted">
-                Usage detected, but Codex limits are unavailable in recent session data.
-              </div>
-            )}
-            <UsageSection
-              title="Session"
-              subtitle="5-hour window"
-              utilization={usage.fiveHour.utilization}
-              resetsAt={usage.fiveHour.resetsAt}
-              color={sessionColor as 'green' | 'yellow' | 'red' | 'muted'}
-              windowDurationMs={sessionWindowMs}
-            />
-            <UsageSection
-              title="Weekly"
-              subtitle="7-day window"
-              utilization={usage.sevenDay.utilization}
-              resetsAt={usage.sevenDay.resetsAt}
-              color={weeklyColor as 'green' | 'yellow' | 'red' | 'muted'}
-              windowDurationMs={weeklyWindowMs}
-            />
-          </>
-        )}
-      </div>
-
-      {/* Footer */}
-      <div className="px-4 py-2 border-t border-nim flex items-center justify-between">
-        {usage.lastUpdated && (
-          <span className="text-[10px] text-nim-faint">
-            Updated {formatLastUpdated(usage.lastUpdated)}
-          </span>
-        )}
-        <button
-          onClick={() => {
-            setUsageIndicatorEnabled(false);
-            onClose();
-          }}
-          className="text-[11px] text-nim-muted hover:text-nim transition-colors"
-        >
-          Disable
-        </button>
-      </div>
-    </div>
+    </FloatingPortal>
   );
 };
 

@@ -5,7 +5,7 @@
  * and reset times.
  */
 
-import React, { useEffect, useRef, RefObject, useLayoutEffect } from 'react';
+import React, { useEffect, RefObject } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import {
@@ -15,6 +15,7 @@ import {
   formatResetTime,
   setClaudeUsageIndicatorEnabledAtom,
 } from '../../store/atoms/claudeUsageAtoms';
+import { useFloatingMenu, FloatingPortal } from '../../hooks/useFloatingMenu';
 
 interface ClaudeUsagePopoverProps {
   anchorRef: RefObject<HTMLElement>;
@@ -108,51 +109,20 @@ export const ClaudeUsagePopover: React.FC<ClaudeUsagePopoverProps> = ({
   const sessionColor = useAtomValue(claudeUsageSessionColorAtom);
   const weeklyColor = useAtomValue(claudeUsageWeeklyColorAtom);
   const setUsageIndicatorEnabled = useSetAtom(setClaudeUsageIndicatorEnabledAtom);
-  const popoverRef = useRef<HTMLDivElement>(null);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
-  const [alignBottom, setAlignBottom] = React.useState(false);
 
-  // Close on click outside
+  const menu = useFloatingMenu({
+    placement: 'right-end',
+    open: true,
+    onOpenChange: (open) => { if (!open) onClose(); },
+  });
+
+  // Set the anchor element as the position reference
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        popoverRef.current &&
-        !popoverRef.current.contains(event.target as Node) &&
-        anchorRef.current &&
-        !anchorRef.current.contains(event.target as Node)
-      ) {
-        onClose();
-      }
-    };
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleEscape);
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [anchorRef, onClose]);
-
-  useLayoutEffect(() => {
-    if (!popoverRef.current || !anchorRef.current) return;
-    const measure = () => {
-      if (!popoverRef.current || !anchorRef.current) return;
-      const popoverRect = popoverRef.current.getBoundingClientRect();
-      const anchorRect = anchorRef.current.getBoundingClientRect();
-      const margin = 12;
-      const fitsBelow = anchorRect.top + popoverRect.height <= window.innerHeight - margin;
-      setAlignBottom(!fitsBelow);
-    };
-    const frame = window.requestAnimationFrame(measure);
-    return () => window.cancelAnimationFrame(frame);
-  }, [anchorRef, usage, isRefreshing]);
+    if (anchorRef.current) {
+      menu.refs.setReference(anchorRef.current);
+    }
+  }, [anchorRef, menu.refs]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -168,105 +138,109 @@ export const ClaudeUsagePopover: React.FC<ClaudeUsagePopoverProps> = ({
   }
 
   return (
-    <div
-      ref={popoverRef}
-      className={`absolute left-full ${alignBottom ? 'bottom-0' : 'top-0'} ml-3 w-60 bg-nim-secondary border border-nim rounded-lg shadow-lg z-50 max-h-[calc(100vh-16px)] overflow-y-auto`}
-      data-testid="claude-usage-popover"
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-nim">
-        <div className="flex items-center gap-2">
-          {/* Anthropic-style icon */}
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            className="text-amber-500"
-          >
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-          </svg>
-          <span className="text-[14px] font-semibold text-nim">Claude Usage</span>
+    <FloatingPortal>
+      <div
+        ref={menu.refs.setFloating}
+        style={menu.floatingStyles}
+        {...menu.getFloatingProps()}
+        className="w-60 bg-nim-secondary border border-nim rounded-lg shadow-lg z-50 overflow-y-auto"
+        data-testid="claude-usage-popover"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-nim">
+          <div className="flex items-center gap-2">
+            {/* Anthropic-style icon */}
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              className="text-amber-500"
+            >
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+            </svg>
+            <span className="text-[14px] font-semibold text-nim">Claude Usage</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="p-1 rounded hover:bg-nim-tertiary text-nim-muted hover:text-nim transition-colors disabled:opacity-50"
+              aria-label="Refresh usage"
+            >
+              <MaterialSymbol icon="refresh" size={14} className={isRefreshing ? 'animate-spin' : ''} />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1 rounded hover:bg-nim-tertiary text-nim-muted hover:text-nim transition-colors"
+              aria-label="Close"
+            >
+              <MaterialSymbol icon="close" size={14} />
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            className="p-1 rounded hover:bg-nim-tertiary text-nim-muted hover:text-nim transition-colors disabled:opacity-50"
-            aria-label="Refresh usage"
-          >
-            <MaterialSymbol icon="refresh" size={14} className={isRefreshing ? 'animate-spin' : ''} />
-          </button>
-          <button
-            onClick={onClose}
-            className="p-1 rounded hover:bg-nim-tertiary text-nim-muted hover:text-nim transition-colors"
-            aria-label="Close"
-          >
-            <MaterialSymbol icon="close" size={14} />
-          </button>
-        </div>
-      </div>
 
-      {/* Content */}
-      <div className="px-4 py-3">
-        {usage.error ? (
-          <div className="text-[13px] text-nim-error">{usage.error}</div>
-        ) : (
-          <>
-            <UsageSection
-              title="Session"
-              subtitle="5-hour window"
-              utilization={usage.fiveHour.utilization}
-              resetsAt={usage.fiveHour.resetsAt}
-              color={sessionColor as 'green' | 'yellow' | 'red' | 'muted'}
-              windowDurationMs={5 * 60 * 60 * 1000} // 5 hours
-            />
-            <UsageSection
-              title="Weekly"
-              subtitle="7-day window"
-              utilization={usage.sevenDay.utilization}
-              resetsAt={usage.sevenDay.resetsAt}
-              color={weeklyColor as 'green' | 'yellow' | 'red' | 'muted'}
-              windowDurationMs={7 * 24 * 60 * 60 * 1000} // 7 days
-            />
-            {usage.sevenDayOpus && usage.sevenDayOpus.utilization > 0 && (
+        {/* Content */}
+        <div className="px-4 py-3">
+          {usage.error ? (
+            <div className="text-[13px] text-nim-error">{usage.error}</div>
+          ) : (
+            <>
               <UsageSection
-                title="Opus (Weekly)"
+                title="Session"
+                subtitle="5-hour window"
+                utilization={usage.fiveHour.utilization}
+                resetsAt={usage.fiveHour.resetsAt}
+                color={sessionColor as 'green' | 'yellow' | 'red' | 'muted'}
+                windowDurationMs={5 * 60 * 60 * 1000} // 5 hours
+              />
+              <UsageSection
+                title="Weekly"
                 subtitle="7-day window"
-                utilization={usage.sevenDayOpus.utilization}
-                resetsAt={usage.sevenDayOpus.resetsAt}
-                color={
-                  usage.sevenDayOpus.utilization >= 80
-                    ? 'red'
-                    : usage.sevenDayOpus.utilization >= 50
-                      ? 'yellow'
-                      : 'green'
-                }
+                utilization={usage.sevenDay.utilization}
+                resetsAt={usage.sevenDay.resetsAt}
+                color={weeklyColor as 'green' | 'yellow' | 'red' | 'muted'}
                 windowDurationMs={7 * 24 * 60 * 60 * 1000} // 7 days
               />
-            )}
-          </>
-        )}
-      </div>
+              {usage.sevenDayOpus && usage.sevenDayOpus.utilization > 0 && (
+                <UsageSection
+                  title="Opus (Weekly)"
+                  subtitle="7-day window"
+                  utilization={usage.sevenDayOpus.utilization}
+                  resetsAt={usage.sevenDayOpus.resetsAt}
+                  color={
+                    usage.sevenDayOpus.utilization >= 80
+                      ? 'red'
+                      : usage.sevenDayOpus.utilization >= 50
+                        ? 'yellow'
+                        : 'green'
+                  }
+                  windowDurationMs={7 * 24 * 60 * 60 * 1000} // 7 days
+                />
+              )}
+            </>
+          )}
+        </div>
 
-      {/* Footer */}
-      <div className="px-4 py-2 border-t border-nim flex items-center justify-between">
-        {usage.lastUpdated && (
-          <span className="text-[10px] text-nim-faint">
-            Updated {formatLastUpdated(usage.lastUpdated)}
-          </span>
-        )}
-        <button
-          onClick={() => {
-            setUsageIndicatorEnabled(false);
-            onClose();
-          }}
-          className="text-[11px] text-nim-muted hover:text-nim transition-colors"
-        >
-          Disable
-        </button>
+        {/* Footer */}
+        <div className="px-4 py-2 border-t border-nim flex items-center justify-between">
+          {usage.lastUpdated && (
+            <span className="text-[10px] text-nim-faint">
+              Updated {formatLastUpdated(usage.lastUpdated)}
+            </span>
+          )}
+          <button
+            onClick={() => {
+              setUsageIndicatorEnabled(false);
+              onClose();
+            }}
+            className="text-[11px] text-nim-muted hover:text-nim transition-colors"
+          >
+            Disable
+          </button>
+        </div>
       </div>
-    </div>
+    </FloatingPortal>
   );
 };
 

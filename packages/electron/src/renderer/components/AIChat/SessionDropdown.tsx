@@ -1,10 +1,11 @@
-import React, { useState, useRef, useEffect, memo } from 'react';
+import React, { useState, memo } from 'react';
 import { useAtomValue } from 'jotai';
 import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
 import { parseModelInfo, getProviderLabel } from '../../utils/modelUtils';
 import type { SessionData } from '@nimbalyst/runtime/ai/server/types';
 import { formatDate } from '@nimbalyst/runtime';
 import { sessionProcessingAtom, sessionUnreadAtom } from '../../store';
+import { useFloatingMenu, FloatingPortal } from '../../hooks/useFloatingMenu';
 
 /**
  * Status indicator that subscribes to session atoms.
@@ -57,25 +58,10 @@ export function SessionDropdown({
   onRenameSession,
   onOpenSessionManager
 }: SessionDropdownProps) {
-  const [isOpen, setIsOpen] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
-  const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-        setRenamingId(null);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  const menu = useFloatingMenu({ placement: 'bottom-end' });
 
   const getCurrentSession = () => {
     if (!currentSessionId) return null;
@@ -117,25 +103,13 @@ export function SessionDropdown({
     }
   };
 
-  // Calculate menu position when opening
-  const handleToggle = () => {
-    if (!isOpen && triggerRef.current) {
-      const rect = triggerRef.current.getBoundingClientRect();
-      // Position menu so its right edge aligns with button's right edge
-      setMenuPosition({
-        top: rect.bottom + 4,
-        right: window.innerWidth - rect.right // Distance from right edge of viewport
-      });
-    }
-    setIsOpen(!isOpen);
-  };
-
   return (
-    <div className="session-dropdown relative" ref={dropdownRef}>
+    <div className="session-dropdown relative">
       <button
-        ref={triggerRef}
+        ref={menu.refs.setReference}
+        {...menu.getReferenceProps()}
         className="session-dropdown-trigger flex items-center gap-1 px-2 py-1.5 bg-transparent border border-[var(--nim-border)] rounded-md text-[var(--nim-text)] text-[13px] cursor-pointer transition-all duration-200 h-8 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-border-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
-        onClick={handleToggle}
+        onClick={() => menu.setIsOpen(!menu.isOpen)}
         title="Session History"
       >
         {currentSessionId && <SessionStatusIndicator sessionId={currentSessionId} />}
@@ -144,114 +118,114 @@ export function SessionDropdown({
         <MaterialSymbol
           icon="expand_more"
           size={16}
-          className={`session-dropdown-arrow shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+          className={`session-dropdown-arrow shrink-0 transition-transform duration-200 ${menu.isOpen ? 'rotate-180' : ''}`}
         />
       </button>
 
-      {isOpen && menuPosition && (
-        <div
-          className="session-dropdown-menu min-w-[280px] max-w-[400px] bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-lg shadow-[0_4px_12px_rgba(0,0,0,0.1)] z-[10000] overflow-hidden"
-          style={{
-            position: 'fixed',
-            top: `${menuPosition.top}px`,
-            right: `${menuPosition.right}px`
-          }}
-        >
-          {onOpenSessionManager && (
-            <button
-              className="session-dropdown-all-sessions flex items-center gap-2 w-full px-3 py-2 bg-transparent border-none text-[var(--nim-text)] text-[13px] cursor-pointer transition-colors duration-200 text-left hover:bg-[var(--nim-bg-hover)]"
-              onClick={() => {
-                onOpenSessionManager();
-                setIsOpen(false);
-              }}
-            >
-              <MaterialSymbol icon="folder_open" size={16} />
-              <span>All Sessions</span>
-            </button>
-          )}
-          {sessions.length > 0 && (
-            <div className="session-dropdown-divider h-px bg-[var(--nim-border)] my-1" />
-          )}
-          <div className="session-dropdown-sessions max-h-[300px] overflow-y-auto">
-            {sessions.map(session => (
-                  <div
-                    key={session.id}
-                    className={`session-dropdown-item flex items-center justify-between px-3 py-2.5 bg-transparent border-none text-[var(--nim-text)] text-[13px] cursor-pointer transition-colors duration-200 w-full text-left hover:bg-[var(--nim-bg-hover)] ${session.id === currentSessionId ? 'active bg-[var(--nim-bg-selected)] font-medium' : ''}`}
-                  >
-                    {renamingId === session.id ? (
-                      <input
-                        type="text"
-                        className="session-rename-input flex-1 px-1.5 py-1 border border-[var(--nim-primary)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] text-[13px] outline-none"
-                        value={renameValue}
-                        onChange={(e) => setRenameValue(e.target.value)}
-                        onBlur={submitRename}
-                        onKeyDown={handleKeyDown}
-                        autoFocus
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    ) : (
-                      <div
-                        className="session-info flex-1 flex flex-col gap-0.5 min-w-0"
-                        onClick={() => {
-                          onSessionSelect(session.id);
-                          setIsOpen(false);
-                        }}
-                      >
-                        <div className="session-name-row flex items-center gap-1.5">
-                          <SessionStatusIndicator sessionId={session.id} />
-                          <span className="session-name overflow-hidden text-ellipsis whitespace-nowrap">{formatSessionName(session)}</span>
-                          {session.provider && session.provider !== 'claude-code' && (
-                            <span className={`session-provider-badge provider-${session.provider} inline-flex items-center px-1 py-px rounded text-[9px] font-semibold uppercase tracking-wide shrink-0`}>
-                              {getProviderLabel(session.provider)}
-                            </span>
-                          )}
-                          {session.model && (
-                            <span className="session-model-badge inline-flex items-center px-1.5 py-px rounded text-[10px] font-medium bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)] shrink-0">
-                              {parseModelInfo(session.model)?.shortModelName}
-                            </span>
+      {menu.isOpen && (
+        <FloatingPortal>
+          <div
+            ref={menu.refs.setFloating}
+            style={menu.floatingStyles}
+            {...menu.getFloatingProps()}
+            className="session-dropdown-menu min-w-[280px] max-w-[400px] bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-lg shadow-[0_4px_12px_rgba(0,0,0,0.1)] z-[10000] overflow-hidden"
+          >
+            {onOpenSessionManager && (
+              <button
+                className="session-dropdown-all-sessions flex items-center gap-2 w-full px-3 py-2 bg-transparent border-none text-[var(--nim-text)] text-[13px] cursor-pointer transition-colors duration-200 text-left hover:bg-[var(--nim-bg-hover)]"
+                onClick={() => {
+                  onOpenSessionManager();
+                  menu.setIsOpen(false);
+                }}
+              >
+                <MaterialSymbol icon="folder_open" size={16} />
+                <span>All Sessions</span>
+              </button>
+            )}
+            {sessions.length > 0 && (
+              <div className="session-dropdown-divider h-px bg-[var(--nim-border)] my-1" />
+            )}
+            <div className="session-dropdown-sessions max-h-[300px] overflow-y-auto">
+              {sessions.map(session => (
+                    <div
+                      key={session.id}
+                      className={`session-dropdown-item flex items-center justify-between px-3 py-2.5 bg-transparent border-none text-[var(--nim-text)] text-[13px] cursor-pointer transition-colors duration-200 w-full text-left hover:bg-[var(--nim-bg-hover)] ${session.id === currentSessionId ? 'active bg-[var(--nim-bg-selected)] font-medium' : ''}`}
+                    >
+                      {renamingId === session.id ? (
+                        <input
+                          type="text"
+                          className="session-rename-input flex-1 px-1.5 py-1 border border-[var(--nim-primary)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] text-[13px] outline-none"
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onBlur={submitRename}
+                          onKeyDown={handleKeyDown}
+                          autoFocus
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      ) : (
+                        <div
+                          className="session-info flex-1 flex flex-col gap-0.5 min-w-0"
+                          onClick={() => {
+                            onSessionSelect(session.id);
+                            menu.setIsOpen(false);
+                          }}
+                        >
+                          <div className="session-name-row flex items-center gap-1.5">
+                            <SessionStatusIndicator sessionId={session.id} />
+                            <span className="session-name overflow-hidden text-ellipsis whitespace-nowrap">{formatSessionName(session)}</span>
+                            {session.provider && session.provider !== 'claude-code' && (
+                              <span className={`session-provider-badge provider-${session.provider} inline-flex items-center px-1 py-px rounded text-[9px] font-semibold uppercase tracking-wide shrink-0`}>
+                                {getProviderLabel(session.provider)}
+                              </span>
+                            )}
+                            {session.model && (
+                              <span className="session-model-badge inline-flex items-center px-1.5 py-px rounded text-[10px] font-medium bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)] shrink-0">
+                                {parseModelInfo(session.model)?.shortModelName}
+                              </span>
+                            )}
+                          </div>
+                          {session.messageCount !== undefined && (
+                            <span className="session-message-count text-[11px] text-[var(--nim-text-muted)]">{session.messageCount} turns</span>
                           )}
                         </div>
-                        {session.messageCount !== undefined && (
-                          <span className="session-message-count text-[11px] text-[var(--nim-text-muted)]">{session.messageCount} turns</span>
-                        )}
-                      </div>
-                    )}
+                      )}
 
-                    <div className="session-actions flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100 [.session-dropdown-item:hover_&]:opacity-100">
-                      {onRenameSession && (
+                      <div className="session-actions flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100 [.session-dropdown-item:hover_&]:opacity-100">
+                        {onRenameSession && (
+                          <button
+                            className="session-action-btn nim-btn-icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRename(session.id);
+                            }}
+                            title="Rename"
+                          >
+                            <MaterialSymbol icon="edit" size={14} />
+                          </button>
+                        )}
                         <button
-                          className="session-action-btn nim-btn-icon"
+                          className="session-action-btn delete nim-btn-icon hover:bg-[var(--nim-bg-tertiary)] hover:text-[var(--nim-error)]"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleRename(session.id);
+                            if (confirm('Delete this session?')) {
+                              onDeleteSession(session.id);
+                            }
                           }}
-                          title="Rename"
+                          title="Delete"
                         >
-                          <MaterialSymbol icon="edit" size={14} />
+                          <MaterialSymbol icon="delete" size={14} />
                         </button>
-                      )}
-                      <button
-                        className="session-action-btn delete nim-btn-icon hover:bg-[var(--nim-bg-tertiary)] hover:text-[var(--nim-error)]"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (confirm('Delete this session?')) {
-                            onDeleteSession(session.id);
-                          }
-                        }}
-                        title="Delete"
-                      >
-                        <MaterialSymbol icon="delete" size={14} />
-                      </button>
+                      </div>
                     </div>
-                  </div>
-            ))}
-          </div>
-          {sessions.length === 0 && (
-            <div className="session-dropdown-empty p-5 text-center text-[var(--nim-text-muted)] text-[13px]">
-              <span>No sessions yet</span>
+              ))}
             </div>
-          )}
-        </div>
+            {sessions.length === 0 && (
+              <div className="session-dropdown-empty p-5 text-center text-[var(--nim-text-muted)] text-[13px]">
+                <span>No sessions yet</span>
+              </div>
+            )}
+          </div>
+        </FloatingPortal>
       )}
     </div>
   );

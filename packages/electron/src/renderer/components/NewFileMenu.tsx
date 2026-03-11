@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect } from 'react';
 import { MaterialSymbol, type NewFileMenuContribution } from '@nimbalyst/runtime';
+import { useFloatingMenu, FloatingPortal, virtualElement } from '../hooks/useFloatingMenu';
 
 // Built-in file types
 export type BuiltInFileType = 'markdown' | 'mockup' | 'any';
@@ -30,53 +31,15 @@ export function NewFileMenu({
   onClose,
   extensionFileTypes = []
 }: NewFileMenuProps) {
-  const menuRef = useRef<HTMLDivElement>(null);
-  const [adjustedPosition, setAdjustedPosition] = useState({ x, y });
+  const menu = useFloatingMenu({
+    placement: 'right-start',
+    open: true,
+    onOpenChange: (open) => { if (!open) onClose(); },
+  });
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        onClose();
-      }
-    };
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleEscape);
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [onClose]);
-
-  // Adjust position after menu is mounted to keep it in viewport
-  useEffect(() => {
-    if (menuRef.current) {
-      const rect = menuRef.current.getBoundingClientRect();
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-
-      let newX = x;
-      let newY = y;
-
-      if (x + rect.width > viewportWidth) {
-        newX = x - rect.width;
-      }
-      if (y + rect.height > viewportHeight) {
-        newY = y - rect.height;
-      }
-
-      if (newX !== x || newY !== y) {
-        setAdjustedPosition({ x: newX, y: newY });
-      }
-    }
-  }, [x, y]);
+    menu.refs.setPositionReference(virtualElement(x, y));
+  }, [x, y, menu.refs]);
 
   const handleSelect = (fileType: NewFileType) => {
     onSelect(fileType);
@@ -84,49 +47,52 @@ export function NewFileMenu({
   };
 
   return (
-    <div
-      ref={menuRef}
-      className="new-file-menu fixed bg-nim-secondary border border-nim rounded-md shadow-lg p-1 min-w-[180px] z-[10000] text-[13px] backdrop-blur-[10px]"
-      style={{ left: adjustedPosition.x, top: adjustedPosition.y }}
-    >
+    <FloatingPortal>
       <div
-        className="new-file-menu-item flex items-center gap-2.5 py-2 px-3 rounded cursor-pointer transition-colors text-nim hover:bg-nim-hover"
-        onClick={() => handleSelect('markdown')}
+        ref={menu.refs.setFloating}
+        style={menu.floatingStyles}
+        {...menu.getFloatingProps()}
+        className="new-file-menu bg-nim-secondary border border-nim rounded-md shadow-lg p-1 min-w-[180px] z-[10000] text-[13px] backdrop-blur-[10px]"
       >
-        <MaterialSymbol icon="description" size={18} />
-        <span>New Markdown File</span>
-      </div>
-
-      <div
-        className="new-file-menu-item flex items-center gap-2.5 py-2 px-3 rounded cursor-pointer transition-colors text-nim hover:bg-nim-hover"
-        onClick={() => handleSelect('mockup')}
-      >
-        <MaterialSymbol icon="web" size={18} />
-        <span>New Mockup</span>
-      </div>
-
-      {/* Extension-contributed file types */}
-      {extensionFileTypes.map((extType) => (
         <div
-          key={extType.extension}
           className="new-file-menu-item flex items-center gap-2.5 py-2 px-3 rounded cursor-pointer transition-colors text-nim hover:bg-nim-hover"
-          onClick={() => handleSelect(`ext:${extType.extension}`)}
+          onClick={() => handleSelect('markdown')}
         >
-          <MaterialSymbol icon={extType.icon} size={18} />
-          <span>New {extType.displayName}</span>
+          <MaterialSymbol icon="description" size={18} />
+          <span>New Markdown File</span>
         </div>
-      ))}
 
-      <div className="new-file-menu-separator h-px bg-[var(--nim-border)] mx-2 my-1" />
+        <div
+          className="new-file-menu-item flex items-center gap-2.5 py-2 px-3 rounded cursor-pointer transition-colors text-nim hover:bg-nim-hover"
+          onClick={() => handleSelect('mockup')}
+        >
+          <MaterialSymbol icon="web" size={18} />
+          <span>New Mockup</span>
+        </div>
 
-      <div
-        className="new-file-menu-item flex items-center gap-2.5 py-2 px-3 rounded cursor-pointer transition-colors text-nim hover:bg-nim-hover"
-        onClick={() => handleSelect('any')}
-      >
-        <MaterialSymbol icon="note_add" size={18} />
-        <span>New File...</span>
+        {/* Extension-contributed file types */}
+        {extensionFileTypes.map((extType) => (
+          <div
+            key={extType.extension}
+            className="new-file-menu-item flex items-center gap-2.5 py-2 px-3 rounded cursor-pointer transition-colors text-nim hover:bg-nim-hover"
+            onClick={() => handleSelect(`ext:${extType.extension}`)}
+          >
+            <MaterialSymbol icon={extType.icon} size={18} />
+            <span>New {extType.displayName}</span>
+          </div>
+        ))}
+
+        <div className="new-file-menu-separator h-px bg-[var(--nim-border)] mx-2 my-1" />
+
+        <div
+          className="new-file-menu-item flex items-center gap-2.5 py-2 px-3 rounded cursor-pointer transition-colors text-nim hover:bg-nim-hover"
+          onClick={() => handleSelect('any')}
+        >
+          <MaterialSymbol icon="note_add" size={18} />
+          <span>New File...</span>
+        </div>
       </div>
-    </div>
+    </FloatingPortal>
   );
 }
 

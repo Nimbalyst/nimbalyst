@@ -16,6 +16,7 @@ import { setSessionPhaseAtom, SESSION_PHASE_COLUMNS } from '../../store/atoms/se
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { dialogRef, DIALOG_IDS } from '../../dialogs';
 import type { ShareDialogData } from '../../dialogs';
+import { useFloatingMenu, FloatingPortal, virtualElement } from '../../hooks/useFloatingMenu';
 
 export interface SessionContextMenuProps {
   sessionId: string;
@@ -62,8 +63,6 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
 }) => {
   const [showPhaseSubmenu, setShowPhaseSubmenu] = useState(false);
   const [submenuFlipped, setSubmenuFlipped] = useState(false);
-  const [adjustedPosition, setAdjustedPosition] = useState<{ x: number; y: number } | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
   const submenuParentRef = useRef<HTMLDivElement>(null);
   const setSessionPhase = useSetAtom(setSessionPhaseAtom);
 
@@ -72,42 +71,15 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
   const shareKeys = useAtomValue(shareKeysAtom);
   const removeShare = useSetAtom(removeSessionShareAtom);
 
-  // Adjust position to keep within viewport
+  const menu = useFloatingMenu({
+    placement: 'right-start',
+    open: true,
+    onOpenChange: (open) => { if (!open) onClose(); },
+  });
+
   useEffect(() => {
-    if (menuRef.current) {
-      const rect = menuRef.current.getBoundingClientRect();
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-
-      let newX = position.x;
-      let newY = position.y;
-
-      if (position.x + rect.width > viewportWidth) {
-        newX = position.x - rect.width;
-      }
-      if (position.y + rect.height > viewportHeight) {
-        newY = position.y - rect.height;
-      }
-
-      newX = Math.max(0, newX);
-      newY = Math.max(0, newY);
-
-      if (newX !== position.x || newY !== position.y) {
-        setAdjustedPosition({ x: newX, y: newY });
-      }
-    }
-  }, [position]);
-
-  // Close on click outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [onClose]);
+    menu.refs.setPositionReference(virtualElement(position.x, position.y));
+  }, [position.x, position.y, menu.refs]);
 
   const menuItemClass = 'session-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0';
 
@@ -170,178 +142,179 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
     }
   }, [onClose, shareInfo, sessionId, removeShare]);
 
-  const pos = adjustedPosition || position;
-
   return (
-    <div
-      ref={menuRef}
-      className="session-context-menu fixed z-[1000] min-w-[140px] p-1 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
-      style={{ left: pos.x, top: pos.y }}
-      onClick={(e) => e.stopPropagation()}
-      onMouseLeave={onClose}
-    >
-      {/* Group 1: Organize (most frequent) */}
-      {onRename && (
-        <button className={menuItemClass} onClick={(e) => handleAction(e, onRename)}>
-          <MaterialSymbol icon="edit" size={14} />
-          Rename
-        </button>
-      )}
-      {onPinToggle && (
-        <button className={menuItemClass} onClick={(e) => handleAction(e, () => onPinToggle(!isPinned))}>
-          <MaterialSymbol icon="push_pin" size={14} />
-          {isPinned ? 'Unpin' : 'Pin'}
-        </button>
-      )}
-      {/* Set Phase submenu */}
+    <FloatingPortal>
       <div
-        ref={submenuParentRef}
-        className="relative"
-        onMouseEnter={() => {
-          // Check if submenu would overflow right edge
-          if (submenuParentRef.current) {
-            const rect = submenuParentRef.current.getBoundingClientRect();
-            const submenuWidth = 150; // min-w-[140px] + padding
-            setSubmenuFlipped(rect.right + submenuWidth > window.innerWidth);
-          }
-          setShowPhaseSubmenu(true);
-        }}
-        onMouseLeave={() => setShowPhaseSubmenu(false)}
+        ref={menu.refs.setFloating}
+        style={menu.floatingStyles}
+        {...menu.getFloatingProps()}
+        className="session-context-menu z-[1000] min-w-[140px] p-1 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
+        onClick={(e) => e.stopPropagation()}
+        onMouseLeave={onClose}
       >
-        <button
-          className={menuItemClass}
-          onClick={(e) => { e.stopPropagation(); setShowPhaseSubmenu(!showPhaseSubmenu); }}
+        {/* Group 1: Organize (most frequent) */}
+        {onRename && (
+          <button className={menuItemClass} onClick={(e) => handleAction(e, onRename)}>
+            <MaterialSymbol icon="edit" size={14} />
+            Rename
+          </button>
+        )}
+        {onPinToggle && (
+          <button className={menuItemClass} onClick={(e) => handleAction(e, () => onPinToggle(!isPinned))}>
+            <MaterialSymbol icon="push_pin" size={14} />
+            {isPinned ? 'Unpin' : 'Pin'}
+          </button>
+        )}
+        {/* Set Phase submenu */}
+        <div
+          ref={submenuParentRef}
+          className="relative"
+          onMouseEnter={() => {
+            // Check if submenu would overflow right edge
+            if (submenuParentRef.current) {
+              const rect = submenuParentRef.current.getBoundingClientRect();
+              const submenuWidth = 150; // min-w-[140px] + padding
+              setSubmenuFlipped(rect.right + submenuWidth > window.innerWidth);
+            }
+            setShowPhaseSubmenu(true);
+          }}
+          onMouseLeave={() => setShowPhaseSubmenu(false)}
         >
-          <MaterialSymbol icon="view_kanban" size={14} />
-          <span className="flex-1">Set Phase</span>
-          {phase && (
-            <span className="text-[10px] text-[var(--nim-text-faint)] ml-1">{phase}</span>
-          )}
-          <MaterialSymbol icon="chevron_right" size={12} />
-        </button>
-        {showPhaseSubmenu && (
-          <div className={`absolute top-0 min-w-[140px] p-1 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] z-[1001] ${submenuFlipped ? 'right-full mr-0.5' : 'left-full ml-0.5'}`}>
-            {SESSION_PHASE_COLUMNS.map((col) => (
-              <button
-                key={col.value}
-                className={`session-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 ${phase === col.value ? 'text-[var(--nim-primary)]' : 'text-[var(--nim-text)]'}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onClose();
-                  setSessionPhase({ sessionId, phase: col.value });
-                }}
-              >
-                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: col.color }} />
-                {col.label}
-                {phase === col.value && <MaterialSymbol icon="check" size={14} className="ml-auto" />}
-              </button>
-            ))}
+          <button
+            className={menuItemClass}
+            onClick={(e) => { e.stopPropagation(); setShowPhaseSubmenu(!showPhaseSubmenu); }}
+          >
+            <MaterialSymbol icon="view_kanban" size={14} />
+            <span className="flex-1">Set Phase</span>
             {phase && (
-              <>
-                <div className="h-px bg-[var(--nim-border)] my-1" />
+              <span className="text-[10px] text-[var(--nim-text-faint)] ml-1">{phase}</span>
+            )}
+            <MaterialSymbol icon="chevron_right" size={12} />
+          </button>
+          {showPhaseSubmenu && (
+            <div className={`absolute top-0 min-w-[140px] p-1 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] z-[1001] ${submenuFlipped ? 'right-full mr-0.5' : 'left-full ml-0.5'}`}>
+              {SESSION_PHASE_COLUMNS.map((col) => (
                 <button
-                  className="session-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text-faint)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+                  key={col.value}
+                  className={`session-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 ${phase === col.value ? 'text-[var(--nim-primary)]' : 'text-[var(--nim-text)]'}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     onClose();
-                    window.electronAPI.invoke('sessions:update-session-metadata', sessionId, { phase: null });
+                    setSessionPhase({ sessionId, phase: col.value });
                   }}
                 >
-                  <MaterialSymbol icon="close" size={14} />
-                  Remove from board
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: col.color }} />
+                  {col.label}
+                  {phase === col.value && <MaterialSymbol icon="check" size={14} className="ml-auto" />}
                 </button>
+              ))}
+              {phase && (
+                <>
+                  <div className="h-px bg-[var(--nim-border)] my-1" />
+                  <button
+                    className="session-context-menu-item flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text-faint)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onClose();
+                      window.electronAPI.invoke('sessions:update-session-metadata', sessionId, { phase: null });
+                    }}
+                  >
+                    <MaterialSymbol icon="close" size={14} />
+                    Remove from board
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Group 2: Branch / workstream actions */}
+        {(onBranch || (onRemoveFromWorkstream && parentSessionId && !isWorktreeSession)) && (
+          <div className="h-px bg-[var(--nim-border)] my-1" />
+        )}
+        {onBranch && (
+          <button className={menuItemClass} onClick={(e) => handleAction(e, onBranch)}>
+            <MaterialSymbol icon="fork_right" size={14} />
+            Branch conversation
+          </button>
+        )}
+        {onRemoveFromWorkstream && parentSessionId && !isWorktreeSession && (
+          <button className={menuItemClass} onClick={(e) => handleAction(e, onRemoveFromWorkstream)}>
+            <MaterialSymbol icon="drive_file_move_rtl" size={14} />
+            Remove from workstream
+          </button>
+        )}
+
+        {/* Group 3: Copy to clipboard */}
+        <div className="h-px bg-[var(--nim-border)] my-1" />
+        <button className={menuItemClass} onClick={handleCopyTranscript}>
+          <MaterialSymbol icon="assignment" size={14} />
+          Copy transcript
+        </button>
+        <button className={menuItemClass} onClick={handleCopySessionId}>
+          <MaterialSymbol icon="content_copy" size={14} />
+          Copy Session ID
+        </button>
+
+        {/* Group 4: Share / export */}
+        <div className="h-px bg-[var(--nim-border)] my-1" />
+        {shareInfo ? (
+          <>
+            <button className={menuItemClass} onClick={handleCopyShareLink}>
+              <MaterialSymbol icon="content_copy" size={14} />
+              Copy share link
+            </button>
+            <button className={menuItemClass} onClick={handleUnshare}>
+              <MaterialSymbol icon="link_off" size={14} />
+              Unshare
+            </button>
+          </>
+        ) : (
+          <button className={menuItemClass} onClick={handleShareLink}>
+            <MaterialSymbol icon="link" size={14} />
+            Share link
+          </button>
+        )}
+        <button className={menuItemClass} onClick={handleExportHtml}>
+          <MaterialSymbol icon="download" size={14} />
+          Export as HTML
+        </button>
+
+        {/* Group 5: Destructive actions */}
+        {(onArchive || onUnarchive || onDelete) && (
+          <div className="h-px bg-[var(--nim-border)] my-1" />
+        )}
+        {(onArchive || onUnarchive) && (
+          <button
+            className={menuItemClass}
+            onClick={(e) => handleAction(e, () => {
+              if (isArchived && onUnarchive) onUnarchive();
+              else if (!isArchived && onArchive) onArchive();
+            })}
+          >
+            {isArchived ? (
+              <>
+                <MaterialSymbol icon="unarchive" size={14} />
+                Unarchive {isWorkstream ? 'Workstream' : isWorktreeSession ? 'Worktree' : 'Session'}
+              </>
+            ) : (
+              <>
+                <MaterialSymbol icon="archive" size={14} />
+                Archive {isWorkstream ? 'Workstream' : isWorktreeSession ? 'Worktree' : 'Session'}
               </>
             )}
-          </div>
+          </button>
+        )}
+        {onDelete && (
+          <button
+            className="session-context-menu-item destructive flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-error)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-error)] hover:text-white [&_svg]:shrink-0"
+            onClick={(e) => handleAction(e, onDelete)}
+          >
+            <MaterialSymbol icon="delete" size={14} />
+            Delete
+          </button>
         )}
       </div>
-
-      {/* Group 2: Branch / workstream actions */}
-      {(onBranch || (onRemoveFromWorkstream && parentSessionId && !isWorktreeSession)) && (
-        <div className="h-px bg-[var(--nim-border)] my-1" />
-      )}
-      {onBranch && (
-        <button className={menuItemClass} onClick={(e) => handleAction(e, onBranch)}>
-          <MaterialSymbol icon="fork_right" size={14} />
-          Branch conversation
-        </button>
-      )}
-      {onRemoveFromWorkstream && parentSessionId && !isWorktreeSession && (
-        <button className={menuItemClass} onClick={(e) => handleAction(e, onRemoveFromWorkstream)}>
-          <MaterialSymbol icon="drive_file_move_rtl" size={14} />
-          Remove from workstream
-        </button>
-      )}
-
-      {/* Group 3: Copy to clipboard */}
-      <div className="h-px bg-[var(--nim-border)] my-1" />
-      <button className={menuItemClass} onClick={handleCopyTranscript}>
-        <MaterialSymbol icon="assignment" size={14} />
-        Copy transcript
-      </button>
-      <button className={menuItemClass} onClick={handleCopySessionId}>
-        <MaterialSymbol icon="content_copy" size={14} />
-        Copy Session ID
-      </button>
-
-      {/* Group 4: Share / export */}
-      <div className="h-px bg-[var(--nim-border)] my-1" />
-      {shareInfo ? (
-        <>
-          <button className={menuItemClass} onClick={handleCopyShareLink}>
-            <MaterialSymbol icon="content_copy" size={14} />
-            Copy share link
-          </button>
-          <button className={menuItemClass} onClick={handleUnshare}>
-            <MaterialSymbol icon="link_off" size={14} />
-            Unshare
-          </button>
-        </>
-      ) : (
-        <button className={menuItemClass} onClick={handleShareLink}>
-          <MaterialSymbol icon="link" size={14} />
-          Share link
-        </button>
-      )}
-      <button className={menuItemClass} onClick={handleExportHtml}>
-        <MaterialSymbol icon="download" size={14} />
-        Export as HTML
-      </button>
-
-      {/* Group 5: Destructive actions */}
-      {(onArchive || onUnarchive || onDelete) && (
-        <div className="h-px bg-[var(--nim-border)] my-1" />
-      )}
-      {(onArchive || onUnarchive) && (
-        <button
-          className={menuItemClass}
-          onClick={(e) => handleAction(e, () => {
-            if (isArchived && onUnarchive) onUnarchive();
-            else if (!isArchived && onArchive) onArchive();
-          })}
-        >
-          {isArchived ? (
-            <>
-              <MaterialSymbol icon="unarchive" size={14} />
-              Unarchive {isWorkstream ? 'Workstream' : isWorktreeSession ? 'Worktree' : 'Session'}
-            </>
-          ) : (
-            <>
-              <MaterialSymbol icon="archive" size={14} />
-              Archive {isWorkstream ? 'Workstream' : isWorktreeSession ? 'Worktree' : 'Session'}
-            </>
-          )}
-        </button>
-      )}
-      {onDelete && (
-        <button
-          className="session-context-menu-item destructive flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-error)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-error)] hover:text-white [&_svg]:shrink-0"
-          onClick={(e) => handleAction(e, onDelete)}
-        >
-          <MaterialSymbol icon="delete" size={14} />
-          Delete
-        </button>
-      )}
-    </div>
+    </FloatingPortal>
   );
 };

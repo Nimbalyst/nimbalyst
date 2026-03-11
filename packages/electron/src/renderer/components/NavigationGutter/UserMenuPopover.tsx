@@ -1,8 +1,9 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { useAlphaFeature } from '../../hooks/useAlphaFeature';
 import type { SettingsCategory } from '../Settings/SettingsSidebar';
 import type { SettingsScope } from '../Settings/SettingsView';
+import { useFloatingMenu, FloatingPortal } from '../../hooks/useFloatingMenu';
 
 interface StytchAuthState {
   isAuthenticated: boolean;
@@ -18,11 +19,25 @@ interface UserMenuPopoverProps {
   onClose: () => void;
   /** Whether the user has a team or mobile sync configured for this workspace */
   isProjectConnected?: boolean;
+  /** The anchor element to position the popover relative to */
+  anchorEl: HTMLElement | null;
 }
 
-export function UserMenuPopover({ onNavigateSettings, onClose, isProjectConnected = false }: UserMenuPopoverProps) {
+export function UserMenuPopover({ onNavigateSettings, onClose, isProjectConnected = false, anchorEl }: UserMenuPopoverProps) {
   const [authState, setAuthState] = useState<StytchAuthState | null>(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
+
+  const menu = useFloatingMenu({
+    placement: 'right-end',
+    open: true,
+    onOpenChange: (open) => { if (!open) onClose(); },
+  });
+
+  // Set the anchor element as the position reference
+  useEffect(() => {
+    if (anchorEl) {
+      menu.refs.setReference(anchorEl);
+    }
+  }, [anchorEl, menu.refs]);
 
   // Load auth state on mount
   useEffect(() => {
@@ -50,34 +65,6 @@ export function UserMenuPopover({ onNavigateSettings, onClose, isProjectConnecte
 
     return () => { unsubscribe?.(); };
   }, []);
-
-  // Close on click outside
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    }
-    // Delay attaching to avoid closing immediately from the button click that opened us
-    const timer = setTimeout(() => {
-      document.addEventListener('mousedown', handleClickOutside);
-    }, 0);
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [onClose]);
-
-  // Close on Escape
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
 
   const isCollaborationEnabled = useAlphaFeature('collaboration');
   const email = authState?.user?.emails?.[0]?.email;
@@ -121,50 +108,54 @@ export function UserMenuPopover({ onNavigateSettings, onClose, isProjectConnecte
   ];
 
   return (
-    <div
-      ref={popoverRef}
-      className="absolute bottom-0 left-full ml-2 w-56 bg-nim-secondary border border-nim rounded-lg shadow-lg z-50 overflow-hidden"
-      data-testid="user-menu-popover"
-    >
-      {/* Navigation links */}
-      <div className="py-1">
-        {menuItems.map((item) => (
-          <button
-            key={item.label}
-            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-nim hover:bg-nim-tertiary cursor-pointer border-none bg-transparent text-left transition-colors duration-100"
-            onClick={item.onClick}
-            data-testid={`user-menu-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
-          >
-            <MaterialSymbol icon={item.icon} size={18} className="text-nim-muted shrink-0" />
-            <span>{item.label}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* Identity row - always shown for login and mobile sync access */}
-      <div className="border-t border-nim" />
-      <button
-        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-nim-tertiary cursor-pointer border-none bg-transparent text-left transition-colors duration-100"
-        onClick={() => {
-          onNavigateSettings('user', 'sync');
-          onClose();
-        }}
-        data-testid="user-menu-identity"
+    <FloatingPortal>
+      <div
+        ref={menu.refs.setFloating}
+        style={menu.floatingStyles}
+        {...menu.getFloatingProps()}
+        className="w-56 bg-nim-secondary border border-nim rounded-lg shadow-lg z-50 overflow-hidden"
+        data-testid="user-menu-popover"
       >
-        <div className="w-7 h-7 rounded-full bg-nim-primary flex items-center justify-center shrink-0">
-          <span className="text-xs font-semibold text-white leading-none">
-            {email ? email[0].toUpperCase() : '?'}
-          </span>
+        {/* Navigation links */}
+        <div className="py-1">
+          {menuItems.map((item) => (
+            <button
+              key={item.label}
+              className="w-full flex items-center gap-3 px-3 py-2 text-sm text-nim hover:bg-nim-tertiary cursor-pointer border-none bg-transparent text-left transition-colors duration-100"
+              onClick={item.onClick}
+              data-testid={`user-menu-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
+            >
+              <MaterialSymbol icon={item.icon} size={18} className="text-nim-muted shrink-0" />
+              <span>{item.label}</span>
+            </button>
+          ))}
         </div>
-        <div className="flex flex-col min-w-0">
-          <span className="text-sm text-nim truncate">
-            {email ?? 'No account'}
-          </span>
-          <span className="text-xs text-nim-muted">
-            {isSignedIn ? 'Signed in' : 'Not signed in'}
-          </span>
-        </div>
-      </button>
-    </div>
+
+        {/* Identity row - always shown for login and mobile sync access */}
+        <div className="border-t border-nim" />
+        <button
+          className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-nim-tertiary cursor-pointer border-none bg-transparent text-left transition-colors duration-100"
+          onClick={() => {
+            onNavigateSettings('user', 'sync');
+            onClose();
+          }}
+          data-testid="user-menu-identity"
+        >
+          <div className="w-7 h-7 rounded-full bg-nim-primary flex items-center justify-center shrink-0">
+            <span className="text-xs font-semibold text-white leading-none">
+              {email ? email[0].toUpperCase() : '?'}
+            </span>
+          </div>
+          <div className="flex flex-col min-w-0">
+            <span className="text-sm text-nim truncate">
+              {email ?? 'No account'}
+            </span>
+            <span className="text-xs text-nim-muted">
+              {isSignedIn ? 'Signed in' : 'Not signed in'}
+            </span>
+          </div>
+        </button>
+      </div>
+    </FloatingPortal>
   );
 }

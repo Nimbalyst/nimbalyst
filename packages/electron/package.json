@@ -54,6 +54,7 @@
     "@electric-sql/pglite": "0.3.14",
     "@electron-toolkit/utils": "^4.0.0",
     "@excalidraw/excalidraw": "0.17.6",
+    "@floating-ui/react": "^0.27.19",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@monaco-editor/react": "^4.7.0",
     "@nimbalyst/runtime": "*",
