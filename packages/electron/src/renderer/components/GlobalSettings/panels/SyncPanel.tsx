@@ -131,6 +131,7 @@ export function SyncPanel() {
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [showQRModal, setShowQRModal] = useState(false);
+  const [pairError, setPairError] = useState<string | null>(null);
   const [showAllProjects, setShowAllProjects] = useState(false);
   const [connectedDevices, setConnectedDevices] = useState<DeviceInfo[]>([]);
   const [devicesLoading, setDevicesLoading] = useState(false);
@@ -805,6 +806,11 @@ export function SyncPanel() {
             <button
               className="self-center flex flex-col items-center gap-1.5 px-4 py-2.5 bg-nim-primary border-none rounded-lg text-white text-[14px] font-medium cursor-pointer hover:bg-nim-primary-hover disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
               onClick={() => {
+                if (enabledProjectCount === 0) {
+                  setPairError('Enable at least one project to sync before pairing your device.');
+                  return;
+                }
+                setPairError(null);
                 posthog?.capture('sync_qr_pairing_opened');
                 setShowQRModal(true);
               }}
@@ -823,6 +829,11 @@ export function SyncPanel() {
             </button>
           </div>
         </div>
+      )}
+      {pairError && (
+          <p className="mt-2 text-[12px] text-nim-error">
+            {pairError}
+          </p>
       )}
 
       {/* Paired Devices */}

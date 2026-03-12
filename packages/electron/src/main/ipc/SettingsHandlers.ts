@@ -752,10 +752,11 @@ export function registerSettingsHandlers() {
             enabledProjects = enabledProjects.filter(p => p !== workspacePath);
         }
 
-        // Save updated config
+        // Save updated config (also update enabled based on whether any projects are selected)
         setSessionSyncConfig({
             ...config,
             enabledProjects,
+            enabled: enabledProjects.length > 0,
         });
 
         logger.store.info(`[sync:toggle-project] Project sync ${enabled ? 'enabled' : 'disabled'} for: ${workspacePath}`);
