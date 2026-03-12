@@ -15,7 +15,7 @@ import React, {
   useRef,
   type ReactNode,
 } from 'react';
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
 import type {
   WalkthroughState,
@@ -43,6 +43,10 @@ import {
 } from '../atoms';
 import { hasActiveDialogsAtom } from '../../contexts/DialogContext';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
+import {
+  walkthroughTriggerCommandAtom,
+  walkthroughResetCommandAtom,
+} from '../../store/atoms/walkthroughCommands';
 
 const WalkthroughContext = createContext<WalkthroughContextValue | null>(null);
 
@@ -395,47 +399,60 @@ export function WalkthroughProvider({
     };
   }, [state, activeWalkthroughId, currentStepIndex, activeWalkthrough, startWalkthrough, dismissWalkthrough, setState]);
 
-  // Listen for IPC messages from main process (Developer menu triggers)
+  // React to walkthrough trigger commands from centralized listener
+  const triggerCommand = useAtomValue(walkthroughTriggerCommandAtom);
+  const triggerCommandProcessedRef = useRef<number | null>(null);
+
   useEffect(() => {
-    const handleTriggerWalkthrough = (walkthroughId: string) => {
-      const walkthrough = walkthroughs.find((w) => w.id === walkthroughId);
-      if (!walkthrough) {
-        errorNotificationService.showInfo(
-          'Walkthrough Not Found',
-          `Unknown walkthrough: ${walkthroughId}`,
-          { duration: 3000 }
-        );
-        return;
-      }
+    if (!triggerCommand || triggerCommand.timestamp === triggerCommandProcessedRef.current) return;
+    triggerCommandProcessedRef.current = triggerCommand.timestamp;
 
-      // Check if the first step's target element exists on the page
-      const firstStep = walkthrough.steps[0];
-      const targetElement = resolveTarget(firstStep.target);
+    const { walkthroughId } = triggerCommand;
+    const walkthrough = walkthroughs.find((w) => w.id === walkthroughId);
+    if (!walkthrough) {
+      errorNotificationService.showInfo(
+        'Walkthrough Not Found',
+        `Unknown walkthrough: ${walkthroughId}`,
+        { duration: 3000 }
+      );
+      return;
+    }
 
-      if (!targetElement) {
-        errorNotificationService.showInfo(
-          'Cannot Show Walkthrough',
-          `"${walkthrough.name}" requires UI elements that aren't visible on this screen. Try switching to ${walkthrough.trigger.screen === 'agent' ? 'Agent Mode' : 'Files Mode'} first.`,
-          { duration: 5000 }
-        );
-        return;
-      }
+    // Check if the first step's target element exists on the page
+    const firstStep = walkthrough.steps[0];
+    const targetElement = resolveTarget(firstStep.target);
 
-      // Check if walkthrough's condition is met
-      if (walkthrough.trigger.condition && !walkthrough.trigger.condition()) {
-        errorNotificationService.showInfo(
-          'Cannot Show Walkthrough',
-          `"${walkthrough.name}" conditions aren't met. Try switching to ${walkthrough.trigger.screen === 'agent' ? 'Agent Mode' : 'Files Mode'} first.`,
-          { duration: 5000 }
-        );
-        return;
-      }
+    if (!targetElement) {
+      errorNotificationService.showInfo(
+        'Cannot Show Walkthrough',
+        `"${walkthrough.name}" requires UI elements that aren't visible on this screen. Try switching to ${walkthrough.trigger.screen === 'agent' ? 'Agent Mode' : 'Files Mode'} first.`,
+        { duration: 5000 }
+      );
+      return;
+    }
 
-      // Start the walkthrough
-      startWalkthrough(walkthroughId);
-    };
+    // Check if walkthrough's condition is met
+    if (walkthrough.trigger.condition && !walkthrough.trigger.condition()) {
+      errorNotificationService.showInfo(
+        'Cannot Show Walkthrough',
+        `"${walkthrough.name}" conditions aren't met. Try switching to ${walkthrough.trigger.screen === 'agent' ? 'Agent Mode' : 'Files Mode'} first.`,
+        { duration: 5000 }
+      );
+      return;
+    }
 
-    const handleResetWalkthroughs = async () => {
+    startWalkthrough(walkthroughId);
+  }, [triggerCommand, startWalkthrough]);
+
+  // React to walkthrough reset commands from centralized listener
+  const resetCommand = useAtomValue(walkthroughResetCommandAtom);
+  const resetCommandProcessedRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (resetCommand === 0 || resetCommand === resetCommandProcessedRef.current) return;
+    resetCommandProcessedRef.current = resetCommand;
+
+    (async () => {
       await resetWalkthroughStateIPC();
       const newState = await getWalkthroughState();
       setState(newState);
@@ -445,17 +462,8 @@ export function WalkthroughProvider({
         'All walkthrough guides will show again.',
         { duration: 3000 }
       );
-    };
-
-    // Subscribe to IPC events
-    const unsubscribeTrigger = window.electronAPI.on('trigger-walkthrough', handleTriggerWalkthrough);
-    const unsubscribeReset = window.electronAPI.on('reset-walkthroughs', handleResetWalkthroughs);
-
-    return () => {
-      unsubscribeTrigger?.();
-      unsubscribeReset?.();
-    };
-  }, [startWalkthrough, setState]);
+    })();
+  }, [resetCommand, setState]);
 
   // Context value
   const contextValue = useMemo<WalkthroughContextValue>(
