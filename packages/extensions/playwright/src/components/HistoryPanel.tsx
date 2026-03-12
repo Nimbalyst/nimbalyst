@@ -134,7 +134,7 @@ export function HistoryPanel({ store, onOpenFile }: HistoryPanelProps) {
                   borderRadius: 6,
                   fontSize: 12,
                 }}
-                formatter={(value) => [formatDuration(value as number ?? 0), 'Duration']}
+                formatter={(value) => [formatDuration(value as number), 'Duration']}
               />
               <Line
                 type="monotone"
@@ -187,10 +187,13 @@ export function HistoryPanel({ store, onOpenFile }: HistoryPanelProps) {
                     borderRadius: 6,
                     fontSize: 12,
                   }}
-                  formatter={(value) => [
-                    `${Math.round((value as number) * 100)}% (${flakyTests.find((t) => t.failureRate === (value as number))?.failures ?? '?'} failures)`,
-                    'Failure Rate',
-                  ]}
+                  formatter={(value) => {
+                    const v = value as number;
+                    return [
+                      `${Math.round(v * 100)}% (${flakyTests.find((t) => t.failureRate === v)?.failures ?? '?'} failures)`,
+                      'Failure Rate',
+                    ];
+                  }}
                 />
                 <Bar dataKey="failureRate" radius={[0, 4, 4, 0]}>
                   {flakyTests.slice(0, 10).map((entry, i) => (

@@ -22,7 +22,7 @@ export function TestExplorerPanel({ host }: PanelHostProps) {
   const [lastRun, setLastRun] = useState<{ passed: number; failed: number; skipped: number; flaky: number; durationMs: number } | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>('tests');
   const [tracePath, setTracePath] = useState<string | undefined>();
-  const [_failedCount, setFailedCount] = useState(0);
+  const [, setFailedCount] = useState(0);
 
   // Initialize runner and history store
   useEffect(() => {
