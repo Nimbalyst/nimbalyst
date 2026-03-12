@@ -12,6 +12,7 @@ import { useWindowLifecycle } from './hooks/useWindowLifecycle';
 import { useTheme } from './hooks/useTheme';
 import { useConfirmDialog } from './hooks/useConfirmDialog';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { useExtensionKeybindings } from './extensions/commands/useExtensionKeybindings';
 import { useOnboarding } from './hooks/useOnboarding';
 // NOTE: useDocumentContext removed - we build documentContext manually now
 import { handleWorkspaceFileSelect as handleWorkspaceFileSelectUtil } from './utils/workspaceFileOperations';
@@ -351,6 +352,9 @@ export default function App() {
 
   // Active extension panel (for sidebar or fullscreen panels from extensions)
   const [activeExtensionPanel, setActiveExtensionPanel] = useState<string | null>(null);
+
+  // Active extension bottom panel (for bottom-placement panels from extensions)
+  const [activeExtensionBottomPanel, setActiveExtensionBottomPanel] = useState<string | null>(null);
 
   // Extension panel AI context (synced from PanelContainer when aiSupported panels are active)
   const extensionPanelAIContext = useAtomValue(extensionPanelAIContextAtom);
@@ -796,13 +800,15 @@ export default function App() {
     aiToolService.setHandleWorkspaceFileSelectFunction(handleWorkspaceFileSelect);
   }, [handleWorkspaceFileSelect]);
 
-  // Expose for E2E tests (same pattern as __editorRegistry)
+  // Expose for E2E tests
   useEffect(() => {
     (window as any).__handleWorkspaceFileSelect = handleWorkspaceFileSelect;
     (window as any).__workspacePath = workspacePath;
+    (window as any).__editorRegistry = editorRegistry;
     return () => {
       delete (window as any).__handleWorkspaceFileSelect;
       delete (window as any).__workspacePath;
+      delete (window as any).__editorRegistry;
     };
   }, [handleWorkspaceFileSelect, workspacePath]);
 
@@ -1085,6 +1091,22 @@ export default function App() {
     agentModeRef,
     toggleAgentCollapsed,
   });
+
+  // Extension-contributed keybindings (reads from manifests, fires commands via registry)
+  useExtensionKeybindings();
+
+  // Listen for extension panel toggle commands (dispatched by ExtensionCommandRegistry)
+  useEffect(() => {
+    const handleTogglePanel = (e: Event) => {
+      const panelId = (e as CustomEvent).detail?.panelId;
+      if (typeof panelId === 'string') {
+        setActiveExtensionBottomPanel(prev => prev === panelId ? null : panelId);
+      }
+    };
+
+    window.addEventListener('nimbalyst:toggle-panel', handleTogglePanel);
+    return () => window.removeEventListener('nimbalyst:toggle-panel', handleTogglePanel);
+  }, []);
 
   // Listen for terminal:show events (from worktree terminal button)
   useEffect(() => {
@@ -1571,6 +1593,7 @@ export default function App() {
           toggleTerminalPanel();
           if (!terminalPanelVisible) {
             closeTrackerPanel(); // Close tracker when opening terminal
+            setActiveExtensionBottomPanel(null); // Close extension bottom panel when opening terminal
           }
         }}
         terminalPanelVisible={terminalPanelVisible}
@@ -1602,6 +1625,15 @@ export default function App() {
         }}
         activeExtensionPanel={activeExtensionPanel}
         onExtensionPanelChange={setActiveExtensionPanel}
+        activeExtensionBottomPanel={activeExtensionBottomPanel}
+        onExtensionBottomPanelChange={(panelId) => {
+          setActiveExtensionBottomPanel(panelId);
+          if (panelId) {
+            // Close other bottom panels for mutual exclusivity
+            closeTrackerPanel();
+            closeTerminalPanel();
+          }
+        }}
         onToggleFilesCollapsed={() => {
           editorModeRef.current?.toggleSidebarCollapsed();
         }}
@@ -1818,6 +1850,27 @@ export default function App() {
             workspacePath={workspacePath}
           />
         )}
+
+        {/* Bottom: Extension Bottom Panel - spans width after nav gutter */}
+        {activeExtensionBottomPanel && workspacePath && (() => {
+          const panel = getPanelById(activeExtensionBottomPanel);
+          if (panel && panel.placement === 'bottom') {
+            return (
+              <div
+                className="bottom-panel-container overflow-hidden"
+              >
+                <PanelContainer
+                  panel={panel}
+                  workspacePath={workspacePath}
+                  onOpenFile={handleWorkspaceFileSelect}
+                  onOpenPanel={(panelId) => setActiveExtensionPanel(panelId)}
+                  onClose={() => setActiveExtensionBottomPanel(null)}
+                />
+              </div>
+            );
+          }
+          return null;
+        })()}
       </div>
 
       {/* Navigation dialogs (QuickOpen, SessionQuickOpen, PromptQuickOpen, AgentCommandPalette) */}

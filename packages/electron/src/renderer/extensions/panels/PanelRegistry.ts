@@ -7,6 +7,7 @@
 
 import type { ComponentType } from 'react';
 import { getExtensionLoader, type LoadedPanel, type PanelHostProps, type PanelGutterButtonProps } from '@nimbalyst/runtime';
+import { registerCommand, unregisterExtension } from '../commands/ExtensionCommandRegistry';
 
 // ============================================================================
 // Types
@@ -29,13 +30,19 @@ export interface RegisteredPanel {
   icon: string;
 
   /** Placement mode */
-  placement: 'sidebar' | 'fullscreen' | 'floating';
+  placement: 'sidebar' | 'fullscreen' | 'floating' | 'bottom';
 
   /** Whether this panel supports AI tools */
   aiSupported: boolean;
 
   /** Sort order for gutter buttons */
   order: number;
+
+  /**
+   * Help tooltip from the panel contribution.
+   * Injected into the HelpContent system automatically.
+   */
+  tooltip?: string;
 
   /** Main panel component */
   component: ComponentType<PanelHostProps>;
@@ -81,7 +88,7 @@ export function getRegisteredPanels(): RegisteredPanel[] {
 /**
  * Get panels by placement type.
  */
-export function getPanelsByPlacement(placement: 'sidebar' | 'fullscreen' | 'floating'): RegisteredPanel[] {
+export function getPanelsByPlacement(placement: 'sidebar' | 'fullscreen' | 'floating' | 'bottom'): RegisteredPanel[] {
   return registeredPanels.filter(p => p.placement === placement);
 }
 
@@ -106,11 +113,45 @@ export function subscribeToPanelRegistry(listener: () => void): () => void {
 // Internal Functions
 // ============================================================================
 
+// Track extension IDs we've registered toggle commands for
+const panelToggleCommandExtensions = new Set<string>();
+
 function syncPanels(): void {
   const loader = getExtensionLoader();
   const loadedPanels = loader.getPanels();
 
+  // Unregister toggle commands for extensions no longer loaded
+  const currentExtensionIds = new Set(loadedPanels.map(p => p.extensionId));
+  for (const extId of panelToggleCommandExtensions) {
+    if (!currentExtensionIds.has(extId)) {
+      unregisterExtension(extId);
+      panelToggleCommandExtensions.delete(extId);
+    }
+  }
+
   registeredPanels = loadedPanels.map(convertToRegisteredPanel);
+
+  // Auto-register panel toggle commands for new panels
+  for (const panel of registeredPanels) {
+    if (panelToggleCommandExtensions.has(panel.extensionId)) continue;
+
+    const commandId = `${panel.id}.toggle`;
+    registerCommand(
+      commandId,
+      panel.extensionId,
+      `Toggle ${panel.title} Panel`,
+      () => {
+        window.dispatchEvent(
+          new CustomEvent('nimbalyst:toggle-panel', { detail: { panelId: panel.id } })
+        );
+      }
+    );
+  }
+
+  // Mark extensions as registered (per extension, not per panel — one registration pass per ext)
+  for (const panel of registeredPanels) {
+    panelToggleCommandExtensions.add(panel.extensionId);
+  }
 
   // Sort by order
   registeredPanels.sort((a, b) => a.order - b.order);
@@ -130,6 +171,7 @@ function convertToRegisteredPanel(loaded: LoadedPanel): RegisteredPanel {
     placement: loaded.contribution.placement,
     aiSupported: loaded.contribution.aiSupported ?? false,
     order: loaded.contribution.order ?? 100,
+    tooltip: loaded.contribution.tooltip,
     component: loaded.component,
     gutterButton: loaded.gutterButton,
     settingsComponent: loaded.settingsComponent,

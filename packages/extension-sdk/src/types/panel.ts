@@ -65,8 +65,12 @@ export interface PanelContribution {
    *
    * - `"floating"`: Panel renders at app level (like modals/popovers).
    *   No gutter button - extension controls visibility via callbacks.
+   *
+   * - `"bottom"`: Panel appears as a resizable horizontal panel below the main editor area,
+   *   similar to the terminal and tracker panels. Gets a gutter button in the bottom section.
+   *   Mutually exclusive with other bottom panels (terminal, tracker).
    */
-  placement: 'sidebar' | 'fullscreen' | 'floating';
+  placement: 'sidebar' | 'fullscreen' | 'floating' | 'bottom';
 
   /**
    * Whether this panel exposes AI tools that share state with the UI.
@@ -92,6 +96,14 @@ export interface PanelContribution {
    * @default 100
    */
   order?: number;
+
+  /**
+   * Help tooltip text shown when hovering the gutter button.
+   * Replaces the need to manually add an entry in HelpContent.ts.
+   *
+   * @example "Browse commit history, inspect diffs, push/pull, and manage branches."
+   */
+  tooltip?: string;
 }
 
 /**
@@ -289,6 +301,20 @@ export interface PanelHost {
    * Only available if panel has `aiSupported: true`.
    */
   readonly ai?: PanelAIContext;
+
+  // ============ WORKSPACE EVENTS ============
+
+  /**
+   * Subscribe to workspace-level IPC events.
+   *
+   * Events are filtered to the current workspace path automatically.
+   * Subscriptions are cleaned up when the panel host is disposed.
+   *
+   * @param event IPC event name (e.g., 'git:status-changed')
+   * @param callback Called with event data when fired for this workspace
+   * @returns Unsubscribe function
+   */
+  onWorkspaceEvent(event: string, callback: (data: unknown) => void): () => void;
 
   // ============ STORAGE ============
 

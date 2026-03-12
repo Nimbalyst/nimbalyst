@@ -1,0 +1,32 @@
+{
+  "id": "com.nimbalyst.git",
+  "name": "Git",
+  "version": "1.0.0",
+  "description": "Git log viewer with push, pull, and rebase support",
+  "author": "Nimbalyst",
+  "main": "dist/index.js",
+  "styles": "dist/index.css",
+  "apiVersion": "1.0.0",
+  "requiredReleaseChannel": "alpha",
+  "permissions": {
+    "filesystem": true
+  },
+  "contributions": {
+    "keybindings": [
+      {
+        "key": "ctrl+shift+g",
+        "command": "com.nimbalyst.git.git-log.toggle"
+      }
+    ],
+    "panels": [
+      {
+        "id": "git-log",
+        "title": "Git Log",
+        "icon": "call_split",
+        "placement": "bottom",
+        "order": 60,
+        "tooltip": "Browse commit history, inspect diffs, push/pull, and manage branches."
+      }
+    ]
+  }
+}

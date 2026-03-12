@@ -24,6 +24,7 @@ export type {
   CustomEditorContribution,
   DocumentHeaderContribution,
   CommandContribution,
+  KeybindingContribution,
   NewFileMenuContribution,
   SlashCommandContribution,
   ClaudePluginContribution,

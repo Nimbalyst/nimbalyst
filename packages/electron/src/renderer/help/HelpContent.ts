@@ -9,6 +9,8 @@
  */
 
 import { KeyboardShortcuts } from '../../shared/KeyboardShortcuts';
+import { getRegisteredPanels } from '../extensions/panels/PanelRegistry';
+import { getRegisteredKeybindings } from '../extensions/commands/ExtensionCommandRegistry';
 
 /**
  * Help content for a single UI element
@@ -328,15 +330,53 @@ export const HelpContent: Record<string, HelpEntry> = {
 };
 
 /**
- * Get help content for a UI element by its data-testid
+ * Get help content for a UI element by its data-testid.
+ * Checks the static registry first, then falls back to extension panel tooltips.
  */
 export function getHelpContent(testId: string): HelpEntry | undefined {
-  return HelpContent[testId];
+  if (testId in HelpContent) {
+    return HelpContent[testId];
+  }
+  return getExtensionPanelHelpContent(testId);
 }
 
 /**
  * Check if help content exists for a given testId
  */
 export function hasHelpContent(testId: string): boolean {
-  return testId in HelpContent;
+  if (testId in HelpContent) return true;
+  return getExtensionPanelHelpContent(testId) !== undefined;
+}
+
+/**
+ * Dynamically look up help content from extension panel tooltips.
+ * Extension gutter buttons use the testId pattern:
+ *   "extension-bottom-panel-{panelId}"
+ *   "extension-panel-{panelId}"
+ *
+ * The tooltip field in the panel manifest contribution populates this.
+ */
+function getExtensionPanelHelpContent(testId: string): HelpEntry | undefined {
+  // Match gutter button testId patterns for extension panels
+  const panelIdFromTestId = testId.startsWith('extension-bottom-panel-')
+    ? testId.slice('extension-bottom-panel-'.length)
+    : testId.startsWith('extension-panel-')
+    ? testId.slice('extension-panel-'.length)
+    : null;
+
+  if (!panelIdFromTestId) return undefined;
+
+  const panels = getRegisteredPanels();
+  const panel = panels.find(p => p.id === panelIdFromTestId);
+  if (!panel?.tooltip) return undefined;
+
+  // Find the keybinding bound to this panel's toggle command
+  const keybindings = getRegisteredKeybindings();
+  const kb = keybindings.find(k => k.commandId === `${panel.id}.toggle`);
+
+  return {
+    title: panel.title,
+    body: panel.tooltip,
+    shortcut: kb?.key,
+  };
 }

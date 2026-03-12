@@ -32,6 +32,7 @@ interface KeyboardShortcutsOptions {
 
   // Agent mode toggle
   toggleAgentCollapsed: () => void;
+
 }
 
 /**
@@ -133,7 +134,6 @@ export function useKeyboardShortcuts({
         e.stopPropagation();
         toggleTerminalPanel();
       }
-
       // Cmd+Shift+K for Kanban view (switch to agent mode + kanban, or toggle if already there)
       if (workspaceMode && isAppModifier && e.shiftKey && e.key === 'k') {
         e.preventDefault();

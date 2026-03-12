@@ -88,8 +88,11 @@ export interface ExtensionContributions {
   /** Entries to add to the New File menu */
   newFileMenu?: NewFileMenuContribution[];
 
-  /** Commands (reserved for future use) */
+  /** Named actions an extension exposes */
   commands?: CommandContribution[];
+
+  /** Key bindings that map key combos to commands */
+  keybindings?: KeybindingContribution[];
 
   /** Slash commands for AI chat */
   slashCommands?: SlashCommandContribution[];
@@ -286,9 +289,30 @@ export interface CommandContribution {
 
   /** Display name */
   title: string;
+}
 
-  /** Optional keyboard shortcut */
-  keybinding?: string;
+/**
+ * Keybinding contribution that binds a key combo to a command.
+ *
+ * @example
+ * ```json
+ * { "key": "ctrl+shift+g", "command": "com.nimbalyst.git.git-log.toggle" }
+ * ```
+ *
+ * Key format: modifier+key (all lowercase, modifiers: ctrl, shift, alt, cmd)
+ * - `ctrl` — Ctrl on all platforms
+ * - `cmd` — Cmd/Meta on macOS, Ctrl on Windows/Linux (same cross-platform semantics as built-ins)
+ * - Modifiers can be combined: `ctrl+shift+g`, `cmd+alt+k`
+ *
+ * Toggle commands for panels are auto-registered as `${extensionId}.${panelId}.toggle`,
+ * so you only need to declare the keybinding — no explicit command declaration required.
+ */
+export interface KeybindingContribution {
+  /** Key combination (e.g., "ctrl+shift+g") */
+  key: string;
+
+  /** Full command ID to execute (e.g., "com.nimbalyst.git.git-log.toggle") */
+  command: string;
 }
 
 export interface SlashCommandContribution {

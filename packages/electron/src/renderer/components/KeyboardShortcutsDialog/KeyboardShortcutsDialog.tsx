@@ -1,5 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { KeyboardShortcuts, getShortcutDisplay } from '../../../shared/KeyboardShortcuts';
+import {
+  getRegisteredKeybindings,
+  subscribeToCommandRegistry,
+  type RegisteredKeybinding,
+} from '../../extensions/commands/ExtensionCommandRegistry';
+import { getExtensionLoader } from '@nimbalyst/runtime';
 
 interface KeyboardShortcutsDialogProps {
   isOpen: boolean;
@@ -14,12 +20,68 @@ interface ShortcutGroup {
   }>;
 }
 
-type TabId = 'general' | 'editor';
+type TabId = 'general' | 'editor' | 'extensions';
 
 const IS_MAC = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
 
+/**
+ * Convert a manifest key string like "ctrl+shift+g" to the display format
+ * compatible with getShortcutDisplay (e.g., "Ctrl+Shift+G").
+ */
+function formatManifestKey(key: string): string {
+  return key
+    .split('+')
+    .map(part => {
+      const lower = part.toLowerCase();
+      if (lower === 'ctrl') return 'Ctrl';
+      if (lower === 'cmd') return 'Cmd';
+      if (lower === 'shift') return 'Shift';
+      if (lower === 'alt') return 'Alt';
+      if (lower === 'option') return 'Option';
+      // Single character keys get uppercased, multi-char stay as-is
+      return part.length === 1 ? part.toUpperCase() : part.charAt(0).toUpperCase() + part.slice(1);
+    })
+    .join('+');
+}
+
+/**
+ * Build extension shortcut groups from registered keybindings,
+ * grouped by extension name.
+ */
+function buildExtensionShortcutGroups(keybindings: RegisteredKeybinding[]): ShortcutGroup[] {
+  if (keybindings.length === 0) return [];
+
+  // Group by extension ID
+  const byExtension = new Map<string, RegisteredKeybinding[]>();
+  for (const kb of keybindings) {
+    const list = byExtension.get(kb.extensionId) ?? [];
+    list.push(kb);
+    byExtension.set(kb.extensionId, list);
+  }
+
+  // Resolve extension names
+  const loader = getExtensionLoader();
+  const groups: ShortcutGroup[] = [];
+
+  for (const [extensionId, kbs] of byExtension) {
+    const ext = loader.getExtension(extensionId);
+    const title = ext?.manifest.name ?? extensionId;
+
+    groups.push({
+      title,
+      shortcuts: kbs.map(kb => ({
+        label: kb.commandTitle,
+        shortcut: formatManifestKey(kb.key),
+      })),
+    });
+  }
+
+  return groups;
+}
+
 export function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardShortcutsDialogProps) {
   const [activeTab, setActiveTab] = useState<TabId>('general');
+  const [extensionGroups, setExtensionGroups] = useState<ShortcutGroup[]>([]);
 
   // Handle Escape key to close dialog
   useEffect(() => {
@@ -35,6 +97,16 @@ export function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardShortcutsDi
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
+
+  // Subscribe to extension keybinding changes
+  useEffect(() => {
+    function sync() {
+      setExtensionGroups(buildExtensionShortcutGroups(getRegisteredKeybindings()));
+    }
+    sync();
+    const unsubscribe = subscribeToCommandRegistry(sync);
+    return unsubscribe;
+  }, []);
 
   if (!isOpen) return null;
 
@@ -160,7 +232,11 @@ export function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardShortcutsDi
     },
   ];
 
-  const shortcutGroups = activeTab === 'general' ? generalShortcuts : editorShortcuts;
+  const shortcutGroups = activeTab === 'general'
+    ? generalShortcuts
+    : activeTab === 'editor'
+    ? editorShortcuts
+    : extensionGroups;
 
   return (
     <div
@@ -186,51 +262,50 @@ export function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardShortcutsDi
 
         {/* Tab navigation */}
         <div className="flex gap-1 px-6 pt-4 border-b border-[var(--nim-border)]">
-          <button
-            onClick={() => setActiveTab('general')}
-            className={`px-4 py-2 text-sm font-medium rounded-t-md transition-colors ${
-              activeTab === 'general'
-                ? 'bg-[var(--nim-bg-secondary)] text-[var(--nim-text)] border-b-2 border-[var(--nim-primary)]'
-                : 'text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'
-            }`}
-          >
-            General
-          </button>
-          <button
-            onClick={() => setActiveTab('editor')}
-            className={`px-4 py-2 text-sm font-medium rounded-t-md transition-colors ${
-              activeTab === 'editor'
-                ? 'bg-[var(--nim-bg-secondary)] text-[var(--nim-text)] border-b-2 border-[var(--nim-primary)]'
-                : 'text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'
-            }`}
-          >
-            Editor Formatting
-          </button>
+          {(['general', 'editor', 'extensions'] as TabId[]).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 text-sm font-medium rounded-t-md transition-colors ${
+                activeTab === tab
+                  ? 'bg-[var(--nim-bg-secondary)] text-[var(--nim-text)] border-b-2 border-[var(--nim-primary)]'
+                  : 'text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'
+              }`}
+            >
+              {tab === 'general' ? 'General' : tab === 'editor' ? 'Editor Formatting' : 'Extensions'}
+            </button>
+          ))}
         </div>
 
         <div className="keyboard-shortcuts-dialog-content overflow-y-auto flex-1 p-6 grid grid-cols-[repeat(auto-fit,minmax(350px,1fr))] gap-8 max-[900px]:grid-cols-1 max-[600px]:p-5 max-[600px]:gap-6">
-          {shortcutGroups.map((group) => (
-            <div key={group.title} className="keyboard-shortcuts-group flex flex-col gap-3">
-              <h3 className="keyboard-shortcuts-group-title m-0 text-sm font-semibold text-[var(--nim-text-muted)] uppercase tracking-[0.5px]">
-                {group.title}
-              </h3>
-              <div className="keyboard-shortcuts-list flex flex-col gap-1">
-                {group.shortcuts.map((item) => (
-                  <div
-                    key={item.label}
-                    className="keyboard-shortcut-item flex items-center justify-between py-1.5 gap-4"
-                  >
-                    <span className="keyboard-shortcut-label text-[var(--nim-text)] text-sm flex-1">
-                      {item.label}
-                    </span>
-                    <kbd className="keyboard-shortcut-key bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded px-2.5 py-1 font-sans text-[13px] font-medium text-[var(--nim-text)] whitespace-nowrap shadow-[0_1px_2px_rgba(0,0,0,0.1)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.3)] min-w-[60px] text-center">
-                      {getShortcutDisplay(item.shortcut)}
-                    </kbd>
-                  </div>
-                ))}
-              </div>
+          {shortcutGroups.length === 0 && activeTab === 'extensions' ? (
+            <div className="text-[var(--nim-text-muted)] text-sm">
+              No extension keybindings registered. Extensions can contribute keybindings via their manifest.json.
             </div>
-          ))}
+          ) : (
+            shortcutGroups.map((group) => (
+              <div key={group.title} className="keyboard-shortcuts-group flex flex-col gap-3">
+                <h3 className="keyboard-shortcuts-group-title m-0 text-sm font-semibold text-[var(--nim-text-muted)] uppercase tracking-[0.5px]">
+                  {group.title}
+                </h3>
+                <div className="keyboard-shortcuts-list flex flex-col gap-1">
+                  {group.shortcuts.map((item) => (
+                    <div
+                      key={item.label}
+                      className="keyboard-shortcut-item flex items-center justify-between py-1.5 gap-4"
+                    >
+                      <span className="keyboard-shortcut-label text-[var(--nim-text)] text-sm flex-1">
+                        {item.label}
+                      </span>
+                      <kbd className="keyboard-shortcut-key bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded px-2.5 py-1 font-sans text-[13px] font-medium text-[var(--nim-text)] whitespace-nowrap shadow-[0_1px_2px_rgba(0,0,0,0.1)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.3)] min-w-[60px] text-center">
+                        {getShortcutDisplay(item.shortcut)}
+                      </kbd>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
         </div>
 
         <div className="px-6 py-3 border-t border-[var(--nim-border)] text-[var(--nim-text-muted)] text-xs">
