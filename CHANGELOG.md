@@ -20,6 +20,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.55.31] - 2026-03-12
+
+
+### Added
+- PostHog DAU tracking via app_foregrounded event
+- Mobile and desktop PostHog users now merge on QR pairing
+
+### Changed
+- Convert file tree scanning from synchronous to async fs operations
+- Narrow extensions find-files scan root using glob literal prefix
+- Eliminate main-process blocking when opening large non-git projects
+- Git remote lookups no longer block the main process on startup
+- Opening large projects no longer freezes the UI
+
+### Fixed
+- File tree loading spinner no longer spins forever on empty workspaces
+- Community dialog logo now shows in packaged builds
+- TypeScript errors in playwright extension
+
 ## [0.55.30] - 2026-03-12
 
 
