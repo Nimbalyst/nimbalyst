@@ -42,3 +42,12 @@ export interface QueuedPrompt {
 export const sessionQueuedPromptsAtom = atomFamily((_sessionId: string) =>
   atom<QueuedPrompt[]>([])
 );
+
+/**
+ * Per-session stream completion signal.
+ * Incremented when ai:streamResponse fires with isComplete:true or ai:error fires.
+ * Used by code that needs to await stream completion without subscribing to IPC.
+ */
+export const streamCompletionSignalAtom = atomFamily((_sessionId: string) =>
+  atom<number>(0)
+);

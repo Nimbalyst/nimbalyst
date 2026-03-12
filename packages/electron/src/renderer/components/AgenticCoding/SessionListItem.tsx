@@ -475,27 +475,27 @@ export const SessionListItem = memo<SessionListItemProps>(({
           </span>
         )}
         <SessionStatusIndicator sessionId={id} messageCount={messageCount} />
-        {(onArchive || onUnarchive) && (
-          <button
-            className={`session-list-item-archive shrink-0 flex items-center justify-center w-5 h-5 p-0 bg-transparent border-none rounded text-[var(--nim-text-faint)] cursor-pointer transition-all duration-150 focus:outline-2 focus:outline-[var(--nim-border-focus)] focus:outline-offset-1
-              ${isHovering ? 'visible opacity-70 pointer-events-auto hover:bg-[var(--nim-bg-tertiary)] hover:text-[var(--nim-text)] hover:opacity-100' : 'opacity-0 pointer-events-none'}
-              disabled:cursor-default disabled:opacity-0 disabled:pointer-events-none
-            `}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (isArchived && onUnarchive) onUnarchive();
-              else if (!isArchived && onArchive) onArchive();
-            }}
-            aria-label={isArchived ? `Unarchive ${isWorkstream ? 'workstream' : isWorktreeSession ? 'worktree' : 'session'}` : `Archive ${isWorkstream ? 'workstream' : isWorktreeSession ? 'worktree' : 'session'}`}
-            title={isArchived ? `Unarchive ${isWorkstream ? 'workstream' : isWorktreeSession ? 'worktree' : 'session'}` : `Archive ${isWorkstream ? 'workstream' : isWorktreeSession ? 'worktree' : 'session'}`}
-          >
-            {isArchived ? (
-              <MaterialSymbol icon="unarchive" size={14} />
-            ) : (
-              <MaterialSymbol icon="archive" size={14} />
-            )}
-          </button>
-        )}
+        {/*{(onArchive || onUnarchive) && (*/}
+        {/*  <button*/}
+        {/*    className={`session-list-item-archive shrink-0 flex items-center justify-center w-5 h-5 p-0 bg-transparent border-none rounded text-[var(--nim-text-faint)] cursor-pointer transition-all duration-150 focus:outline-2 focus:outline-[var(--nim-border-focus)] focus:outline-offset-1*/}
+        {/*      ${isHovering ? 'visible opacity-70 pointer-events-auto hover:bg-[var(--nim-bg-tertiary)] hover:text-[var(--nim-text)] hover:opacity-100' : 'opacity-0 pointer-events-none'}*/}
+        {/*      disabled:cursor-default disabled:opacity-0 disabled:pointer-events-none*/}
+        {/*    `}*/}
+        {/*    onClick={(e) => {*/}
+        {/*      e.stopPropagation();*/}
+        {/*      if (isArchived && onUnarchive) onUnarchive();*/}
+        {/*      else if (!isArchived && onArchive) onArchive();*/}
+        {/*    }}*/}
+        {/*    aria-label={isArchived ? `Unarchive ${isWorkstream ? 'workstream' : isWorktreeSession ? 'worktree' : 'session'}` : `Archive ${isWorkstream ? 'workstream' : isWorktreeSession ? 'worktree' : 'session'}`}*/}
+        {/*    title={isArchived ? `Unarchive ${isWorkstream ? 'workstream' : isWorktreeSession ? 'worktree' : 'session'}` : `Archive ${isWorkstream ? 'workstream' : isWorktreeSession ? 'worktree' : 'session'}`}*/}
+        {/*  >*/}
+        {/*    {isArchived ? (*/}
+        {/*      <MaterialSymbol icon="unarchive" size={14} />*/}
+        {/*    ) : (*/}
+        {/*      <MaterialSymbol icon="archive" size={14} />*/}
+        {/*    )}*/}
+        {/*  </button>*/}
+        {/*)}*/}
       </div>
 
       {/* Context Menu */}

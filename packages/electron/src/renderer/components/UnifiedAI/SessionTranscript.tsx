@@ -45,6 +45,7 @@ import {
   sessionModelAtom,
   sessionArchivedAtom,
   sessionProcessingAtom,
+  sessionHasPendingInteractivePromptAtom,
   sessionWorktreeIdAtom,
   loadSessionDataAtom,
   reloadSessionDataAtom,
@@ -66,6 +67,7 @@ import {
   clearSessionError,
   loadInitialQueuedPrompts,
 } from '../../store';
+import { streamCompletionSignalAtom } from '../../store/atoms/sessionTranscript';
 import { convertToWorkstreamAtom, sessionPromptAdditionsAtom, sessionLastSubmitAtAtom, sessionDraftLocalModifiedAtAtom } from '../../store/atoms/sessions';
 import { scrollToTeammateAtom } from '../../store/atoms/agentMode';
 import { usePostHog } from 'posthog-js/react';
@@ -268,6 +270,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const [currentModel, setCurrentModel] = useAtom(sessionModelAtom(sessionId));
   const [isArchived, setIsArchived] = useAtom(sessionArchivedAtom(sessionId));
   const [isProcessing, setIsProcessing] = useAtom(sessionProcessingAtom(sessionId));
+  const hasPendingInteractivePrompt = useAtomValue(sessionHasPendingInteractivePromptAtom(sessionId));
   const worktreeId = useAtomValue(sessionWorktreeIdAtom(sessionId));
   const loadSessionData = useSetAtom(loadSessionDataAtom);
   const reloadSessionData = useSetAtom(reloadSessionDataAtom);
@@ -1300,21 +1303,19 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
           // 2. Send feedback message to the same session
           const feedbackMessage = `The user has provided feedback to help overcome the blockers:\n\n${feedback}\n\nProcess this feedback. Then call the super_loop_progress_update tool with status "running" to clear the blocked state and include a learning entry summarizing the user's feedback.`;
 
-          // 3. Set up stream completion listener before sending
+          // 3. Set up stream completion listener using centralized atom signal
+          // (avoids dynamic IPC subscriptions which cause memory leaks)
+          const signalAtom = streamCompletionSignalAtom(sessionId);
+          const initialSignal = store.get(signalAtom);
           const streamComplete = new Promise<void>((resolve) => {
-            let resolved = false;
-            const doResolve = () => {
-              if (resolved) return;
-              resolved = true;
-              cleanupStream?.();
-              cleanupError?.();
+            // Check if signal already advanced (unlikely but safe)
+            if (store.get(signalAtom) !== initialSignal) {
               resolve();
-            };
-            const cleanupStream = window.electronAPI.on('ai:streamResponse', (response: { sessionId: string; isComplete?: boolean }) => {
-              if (response.sessionId === sessionId && response.isComplete) doResolve();
-            });
-            const cleanupError = window.electronAPI.on('ai:error', (error: { sessionId: string }) => {
-              if (error.sessionId === sessionId) doResolve();
+              return;
+            }
+            const unsub = store.sub(signalAtom, () => {
+              unsub();
+              resolve();
             });
           });
 
@@ -1508,6 +1509,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
             sessionData={sessionData}
             todos={todos}
             isProcessing={isLoading}
+            hasPendingInteractivePrompt={hasPendingInteractivePrompt}
             onFileClick={handleFileClick}
             hideSidebar={hideSidebar || mode === 'chat'}
             showFloatingActions={mode === 'agent'}

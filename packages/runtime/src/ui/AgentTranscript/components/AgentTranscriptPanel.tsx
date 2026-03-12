@@ -20,6 +20,8 @@ interface AgentTranscriptPanelProps {
   sessionData: SessionData;
   todos?: Todo[];
   isProcessing?: boolean; // Whether the session is currently processing a request
+  /** When true, session is waiting for user input — suppresses the "Thinking..." indicator */
+  hasPendingInteractivePrompt?: boolean;
   onSettingsChange?: (settings: TranscriptSettings) => void;
   showSettings?: boolean;
   initialSettings?: TranscriptSettings;
@@ -89,6 +91,7 @@ const AgentTranscriptPanelComponent = React.forwardRef<
   sessionData,
   todos = [],
   isProcessing,
+  hasPendingInteractivePrompt,
   onSettingsChange,
   showSettings,
   initialSettings,
@@ -325,6 +328,7 @@ const AgentTranscriptPanelComponent = React.forwardRef<
           sessionId={sessionId}
           sessionStatus={sessionData.metadata?.sessionStatus as string}
           isProcessing={isProcessing}
+          hasPendingInteractivePrompt={hasPendingInteractivePrompt}
           messages={sessionData.messages}
           provider={sessionData.provider}
           settings={initialSettings}
@@ -456,6 +460,7 @@ export const AgentTranscriptPanel = React.memo(
 
     // Processing state changed - must re-render (affects spinner, etc.)
     if (prevProps.isProcessing !== nextProps.isProcessing) return false;
+    if (prevProps.hasPendingInteractivePrompt !== nextProps.hasPendingInteractivePrompt) return false;
 
     // Archived state changed - must re-render
     if (prevProps.isArchived !== nextProps.isArchived) return false;

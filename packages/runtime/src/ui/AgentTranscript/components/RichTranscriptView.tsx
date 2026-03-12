@@ -381,6 +381,8 @@ interface RichTranscriptViewProps {
   sessionId: string;
   sessionStatus?: string;
   isProcessing?: boolean; // Whether the session is currently processing a request
+  /** When true, session is waiting for user input — suppresses the "Thinking..." indicator */
+  hasPendingInteractivePrompt?: boolean;
   messages: Message[];
   provider?: string;
   settings?: TranscriptSettings;
@@ -701,7 +703,7 @@ export const extractEditsFromToolMessage = (message: Message): any[] => {
 export const RichTranscriptView = React.forwardRef<
   { scrollToMessage: (index: number) => void; scrollToTop: () => void },
   RichTranscriptViewProps
->(({ sessionId, sessionStatus, isProcessing, messages, provider, settings: propsSettings, onSettingsChange, showSettings, documentContext, workspacePath, renderEmptyExtra, readFile, onOpenFile, onCompact, promptAdditions, currentTeammates, appStartTime, getToolCallDiffs }, ref) => {
+>(({ sessionId, sessionStatus, isProcessing, hasPendingInteractivePrompt, messages, provider, settings: propsSettings, onSettingsChange, showSettings, documentContext, workspacePath, renderEmptyExtra, readFile, onOpenFile, onCompact, promptAdditions, currentTeammates, appStartTime, getToolCallDiffs }, ref) => {
   const [collapsedMessages, setCollapsedMessages] = useState<Set<number>>(new Set());
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
   const scrollButtonRef = useRef<HTMLDivElement>(null);
@@ -746,6 +748,13 @@ export const RichTranscriptView = React.forwardRef<
 
   // Determine if we're waiting for a response (used for scroll behavior and UI)
   const isWaitingForResponse = useMemo(() => {
+    // Session is waiting for the USER to answer — not thinking, don't show the indicator.
+    // Check the prop (live IPC state) AND scan messages directly (survives session reloads).
+    if (hasPendingInteractivePrompt) return false;
+    const hasPendingQuestion = messages.some(
+      msg => msg.role === 'tool' && msg.toolCall?.name === 'AskUserQuestion' && !msg.toolCall.result
+    );
+    if (hasPendingQuestion) return false;
     // Check isProcessing prop first (most reliable for queued prompts from mobile)
     if (isProcessing) return true;
     if (sessionStatus === 'running') return true;
@@ -754,7 +763,7 @@ export const RichTranscriptView = React.forwardRef<
       return lastMessage.role === 'user';
     }
     return false;
-  }, [messages, sessionStatus, isProcessing]);
+  }, [messages, sessionStatus, isProcessing, hasPendingInteractivePrompt]);
 
   // Compute waiting indicator text — show agent/teammate count when lead is idle but agents are running
   const waitingText = useMemo(() => {

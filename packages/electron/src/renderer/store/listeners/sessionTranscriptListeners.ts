@@ -6,7 +6,8 @@
  *
  * Events handled:
  * - ai:tokenUsageUpdated → updates sessionStoreAtom tokenUsage
- * - ai:error → sessionErrorAtom
+ * - ai:error → sessionErrorAtom, streamCompletionSignalAtom
+ * - ai:streamResponse (isComplete) → streamCompletionSignalAtom
  * - ai:promptAdditions → sessionPromptAdditionsAtom (dev mode)
  * - ai:queuedPromptsReceived → triggers queue refresh
  *
@@ -24,6 +25,7 @@ import { updateSessionStoreAtom, sessionStoreAtom, sessionPromptAdditionsAtom } 
 import {
   sessionErrorAtom,
   sessionQueuedPromptsAtom,
+  streamCompletionSignalAtom,
 } from '../atoms/sessionTranscript';
 
 /**
@@ -73,6 +75,25 @@ export function initSessionTranscriptListeners(): () => void {
 
       // Set the error in the atom - SessionTranscript will read it and display
       store.set(sessionErrorAtom(sessionId), { message, isAuthError, isBedrockToolError, isServerError });
+
+      // Signal stream completion so awaiters (e.g. superLoopBlockedFeedback) unblock
+      store.set(streamCompletionSignalAtom(sessionId), (prev) => prev + 1);
+    })
+  );
+
+  // =========================================================================
+  // Stream Response Completion Signal
+  // =========================================================================
+  cleanups.push(
+    window.electronAPI.on('ai:streamResponse', (data: {
+      sessionId: string;
+      isComplete?: boolean;
+    }) => {
+      const { sessionId, isComplete } = data;
+      if (!sessionId || !isComplete) return;
+
+      // Signal stream completion so awaiters (e.g. superLoopBlockedFeedback) unblock
+      store.set(streamCompletionSignalAtom(sessionId), (prev) => prev + 1);
     })
   );
 

@@ -211,9 +211,14 @@ export const refreshPendingPromptsAtom = atom(
         }));
         set(sessionPendingPromptsAtom(sessionId), pendingPrompts);
 
-        // Update unified pending interactive prompt state
-        // Any pending prompt means we're waiting for user input
-        set(sessionHasPendingInteractivePromptAtom(sessionId), pendingPrompts.length > 0);
+        // Update unified pending interactive prompt state.
+        // AskUserQuestion is not a durable prompt — check session messages too.
+        const hasDurablePrompt = pendingPrompts.length > 0;
+        const messages = get(sessionMessagesAtom(sessionId));
+        const hasPendingAskUserQuestion = messages.some(
+          msg => msg.role === 'tool' && msg.toolCall?.name === 'AskUserQuestion' && !msg.toolCall.result
+        );
+        set(sessionHasPendingInteractivePromptAtom(sessionId), hasDurablePrompt || hasPendingAskUserQuestion);
       }
     } catch (error) {
       console.error('[refreshPendingPromptsAtom] Failed to refresh:', error);
