@@ -158,8 +158,12 @@ export async function restoreSessionState(): Promise<boolean> {
                         window = createWindow(false, true, sessionWindow.workspacePath, sessionWindow.bounds);
                         logger.session.info(`Restored workspace window: ${sessionWindow.workspacePath}`);
 
-                        // Auto-match workspace to team (fire-and-forget)
-                        autoMatchTeamForWorkspace(sessionWindow.workspacePath).catch(() => {});
+                        const restoredWorkspacePath = sessionWindow.workspacePath;
+                        setTimeout(() => {
+                            // Yield before running background workspace matching so
+                            // restored windows don't block the startup tick.
+                            void autoMatchTeamForWorkspace(restoredWorkspacePath).catch(() => {});
+                        }, 0);
 
                         // Note: Workspace tabs will be restored by the workspace's own tab state management
                         // We don't manually open files here to avoid interfering with tab restoration

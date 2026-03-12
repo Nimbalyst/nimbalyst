@@ -12,9 +12,9 @@
  */
 
 import { BrowserWindow } from 'electron';
-import { execSync } from 'child_process';
 import { safeHandle } from '../utils/ipcRegistry';
 import { logger } from '../utils/logger';
+import { getNormalizedGitRemote } from '../utils/gitUtils';
 import { database } from '../database/PGLiteDatabaseWorker';
 import { getSessionSyncConfig } from '../utils/store';
 import { getStytchUserId, isAuthenticated } from './StytchAuthService';
@@ -86,34 +86,7 @@ function sendToWorkspaceWindows(workspacePath: string, channel: string, data?: u
 // Project Identity
 // ============================================================================
 
-/**
- * Get the normalized git remote URL for a workspace path.
- * Used as the projectId for TrackerRoom routing.
- * Returns null if not a git repo or no remote configured.
- */
-function getGitProjectId(workspacePath: string): string | null {
-  try {
-    const remoteUrl = execSync('git remote get-url origin', {
-      cwd: workspacePath,
-      encoding: 'utf8',
-      timeout: 5000,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim();
-
-    if (!remoteUrl) return null;
-
-    // Normalize: strip protocol, .git suffix, trailing slashes
-    return remoteUrl
-      .replace(/^https?:\/\//, '')
-      .replace(/^git@/, '')
-      .replace(/:/, '/')
-      .replace(/\.git$/, '')
-      .replace(/\/+$/, '')
-      .toLowerCase();
-  } catch {
-    return null;
-  }
-}
+// Git remote lookup is provided by getNormalizedGitRemote from gitUtils.
 
 // ============================================================================
 // Internal helpers
@@ -207,19 +180,19 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
     return;
   }
 
+  // Get git remote once -- used both for team lookup and as the projectId
+  const projectId = await getNormalizedGitRemote(workspacePath);
+  if (!projectId) {
+    return;
+  }
+
   // Look up the team org for this workspace (by git remote match)
   // Users auth to their personal org, but tracker rooms are scoped to team orgs
-  const team = await findTeamForWorkspace(workspacePath);
+  const team = await findTeamForWorkspace(workspacePath, projectId);
   if (!team) {
     return;
   }
   const orgId = team.orgId;
-
-  // Get project identity from git remote
-  const projectId = getGitProjectId(workspacePath);
-  if (!projectId) {
-    return;
-  }
 
   // Determine server URL (same logic as SyncManager)
   const PRODUCTION_SYNC_URL = 'wss://sync.nimbalyst.com';

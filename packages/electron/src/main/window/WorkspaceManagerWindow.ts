@@ -376,22 +376,23 @@ export function setupWorkspaceManagerHandlers() {
       }
     })();
 
-    // Start watching workspace MCP config for changes
-    try {
-      const mcpService = getMcpConfigService();
-      if (mcpService) {
-        mcpService.startWatchingWorkspaceConfig(workspacePath);
+    setTimeout(() => {
+      // Start watching workspace MCP config for changes after the open handler returns.
+      try {
+        const mcpService = getMcpConfigService();
+        if (mcpService) {
+          mcpService.startWatchingWorkspaceConfig(workspacePath);
+        }
+      } catch (error) {
+        // Log error but don't throw - workspace opening must continue
+        console.error('[MCP] Failed to start watching workspace config:', error);
       }
-    } catch (error) {
-      // Log error but don't throw - workspace opening must continue
-      console.error('[MCP] Failed to start watching workspace config:', error);
-    }
 
-    // Auto-match workspace to a team (fire-and-forget, never blocks opening)
-    autoMatchTeamForWorkspace(workspacePath).catch(() => {});
-
-    // Initialize tracker sync for this workspace (fire-and-forget)
-    initializeTrackerSync(workspacePath).catch(() => {});
+      // Auto-match workspace to a team and initialize tracker sync only after
+      // we've yielded the main thread; both paths may probe git remotes.
+      void autoMatchTeamForWorkspace(workspacePath).catch(() => {});
+      void initializeTrackerSync(workspacePath).catch(() => {});
+    }, 0);
 
     // Restore dev tools if they were open
     if (savedState?.devToolsOpen) {

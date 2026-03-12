@@ -1357,11 +1357,12 @@ app.whenReady().then(async () => {
 
         const window = createWindow(false, true, workspacePath);
 
-        // Auto-match workspace to team (fire-and-forget)
-        autoMatchTeamForWorkspace(workspacePath).catch(() => {});
-
-        // Initialize tracker sync for this workspace (fire-and-forget)
-        initializeTrackerSync(workspacePath).catch(() => {});
+        setTimeout(() => {
+            // Yield before background workspace initialization so CLI opens don't
+            // inherit synchronous git/process work on the startup tick.
+            void autoMatchTeamForWorkspace(workspacePath).catch(() => {});
+            void initializeTrackerSync(workspacePath).catch(() => {});
+        }, 0);
 
         window.once('ready-to-show', () => {
             window.show();

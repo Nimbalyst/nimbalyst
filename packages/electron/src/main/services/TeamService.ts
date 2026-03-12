@@ -20,10 +20,10 @@
  */
 
 import { net } from 'electron';
-import { execSync } from 'child_process';
 import { createHash } from 'crypto';
 import { safeHandle } from '../utils/ipcRegistry';
 import { logger } from '../utils/logger';
+import { getNormalizedGitRemote } from '../utils/gitUtils';
 import { getSessionSyncConfig } from '../utils/store';
 import {
   getAccounts,
@@ -318,33 +318,7 @@ async function fetchTeamApi(path: string, method: string, body?: unknown, orgId?
 // Git Remote Detection
 // ============================================================================
 
-/**
- * Get the normalized git remote URL for a workspace path.
- * Reuses the same normalization as TrackerSyncManager.getGitProjectId().
- */
-function getGitRemote(workspacePath: string): string | null {
-  try {
-    const remoteUrl = execSync('git remote get-url origin', {
-      cwd: workspacePath,
-      encoding: 'utf8',
-      timeout: 5000,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim();
-
-    if (!remoteUrl) return null;
-
-    // Normalize: strip protocol, .git suffix, trailing slashes
-    return remoteUrl
-      .replace(/^https?:\/\//, '')
-      .replace(/^git@/, '')
-      .replace(/:/, '/')
-      .replace(/\.git$/, '')
-      .replace(/\/+$/, '')
-      .toLowerCase();
-  } catch {
-    return null;
-  }
-}
+// Git remote lookup is provided by getNormalizedGitRemote from gitUtils.
 
 /**
  * Hash a git remote URL with SHA-256 for server-side lookup.
@@ -430,14 +404,15 @@ async function getTeamByOrgId(orgId: string): Promise<TeamDetails | null> {
 
 /**
  * Find a team matching a workspace's git remote.
+ * Pass precomputedRemote to skip the git spawn when the caller already has it.
  */
-export async function findTeamForWorkspace(workspacePath: string): Promise<TeamDetails | null> {
+export async function findTeamForWorkspace(workspacePath: string, precomputedRemote?: string): Promise<TeamDetails | null> {
   if (!isAuthenticated()) {
     // logger.main.info('[TeamService] findTeamForWorkspace: not authenticated');
     return null;
   }
 
-  const remote = getGitRemote(workspacePath);
+  const remote = precomputedRemote ?? await getNormalizedGitRemote(workspacePath);
   if (!remote) {
     // logger.main.info('[TeamService] findTeamForWorkspace: no git remote for', workspacePath);
     return null;
@@ -470,7 +445,7 @@ export async function findTeamForWorkspace(workspacePath: string): Promise<TeamD
 export async function findPendingInviteForWorkspace(workspacePath: string): Promise<TeamDetails | null> {
   if (!isAuthenticated()) return null;
 
-  const remote = getGitRemote(workspacePath);
+  const remote = await getNormalizedGitRemote(workspacePath);
   if (!remote) return null;
 
   const remoteHash = hashGitRemote(remote);
@@ -496,7 +471,7 @@ export async function findPendingInviteForWorkspace(workspacePath: string): Prom
 async function createTeam(name: string, workspacePath?: string, accountOrgId?: string): Promise<TeamDetails> {
   let gitRemoteHash: string | undefined;
   if (workspacePath) {
-    const remote = getGitRemote(workspacePath);
+    const remote = await getNormalizedGitRemote(workspacePath);
     if (remote) {
       gitRemoteHash = hashGitRemote(remote);
     }
@@ -1006,7 +981,7 @@ export function registerTeamHandlers(): void {
 
   safeHandle('team:get-git-remote', async (_event, workspacePath: string) => {
     try {
-      const remote = getGitRemote(workspacePath);
+      const remote = await getNormalizedGitRemote(workspacePath);
       return { success: true, remote };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
@@ -1015,7 +990,7 @@ export function registerTeamHandlers(): void {
 
   safeHandle('team:set-project-identity', async (_event, orgId: string, workspacePath: string) => {
     try {
-      const remote = getGitRemote(workspacePath);
+      const remote = await getNormalizedGitRemote(workspacePath);
       if (!remote) {
         return { success: false, error: 'No git remote found for this workspace' };
       }

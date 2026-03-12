@@ -1,5 +1,8 @@
-import { execSync } from 'child_process';
+import { execFile, execSync } from 'child_process';
 import { readdirSync } from 'fs';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Cached result of git availability check.
@@ -105,4 +108,36 @@ export function logEbadfDiagnostic(context: string, error: unknown): void {
     `[${context}] EBADF detected - open fd count: ${fdCount ?? 'unknown'}`,
     '(system soft limit is typically 256 on macOS; run `ulimit -n` to check)'
   );
+}
+
+/**
+ * Get the normalized git remote URL for a workspace path.
+ *
+ * Runs `git remote get-url origin` asynchronously (no shell), then normalizes
+ * the result by stripping protocol, git@ prefix, .git suffix, and lowercasing.
+ * Returns null if the workspace is not a git repo or has no origin remote.
+ */
+export async function getNormalizedGitRemote(workspacePath: string): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync('git', ['remote', 'get-url', 'origin'], {
+      cwd: workspacePath,
+      encoding: 'utf8',
+      timeout: 5000,
+      maxBuffer: 1024 * 1024,
+    });
+    const remoteUrl = stdout.trim();
+
+    if (!remoteUrl) return null;
+
+    // Normalize: strip protocol, .git suffix, trailing slashes
+    return remoteUrl
+      .replace(/^https?:\/\//, '')
+      .replace(/^git@/, '')
+      .replace(/:/, '/')
+      .replace(/\.git$/, '')
+      .replace(/\/+$/, '')
+      .toLowerCase();
+  } catch {
+    return null;
+  }
 }
