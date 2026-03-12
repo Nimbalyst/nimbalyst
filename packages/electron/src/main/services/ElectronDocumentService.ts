@@ -571,10 +571,12 @@ export class ElectronDocumentService implements DocumentService {
     return this.metadataByPath.get(path) || null;
   }
 
+  /**
+   * Returns cached metadata immediately without blocking on the scan.
+   * On first call this may return an empty array. Callers that need
+   * complete data must also subscribe via watchDocumentMetadata().
+   */
   async listDocumentMetadata(): Promise<DocumentMetadataEntry[]> {
-    // Start scan in the background but return cached data immediately.
-    // The scan will notify metadata watchers when complete, so callers
-    // that subscribe to change events will receive the full data set.
     this.startScanIfNeeded();
     return Array.from(this.metadataCache.values());
   }

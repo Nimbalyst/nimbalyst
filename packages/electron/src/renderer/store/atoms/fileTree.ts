@@ -351,6 +351,12 @@ const SPECIAL_DIRECTORIES = ['nimbalyst-local'];
 export const rawFileTreeAtom = atom<RendererFileTreeItem[]>([]);
 
 /**
+ * Whether the initial file tree load has completed.
+ * Distinguishes "still loading" from "workspace is genuinely empty".
+ */
+export const fileTreeLoadedAtom = atom(false);
+
+/**
  * The filtered file tree items that the flat tree component renders.
  * Written by FlatFileTree component when its items prop changes.
  */

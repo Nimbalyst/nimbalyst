@@ -108,11 +108,11 @@ export async function getFolderContents(dirPath: string, depth: number = 0): Pro
         // MAX_DEPTH + MAX_ITEMS_PER_DIR bound the total work per branch:
         //   worst case is 200^8 but in practice it's far less because most
         //   entries are files (not directories) and excluded dirs are pruned.
-        await Promise.all(
-            directoriesToPopulate.map(async (directory) => {
-                directory.children = await getFolderContents(directory.path, depth + 1);
-            })
-        );
+        // Recurse sequentially to avoid unbounded file-descriptor fan-out.
+        // Each call is still async (non-blocking), so the main thread stays responsive.
+        for (const directory of directoriesToPopulate) {
+            directory.children = await getFolderContents(directory.path, depth + 1);
+        }
     } catch (error: any) {
         if (error.code !== 'ENOENT') {
             console.error('Error reading folder contents:', error);

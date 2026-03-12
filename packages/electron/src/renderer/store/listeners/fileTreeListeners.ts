@@ -11,7 +11,7 @@
  */
 
 import { store } from '@nimbalyst/runtime/store';
-import { rawFileTreeAtom, type RendererFileTreeItem } from '../atoms/fileTree';
+import { rawFileTreeAtom, fileTreeLoadedAtom, type RendererFileTreeItem } from '../atoms/fileTree';
 
 /**
  * Initialize file tree listeners.
@@ -30,9 +30,11 @@ export function initFileTreeListeners(workspacePath: string): () => void {
     window.electronAPI.getFolderContents(workspacePath)
       .then((tree: RendererFileTreeItem[]) => {
         store.set(rawFileTreeAtom, tree);
+        store.set(fileTreeLoadedAtom, true);
       })
       .catch((error: unknown) => {
         console.error('[fileTreeListeners] Error loading initial file tree:', error);
+        store.set(fileTreeLoadedAtom, true);
       });
   }
 

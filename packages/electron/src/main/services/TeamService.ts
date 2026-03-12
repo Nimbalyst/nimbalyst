@@ -318,8 +318,6 @@ async function fetchTeamApi(path: string, method: string, body?: unknown, orgId?
 // Git Remote Detection
 // ============================================================================
 
-// Git remote lookup is provided by getNormalizedGitRemote from gitUtils.
-
 /**
  * Hash a git remote URL with SHA-256 for server-side lookup.
  * The server never sees the plaintext remote URL -- only the hex digest.

@@ -172,6 +172,7 @@ export {
 export {
   fileTreeAtom,
   rawFileTreeAtom,
+  fileTreeLoadedAtom,
   gitStatusMapAtom,
   fileGitStatusAtom,
   expandedDirsAtom,

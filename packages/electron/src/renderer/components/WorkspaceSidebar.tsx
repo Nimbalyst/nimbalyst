@@ -12,7 +12,7 @@ import { getFileName } from '../utils/pathUtils';
 import { getExtensionLoader } from '@nimbalyst/runtime';
 import { KeyboardShortcuts } from '../../shared/KeyboardShortcuts';
 import { HelpTooltip } from '../help';
-import { store, gitStatusMapAtom, revealRequestAtom, rawFileTreeAtom, type FileGitStatus as AtomFileGitStatus } from '../store';
+import { store, gitStatusMapAtom, revealRequestAtom, rawFileTreeAtom, fileTreeLoadedAtom, type FileGitStatus as AtomFileGitStatus } from '../store';
 import { refreshFileTree } from '../store/listeners/fileTreeListeners';
 import { useTabsActions } from '../contexts/TabsContext';
 
@@ -160,6 +160,7 @@ export function WorkspaceSidebar({
 
   // File tree state - read from centralized atom (populated by fileTreeListeners.ts)
   const fileTree = useAtomValue(rawFileTreeAtom);
+  const fileTreeLoaded = useAtomValue(fileTreeLoadedAtom);
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
   const [isDragOverRoot, setIsDragOverRoot] = useState(false);
@@ -1178,7 +1179,7 @@ export function WorkspaceSidebar({
                 {aiFilterHintText}
               </div>
             )}
-            {isFilteredTreeEmpty && fileTreeFilter === 'all' && fileTree.length === 0 ? (
+            {isFilteredTreeEmpty && fileTreeFilter === 'all' && !fileTreeLoaded ? (
               <div className="flex items-center gap-2 px-4 py-3 text-[13px] text-[var(--nim-text-muted)]">
                 <span className="material-symbols-outlined text-base animate-spin">progress_activity</span>
                 Loading files...

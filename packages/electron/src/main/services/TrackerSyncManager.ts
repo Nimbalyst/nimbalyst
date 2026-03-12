@@ -86,8 +86,6 @@ function sendToWorkspaceWindows(workspacePath: string, channel: string, data?: u
 // Project Identity
 // ============================================================================
 
-// Git remote lookup is provided by getNormalizedGitRemote from gitUtils.
-
 // ============================================================================
 // Internal helpers
 // ============================================================================
