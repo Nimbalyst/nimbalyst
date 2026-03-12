@@ -20,6 +20,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.55.30] - 2026-03-12
+
+
+### Changed
+- Centralize WalkthroughProvider IPC listeners into store
+- Centralize UpdateToast IPC listeners into store
+
+### Fixed
+- Mobile sync initial setup not syncing and pairing without projects
+- Thinking indicator hidden and waiting state not restored after session switch
+- AskUserQuestion widget stays pending after session abort
+- Automations extension incorrectly on stable channel (reverted to alpha)
+- TypeScript errors across electron and playwright packages
+
 ## [0.55.29] - 2026-03-12
 
 
