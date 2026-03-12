@@ -31,6 +31,7 @@ import {
 } from '../utils/store';
 import { registerFileExtension, clearRegisteredExtensions } from '../extensions/RegisteredFileTypes';
 import type { ReleaseChannel } from '../utils/store';
+import { buildExtensionFindFilesPlan } from './extensionFindFilesPlan';
 
 /**
  * Check if an extension should be visible for the current release channel.
@@ -678,13 +679,37 @@ export function registerExtensionHandlers(): void {
     'extensions:find-files',
     async (_event, dirPath: string, pattern: string) => {
       const matches: string[] = [];
+      const rootPath = path.resolve(dirPath);
+      // buildExtensionFindFilesPlan extracts the literal directory prefix from the glob
+      // pattern to narrow the scan root, but normalizedPattern retains those prefix segments.
+      // This works because relativePath is computed from rootPath (not scanRoot), so the
+      // full pattern still matches correctly against the full relative path.
+      const { normalizedPattern, scanRoot } = buildExtensionFindFilesPlan(rootPath, pattern);
+
+      if (scanRoot !== rootPath && !scanRoot.startsWith(rootPath + path.sep)) {
+        logger.main.warn('[ExtensionHandlers] Refusing to scan outside workspace root:', {
+          dirPath: rootPath,
+          pattern,
+          scanRoot,
+        });
+        return matches;
+      }
+
+      try {
+        const stat = await fs.stat(scanRoot);
+        if (!stat.isDirectory()) {
+          return matches;
+        }
+      } catch {
+        return matches;
+      }
 
       async function scanDirectory(dir: string): Promise<void> {
         try {
           const entries = await fs.readdir(dir, { withFileTypes: true });
           for (const entry of entries) {
             const fullPath = path.join(dir, entry.name);
-            const relativePath = path.relative(dirPath, fullPath);
+            const relativePath = path.relative(rootPath, fullPath).split(path.sep).join('/');
 
             if (entry.isDirectory()) {
               // Skip hidden directories and node_modules
@@ -693,7 +718,7 @@ export function registerExtensionHandlers(): void {
               }
             } else {
               // Check if file matches the pattern
-              if (minimatch(relativePath, pattern) || minimatch(entry.name, pattern)) {
+              if (minimatch(relativePath, normalizedPattern) || minimatch(entry.name, normalizedPattern)) {
                 matches.push(fullPath);
               }
             }
@@ -704,7 +729,7 @@ export function registerExtensionHandlers(): void {
       }
 
       try {
-        await scanDirectory(dirPath);
+        await scanDirectory(scanRoot);
         return matches;
       } catch (error) {
         logger.main.error('[ExtensionHandlers] Failed to find files:', error);
