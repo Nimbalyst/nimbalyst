@@ -20,6 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.55.28] - 2026-03-12
+
+
+### Added
+- PostHog analytics tracking for session kanban board interactions
+
+### Changed
+- Adopted @floating-ui/react for all dropdown and popover positioning (replaces custom positioning logic)
+- Consolidated E2E test suite to reduce Electron launches from ~83 to 29 files
+
+### Fixed
+- Guard against pending-cleared reload race condition during diff tag clearing
+- Sessions stuck in 'running' state after completion
+- Opening files from the file tree now uses IPC instead of scrolling the virtualized tree
+- Preserve Keep All content in chained diff replacements when applying sequential markdown changes
+- Prevent false diff markers on list items with bold text
+- Kanban peek panel and context menu rendered transparent in the Complete column
+
 ## [0.55.25] - 2026-03-07
 
 
