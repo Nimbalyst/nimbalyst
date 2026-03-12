@@ -159,7 +159,6 @@ async function extractScreenshots(
   const screenshots: TraceScreenshot[] = [];
 
   // Find screenshot resources referenced in events
-  const resourceMap = new Map<string, string>(); // sha1 -> callId
   for (const event of events) {
     if (event.type === 'resource' && event.sha1) {
       // Map resource sha1 to the nearest action
@@ -199,7 +198,7 @@ async function extractScreenshots(
 
 async function extractSnapshots(
   zip: JSZip,
-  events: TraceEvent[],
+  _events: TraceEvent[],
   actions: TraceAction[]
 ): Promise<TraceSnapshot[]> {
   const snapshots: TraceSnapshot[] = [];

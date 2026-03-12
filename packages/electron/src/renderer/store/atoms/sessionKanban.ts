@@ -66,7 +66,8 @@ const PHASE_PRIORITY: Record<string, number> = {
 // ============================================================
 
 /** Derive the card type from session metadata */
-export function getCardType(meta: SessionMeta): KanbanCardType {
+export function getCardType(meta: SessionMeta | undefined): KanbanCardType {
+  if (!meta) return 'session';
   if (meta.worktreeId) return 'worktree';
   if (meta.sessionType === 'workstream' || meta.childCount > 0) return 'workstream';
   return 'session';

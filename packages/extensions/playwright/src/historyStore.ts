@@ -5,7 +5,6 @@ import type {
   TestResultRecord,
   TestRunResult,
   TestNode,
-  TestStatus,
   FlakyTestScore,
 } from './types';
 
