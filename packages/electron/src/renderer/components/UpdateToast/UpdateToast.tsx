@@ -1,140 +1,19 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useCallback } from 'react';
+import { useAtom } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
 import { UpdateAvailableToast } from './UpdateAvailableToast';
 import { ReleaseNotesDialog } from './ReleaseNotesDialog';
 import { DownloadProgressToast } from './DownloadProgressToast';
 import { UpdateReadyToast } from './UpdateReadyToast';
+import { updateStateAtom } from '../../store/atoms/updateState';
 
-export type UpdateState = 'idle' | 'checking' | 'up-to-date' | 'available' | 'viewing-notes' | 'downloading' | 'ready' | 'waiting-for-sessions' | 'error';
-
-export interface UpdateInfo {
-  version: string;
-  releaseNotes?: string;
-  releaseDate?: string;
-}
-
-export interface DownloadProgress {
-  bytesPerSecond: number;
-  percent: number;
-  transferred: number;
-  total: number;
-}
+// Re-export types from atom file for backwards compatibility
+export type { UpdateState, UpdateInfo, DownloadProgress } from '../../store/atoms/updateState';
 
 export function UpdateToast(): React.ReactElement | null {
-  const [state, setState] = useState<UpdateState>('idle');
-  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
-  const [currentVersion, setCurrentVersion] = useState<string>('');
-  const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string>('');
+  const [updateState, setUpdateState] = useAtom(updateStateAtom);
+  const { state, updateInfo, currentVersion, downloadProgress, errorMessage } = updateState;
   const posthog = usePostHog();
-
-  // Check for reminder suppression
-  const checkReminderSuppression = useCallback(async (version: string): Promise<boolean> => {
-    try {
-      const result = await window.electronAPI.invoke('update:check-reminder-suppression', version);
-      return result.suppressed === true;
-    } catch (error) {
-      console.error('[UpdateToast] Failed to check reminder suppression:', error);
-      return false;
-    }
-  }, []);
-
-  // Set up IPC listeners
-  useEffect(() => {
-    const handleUpdateAvailable = async (data: {
-      currentVersion: string;
-      newVersion: string;
-      releaseNotes?: string;
-      releaseDate?: string;
-      isManualCheck?: boolean;
-    }) => {
-      console.log('[UpdateToast] Update available:', data);
-
-      // Check if reminder is suppressed for this version
-      // Skip suppression for manual checks (user explicitly clicked "Check for Updates")
-      if (!data.isManualCheck) {
-        const suppressed = await checkReminderSuppression(data.newVersion);
-        if (suppressed) {
-          console.log('[UpdateToast] Reminder suppressed for version:', data.newVersion);
-          setState('idle');
-          return;
-        }
-      }
-
-      setCurrentVersion(data.currentVersion);
-      setUpdateInfo({
-        version: data.newVersion,
-        releaseNotes: data.releaseNotes,
-        releaseDate: data.releaseDate,
-      });
-      setState('available');
-    };
-
-    const handleDownloadProgress = (data: DownloadProgress) => {
-      console.log('[UpdateToast] Download progress:', data.percent);
-      setDownloadProgress(data);
-      if (state !== 'downloading') {
-        setState('downloading');
-      }
-    };
-
-    const handleUpdateReady = (data: { version: string }) => {
-      console.log('[UpdateToast] Update ready:', data);
-      setUpdateInfo(prev => prev ? { ...prev, version: data.version } : { version: data.version });
-      setState('ready');
-    };
-
-    const handleUpdateError = (data: { message: string }) => {
-      console.log('[UpdateToast] Update error:', data);
-      setErrorMessage(data.message);
-      setState('error');
-    };
-
-    const handleCheckingForUpdate = () => {
-      console.log('[UpdateToast] Checking for updates...');
-      setState('checking');
-    };
-
-    const handleUpToDate = () => {
-      console.log('[UpdateToast] Already up to date');
-      setState('up-to-date');
-      // Auto-dismiss after 3 seconds
-      setTimeout(() => {
-        setState((currentState) => currentState === 'up-to-date' ? 'idle' : currentState);
-      }, 3000);
-    };
-
-    const handleSessionsFinished = () => {
-      console.log('[UpdateToast] All AI sessions finished, installing update...');
-      setState('ready');
-    };
-
-    // Register listeners
-    window.electronAPI.on('update-toast:show-available', handleUpdateAvailable);
-    window.electronAPI.on('update-toast:progress', handleDownloadProgress);
-    window.electronAPI.on('update-toast:show-ready', handleUpdateReady);
-    window.electronAPI.on('update-toast:error', handleUpdateError);
-    window.electronAPI.on('update-toast:checking', handleCheckingForUpdate);
-    window.electronAPI.on('update-toast:up-to-date', handleUpToDate);
-    window.electronAPI.on('update-toast:sessions-finished', handleSessionsFinished);
-
-    // Get current version
-    window.electronAPI.invoke('get-current-version').then((version: string) => {
-      setCurrentVersion(version);
-    }).catch((error: Error) => {
-      console.error('[UpdateToast] Failed to get current version:', error);
-    });
-
-    return () => {
-      window.electronAPI.off?.('update-toast:show-available', handleUpdateAvailable);
-      window.electronAPI.off?.('update-toast:progress', handleDownloadProgress);
-      window.electronAPI.off?.('update-toast:show-ready', handleUpdateReady);
-      window.electronAPI.off?.('update-toast:error', handleUpdateError);
-      window.electronAPI.off?.('update-toast:checking', handleCheckingForUpdate);
-      window.electronAPI.off?.('update-toast:up-to-date', handleUpToDate);
-      window.electronAPI.off?.('update-toast:sessions-finished', handleSessionsFinished);
-    };
-  }, [state, checkReminderSuppression]);
 
   // Action handlers
   const handleUpdateNow = useCallback(() => {
@@ -143,9 +22,9 @@ export function UpdateToast(): React.ReactElement | null {
       action: 'download_clicked',
       new_version: updateInfo?.version || 'unknown'
     });
-    setState('downloading');
+    setUpdateState((prev) => ({ ...prev, state: 'downloading' }));
     window.electronAPI.send('update-toast:download');
-  }, [posthog, updateInfo?.version]);
+  }, [posthog, updateInfo?.version, setUpdateState]);
 
   const handleViewReleaseNotes = useCallback(() => {
     console.log('[UpdateToast] View release notes clicked');
@@ -153,8 +32,8 @@ export function UpdateToast(): React.ReactElement | null {
       action: 'release_notes_clicked',
       new_version: updateInfo?.version || 'unknown'
     });
-    setState('viewing-notes');
-  }, [posthog, updateInfo?.version]);
+    setUpdateState((prev) => ({ ...prev, state: 'viewing-notes' }));
+  }, [posthog, updateInfo?.version, setUpdateState]);
 
   const handleRemindLater = useCallback(async () => {
     console.log('[UpdateToast] Remind later clicked');
@@ -169,35 +48,31 @@ export function UpdateToast(): React.ReactElement | null {
         console.error('[UpdateToast] Failed to set reminder suppression:', error);
       }
     }
-    setState('idle');
-    setUpdateInfo(null);
-  }, [posthog, updateInfo]);
+    setUpdateState((prev) => ({ ...prev, state: 'idle', updateInfo: null }));
+  }, [posthog, updateInfo, setUpdateState]);
 
   const handleDismiss = useCallback(() => {
     console.log('[UpdateToast] Dismiss clicked');
-    setState('idle');
-    setUpdateInfo(null);
-  }, []);
+    setUpdateState((prev) => ({ ...prev, state: 'idle', updateInfo: null }));
+  }, [setUpdateState]);
 
   const handleCloseReleaseNotes = useCallback(() => {
     console.log('[UpdateToast] Close release notes clicked');
-    setState('available');
-  }, []);
+    setUpdateState((prev) => ({ ...prev, state: 'available' }));
+  }, [setUpdateState]);
 
   const handleUpdateFromNotes = useCallback(() => {
     console.log('[UpdateToast] Update from release notes clicked');
-    setState('downloading');
+    setUpdateState((prev) => ({ ...prev, state: 'downloading' }));
     window.electronAPI.send('update-toast:download');
-  }, []);
+  }, [setUpdateState]);
 
   const handleCancelDownload = useCallback(() => {
     console.log('[UpdateToast] Cancel download clicked');
     // Note: electron-updater doesn't support canceling downloads directly
     // We'll just hide the toast and let the download continue in the background
-    setState('idle');
-    setUpdateInfo(null);
-    setDownloadProgress(null);
-  }, []);
+    setUpdateState((prev) => ({ ...prev, state: 'idle', updateInfo: null, downloadProgress: null }));
+  }, [setUpdateState]);
 
   const handleRelaunch = useCallback(async () => {
     console.log('[UpdateToast] Relaunch clicked');
@@ -210,7 +85,7 @@ export function UpdateToast(): React.ReactElement | null {
           reason: 'active_ai_sessions',
           new_version: updateInfo?.version || 'unknown'
         });
-        setState('waiting-for-sessions');
+        setUpdateState((prev) => ({ ...prev, state: 'waiting-for-sessions' }));
         window.electronAPI.send('update-toast:install-when-idle');
         return;
       }
@@ -218,7 +93,7 @@ export function UpdateToast(): React.ReactElement | null {
       console.error('[UpdateToast] Failed to check active sessions, proceeding with install:', error);
     }
     window.electronAPI.send('update-toast:install');
-  }, [posthog, updateInfo?.version]);
+  }, [posthog, updateInfo?.version, setUpdateState]);
 
   const handleForceRestart = useCallback(() => {
     console.log('[UpdateToast] Force restart clicked');
@@ -231,10 +106,8 @@ export function UpdateToast(): React.ReactElement | null {
 
   const handleDoItLater = useCallback(() => {
     console.log('[UpdateToast] Do it later clicked');
-    setState('idle');
-    setUpdateInfo(null);
-    setDownloadProgress(null);
-  }, []);
+    setUpdateState((prev) => ({ ...prev, state: 'idle', updateInfo: null, downloadProgress: null }));
+  }, [setUpdateState]);
 
   // Don't render anything if idle
   if (state === 'idle') {

@@ -71,6 +71,7 @@ import {
 import { initClaudeUsageListeners } from './store/listeners/claudeUsageListeners';
 import { initCodexUsageListeners } from './store/listeners/codexUsageListeners';
 import { initTrackerSyncListeners } from './store/listeners/trackerSyncListeners';
+import { initUpdateListeners } from './store/listeners/updateListeners';
 import { TrackerBottomPanel } from './components/TrackerBottomPanel/TrackerBottomPanel.tsx';
 import { TrackerMode } from './components/TrackerMode';
 import { CollabMode } from './components/CollabMode';
@@ -218,10 +219,12 @@ export default function App() {
     const cleanupClaude = initClaudeUsageListeners();
     const cleanupCodex = initCodexUsageListeners();
     const cleanupTrackerSync = initTrackerSyncListeners();
+    const cleanupUpdate = initUpdateListeners();
     return () => {
       cleanupClaude?.();
       cleanupCodex?.();
       cleanupTrackerSync?.();
+      cleanupUpdate?.();
     };
   }, []);
 
