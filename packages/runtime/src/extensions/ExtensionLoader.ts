@@ -1715,8 +1715,10 @@ export async function initializeExtensions(): Promise<void> {
       const discovered = await loader.discoverExtensions();
       console.info(`[ExtensionLoader] Found ${discovered.length} extension(s):`, discovered.map(d => d.manifest.id));
 
+      // Resolve which extensions are enabled, then load them all in parallel.
+      // Extensions are independent (own context, own registrations) so order doesn't matter.
+      const toLoad: typeof discovered = [];
       for (const ext of discovered) {
-        // Check persisted enabled state, passing manifest's defaultEnabled
         let shouldLoad = true;
         if (enabledStateProvider) {
           try {
@@ -1737,12 +1739,27 @@ export async function initializeExtensions(): Promise<void> {
           continue;
         }
 
-        console.info(
-          `[ExtensionLoader] Loading ${ext.manifest.name} v${ext.manifest.version}...`
-        );
-        const result = await loader.loadExtension(ext);
-        if (!result.success) {
-          console.error(`[ExtensionLoader] Failed to load ${ext.manifest.id}:`, result.error);
+        toLoad.push(ext);
+      }
+
+      console.info(`[ExtensionLoader] Loading ${toLoad.length} extension(s) in parallel...`);
+      const results = await Promise.allSettled(
+        toLoad.map(async (ext) => {
+          console.info(
+            `[ExtensionLoader] Loading ${ext.manifest.name} v${ext.manifest.version}...`
+          );
+          const result = await loader.loadExtension(ext);
+          if (!result.success) {
+            console.error(`[ExtensionLoader] Failed to load ${ext.manifest.id}:`, result.error);
+          }
+          return result;
+        })
+      );
+
+      // Log any unexpected rejections (loadExtension itself shouldn't throw, but be safe)
+      for (let i = 0; i < results.length; i++) {
+        if (results[i].status === 'rejected') {
+          console.error(`[ExtensionLoader] Extension ${toLoad[i].manifest.id} threw during load:`, (results[i] as PromiseRejectedResult).reason);
         }
       }
 

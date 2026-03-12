@@ -1,7 +1,6 @@
 import { BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent, app, shell } from 'electron';
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import * as fs from 'fs/promises';
-import * as fsSync from 'fs';
 import * as path from 'path';
 import {
   Document,
@@ -48,22 +47,23 @@ export class ElectronDocumentService implements DocumentService {
    * Quick check if a markdown file contains tracker-relevant frontmatter
    * This reads only the first ~4KB of the file for performance
    */
-  private hasTrackerFrontmatter(fullPath: string): boolean {
+  private async hasTrackerFrontmatter(fullPath: string): Promise<boolean> {
     try {
-      // Read only the first 4KB - frontmatter should be at the top
-      const fd = fsSync.openSync(fullPath, 'r');
-      const buffer = Buffer.alloc(4096);
-      const bytesRead = fsSync.readSync(fd, buffer, 0, 4096, 0);
-      fsSync.closeSync(fd);
+      const fh = await fs.open(fullPath, 'r');
+      try {
+        const buffer = Buffer.alloc(4096);
+        const { bytesRead } = await fh.read(buffer, 0, 4096, 0);
+        const content = buffer.toString('utf-8', 0, bytesRead);
 
-      const content = buffer.toString('utf-8', 0, bytesRead);
+        // Check for YAML frontmatter with plan/bug/tracker content
+        // Look for patterns like planStatus:, or inline tracker items like #bug[, #task[, etc.
+        const hasPlanStatus = /^---[\s\S]*?planStatus:/m.test(content);
+        const hasInlineTracker = /#([a-z][\w-]*)\[/.test(content);
 
-      // Check for YAML frontmatter with plan/bug/tracker content
-      // Look for patterns like planStatus:, or inline tracker items like #bug[, #task[, etc.
-      const hasPlanStatus = /^---[\s\S]*?planStatus:/m.test(content);
-      const hasInlineTracker = /#([a-z][\w-]*)\[/.test(content);
-
-      return hasPlanStatus || hasInlineTracker;
+        return hasPlanStatus || hasInlineTracker;
+      } finally {
+        await fh.close();
+      }
     } catch {
       return false;
     }
@@ -104,6 +104,16 @@ export class ElectronDocumentService implements DocumentService {
       this.initializationPromise = this.initializeAsync();
     }
     await this.initializationPromise;
+  }
+
+  /**
+   * Start the background scan if not already started, but don't block on it.
+   * Callers that can tolerate stale/empty data should use this instead of ensureInitialized().
+   */
+  private startScanIfNeeded(): void {
+    if (!this.initializationPromise) {
+      this.initializationPromise = this.initializeAsync();
+    }
   }
 
   // Public method to trigger a full refresh (for tracker panel initialization, etc.)
@@ -279,12 +289,15 @@ export class ElectronDocumentService implements DocumentService {
     }
   }
 
-  private scanDirectory(
+  // Number of fs operations between event loop yields during async scan
+  private static readonly YIELD_INTERVAL = 100;
+
+  private async scanDirectoryAsync(
     dirPath: string,
     basePath: string = '',
     depth: number = 0,
-    scanState: { count: number; trackerCount: number; startTime: number; stopped: boolean } = { count: 0, trackerCount: 0, startTime: Date.now(), stopped: false }
-  ): Document[] {
+    scanState: { count: number; trackerCount: number; startTime: number; stopped: boolean; sinceYield: number }
+  ): Promise<Document[]> {
     const documents: Document[] = [];
 
     // Check time limit BEFORE scanning this directory
@@ -299,7 +312,6 @@ export class ElectronDocumentService implements DocumentService {
     }
 
     if (depth > ElectronDocumentService.MAX_DEPTH) {
-      // console.warn(`[DocumentService] Stopped scanning at depth ${depth} (limit: ${ElectronDocumentService.MAX_DEPTH})`);
       return documents;
     }
 
@@ -330,7 +342,7 @@ export class ElectronDocumentService implements DocumentService {
     const markdownExtensions = ['.md', '.markdown'];
 
     try {
-      const items = fsSync.readdirSync(dirPath);
+      const items = await fs.readdir(dirPath);
 
       for (const item of items) {
         // Check time limit on EVERY iteration to bail out quickly
@@ -357,7 +369,14 @@ export class ElectronDocumentService implements DocumentService {
         const relativePath = basePath ? path.join(basePath, item) : item;
 
         try {
-          const stats = fsSync.statSync(fullPath);
+          // Yield the event loop periodically so IPC responses aren't starved
+          scanState.sinceYield++;
+          if (scanState.sinceYield >= ElectronDocumentService.YIELD_INTERVAL) {
+            scanState.sinceYield = 0;
+            await new Promise<void>(resolve => setImmediate(resolve));
+          }
+
+          const stats = await fs.stat(fullPath);
 
           if (stats.isDirectory()) {
             // Add directory as a mentionable document for @ mentions
@@ -371,7 +390,8 @@ export class ElectronDocumentService implements DocumentService {
               type: 'directory'
             });
             // Recursively scan subdirectories with incremented depth
-            documents.push(...this.scanDirectory(fullPath, relativePath, depth + 1, scanState));
+            const subDocs = await this.scanDirectoryAsync(fullPath, relativePath, depth + 1, scanState);
+            documents.push(...subDocs);
           } else if (stats.isFile()) {
             const ext = path.extname(item).toLowerCase();
             if (supportedExtensions.includes(ext)) {
@@ -383,7 +403,7 @@ export class ElectronDocumentService implements DocumentService {
               // - For markdown files above the limit, check if they have tracker frontmatter
               let shouldAdd = underLimit;
               if (!underLimit && isMarkdown) {
-                shouldAdd = this.hasTrackerFrontmatter(fullPath);
+                shouldAdd = await this.hasTrackerFrontmatter(fullPath);
                 if (shouldAdd) {
                   scanState.trackerCount++;
                 }
@@ -418,9 +438,8 @@ export class ElectronDocumentService implements DocumentService {
 
   private async scanDocuments(): Promise<Document[]> {
     try {
-      // Use synchronous file system operations like the file tree
-      const scanState = { count: 0, trackerCount: 0, startTime: Date.now(), stopped: false };
-      const docs = this.scanDirectory(this.workspacePath, '', 0, scanState);
+      const scanState = { count: 0, trackerCount: 0, startTime: Date.now(), stopped: false, sinceYield: 0 };
+      const docs = await this.scanDirectoryAsync(this.workspacePath, '', 0, scanState);
 
       // Log info about scan results
       const elapsed = Date.now() - scanState.startTime;
@@ -553,22 +572,11 @@ export class ElectronDocumentService implements DocumentService {
   }
 
   async listDocumentMetadata(): Promise<DocumentMetadataEntry[]> {
-    await this.ensureInitialized();
-    const metadata = Array.from(this.metadataCache.values());
-    // console.log(`[DocumentService] listDocumentMetadata returning ${metadata.length} entries`);
-    if (metadata.length > 0) {
-      const planDocs = metadata.filter(m => m.path.includes('plan'));
-      // console.log(`[DocumentService] Found ${planDocs.length} plan documents`);
-      if (planDocs.length > 0) {
-        // console.log('[DocumentService] Sample plan doc:', {
-        //   path: planDocs[0].path,
-        //   hasFrontmatter: !!planDocs[0].frontmatter,
-        //   frontmatterKeys: Object.keys(planDocs[0].frontmatter || {}),
-        //   hasPlanStatus: !!(planDocs[0].frontmatter && planDocs[0].frontmatter.planStatus)
-        // });
-      }
-    }
-    return metadata;
+    // Start scan in the background but return cached data immediately.
+    // The scan will notify metadata watchers when complete, so callers
+    // that subscribe to change events will receive the full data set.
+    this.startScanIfNeeded();
+    return Array.from(this.metadataCache.values());
   }
 
   watchDocumentMetadata(listener: (change: MetadataChangeEvent) => void): () => void {
