@@ -15,7 +15,7 @@ describe('FileTree All Files Mode', () => {
         fs.rmSync(tempDir, { recursive: true, force: true });
     });
 
-    it('should return all folders including those without known file extensions', () => {
+    it('should return all folders including those without known file extensions', async () => {
         // Create a structure like DisneyPins:
         // - .claude/ (hidden folder)
         // - backend/ (folder with python files)
@@ -38,7 +38,7 @@ describe('FileTree All Files Mode', () => {
         fs.writeFileSync(path.join(tempDir, 'Data', 'users.csv'), 'id,name');
         fs.writeFileSync(path.join(tempDir, 'FrontEnd', 'App.swift'), 'import SwiftUI');
 
-        const result = getFolderContents(tempDir);
+        const result = await getFolderContents(tempDir);
         const names = result.map(item => item.name);
 
         // Should include ALL folders - both hidden and regular
@@ -55,13 +55,13 @@ describe('FileTree All Files Mode', () => {
         expect(result.length).toBe(8);
     });
 
-    it('should return empty folders', () => {
+    it('should return empty folders', async () => {
         fs.mkdirSync(path.join(tempDir, 'emptyFolder1'));
         fs.mkdirSync(path.join(tempDir, 'emptyFolder2'));
         fs.mkdirSync(path.join(tempDir, 'folderWithFile'));
         fs.writeFileSync(path.join(tempDir, 'folderWithFile', 'test.txt'), 'content');
 
-        const result = getFolderContents(tempDir);
+        const result = await getFolderContents(tempDir);
         const names = result.map(item => item.name);
 
         expect(names).toContain('emptyFolder1');
@@ -70,7 +70,7 @@ describe('FileTree All Files Mode', () => {
         expect(result.length).toBe(3);
     });
 
-    it('should exclude only the specific excluded directories', () => {
+    it('should exclude only the specific excluded directories', async () => {
         // These should be excluded
         fs.mkdirSync(path.join(tempDir, 'node_modules'));
         fs.mkdirSync(path.join(tempDir, '.git'));
@@ -83,7 +83,7 @@ describe('FileTree All Files Mode', () => {
         fs.mkdirSync(path.join(tempDir, 'backend'));
         fs.mkdirSync(path.join(tempDir, 'Data'));
 
-        const result = getFolderContents(tempDir);
+        const result = await getFolderContents(tempDir);
         const names = result.map(item => item.name);
 
         // Should NOT include excluded dirs
@@ -100,20 +100,20 @@ describe('FileTree All Files Mode', () => {
         expect(result.length).toBe(3);
     });
 
-    it('should include folders with only binary/unknown file types', () => {
+    it('should include folders with only binary/unknown file types', async () => {
         fs.mkdirSync(path.join(tempDir, 'images'));
         fs.mkdirSync(path.join(tempDir, 'videos'));
         fs.writeFileSync(path.join(tempDir, 'images', 'photo.png'), 'fake png');
         fs.writeFileSync(path.join(tempDir, 'videos', 'clip.mp4'), 'fake mp4');
 
-        const result = getFolderContents(tempDir);
+        const result = await getFolderContents(tempDir);
         const names = result.map(item => item.name);
 
         expect(names).toContain('images');
         expect(names).toContain('videos');
     });
 
-    it('should return all folders from actual DisneyPins directory', () => {
+    it('should return all folders from actual DisneyPins directory', async () => {
         const disneyPinsPath = '/Users/ghinkle/sources/DisneyPins';
 
         // Skip if the directory doesn't exist (running on CI)
@@ -121,7 +121,7 @@ describe('FileTree All Files Mode', () => {
             return;
         }
 
-        const result = getFolderContents(disneyPinsPath);
+        const result = await getFolderContents(disneyPinsPath);
         const names = result.map(item => item.name);
 
         if (result.length === 0) {
@@ -149,7 +149,7 @@ describe('FileTree Natural Sorting', () => {
         fs.rmSync(tempDir, { recursive: true, force: true });
     });
 
-    it('should sort files with numbers naturally', () => {
+    it('should sort files with numbers naturally', async () => {
         // Create files with numbers
         const files = [
             'Doc 1.md',
@@ -164,7 +164,7 @@ describe('FileTree Natural Sorting', () => {
             fs.writeFileSync(path.join(tempDir, filename), '');
         });
 
-        const result = getFolderContents(tempDir);
+        const result = await getFolderContents(tempDir);
         const fileNames = result.map(item => item.name);
 
         expect(fileNames).toEqual([
@@ -177,7 +177,7 @@ describe('FileTree Natural Sorting', () => {
         ]);
     });
 
-    it('should sort files with leading zeros naturally', () => {
+    it('should sort files with leading zeros naturally', async () => {
         // Create files with leading zeros
         const files = [
             '01 test.md',
@@ -191,7 +191,7 @@ describe('FileTree Natural Sorting', () => {
             fs.writeFileSync(path.join(tempDir, filename), '');
         });
 
-        const result = getFolderContents(tempDir);
+        const result = await getFolderContents(tempDir);
         const fileNames = result.map(item => item.name);
 
         expect(fileNames).toEqual([
@@ -203,7 +203,7 @@ describe('FileTree Natural Sorting', () => {
         ]);
     });
 
-    it('should sort version numbers naturally', () => {
+    it('should sort version numbers naturally', async () => {
         // Create files with version numbers
         const files = [
             'v1.2.0.md',
@@ -217,7 +217,7 @@ describe('FileTree Natural Sorting', () => {
             fs.writeFileSync(path.join(tempDir, filename), '');
         });
 
-        const result = getFolderContents(tempDir);
+        const result = await getFolderContents(tempDir);
         const fileNames = result.map(item => item.name);
 
         expect(fileNames).toEqual([
@@ -229,7 +229,7 @@ describe('FileTree Natural Sorting', () => {
         ]);
     });
 
-    it('should still sort directories before files', () => {
+    it('should still sort directories before files', async () => {
         // Create mix of files and directories
         fs.writeFileSync(path.join(tempDir, 'File 1.md'), '');
         fs.writeFileSync(path.join(tempDir, 'File 10.md'), '');
@@ -237,7 +237,7 @@ describe('FileTree Natural Sorting', () => {
         fs.mkdirSync(path.join(tempDir, 'Dir 10'));
         fs.writeFileSync(path.join(tempDir, 'File 2.md'), '');
 
-        const result = getFolderContents(tempDir);
+        const result = await getFolderContents(tempDir);
         const names = result.map(item => ({ name: item.name, type: item.type }));
 
         expect(names).toEqual([
@@ -249,7 +249,7 @@ describe('FileTree Natural Sorting', () => {
         ]);
     });
 
-    it('should handle mixed alphanumeric filenames', () => {
+    it('should handle mixed alphanumeric filenames', async () => {
         // Create files with mixed patterns
         const files = [
             'Chapter 1.md',
@@ -264,7 +264,7 @@ describe('FileTree Natural Sorting', () => {
             fs.writeFileSync(path.join(tempDir, filename), '');
         });
 
-        const result = getFolderContents(tempDir);
+        const result = await getFolderContents(tempDir);
         const fileNames = result.map(item => item.name);
 
         expect(fileNames).toEqual([
@@ -277,7 +277,7 @@ describe('FileTree Natural Sorting', () => {
         ]);
     });
 
-    it('should be case-insensitive', () => {
+    it('should be case-insensitive', async () => {
         // Create files with different cases
         const files = [
             'apple.md',
@@ -290,7 +290,7 @@ describe('FileTree Natural Sorting', () => {
             fs.writeFileSync(path.join(tempDir, filename), '');
         });
 
-        const result = getFolderContents(tempDir);
+        const result = await getFolderContents(tempDir);
         const fileNames = result.map(item => item.name);
 
         expect(fileNames).toEqual([

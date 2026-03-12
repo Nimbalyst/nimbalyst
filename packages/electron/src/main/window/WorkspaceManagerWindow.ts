@@ -1,7 +1,8 @@
 import { BrowserWindow, dialog, app } from 'electron';
 import { join, basename } from 'path';
 import { getPreloadPath } from '../utils/appPaths';
-import { existsSync, mkdirSync, statSync, readdirSync } from 'fs';
+import { existsSync, mkdirSync, statSync } from 'fs';
+import { readdir, stat as fsStat } from 'fs/promises';
 import { getRecentItems, addToRecentItems, store, getWorkspaceWindowState, getTheme } from '../utils/store';
 import { createWindow, findWindowByWorkspace } from './WindowManager';
 import { safeHandle } from '../utils/ipcRegistry';
@@ -42,10 +43,9 @@ function bucketFileCount(count: number): string {
   return '100+';
 }
 
-// Helper function to check if workspace has subfolders
-function hasSubfolders(workspacePath: string): boolean {
+async function hasSubfolders(workspacePath: string): Promise<boolean> {
   try {
-    const entries = readdirSync(workspacePath, { withFileTypes: true });
+    const entries = await readdir(workspacePath, { withFileTypes: true });
     return entries.some(entry => entry.isDirectory() && !entry.name.startsWith('.'));
   } catch (error) {
     return false;
@@ -203,13 +203,7 @@ export function setupWorkspaceManagerHandlers() {
         try {
           if (existsSync(workspace.path)) {
             const stats = statSync(workspace.path);
-            // Use quick scan with low limits for listing view (just enough to show info)
-            // Wrap in Promise to allow concurrent scanning
-            const { files, limited } = await new Promise<{ files: string[], limited: boolean }>((resolve) => {
-              setImmediate(() => {
-                resolve(getWorkspaceFiles(workspace.path, '', 1000, 5));
-              });
-            });
+            const { files, limited } = await getWorkspaceFiles(workspace.path, '', 1000, 5);
 
             return {
               ...workspace,
@@ -240,7 +234,7 @@ export function setupWorkspaceManagerHandlers() {
   safeHandle('workspace-manager:get-workspace-stats', async (event, workspacePath: string) => {
     try {
       // Use higher limits for stats (when user clicks on a workspace)
-      const { files, limited } = getWorkspaceFiles(workspacePath, '', 10000, 10);
+      const { files, limited } = await getWorkspaceFiles(workspacePath, '', 10000, 10);
       let totalSize = 0;
       const markdownFiles = [];
 
@@ -345,42 +339,41 @@ export function setupWorkspaceManagerHandlers() {
       return { success: true };
     }
 
-    // Track workspace opened analytics event (use quick scan for analytics)
-    try {
-      const { files } = getWorkspaceFiles(workspacePath, '', 1000, 8);
-
-      // Check git repository status (defaults to false if git not available)
-      let isGitRepository = false;
-      let isGitHub = false;
-
-      try {
-        const gitStatusService = new GitStatusService();
-        isGitRepository = await gitStatusService.isGitRepo(workspacePath);
-        if (isGitRepository) {
-          isGitHub = await gitStatusService.hasGitHubRemote(workspacePath);
-        }
-      } catch (gitError) {
-        // Git checks failed - continue with defaults (false, false)
-        console.error('Error checking git status:', gitError);
-      }
-
-      const analytics = AnalyticsService.getInstance();
-      analytics.sendEvent('workspace_opened', {
-        fileCount: bucketFileCount(files.length),
-        hasSubfolders: hasSubfolders(workspacePath),
-        source: 'dialog', // Opened via workspace manager dialog
-        isGitRepository,
-        isGitHub,
-      });
-    } catch (error) {
-      console.error('Error tracking workspace_opened event:', error);
-    }
-
     // Check for saved workspace window state
     const savedState = getWorkspaceWindowState(workspacePath);
 
     // Create window with saved bounds if available
     const window = createWindow(false, true, workspacePath, savedState?.bounds);
+
+    (async () => {
+      try {
+        const { files } = await getWorkspaceFiles(workspacePath, '', 1000, 8);
+
+        let isGitRepository = false;
+        let isGitHub = false;
+
+        try {
+          const gitStatusService = new GitStatusService();
+          isGitRepository = await gitStatusService.isGitRepo(workspacePath);
+          if (isGitRepository) {
+            isGitHub = await gitStatusService.hasGitHubRemote(workspacePath);
+          }
+        } catch (gitError) {
+          console.error('Error checking git status:', gitError);
+        }
+
+        const analytics = AnalyticsService.getInstance();
+        analytics.sendEvent('workspace_opened', {
+          fileCount: bucketFileCount(files.length),
+          hasSubfolders: await hasSubfolders(workspacePath),
+          source: 'dialog',
+          isGitRepository,
+          isGitHub,
+        });
+      } catch (error) {
+        console.error('Error tracking workspace_opened event:', error);
+      }
+    })().catch(() => {});
 
     // Start watching workspace MCP config for changes
     try {
@@ -436,13 +429,13 @@ export function setupWorkspaceManagerHandlers() {
 
 // Helper function to get all files in a workspace with limits
 // Returns { files: string[], limited: boolean } where limited=true if we hit a limit
-function getWorkspaceFiles(
+async function getWorkspaceFiles(
   workspacePath: string,
   relativePath: string = '',
   maxFiles: number = 10000,
   maxDepth: number = 10,
   currentDepth: number = 0
-): { files: string[], limited: boolean } {
+): Promise<{ files: string[], limited: boolean }> {
   const files: string[] = [];
   let limited = false;
 
@@ -455,7 +448,7 @@ function getWorkspaceFiles(
   const fullPath = join(workspacePath, relativePath);
 
   try {
-    const items = readdirSync(fullPath);
+    const items = await readdir(fullPath, { withFileTypes: true });
 
     for (const item of items) {
       // Stop if we've found enough files
@@ -466,29 +459,35 @@ function getWorkspaceFiles(
       }
 
       // Skip hidden files and common ignore patterns
-      if (item.startsWith('.') || item === 'node_modules' || item === 'dist' || item === 'out') {
+      if (item.name.startsWith('.') || item.name === 'node_modules' || item.name === 'dist' || item.name === 'out') {
         continue;
       }
 
-      const itemPath = join(relativePath, item);
-      const fullItemPath = join(workspacePath, itemPath);
+      const itemPath = join(relativePath, item.name);
 
-      try {
-        const stats = statSync(fullItemPath);
-
-        if (stats.isDirectory()) {
-          const result = getWorkspaceFiles(workspacePath, itemPath, maxFiles - files.length, maxDepth, currentDepth + 1);
-          files.push(...result.files);
-          if (result.limited) {
-            limited = true;
-            break;
-          }
-        } else {
-          files.push(itemPath);
+      // Resolve symlinks to their target type
+      let isDir = item.isDirectory();
+      let isFile = item.isFile();
+      if (item.isSymbolicLink()) {
+        try {
+          const targetStats = await fsStat(join(workspacePath, itemPath));
+          isDir = targetStats.isDirectory();
+          isFile = targetStats.isFile();
+        } catch {
+          // Broken symlink — skip
+          continue;
         }
-      } catch (error) {
-        // Skip files/folders we can't access
-        console.debug(`[WorkspaceManager] Cannot access ${fullItemPath}:`, error instanceof Error ? error.message : String(error));
+      }
+
+      if (isDir) {
+        const result = await getWorkspaceFiles(workspacePath, itemPath, maxFiles - files.length, maxDepth, currentDepth + 1);
+        files.push(...result.files);
+        if (result.limited) {
+          limited = true;
+          break;
+        }
+      } else if (isFile) {
+        files.push(itemPath);
       }
     }
   } catch (error) {

@@ -39,13 +39,14 @@ export class OptimizedWorkspaceWatcher {
 
             const timer = setTimeout(() => {
                 logger.workspaceWatcher.debug('Updating file tree');
-                const fileTree = getFolderContents(workspacePath);
-
-                if (!window || window.isDestroyed()) {
-                    return;
-                }
-
-                window.webContents.send('workspace-file-tree-updated', { fileTree });
+                getFolderContents(workspacePath).then((fileTree) => {
+                    if (!window || window.isDestroyed()) {
+                        return;
+                    }
+                    window.webContents.send('workspace-file-tree-updated', { fileTree });
+                }).catch((error) => {
+                    logger.workspaceWatcher.error('Failed to update file tree:', error);
+                });
             }, 500);
 
             this.updateTimers.set(windowId, timer);

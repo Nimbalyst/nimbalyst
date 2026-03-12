@@ -1,4 +1,4 @@
-import { readdirSync, statSync } from 'fs';
+import { readdir, stat } from 'fs/promises';
 import { join } from 'path';
 import { FileTreeItem } from '../types';
 import { shouldExcludeDir } from './fileFilters';
@@ -44,7 +44,7 @@ function sortItems(items: FileTreeItem[]): void {
     });
 }
 
-export function getFolderContents(dirPath: string, depth: number = 0): FileTreeItem[] {
+export async function getFolderContents(dirPath: string, depth: number = 0): Promise<FileTreeItem[]> {
     const result: FileTreeItem[] = [];
     const directoriesToPopulate: FileTreeItem[] = [];
 
@@ -53,34 +53,42 @@ export function getFolderContents(dirPath: string, depth: number = 0): FileTreeI
     }
 
     try {
-        const entries = readdirSync(dirPath);
+        const entries = await readdir(dirPath, { withFileTypes: true });
         let visibleCount = 0;
 
         for (const entry of entries) {
-            if (entry === '.DS_Store' || shouldExcludeDir(entry)) continue;
+            if (entry.name === '.DS_Store' || shouldExcludeDir(entry.name)) continue;
             if (visibleCount >= MAX_ITEMS_PER_DIR) continue;
 
-            const fullPath = join(dirPath, entry);
+            const fullPath = join(dirPath, entry.name);
 
-            try {
-                const stats = statSync(fullPath);
-
-                if (stats.isDirectory()) {
-                    const dirItem: FileTreeItem = {
-                        name: entry,
-                        type: 'directory',
-                        path: fullPath,
-                        children: []
-                    };
-                    directoriesToPopulate.push(dirItem);
-                    result.push(dirItem);
-                    visibleCount++;
-                } else if (stats.isFile()) {
-                    result.push({ name: entry, type: 'file', path: fullPath });
-                    visibleCount++;
+            // Resolve symlinks to their target type
+            let isDir = entry.isDirectory();
+            let isFile = entry.isFile();
+            if (entry.isSymbolicLink()) {
+                try {
+                    const targetStats = await stat(fullPath);
+                    isDir = targetStats.isDirectory();
+                    isFile = targetStats.isFile();
+                } catch {
+                    // Broken symlink — skip
+                    continue;
                 }
-            } catch {
-                // Skip files/dirs we can't stat (permissions, broken symlinks)
+            }
+
+            if (isDir) {
+                const dirItem: FileTreeItem = {
+                    name: entry.name,
+                    type: 'directory',
+                    path: fullPath,
+                    children: []
+                };
+                directoriesToPopulate.push(dirItem);
+                result.push(dirItem);
+                visibleCount++;
+            } else if (isFile) {
+                result.push({ name: entry.name, type: 'file', path: fullPath });
+                visibleCount++;
             }
         }
 
@@ -90,9 +98,11 @@ export function getFolderContents(dirPath: string, depth: number = 0): FileTreeI
         // MAX_DEPTH + MAX_ITEMS_PER_DIR bound the total work per branch:
         //   worst case is 200^8 but in practice it's far less because most
         //   entries are files (not directories) and excluded dirs are pruned.
-        for (const directory of directoriesToPopulate) {
-            directory.children = getFolderContents(directory.path, depth + 1);
-        }
+        await Promise.all(
+            directoriesToPopulate.map(async (directory) => {
+                directory.children = await getFolderContents(directory.path, depth + 1);
+            })
+        );
     } catch (error: any) {
         if (error.code !== 'ENOENT') {
             console.error('Error reading folder contents:', error);

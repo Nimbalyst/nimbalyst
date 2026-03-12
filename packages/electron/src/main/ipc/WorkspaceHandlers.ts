@@ -211,13 +211,13 @@ async function findWorkspaceFiles(dir: string): Promise<string[]> {
 export function registerWorkspaceHandlers() {
     const analytics = AnalyticsService.getInstance();
     // Get folder contents
-    safeHandle('get-folder-contents', (event, dirPath: string) => {
-        return getFolderContents(dirPath);
+    safeHandle('get-folder-contents', async (event, dirPath: string) => {
+        return await getFolderContents(dirPath);
     });
 
     // Refresh folder contents (for when user expands a folder)
-    safeHandle('refresh-folder-contents', (event, folderPath: string) => {
-        return getFolderContents(folderPath);
+    safeHandle('refresh-folder-contents', async (event, folderPath: string) => {
+        return await getFolderContents(folderPath);
     });
 
     // Create new file

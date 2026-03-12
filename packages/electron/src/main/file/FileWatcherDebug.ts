@@ -71,7 +71,7 @@ export function getFileWatcherStatus(windowId: number): string {
 }
 
 // Force refresh the workspace file tree
-export function refreshWorkspaceFileTree(window: BrowserWindow) {
+export async function refreshWorkspaceFileTree(window: BrowserWindow) {
     const windowId = window.id;
     const state = windowStates.get(windowId);
 
@@ -79,7 +79,7 @@ export function refreshWorkspaceFileTree(window: BrowserWindow) {
         console.log('[DEBUG] Force refreshing file tree for:', state.workspacePath);
 
         // Get fresh file tree
-        const fileTree = getFolderContents(state.workspacePath);
+        const fileTree = await getFolderContents(state.workspacePath);
 
         // Send to renderer
         window.webContents.send('workspace-file-tree-updated', { fileTree });

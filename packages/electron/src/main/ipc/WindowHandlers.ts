@@ -15,7 +15,7 @@ const FOREGROUND_THROTTLE_MS = 30 * 60 * 1000; // 30 minutes
 
 export function registerWindowHandlers() {
     // Get initial window state
-    safeHandle('get-initial-state', (event) => {
+    safeHandle('get-initial-state', async (event) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) return null;
 
@@ -27,7 +27,7 @@ export function registerWindowHandlers() {
 
         // If it's a workspace mode window, return the full initial state
         if (state.mode === 'workspace' && state.workspacePath) {
-            const fileTree = getFolderContents(state.workspacePath);
+            const fileTree = await getFolderContents(state.workspacePath);
             return {
                 mode: 'workspace',
                 workspacePath: state.workspacePath,
