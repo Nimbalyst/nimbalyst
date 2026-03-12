@@ -793,6 +793,31 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
         return;
       }
 
+      // Handle Cmd+Shift+V for force-paste (bypass large paste → attachment conversion)
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'v') {
+        e.preventDefault();
+        navigator.clipboard.readText().then(text => {
+          if (!text || !textareaRef.current) return;
+          const textarea = textareaRef.current;
+          const start = textarea.selectionStart;
+          const end = textarea.selectionEnd;
+          const before = value.substring(0, start);
+          const after = value.substring(end);
+          // Prevent '#' at start from triggering memory mode when force-pasting
+          if (provider === 'claude-code' && (before + text).trimStart().startsWith('#') && before.trim() === '') {
+            pastedHashContentRef.current = true;
+          }
+          onChange(before + text + after);
+          setTimeout(() => {
+            if (textareaRef.current) {
+              const newCursorPos = start + text.length;
+              textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+            }
+          }, 0);
+        });
+        return;
+      }
+
       // Handle Cmd+A / Ctrl+A for select all
       if ((e.metaKey || e.ctrlKey) && e.key === 'a' && !e.shiftKey) {
         e.stopPropagation();
