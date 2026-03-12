@@ -1,9 +1,7 @@
 import { BrowserWindow, shell, nativeImage, app, powerMonitor } from 'electron';
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import { windowStates, windows, getWindowId } from '../window/WindowManager';
-import { startFileWatcher } from '../file/FileWatcher';
 import { basename, join } from 'path';
-import { getFolderContents } from '../utils/FileTree';
 import { writeFileSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { reportDesktopActivity, setWindowFocused, setScreenLocked, setIdleThresholdMs, attemptReconnect } from '../services/SyncManager';
@@ -15,7 +13,7 @@ const FOREGROUND_THROTTLE_MS = 30 * 60 * 1000; // 30 minutes
 
 export function registerWindowHandlers() {
     // Get initial window state
-    safeHandle('get-initial-state', async (event) => {
+    safeHandle('get-initial-state', (event) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) return null;
 
@@ -25,18 +23,14 @@ export function registerWindowHandlers() {
         const state = windowStates.get(windowId);
         if (!state) return null;
 
-        // If it's a workspace mode window, return the full initial state
         if (state.mode === 'workspace' && state.workspacePath) {
-            const fileTree = await getFolderContents(state.workspacePath);
             return {
                 mode: 'workspace',
                 workspacePath: state.workspacePath,
                 workspaceName: basename(state.workspacePath),
-                fileTree
             };
         }
 
-        // For document mode, just return the mode
         return {
             mode: 'document'
         };

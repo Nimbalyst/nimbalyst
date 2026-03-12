@@ -1,7 +1,27 @@
+import { Dirent } from 'fs';
 import { readdir, stat } from 'fs/promises';
 import { join } from 'path';
 import { FileTreeItem } from '../types';
 import { shouldExcludeDir } from './fileFilters';
+
+/**
+ * Resolve a directory entry's type, following symlinks to their target.
+ * Returns { isDir, isFile } or null if the symlink is broken.
+ */
+export async function resolveEntryType(entry: Dirent, fullPath: string): Promise<{ isDir: boolean; isFile: boolean } | null> {
+    let isDir = entry.isDirectory();
+    let isFile = entry.isFile();
+    if (entry.isSymbolicLink()) {
+        try {
+            const targetStats = await stat(fullPath);
+            isDir = targetStats.isDirectory();
+            isFile = targetStats.isFile();
+        } catch {
+            return null; // Broken symlink
+        }
+    }
+    return { isDir, isFile };
+}
 
 // Natural sort collator for handling numbers in filenames
 const naturalCollator = new Intl.Collator(undefined, {
@@ -58,23 +78,13 @@ export async function getFolderContents(dirPath: string, depth: number = 0): Pro
 
         for (const entry of entries) {
             if (entry.name === '.DS_Store' || shouldExcludeDir(entry.name)) continue;
-            if (visibleCount >= MAX_ITEMS_PER_DIR) continue;
+            if (visibleCount >= MAX_ITEMS_PER_DIR) break;
 
             const fullPath = join(dirPath, entry.name);
 
-            // Resolve symlinks to their target type
-            let isDir = entry.isDirectory();
-            let isFile = entry.isFile();
-            if (entry.isSymbolicLink()) {
-                try {
-                    const targetStats = await stat(fullPath);
-                    isDir = targetStats.isDirectory();
-                    isFile = targetStats.isFile();
-                } catch {
-                    // Broken symlink — skip
-                    continue;
-                }
-            }
+            const resolved = await resolveEntryType(entry, fullPath);
+            if (!resolved) continue; // Broken symlink
+            const { isDir, isFile } = resolved;
 
             if (isDir) {
                 const dirItem: FileTreeItem = {

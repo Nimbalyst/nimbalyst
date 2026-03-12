@@ -1178,7 +1178,12 @@ export function WorkspaceSidebar({
                 {aiFilterHintText}
               </div>
             )}
-            {isFilteredTreeEmpty && fileTreeFilter !== 'all' ? (
+            {isFilteredTreeEmpty && fileTreeFilter === 'all' && fileTree.length === 0 ? (
+              <div className="flex items-center gap-2 px-4 py-3 text-[13px] text-[var(--nim-text-muted)]">
+                <span className="material-symbols-outlined text-base animate-spin">progress_activity</span>
+                Loading files...
+              </div>
+            ) : isFilteredTreeEmpty && fileTreeFilter !== 'all' ? (
               <div className="file-tree-empty-state flex flex-col items-center justify-center py-12 px-6 text-center min-h-[300px]">
                 <span className="material-symbols-outlined file-tree-empty-icon text-5xl text-[var(--nim-text-faint)] opacity-50 mb-4">
                   filter_list_off

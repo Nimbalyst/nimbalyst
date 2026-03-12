@@ -2,7 +2,8 @@ import { BrowserWindow, dialog, app } from 'electron';
 import { join, basename } from 'path';
 import { getPreloadPath } from '../utils/appPaths';
 import { existsSync, mkdirSync, statSync } from 'fs';
-import { readdir, stat as fsStat } from 'fs/promises';
+import { readdir } from 'fs/promises';
+import { resolveEntryType } from '../utils/FileTree';
 import { getRecentItems, addToRecentItems, store, getWorkspaceWindowState, getTheme } from '../utils/store';
 import { createWindow, findWindowByWorkspace } from './WindowManager';
 import { safeHandle } from '../utils/ipcRegistry';
@@ -373,7 +374,7 @@ export function setupWorkspaceManagerHandlers() {
       } catch (error) {
         console.error('Error tracking workspace_opened event:', error);
       }
-    })().catch(() => {});
+    })();
 
     // Start watching workspace MCP config for changes
     try {
@@ -465,19 +466,9 @@ async function getWorkspaceFiles(
 
       const itemPath = join(relativePath, item.name);
 
-      // Resolve symlinks to their target type
-      let isDir = item.isDirectory();
-      let isFile = item.isFile();
-      if (item.isSymbolicLink()) {
-        try {
-          const targetStats = await fsStat(join(workspacePath, itemPath));
-          isDir = targetStats.isDirectory();
-          isFile = targetStats.isFile();
-        } catch {
-          // Broken symlink — skip
-          continue;
-        }
-      }
+      const resolved = await resolveEntryType(item, join(workspacePath, itemPath));
+      if (!resolved) continue; // Broken symlink
+      const { isDir, isFile } = resolved;
 
       if (isDir) {
         const result = await getWorkspaceFiles(workspacePath, itemPath, maxFiles - files.length, maxDepth, currentDepth + 1);
