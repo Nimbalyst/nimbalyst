@@ -137,9 +137,19 @@ export function initSessionStateListeners(): () => void {
     switch (type) {
       // Session is actively running
       case 'session:started':
+        store.set(sessionProcessingAtom(sessionId), true);
+        break;
+
       case 'session:streaming':
+        store.set(sessionProcessingAtom(sessionId), true);
+        // AI resumed streaming - no longer waiting for user input
+        store.set(sessionHasPendingInteractivePromptAtom(sessionId), false);
+        break;
+
+      // Session is waiting for user input (AskUserQuestion, ExitPlanMode, ToolPermission)
       case 'session:waiting':
         store.set(sessionProcessingAtom(sessionId), true);
+        store.set(sessionHasPendingInteractivePromptAtom(sessionId), true);
         break;
 
       // Session has finished (successfully or with error)

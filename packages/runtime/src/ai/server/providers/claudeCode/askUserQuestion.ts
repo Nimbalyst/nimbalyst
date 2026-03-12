@@ -97,6 +97,21 @@ export async function handleAskUserQuestionTool(
     };
   } catch (error) {
     deps.onError(error);
+
+    // Log a cancelled tool result so the widget transitions from "pending" to "cancelled".
+    // This covers all rejection paths: abort signal, explicit cancel, rejectAllPendingQuestions.
+    if (deps.sessionId) {
+      deps.logAgentMessage(
+        deps.sessionId,
+        JSON.stringify({
+          type: 'nimbalyst_tool_result',
+          tool_use_id: questionId,
+          result: JSON.stringify({ cancelled: true, respondedAt: Date.now() }),
+          is_error: true
+        })
+      ).catch(() => {});
+    }
+
     return {
       behavior: 'deny',
       message: error instanceof Error ? error.message : 'Question cancelled'

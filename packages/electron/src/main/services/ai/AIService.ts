@@ -2216,6 +2216,12 @@ export class AIService {
         syncPendingPrompt(data.sessionId, true);
         TrayManager.getInstance().onPromptCreated(data.sessionId);
 
+        // Update session status so all windows show the pending indicator
+        getSessionStateManager().updateActivity({
+          sessionId: data.sessionId,
+          status: 'waiting_for_input',
+        }).catch(() => {});
+
         // Show OS notification if app is backgrounded
         const sessionTitle = session.title || 'AI Session';
         notificationService.showBlockedNotification(
@@ -2235,6 +2241,12 @@ export class AIService {
         syncPendingPrompt(data.sessionId, true);
         TrayManager.getInstance().onPromptCreated(data.sessionId);
 
+        // Update session status to waiting_for_input so all windows show the pending indicator
+        getSessionStateManager().updateActivity({
+          sessionId: data.sessionId,
+          status: 'waiting_for_input',
+        }).catch(() => {});
+
         // Show OS notification if app is backgrounded
         const sessionTitle = session.title || 'AI Session';
         notificationService.showBlockedNotification(
@@ -2253,6 +2265,13 @@ export class AIService {
         safeSend(event, 'ai:askUserQuestionAnswered', data);
         syncPendingPrompt(data.sessionId, false);
         TrayManager.getInstance().onPromptResolved(data.sessionId);
+
+        // Update session status back to running so all windows clear the pending indicator
+        getSessionStateManager().updateActivity({
+          sessionId: data.sessionId,
+          status: 'running',
+          isStreaming: true,
+        }).catch(() => {});
       };
       provider.removeAllListeners('askUserQuestion:answered');
       provider.on('askUserQuestion:answered', onAskUserQuestionAnswered);
@@ -2263,6 +2282,12 @@ export class AIService {
         safeSend(event, 'ai:toolPermission', data);
         syncPendingPrompt(data.sessionId, true);
         TrayManager.getInstance().onPromptCreated(data.sessionId);
+
+        // Update session status so all windows show the pending indicator
+        getSessionStateManager().updateActivity({
+          sessionId: data.sessionId,
+          status: 'waiting_for_input',
+        }).catch(() => {});
 
         // Show OS notification if app is backgrounded
         const sessionTitle = session.title || 'AI Session';
@@ -2286,6 +2311,13 @@ export class AIService {
         safeSend(event, 'ai:toolPermissionResolved', data);
         syncPendingPrompt(data.sessionId, false);
         TrayManager.getInstance().onPromptResolved(data.sessionId);
+
+        // Update session status back to running so all windows clear the pending indicator
+        getSessionStateManager().updateActivity({
+          sessionId: data.sessionId,
+          status: 'running',
+          isStreaming: true,
+        }).catch(() => {});
       };
       provider.removeAllListeners('toolPermission:resolved');
       provider.on('toolPermission:resolved', onToolPermissionResolved);

@@ -2731,27 +2731,9 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     if (pending) {
       pending.reject(error);
       this.pendingAskUserQuestions.delete(questionId);
-
-      // Extract sessionId from questionId (format: ask-{sessionId}-{timestamp})
-      const sessionIdMatch = questionId.match(/^ask-(.+)-\d+$/);
-      const sessionId = sessionIdMatch?.[1];
-
-      // Log as nimbalyst_tool_result with error flag to mark as cancelled
-      if (sessionId && sessionId !== 'unknown') {
-        this.logAgentMessage(
-          sessionId,
-          'claude-code',
-          'output',
-          JSON.stringify({
-            type: 'nimbalyst_tool_result',
-            tool_use_id: questionId,
-            result: JSON.stringify({ cancelled: true, respondedAt: Date.now() }),
-            is_error: true
-          })
-        ).catch(err => {
-          console.error('[CLAUDE-CODE] Failed to persist AskUserQuestion cancel:', err);
-        });
-      }
+      // The cancelled tool result is logged by handleAskUserQuestionTool's catch block,
+      // which fires when the promise rejects. It correctly handles all questionId formats
+      // (both legacy ask-{sessionId}-{timestamp} and new toolu_... Claude tool use IDs).
     }
   }
 
