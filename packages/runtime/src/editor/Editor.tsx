@@ -198,6 +198,47 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
     };
   }, [editor, config.onDirtyChange]);
 
+  // Ref for the collaboration cursors container - placed inside the editor
+  // content area so cursors scroll with the document
+  const cursorsContainerRef = useRef<HTMLElement | null>(null);
+
+  // Fade collaboration cursors after inactivity
+  const cursorFadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const CURSOR_FADE_DELAY_MS = 3000;
+
+  useEffect(() => {
+    if (!config.collaboration) return;
+
+    const container = cursorsContainerRef.current;
+    if (!container) return;
+
+    // Watch for DOM changes in the cursors container (cursor position updates)
+    const observer = new MutationObserver(() => {
+      // Cursor positions changed - mark as active
+      container.classList.remove('collab-cursors-faded');
+      if (cursorFadeTimerRef.current) {
+        clearTimeout(cursorFadeTimerRef.current);
+      }
+      cursorFadeTimerRef.current = setTimeout(() => {
+        container.classList.add('collab-cursors-faded');
+      }, CURSOR_FADE_DELAY_MS);
+    });
+
+    observer.observe(container, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['style'],
+    });
+
+    return () => {
+      observer.disconnect();
+      if (cursorFadeTimerRef.current) {
+        clearTimeout(cursorFadeTimerRef.current);
+      }
+    };
+  }, [config.collaboration]);
+
   const onRef = (_floatingAnchorElem: HTMLDivElement) => {
     if (_floatingAnchorElem !== null) {
       setFloatingAnchorElem(_floatingAnchorElem);
@@ -271,6 +312,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
                 shouldBootstrap={config.collaboration.shouldBootstrap}
                 username={config.collaboration.username}
                 cursorColor={config.collaboration.cursorColor}
+                cursorsContainerRef={cursorsContainerRef}
                 initialEditorState={config.collaboration.initialEditorState}
               />
             ) : (
@@ -283,6 +325,9 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
                   {config.documentHeader}
                   <div className="editor">
                     <ContentEditable placeholder={placeholder} />
+                    {config.collaboration && (
+                      <div ref={cursorsContainerRef as React.RefObject<HTMLDivElement>} className="collab-cursors-container" />
+                    )}
                   </div>
                 </div>
               }

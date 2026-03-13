@@ -114,6 +114,30 @@ header h1 {
   z-index: -1;
 }
 
+/* Collaboration cursors container - positioned inside editor content
+   so cursors scroll with the document */
+.stravu-editor .collab-cursors-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Cursor elements (caret + name label + selection highlights).
+   Lexical portals a <div> inside our container; each remote cursor's
+   selection rects are direct children of that inner div. */
+.stravu-editor .collab-cursors-container > div > span {
+  transition: opacity 0.6s ease;
+}
+
+/* Fade cursors after a period of inactivity */
+.stravu-editor .collab-cursors-container.collab-cursors-faded > div > span {
+  opacity: 0.15;
+}
+
 .test-recorder-output {
   margin: 20px auto 20px auto;
   width: 100%;
