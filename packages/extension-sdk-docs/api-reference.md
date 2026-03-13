@@ -137,7 +137,17 @@ interface ChatCompletionOptions {
   maxTokens?: number;
   temperature?: number;     // 0-1
   systemPrompt?: string;    // Prepended as system message
+  responseFormat?: ResponseFormat; // Constrain output format (JSON, JSON schema)
 }
+
+type ResponseFormat =
+  | { type: 'text' }                                          // Default: plain text
+  | { type: 'json_object' }                                   // Valid JSON output
+  | { type: 'json_schema'; jsonSchema: {                      // JSON matching a schema
+      name: string;
+      schema: JSONSchema;
+      strict?: boolean;  // default: true for OpenAI
+    } };
 
 interface ChatCompletionResult {
   content: string;          // Assistant response

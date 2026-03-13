@@ -298,7 +298,17 @@ export interface ProviderConfig {
   baseUrl?: string;
   allowedTools?: string[];  // List of allowed tool names, ['*'] for all tools
   effortLevel?: EffortLevel;  // Effort level for Opus 4.6 adaptive reasoning (low/medium/high/max)
+  responseFormat?: ProviderResponseFormat;  // Response format constraint (extension chat completions)
 }
+
+/**
+ * Response format constraint passed to providers.
+ * Maps to provider-specific API format in each provider implementation.
+ */
+export type ProviderResponseFormat =
+  | { type: 'text' }
+  | { type: 'json_object' }
+  | { type: 'json_schema'; jsonSchema: { name: string; schema: Record<string, unknown>; strict?: boolean } };
 
 export interface ProviderCapabilities {
   streaming: boolean;

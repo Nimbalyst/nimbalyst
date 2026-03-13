@@ -201,7 +201,7 @@ export class LMStudioProvider extends BaseAIProvider {
     const tools = this.getToolsInOpenAIFormat();
 
     // Log the request for debugging
-    const requestBody = {
+    const requestBody: any = {
       model: this.config.model || 'local-model',
       messages: apiMessages,
       max_tokens: this.config.maxTokens || 4096,
@@ -212,6 +212,23 @@ export class LMStudioProvider extends BaseAIProvider {
       // Request usage data in streaming response (OpenAI-compatible extension)
       stream_options: { include_usage: true }
     };
+
+    // Apply response format if specified (extension chat completions)
+    // LM Studio uses OpenAI-compatible format
+    if (this.config.responseFormat && this.config.responseFormat.type !== 'text') {
+      if (this.config.responseFormat.type === 'json_object') {
+        requestBody.response_format = { type: 'json_object' };
+      } else if (this.config.responseFormat.type === 'json_schema') {
+        requestBody.response_format = {
+          type: 'json_schema',
+          json_schema: {
+            name: this.config.responseFormat.jsonSchema.name,
+            schema: this.config.responseFormat.jsonSchema.schema,
+            strict: this.config.responseFormat.jsonSchema.strict ?? true,
+          },
+        };
+      }
+    }
     
     console.log('[LMStudio] Sending request with tools:', {
       model: requestBody.model,

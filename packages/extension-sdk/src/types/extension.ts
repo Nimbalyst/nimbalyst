@@ -659,7 +659,25 @@ export interface ChatCompletionOptions {
   temperature?: number;
   /** Convenience: prepended as a system message before the messages array. */
   systemPrompt?: string;
+  /**
+   * Response format constraint.
+   * - `{ type: 'text' }` or omitted: plain text (default)
+   * - `{ type: 'json_object' }`: model returns valid JSON
+   * - `{ type: 'json_schema', jsonSchema: { name, schema } }`: model returns JSON matching the schema
+   *
+   * When using json_object or json_schema, include "respond in JSON" in your system prompt
+   * or messages for best results.
+   */
+  responseFormat?: ResponseFormat;
 }
+
+/**
+ * Response format constraint for chat completions.
+ */
+export type ResponseFormat =
+  | { type: 'text' }
+  | { type: 'json_object' }
+  | { type: 'json_schema'; jsonSchema: { name: string; schema: JSONSchema; strict?: boolean } };
 
 /**
  * Result from a chat completion request.

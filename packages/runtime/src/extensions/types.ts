@@ -65,6 +65,7 @@ export type {
   ChatCompletionStreamChunk,
   ChatCompletionStreamOptions,
   ChatCompletionStreamHandle,
+  ResponseFormat,
 } from '@nimbalyst/extension-sdk';
 
 /**

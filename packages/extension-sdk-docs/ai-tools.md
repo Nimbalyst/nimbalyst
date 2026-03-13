@@ -594,6 +594,45 @@ const result = await context.services.ai!.chatCompletion({
 });
 ```
 
+### Structured Output (JSON Mode)
+
+Use `responseFormat` to constrain the model's output to valid JSON:
+
+```typescript
+// Simple JSON mode - model returns valid JSON
+const result = await context.services.ai!.chatCompletion({
+  messages: [{ role: 'user', content: 'List 3 colors with hex codes' }],
+  systemPrompt: 'Respond in JSON format.',
+  responseFormat: { type: 'json_object' },
+});
+const data = JSON.parse(result.content);
+```
+
+For stricter control, use `json_schema` to enforce a specific shape:
+
+```typescript
+const result = await context.services.ai!.chatCompletion({
+  messages: [{ role: 'user', content: 'Classify this issue: login page crashes on Safari' }],
+  responseFormat: {
+    type: 'json_schema',
+    jsonSchema: {
+      name: 'issue_classification',
+      schema: {
+        type: 'object',
+        properties: {
+          category: { type: 'string', enum: ['bug', 'feature', 'question'] },
+          severity: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
+          component: { type: 'string' },
+        },
+        required: ['category', 'severity', 'component'],
+      },
+    },
+  },
+});
+const classification = JSON.parse(result.content);
+// => { category: "bug", severity: "high", component: "auth" }
+```
+
 ### Key Points
 
 - **Stateless**: These calls do not create sessions in the session history. Each call is independent.

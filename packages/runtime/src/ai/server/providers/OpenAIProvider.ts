@@ -243,6 +243,22 @@ export class OpenAIProvider extends BaseAIProvider {
         stream_options: { include_usage: true }  // Request usage data in streaming response
       };
 
+      // Apply response format if specified (extension chat completions)
+      if (this.config.responseFormat && this.config.responseFormat.type !== 'text') {
+        if (this.config.responseFormat.type === 'json_object') {
+          completionParams.response_format = { type: 'json_object' };
+        } else if (this.config.responseFormat.type === 'json_schema') {
+          completionParams.response_format = {
+            type: 'json_schema',
+            json_schema: {
+              name: this.config.responseFormat.jsonSchema.name,
+              schema: this.config.responseFormat.jsonSchema.schema,
+              strict: this.config.responseFormat.jsonSchema.strict ?? true,
+            },
+          };
+        }
+      }
+
       // Some models (o1 series, gpt-5, gpt-4.5) don't support temperature parameter
       // They only work with the default temperature of 1
       const supportsTemperature =

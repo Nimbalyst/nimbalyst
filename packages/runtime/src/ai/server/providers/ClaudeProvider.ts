@@ -281,7 +281,7 @@ export class ClaudeProvider extends BaseAIProvider {
       console.log('[ClaudeProvider] Stack trace:', new Error().stack);
 
       // Use the stream helper for better usage data support
-      const apiRequest = {
+      const apiRequest: any = {
         model: modelId,
         max_tokens: this.config.maxTokens || 4000,
         temperature: this.config.temperature || 0,
@@ -289,6 +289,18 @@ export class ClaudeProvider extends BaseAIProvider {
         messages: apiMessages,
         ...(tools.length > 0 ? { tools } : {}),
       };
+
+      // Apply response format if specified (extension chat completions)
+      if (this.config.responseFormat && this.config.responseFormat.type !== 'text') {
+        if (this.config.responseFormat.type === 'json_object') {
+          apiRequest.response_format = { type: 'json' };
+        } else if (this.config.responseFormat.type === 'json_schema') {
+          apiRequest.response_format = {
+            type: 'json',
+            schema: this.config.responseFormat.jsonSchema.schema,
+          };
+        }
+      }
 
       console.group('🚀 [ClaudeProvider] Final API Request');
       console.log('Model:', apiRequest.model);

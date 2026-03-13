@@ -5917,7 +5917,7 @@ export class AIService {
    */
   private async resolveExtensionChatProvider(
     event: Electron.IpcMainInvokeEvent,
-    options: { model?: string; maxTokens?: number; temperature?: number }
+    options: { model?: string; maxTokens?: number; temperature?: number; responseFormat?: any }
   ): Promise<{ provider: AIProvider; providerConfig: ProviderConfig; providerType: AIProviderType; syntheticSessionId: string }> {
     const CHAT_PROVIDERS: AIProviderType[] = ['claude', 'openai', 'lmstudio'];
 
@@ -5975,6 +5975,7 @@ export class AIService {
       model: modelId,
       maxTokens: options.maxTokens,
       temperature: options.temperature,
+      responseFormat: options.responseFormat,
     };
 
     // LM Studio needs baseUrl
