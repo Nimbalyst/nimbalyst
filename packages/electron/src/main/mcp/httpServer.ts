@@ -3006,6 +3006,9 @@ The commit message should follow these guidelines:
           // Listen for response via unified handler (SessionHandlers persists to DB)
           const responseChannel =
             getGitCommitProposalResponseChannel(proposalId);
+          console.log(
+            `[MCP Server] Registering git commit proposal listener on channel: ${responseChannel}`
+          );
           ipcMain.once(
             responseChannel,
             async (
@@ -3019,6 +3022,9 @@ The commit message should follow these guidelines:
                 commitMessage?: string;
               }
             ) => {
+              console.log(
+                `[MCP Server] Git commit proposal response received: action=${result.action}, hash=${result.commitHash || "none"}`
+              );
 
               if (result.action === "committed" && result.commitHash) {
                 // Only report success if we have a valid commit hash

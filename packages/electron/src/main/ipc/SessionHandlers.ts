@@ -1592,7 +1592,27 @@ export async function registerSessionHandlers() {
             if (promptType === 'git_commit_proposal_request') {
                 const { ipcMain } = await import('electron');
                 const responseChannel = getGitCommitProposalResponseChannel(sessionId, canonicalPromptId);
-                ipcMain.emit(responseChannel, null, response);
+                const hasWaiter = ipcMain.listenerCount(responseChannel) > 0;
+                if (hasWaiter) {
+                    ipcMain.emit(responseChannel, null, response);
+                } else {
+                    // The MCP server's ipcMain.once() listener is gone — the Claude Code
+                    // subprocess likely died or the app restarted since the proposal was
+                    // created.  The response was already persisted to DB above, so it's
+                    // durable. Mark the session as idle so it doesn't appear stuck forever.
+                    console.warn(
+                        `[SessionHandlers] No MCP waiter for git commit proposal response on channel: ${responseChannel}. ` +
+                        `The Claude Code subprocess may have exited. Session: ${sessionId}, proposalId: ${canonicalPromptId}. ` +
+                        `Marking session as idle.`
+                    );
+                    try {
+                        const { getSessionStateManager } = await import('@nimbalyst/runtime/ai/server/SessionStateManager');
+                        const stateManager = getSessionStateManager();
+                        await stateManager.endSession(sessionId);
+                    } catch (cleanupErr) {
+                        console.warn('[SessionHandlers] Failed to mark orphaned session as idle:', cleanupErr);
+                    }
+                }
                 event.sender.send('ai:gitCommitProposalResolved', { sessionId, proposalId: canonicalPromptId });
                 TrayManager.getInstance().onPromptResolved(sessionId);
             }
