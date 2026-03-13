@@ -91,6 +91,11 @@ export function GitLogPanel({ host }: PanelHostProps) {
   const [searchFilter, setSearchFilter] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  type PullStrategy = 'rebase' | 'merge' | 'ff-only';
+  const [pullStrategy, setPullStrategy] = useState<PullStrategy>(
+    () => host.storage.getGlobal<PullStrategy>('pullStrategy') ?? 'rebase'
+  );
+  const [pullMenuOpen, setPullMenuOpen] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isResizing, setIsResizing] = useState(false);
@@ -279,7 +284,8 @@ export function GitLogPanel({ host }: PanelHostProps) {
   const handlePull = useCallback(async () => {
     setActionLoading('pull');
     try {
-      const result = await ipc.invoke('git:pull', workspacePath) as PullResult;
+      const opts = pullStrategy === 'rebase' ? { rebase: true } : pullStrategy === 'ff-only' ? { ffOnly: true } : {};
+      const result = await ipc.invoke('git:pull', workspacePath, opts) as PullResult;
       if (result.success) {
         showMessage('Pulled successfully');
         loadStatus();
@@ -292,7 +298,13 @@ export function GitLogPanel({ host }: PanelHostProps) {
     } finally {
       setActionLoading(null);
     }
-  }, [workspacePath, showMessage, loadStatus, loadCommits]);
+  }, [workspacePath, showMessage, loadStatus, loadCommits, pullStrategy]);
+
+  const handleChangePullStrategy = useCallback((strategy: PullStrategy) => {
+    setPullStrategy(strategy);
+    setPullMenuOpen(false);
+    void host.storage.setGlobal('pullStrategy', strategy);
+  }, [host.storage]);
 
   const handleFetch = useCallback(async () => {
     setActionLoading('fetch');
@@ -460,14 +472,46 @@ export function GitLogPanel({ host }: PanelHostProps) {
           >
             {actionLoading === 'push' ? '...' : '↑ Push'}
           </button>
-          <button
-            className="git-log-action-btn"
-            onClick={handlePull}
-            disabled={!!actionLoading}
-            title="Pull"
-          >
-            {actionLoading === 'pull' ? '...' : '↓ Pull'}
-          </button>
+          <div className="git-log-split-btn">
+            <button
+              className="git-log-action-btn git-log-split-btn-main"
+              onClick={handlePull}
+              disabled={!!actionLoading}
+              title={`Pull (${pullStrategy})`}
+            >
+              {actionLoading === 'pull' ? '...' : `↓ Pull`}
+            </button>
+            <button
+              className="git-log-action-btn git-log-split-btn-arrow"
+              onClick={() => setPullMenuOpen(v => !v)}
+              disabled={!!actionLoading}
+              title="Pull strategy"
+            >
+              ▾
+            </button>
+            {pullMenuOpen && (
+              <div className="git-log-split-menu">
+                <button
+                  className={`git-log-split-menu-item${pullStrategy === 'rebase' ? ' git-log-split-menu-item--active' : ''}`}
+                  onClick={() => handleChangePullStrategy('rebase')}
+                >
+                  Rebase
+                </button>
+                <button
+                  className={`git-log-split-menu-item${pullStrategy === 'merge' ? ' git-log-split-menu-item--active' : ''}`}
+                  onClick={() => handleChangePullStrategy('merge')}
+                >
+                  Merge
+                </button>
+                <button
+                  className={`git-log-split-menu-item${pullStrategy === 'ff-only' ? ' git-log-split-menu-item--active' : ''}`}
+                  onClick={() => handleChangePullStrategy('ff-only')}
+                >
+                  Fast-forward only
+                </button>
+              </div>
+            )}
+          </div>
           <button
             className="git-log-action-btn"
             onClick={handleFetch}

@@ -87,6 +87,7 @@ class PanelHostImpl implements PanelHost {
   private _theme: string;
   private _isSettingsOpen = false;
   private themeListeners = new Set<(theme: string) => void>();
+  private eventCleanups: (() => void)[] = [];
 
   private onOpenFile: (path: string) => void;
   private onOpenPanel: (panelId: string) => void;
@@ -152,6 +153,21 @@ class PanelHostImpl implements PanelHost {
     this._isSettingsOpen = false;
   }
 
+  onWorkspaceEvent(event: string, callback: (data: unknown) => void): () => void {
+    const workspacePath = this.workspacePath;
+    const unsub = window.electronAPI.on(event, (data: unknown) => {
+      // Filter to events for this workspace
+      const d = data as Record<string, unknown> | undefined;
+      if (d?.workspacePath && d.workspacePath !== workspacePath) return;
+      callback(data);
+    });
+    this.eventCleanups.push(unsub);
+    return () => {
+      unsub();
+      this.eventCleanups = this.eventCleanups.filter(c => c !== unsub);
+    };
+  }
+
   async exec(command: string, options?: ExecOptions): Promise<ExecResult> {
     try {
       const result = await window.electronAPI.invoke('extension:exec', {
@@ -179,6 +195,8 @@ class PanelHostImpl implements PanelHost {
   dispose(): void {
     this.unsubscribeTheme();
     this.themeListeners.clear();
+    for (const cleanup of this.eventCleanups) cleanup();
+    this.eventCleanups = [];
   }
 
   private notifyThemeChange(theme: string): void {

@@ -38,7 +38,7 @@ export function usePanels(): RegisteredPanel[] {
  * Hook that returns panels filtered by placement type.
  */
 export function usePanelsByPlacement(
-  placement: 'sidebar' | 'fullscreen' | 'floating'
+  placement: 'sidebar' | 'fullscreen' | 'floating' | 'bottom'
 ): RegisteredPanel[] {
   const [panels, setPanels] = useState<RegisteredPanel[]>(() =>
     getPanelsByPlacement(placement)
@@ -60,7 +60,7 @@ export function usePanelsByPlacement(
 }
 
 /**
- * Hook that returns gutter button data for extension panels.
+ * Hook that returns gutter button data for extension panels (sidebar and fullscreen).
  */
 export function useExtensionGutterButtons(): Array<{
   id: string;
@@ -91,6 +91,45 @@ export function useExtensionGutterButtons(): Array<{
         }));
 
       setButtons(gutterButtons);
+    }
+
+    updateButtons();
+    const unsubscribe = subscribeToPanelRegistry(updateButtons);
+    return unsubscribe;
+  }, []);
+
+  return buttons;
+}
+
+/**
+ * Hook that returns gutter button data for extension bottom panels.
+ */
+export function useExtensionBottomPanelButtons(): Array<{
+  id: string;
+  icon: string;
+  label: string;
+  order: number;
+}> {
+  const [buttons, setButtons] = useState<Array<{
+    id: string;
+    icon: string;
+    label: string;
+    order: number;
+  }>>([]);
+
+  useEffect(() => {
+    function updateButtons(): void {
+      const panels = getRegisteredPanels();
+      const bottomButtons = panels
+        .filter(p => p.placement === 'bottom')
+        .map(p => ({
+          id: p.id,
+          icon: p.icon,
+          label: p.title,
+          order: p.order,
+        }));
+
+      setButtons(bottomButtons);
     }
 
     updateButtons();

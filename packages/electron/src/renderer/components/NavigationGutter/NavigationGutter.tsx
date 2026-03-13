@@ -13,7 +13,7 @@ import { ExtensionDevIndicator } from '../ExtensionDevIndicator';
 import { ClaudeUsageIndicator } from '../ClaudeUsageIndicator';
 import { CodexUsageIndicator } from '../CodexUsageIndicator';
 import { VoiceModeButton } from '../UnifiedAI/VoiceModeButton';
-import { useExtensionGutterButtons } from '../../extensions/panels/usePanels';
+import { useExtensionGutterButtons, useExtensionBottomPanelButtons } from '../../extensions/panels/usePanels';
 import { HelpTooltip } from '../../help';
 import { terminalFeatureAvailableAtom, syncEnabledAtom, syncEnabledProjectsAtom } from '../../store/atoms/appSettings';
 import { workspaceHasTeamAtom } from '../../store/atoms/collabDocuments';
@@ -53,6 +53,10 @@ interface NavigationGutterProps {
   onToggleFilesCollapsed?: () => void;
   /** Callback to toggle Agent mode session history collapsed state */
   onToggleAgentCollapsed?: () => void;
+  /** Currently active extension bottom panel ID */
+  activeExtensionBottomPanel?: string | null;
+  /** Callback when an extension bottom panel is toggled */
+  onExtensionBottomPanelChange?: (panelId: string | null) => void;
 }
 
 interface NavButton {
@@ -80,6 +84,8 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   onExtensionPanelChange,
   onToggleFilesCollapsed,
   onToggleAgentCollapsed,
+  activeExtensionBottomPanel,
+  onExtensionBottomPanelChange,
 }) => {
   const posthog = usePostHog();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -113,6 +119,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
 
   // Get extension panel buttons from the panel registry
   const extensionPanelButtons = useExtensionGutterButtons();
+  const extensionBottomPanelButtons = useExtensionBottomPanelButtons();
   // Content mode buttons - primary navigation (top)
   const contentModeButtonsTop: NavButton[] = [
     {
@@ -449,6 +456,33 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
                 data-testid={testId}
               >
                 <MaterialSymbol icon={button.icon} size={20} fill={isActive} />
+              </button>
+            </HelpTooltip>
+          );
+        })}
+        {extensionBottomPanelButtons.map((panel) => {
+          const isActive = activeExtensionBottomPanel === panel.id;
+          const testId = `extension-bottom-panel-${panel.id}`;
+          return (
+            <HelpTooltip key={panel.id} testId={testId} placement="right">
+              <button
+                className={`nav-button relative w-9 h-9 flex items-center justify-center border-none rounded-md cursor-pointer transition-all duration-150 p-0 active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2 ${isActive ? 'active bg-nim-primary text-white hover:bg-nim-primary-hover' : 'bg-transparent text-nim-muted hover:bg-nim-tertiary hover:text-nim'}`}
+                onClick={() => {
+                  const newPanelId = isActive ? null : panel.id;
+                  onExtensionBottomPanelChange?.(newPanelId);
+                  posthog?.capture('extension_panel_toggled', {
+                    panelId: panel.id,
+                    placement: 'bottom',
+                    action: newPanelId ? 'activated' : 'deactivated',
+                  });
+                }}
+                title={panel.label}
+                aria-label={panel.label}
+                aria-pressed={isActive}
+                data-testid={testId}
+                data-panel-id={panel.id}
+              >
+                <MaterialSymbol icon={panel.icon} size={20} fill={isActive} />
               </button>
             </HelpTooltip>
           );

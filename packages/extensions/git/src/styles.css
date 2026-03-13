@@ -161,6 +161,62 @@
   font-size: 14px;
 }
 
+/* Split button (pull) */
+.git-log-split-btn {
+  display: flex;
+  position: relative;
+}
+
+.git-log-split-btn-main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: none;
+}
+
+.git-log-split-btn-arrow {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  padding: 3px 4px;
+  font-size: 9px;
+  line-height: 1;
+}
+
+.git-log-split-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 2px;
+  background: var(--nim-bg-secondary);
+  border: 1px solid var(--nim-border);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  z-index: 100;
+  min-width: 140px;
+  padding: 2px 0;
+}
+
+.git-log-split-menu-item {
+  display: block;
+  width: 100%;
+  padding: 4px 10px;
+  background: none;
+  border: none;
+  color: var(--nim-text);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.git-log-split-menu-item:hover {
+  background: var(--nim-bg-active);
+}
+
+.git-log-split-menu-item--active {
+  color: var(--nim-primary);
+  font-weight: 500;
+}
+
 /* Status bar */
 .git-log-status-bar {
   padding: 4px 10px;

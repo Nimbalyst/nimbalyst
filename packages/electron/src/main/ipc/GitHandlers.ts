@@ -10,6 +10,7 @@ import log from 'electron-log/main';
 import { existsSync } from 'fs';
 import { join, relative, isAbsolute } from 'path';
 import { gitOperationLock } from '../services/GitOperationLock';
+import { safeHandle } from '../utils/ipcRegistry';
 
 function isGitRepository(workspacePath: string): boolean {
   try {
@@ -46,6 +47,7 @@ interface GitCommit {
   message: string;
   author: string;
   date: string;
+  refs?: string;
 }
 
 /**
@@ -87,11 +89,22 @@ export function registerGitHandlers(): void {
   });
 
   /**
-   * Get recent commits
+   * Get recent commits with optional filters
    */
   ipcMain.handle(
     'git:log',
-    async (_event, workspacePath: string, limit: number = 10): Promise<GitCommit[]> => {
+    async (
+      _event,
+      workspacePath: string,
+      limit: number = 10,
+      options?: {
+        branch?: string;
+        author?: string;
+        since?: string;
+        until?: string;
+        aheadBehind?: boolean;
+      }
+    ): Promise<GitCommit[]> => {
       if (!workspacePath) {
         throw new Error('workspacePath is required');
       }
@@ -107,16 +120,409 @@ export function registerGitHandlers(): void {
           return [];
         }
 
-        const gitLog = await git.log({ maxCount: Math.min(limit, 50) });
+        // Use a unique record separator that won't appear in commit messages
+        const RS = '\x1e'; // ASCII Record Separator
+        const rawArgs: string[] = [
+          `--format=${RS}%H%n%s%n%an%n%ai%n%D`,
+          `--max-count=${Math.min(limit, 200)}`,
+        ];
 
-        return gitLog.all.map((commit) => ({
-          hash: commit.hash,
-          message: commit.message,
-          author: commit.author_name,
-          date: commit.date,
-        }));
+        if (options?.author) {
+          rawArgs.push(`--author=${options.author}`);
+        }
+        if (options?.since) {
+          rawArgs.push(`--since=${options.since}`);
+        }
+        if (options?.until) {
+          rawArgs.push(`--until=${options.until}`);
+        }
+
+        // Branch must be a positional arg after options
+        if (options?.branch) {
+          rawArgs.push(options.branch);
+        }
+
+        const rawOutput = await git.raw(['log', ...rawArgs]);
+
+        if (!rawOutput.trim()) {
+          return [];
+        }
+
+        // Parse the custom format output: hash, subject, author, date, refs
+        const gitLog = rawOutput
+          .split(RS)
+          .filter(entry => entry.trim())
+          .map(entry => {
+            const lines = entry.trim().split('\n');
+            if (lines.length < 4) return null;
+            return {
+              hash: lines[0]?.trim() || '',
+              message: lines[1]?.trim() || '',
+              author: lines[2]?.trim() || '',
+              date: lines[3]?.trim() || '',
+              refs: lines[4]?.trim() || '',
+            };
+          })
+          .filter((c): c is NonNullable<typeof c> => c !== null && !!c.hash);
+
+        return gitLog;
       } catch (error) {
         log.error('Failed to get git log:', error);
+        throw error;
+      }
+    }
+  );
+
+  /**
+   * List branches
+   */
+  safeHandle('git:branches', async (_event, workspacePath: string): Promise<{ branches: string[]; current: string }> => {
+    if (!workspacePath) throw new Error('workspacePath is required');
+    if (!isGitRepository(workspacePath)) return { branches: [], current: '' };
+
+    try {
+      const git: SimpleGit = simpleGit(workspacePath);
+      const summary = await git.branch();
+      return {
+        branches: summary.all,
+        current: summary.current,
+      };
+    } catch (error) {
+      log.error('[git:branches] Failed:', error);
+      throw error;
+    }
+  });
+
+  /**
+   * Push current branch to remote
+   */
+  safeHandle(
+    'git:push',
+    async (_event, workspacePath: string, options?: { force?: boolean; setUpstream?: boolean; remote?: string; branch?: string }):
+      Promise<{ success: boolean; error?: string }> => {
+      if (!workspacePath) throw new Error('workspacePath is required');
+      if (!isGitRepository(workspacePath)) return { success: false, error: 'Not a git repository' };
+
+      return gitOperationLock.withLock(workspacePath, 'git:push', async () => {
+        try {
+          const git: SimpleGit = simpleGit(workspacePath);
+          const status = await git.status();
+          const branch = status.current || '';
+
+          const pushArgs: string[] = [];
+          const remote = options?.remote || 'origin';
+
+          if (options?.setUpstream) {
+            pushArgs.push('--set-upstream', remote, branch);
+          } else if (options?.force) {
+            pushArgs.push('--force-with-lease');
+          }
+
+          await git.push(remote, branch, pushArgs);
+          return { success: true };
+        } catch (error) {
+          log.error('[git:push] Failed:', error);
+          return { success: false, error: error instanceof Error ? error.message : String(error) };
+        }
+      });
+    }
+  );
+
+  /**
+   * Pull from remote
+   */
+  safeHandle(
+    'git:pull',
+    async (_event, workspacePath: string, options?: { rebase?: boolean; ffOnly?: boolean }):
+      Promise<{ success: boolean; error?: string; conflicts?: string[] }> => {
+      if (!workspacePath) throw new Error('workspacePath is required');
+      if (!isGitRepository(workspacePath)) return { success: false, error: 'Not a git repository' };
+
+      return gitOperationLock.withLock(workspacePath, 'git:pull', async () => {
+        try {
+          const git: SimpleGit = simpleGit(workspacePath);
+          const pullArgs: string[] = [];
+          if (options?.rebase) {
+            pullArgs.push('--rebase');
+          } else if (options?.ffOnly) {
+            pullArgs.push('--ff-only');
+          }
+          await git.pull(undefined, undefined, pullArgs);
+          return { success: true };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          log.error('[git:pull] Failed:', error);
+
+          // Check for conflict markers in error message
+          if (message.includes('CONFLICT') || message.includes('conflict')) {
+            const git: SimpleGit = simpleGit(workspacePath);
+            const status = await git.status();
+            return { success: false, error: message, conflicts: status.conflicted };
+          }
+
+          return { success: false, error: message };
+        }
+      });
+    }
+  );
+
+  /**
+   * Fetch from remote without merging
+   */
+  safeHandle(
+    'git:fetch',
+    async (_event, workspacePath: string, options?: { remote?: string }):
+      Promise<{ success: boolean; error?: string }> => {
+      if (!workspacePath) throw new Error('workspacePath is required');
+      if (!isGitRepository(workspacePath)) return { success: false, error: 'Not a git repository' };
+
+      try {
+        const git: SimpleGit = simpleGit(workspacePath);
+        await git.fetch(options?.remote || 'origin');
+        return { success: true };
+      } catch (error) {
+        log.error('[git:fetch] Failed:', error);
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    }
+  );
+
+  /**
+   * Start, continue, or abort a rebase
+   */
+  safeHandle(
+    'git:rebase',
+    async (_event, workspacePath: string, options: { target?: string; action?: 'continue' | 'abort' | 'skip' }):
+      Promise<{ success: boolean; error?: string; conflicts?: string[] }> => {
+      if (!workspacePath) throw new Error('workspacePath is required');
+      if (!isGitRepository(workspacePath)) return { success: false, error: 'Not a git repository' };
+
+      return gitOperationLock.withLock(workspacePath, 'git:rebase', async () => {
+        try {
+          const git: SimpleGit = simpleGit(workspacePath);
+
+          if (options.action === 'continue') {
+            await git.rebase(['--continue']);
+          } else if (options.action === 'abort') {
+            await git.rebase(['--abort']);
+          } else if (options.action === 'skip') {
+            await git.rebase(['--skip']);
+          } else if (options.target) {
+            await git.rebase([options.target]);
+          } else {
+            throw new Error('rebase requires either a target branch or an action (continue/abort/skip)');
+          }
+
+          return { success: true };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          log.error('[git:rebase] Failed:', error);
+
+          if (message.includes('CONFLICT') || message.includes('conflict')) {
+            const git: SimpleGit = simpleGit(workspacePath);
+            const status = await git.status();
+            return { success: false, error: message, conflicts: status.conflicted };
+          }
+
+          return { success: false, error: message };
+        }
+      });
+    }
+  );
+
+  /**
+   * Get current rebase status and any conflict files
+   */
+  safeHandle(
+    'git:rebase-status',
+    async (_event, workspacePath: string):
+      Promise<{ isRebasing: boolean; conflicts: string[]; currentCommit?: string }> => {
+      if (!workspacePath) throw new Error('workspacePath is required');
+      if (!isGitRepository(workspacePath)) return { isRebasing: false, conflicts: [] };
+
+      try {
+        const git: SimpleGit = simpleGit(workspacePath);
+
+        // Check for REBASE_HEAD file as indicator of active rebase
+        const rebaseHeadPath = join(workspacePath, '.git', 'REBASE_HEAD');
+        const isRebasing = existsSync(rebaseHeadPath);
+
+        if (!isRebasing) {
+          return { isRebasing: false, conflicts: [] };
+        }
+
+        const status = await git.status();
+        return {
+          isRebasing: true,
+          conflicts: status.conflicted,
+        };
+      } catch (error) {
+        log.error('[git:rebase-status] Failed:', error);
+        return { isRebasing: false, conflicts: [] };
+      }
+    }
+  );
+
+  /**
+   * Set upstream tracking branch for current branch
+   */
+  safeHandle(
+    'git:set-upstream',
+    async (_event, workspacePath: string, remote: string, branch?: string):
+      Promise<{ success: boolean; error?: string }> => {
+      if (!workspacePath) throw new Error('workspacePath is required');
+      if (!remote) throw new Error('remote is required');
+      if (!isGitRepository(workspacePath)) return { success: false, error: 'Not a git repository' };
+
+      try {
+        const git: SimpleGit = simpleGit(workspacePath);
+        const status = await git.status();
+        const targetBranch = branch || status.current || '';
+        await git.push(['--set-upstream', remote, targetBranch]);
+        return { success: true };
+      } catch (error) {
+        log.error('[git:set-upstream] Failed:', error);
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    }
+  );
+
+  /**
+   * Checkout a branch or commit hash (detached HEAD if hash)
+   */
+  safeHandle(
+    'git:checkout',
+    async (_event, workspacePath: string, ref: string):
+      Promise<{ success: boolean; error?: string }> => {
+      if (!workspacePath) throw new Error('workspacePath is required');
+      if (!ref) throw new Error('ref is required');
+      if (!isGitRepository(workspacePath)) return { success: false, error: 'Not a git repository' };
+
+      return gitOperationLock.withLock(workspacePath, 'git:checkout', async () => {
+        try {
+          const git: SimpleGit = simpleGit(workspacePath);
+          await git.checkout(ref);
+          return { success: true };
+        } catch (error) {
+          log.error('[git:checkout] Failed:', error);
+          return { success: false, error: error instanceof Error ? error.message : String(error) };
+        }
+      });
+    }
+  );
+
+  /**
+   * Cherry-pick a commit onto the current branch
+   */
+  safeHandle(
+    'git:cherry-pick',
+    async (_event, workspacePath: string, hash: string):
+      Promise<{ success: boolean; error?: string; conflicts?: string[] }> => {
+      if (!workspacePath) throw new Error('workspacePath is required');
+      if (!hash) throw new Error('hash is required');
+      if (!isGitRepository(workspacePath)) return { success: false, error: 'Not a git repository' };
+
+      return gitOperationLock.withLock(workspacePath, 'git:cherry-pick', async () => {
+        try {
+          const git: SimpleGit = simpleGit(workspacePath);
+          await git.raw(['cherry-pick', hash]);
+          return { success: true };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          log.error('[git:cherry-pick] Failed:', error);
+          if (message.includes('CONFLICT') || message.includes('conflict')) {
+            const git2: SimpleGit = simpleGit(workspacePath);
+            const status = await git2.status();
+            return { success: false, error: message, conflicts: status.conflicted };
+          }
+          return { success: false, error: message };
+        }
+      });
+    }
+  );
+
+  /**
+   * Create a new branch starting from a given commit
+   */
+  safeHandle(
+    'git:create-branch',
+    async (_event, workspacePath: string, branchName: string, fromHash: string):
+      Promise<{ success: boolean; error?: string }> => {
+      if (!workspacePath) throw new Error('workspacePath is required');
+      if (!branchName) throw new Error('branchName is required');
+      if (!isGitRepository(workspacePath)) return { success: false, error: 'Not a git repository' };
+
+      return gitOperationLock.withLock(workspacePath, 'git:create-branch', async () => {
+        try {
+          const git: SimpleGit = simpleGit(workspacePath);
+          await git.checkoutBranch(branchName, fromHash || 'HEAD');
+          return { success: true };
+        } catch (error) {
+          log.error('[git:create-branch] Failed:', error);
+          return { success: false, error: error instanceof Error ? error.message : String(error) };
+        }
+      });
+    }
+  );
+
+  /**
+   * Get detailed info for a single commit (full message, per-file stats)
+   */
+  safeHandle(
+    'git:commit-detail',
+    async (_event, workspacePath: string, hash: string): Promise<{
+      body: string;
+      files: Array<{ status: string; path: string; added: number; deleted: number }>;
+      summary: { filesChanged: number; insertions: number; deletions: number };
+    } | null> => {
+      if (!workspacePath) throw new Error('workspacePath is required');
+      if (!hash) throw new Error('hash is required');
+      if (!isGitRepository(workspacePath)) return null;
+
+      try {
+        const git: SimpleGit = simpleGit(workspacePath);
+
+        const [bodyRaw, numstatRaw, nameStatusRaw] = await Promise.all([
+          git.raw(['show', '-s', '--format=%B', hash]),
+          git.raw(['diff-tree', '--no-commit-id', '-r', '--numstat', hash]),
+          git.raw(['diff-tree', '--no-commit-id', '-r', '--name-status', hash]),
+        ]);
+
+        // Parse numstat: "<added>\t<deleted>\t<path>"
+        const numstatMap = new Map<string, { added: number; deleted: number }>();
+        for (const line of numstatRaw.trim().split('\n').filter(Boolean)) {
+          const parts = line.split('\t');
+          if (parts.length >= 3) {
+            numstatMap.set(parts[2], {
+              added: parseInt(parts[0], 10) || 0,
+              deleted: parseInt(parts[1], 10) || 0,
+            });
+          }
+        }
+
+        // Parse name-status: "<STATUS>\t<path>" or "<STATUS>\t<old>\t<new>" for renames
+        const files: Array<{ status: string; path: string; added: number; deleted: number }> = [];
+        for (const line of nameStatusRaw.trim().split('\n').filter(Boolean)) {
+          const parts = line.split('\t');
+          if (parts.length >= 2) {
+            const status = parts[0][0];
+            const path = parts[parts.length - 1]; // new path for renames, only path otherwise
+            const stats = numstatMap.get(path) ?? { added: 0, deleted: 0 };
+            files.push({ status, path, ...stats });
+          }
+        }
+
+        return {
+          body: bodyRaw.trim(),
+          files,
+          summary: {
+            filesChanged: files.length,
+            insertions: files.reduce((s, f) => s + f.added, 0),
+            deletions: files.reduce((s, f) => s + f.deleted, 0),
+          },
+        };
+      } catch (error) {
+        log.error('[git:commit-detail] Failed:', error);
         throw error;
       }
     }
