@@ -371,6 +371,8 @@ export const SessionListItem = memo<SessionListItemProps>(({
   return (
     <div
         id={"session-list-item-" + id}
+      data-testid={isWorktreeSession ? 'worktree-session-item' : isWorkstream ? 'workstream-session-item' : 'session-list-item'}
+      data-session-type={isWorktreeSession ? 'worktree' : isWorkstream ? 'workstream' : 'session'}
       className={`session-list-item relative flex items-start gap-2.5 py-1 px-3 pl-8 cursor-pointer rounded mx-2 transition-[background-color,opacity] duration-150 select-none
         hover:bg-[var(--nim-bg-hover)]
         focus:outline-2 focus:outline-[var(--nim-border-focus)] focus:-outline-offset-2

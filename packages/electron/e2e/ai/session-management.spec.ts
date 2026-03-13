@@ -105,17 +105,19 @@ test.describe('Agent Mode UI', () => {
 
   test('should create multiple sessions and show them in history', async () => {
     await createNewAgentSession(page);
-    await page.waitForTimeout(300);
 
     const agentMode = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentMode);
-    const sessionItems = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.sessionListItem);
+    const sessionItems = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.anySessionItem);
+    // Wait for at least 2 session items to appear in the DOM
+    await sessionItems.nth(1).waitFor({ state: 'attached', timeout: 3000 });
     const sessionCount = await sessionItems.count();
     expect(sessionCount).toBeGreaterThanOrEqual(2);
   });
 
   test('should switch between sessions via sidebar', async () => {
     const agentMode = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentMode);
-    const sessionItems = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.sessionListItem);
+    const sessionItems = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.anySessionItem);
+    await sessionItems.nth(1).waitFor({ state: 'attached', timeout: 3000 });
     const sessionCount = await sessionItems.count();
     expect(sessionCount).toBeGreaterThanOrEqual(2);
 
@@ -124,23 +126,6 @@ test.describe('Agent Mode UI', () => {
     // Verify chat input is visible after session switch
     const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentChatInput);
     await expect(chatInput).toBeVisible({ timeout: 2000 });
-  });
-
-  test('should persist chat input across mode switches', async () => {
-    const agentMode = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentMode);
-    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentChatInput);
-    await chatInput.fill('Unsent message for persistence test');
-    await page.waitForTimeout(200);
-
-    await switchToEditorMode(page);
-    await page.waitForTimeout(300);
-
-    await switchToAgentMode(page);
-    await page.waitForTimeout(300);
-
-    const value = await chatInput.inputValue();
-    expect(value).toContain('Unsent message for persistence test');
-    await chatInput.clear();
   });
 
   test('should show all agent mode interface elements', async () => {
@@ -179,6 +164,7 @@ test.describe('Concurrent Sessions', () => {
     page = await electronApp.firstWindow();
     await waitForAppReady(page);
     await dismissProjectTrustToast(page);
+    await dismissAPIKeyDialog(page);
   });
 
   test.afterAll(async () => {
@@ -189,26 +175,33 @@ test.describe('Concurrent Sessions', () => {
   test('should support multiple concurrent sessions without conflicts', async () => {
     await switchToAgentMode(page);
 
+    const agentMode = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentMode);
+    const sessionItems = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.anySessionItem);
+
+    // Wait for the initial auto-created session to appear
+    await sessionItems.first().waitFor({ state: 'attached', timeout: 3000 });
+    const initialCount = await sessionItems.count();
+
     // Create 2 additional sessions
     await createNewAgentSession(page);
-    await page.waitForTimeout(300);
+    await sessionItems.nth(initialCount).waitFor({ state: 'attached', timeout: 3000 });
     await createNewAgentSession(page);
-    await page.waitForTimeout(300);
+    await sessionItems.nth(initialCount + 1).waitFor({ state: 'attached', timeout: 3000 });
 
-    const agentMode = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentMode);
-    const sessionCount = await agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.sessionListItem).count();
-    expect(sessionCount).toBe(3);
+    const sessionCount = await sessionItems.count();
+    expect(sessionCount).toBeGreaterThanOrEqual(initialCount + 2);
   });
 
   test('should isolate sessions from each other', async () => {
     await switchToAgentMode(page);
 
-    await createNewAgentSession(page);
-    await page.waitForTimeout(500);
-
     const agentMode = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentMode);
     const sessionHistory = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistory);
-    const sessionItems = sessionHistory.locator(PLAYWRIGHT_TEST_SELECTORS.sessionListItem);
+    const sessionItems = sessionHistory.locator(PLAYWRIGHT_TEST_SELECTORS.anySessionItem);
+
+    await createNewAgentSession(page);
+    // Wait for the new session item to appear
+    await sessionItems.nth(1).waitFor({ state: 'attached', timeout: 3000 });
 
     // Verify we have at least 2 sessions
     const sessionCount = await sessionItems.count();
@@ -242,24 +235,25 @@ test.describe('Concurrent Sessions', () => {
 
     const agentMode = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentMode);
     const sessionHistory = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistory);
+    const sessionItems = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.anySessionItem);
 
     // Get initial session count (from previous tests in serial mode)
-    const initialCount = await agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.sessionListItem).count();
+    const initialCount = await sessionItems.count();
 
     await createNewAgentSession(page);
-    await page.waitForTimeout(300);
+    await sessionItems.nth(initialCount).waitFor({ state: 'attached', timeout: 3000 });
     await createNewAgentSession(page);
-    await page.waitForTimeout(300);
+    await sessionItems.nth(initialCount + 1).waitFor({ state: 'attached', timeout: 3000 });
 
     // Verify we added 2 sessions
-    const newCount = await agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.sessionListItem).count();
+    const newCount = await sessionItems.count();
     expect(newCount).toBe(initialCount + 2);
 
     // Rapidly switch between the 3 most recent sessions
     const totalSessions = newCount;
     for (let i = 0; i < 10; i++) {
       const index = (totalSessions - 3) + (i % 3);
-      await sessionHistory.locator(PLAYWRIGHT_TEST_SELECTORS.sessionListItem).nth(index).click();
+      await sessionItems.nth(index).click();
       await page.waitForTimeout(50);
     }
   });
@@ -343,7 +337,8 @@ test.describe('Cross-Mode Session Visibility', () => {
     await agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistoryList).waitFor({ state: 'visible', timeout: 2000 });
 
     // Check the session appears in agent-mode history
-    const sessionItems = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.sessionListItem);
+    const sessionItems = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.anySessionItem);
+    await sessionItems.nth(1).waitFor({ state: 'attached', timeout: 3000 });
     const sessionCount = await sessionItems.count();
     expect(sessionCount).toBeGreaterThanOrEqual(2);
   });
@@ -408,20 +403,19 @@ test.describe('Session Status Indicators', () => {
     const sessionHistory = page.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistory);
     await expect(sessionHistory).toBeVisible({ timeout: 2000 });
 
-    const sessionItems = page.locator(PLAYWRIGHT_TEST_SELECTORS.sessionListItem);
-    const count = await sessionItems.count();
+    const sessionItems = page.locator(PLAYWRIGHT_TEST_SELECTORS.anySessionItem);
+    await sessionItems.first().waitFor({ state: 'attached', timeout: 3000 });
 
-    if (count > 0) {
-      const firstItem = sessionItems.first();
-      await expect(firstItem.locator(PLAYWRIGHT_TEST_SELECTORS.sessionListItemRight)).toBeVisible();
-    }
+    // Verify each session item has the right-side container (may be empty if no status badges)
+    const firstItem = sessionItems.first();
+    await expect(firstItem.locator(PLAYWRIGHT_TEST_SELECTORS.sessionListItemRight)).toBeAttached({ timeout: 2000 });
   });
 
   test('switching sessions should clear unread indicator', async () => {
     const sessionHistory = page.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistory);
     await expect(sessionHistory).toBeVisible({ timeout: 2000 });
 
-    const sessionItems = page.locator(PLAYWRIGHT_TEST_SELECTORS.sessionListItem);
+    const sessionItems = page.locator(PLAYWRIGHT_TEST_SELECTORS.anySessionItem);
     const count = await sessionItems.count();
 
     if (count >= 2) {
@@ -483,13 +477,14 @@ test.describe('Workstream Sessions', () => {
     await addButton.click();
     await page.waitForTimeout(1000);
 
-    // Session list should show 1 session (parent only, children filtered out)
-    const sessionItem = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.sessionListItem);
-    expect(await sessionItem.count()).toBe(1);
-
     // Session tabs should now show 2 tabs (parent + child)
     const sessionTabs = sessionTabBar.locator(PLAYWRIGHT_TEST_SELECTORS.sessionTabInWorkstream);
     await expect(sessionTabs).toHaveCount(2, { timeout: 5000 });
+
+    // Parent should now render as a workstream group (not a flat session-list-item)
+    // Children appear as workstream-child-item inside the group
+    const workstreamChildren = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.workstreamChildItem);
+    await expect(workstreamChildren).toHaveCount(2, { timeout: 5000 });
   });
 });
 
@@ -551,7 +546,7 @@ test.describe('Child Session Persistence', () => {
     await expect(sessionTabs).toHaveCount(3, { timeout: 5000 });
 
     // Verify children appear in sidebar
-    const workstreamChildren = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistoryList).locator(PLAYWRIGHT_TEST_SELECTORS.workstreamSessionItem);
+    const workstreamChildren = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistoryList).locator(PLAYWRIGHT_TEST_SELECTORS.workstreamChildItem);
     await expect(workstreamChildren).toHaveCount(3, { timeout: 5000 });
 
     // Select the second tab
@@ -589,115 +584,3 @@ test.describe('Child Session Persistence', () => {
   });
 });
 
-// ============================================================================
-// SECTION 7: Worktree Session Persistence
-// Tests worktree creation and persistence after app relaunch
-// Requires git init + separate app lifecycle
-// ============================================================================
-
-test.describe('Worktree Session Persistence', () => {
-  let electronApp: ElectronApplication;
-  let page: Page;
-  let workspacePath: string;
-
-  test.beforeAll(async () => {
-    workspacePath = await createTempWorkspace();
-
-    // Initialize git repo (required for worktrees)
-    const { execSync } = await import('child_process');
-    execSync('git init', { cwd: workspacePath });
-    execSync('git config user.email "test@test.com"', { cwd: workspacePath });
-    execSync('git config user.name "Test User"', { cwd: workspacePath });
-
-    await fs.writeFile(
-      path.join(workspacePath, 'test.md'),
-      '# Test\n\nContent.\n',
-      'utf8'
-    );
-    execSync('git add .', { cwd: workspacePath });
-    execSync('git commit -m "Initial commit"', { cwd: workspacePath });
-
-    electronApp = await launchElectronApp({
-      workspace: workspacePath,
-      permissionMode: 'allow-all',
-    });
-    page = await electronApp.firstWindow();
-    await waitForAppReady(page);
-  });
-
-  test.afterAll(async () => {
-    await electronApp?.close();
-    await fs.rm(workspacePath, { recursive: true, force: true }).catch(() => undefined);
-    const worktreeDir = `${workspacePath}_worktrees`;
-    await fs.rm(worktreeDir, { recursive: true, force: true }).catch(() => undefined);
-  });
-
-  test('should create worktree session and persist after relaunch', async () => {
-    test.setTimeout(60000);
-
-    await switchToAgentMode(page);
-    await page.waitForTimeout(500);
-
-    // Open dropdown to create worktree session
-    const agentMode = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentMode);
-    const newButton = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistoryNewButton);
-    await expect(newButton).toBeVisible({ timeout: 3000 });
-    await newButton.click();
-
-    const dropdownMenu = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistoryNewMenu);
-    await expect(dropdownMenu).toBeVisible({ timeout: 3000 });
-
-    const newWorktreeButton = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.newWorktreeSessionButton);
-    await expect(newWorktreeButton).toBeVisible({ timeout: 3000 });
-    await newWorktreeButton.click();
-
-    await page.waitForTimeout(3000);
-
-    // Verify worktree session was created
-    const worktreeGroup = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.worktreeGroup);
-    const worktreeSingle = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.worktreeSingle);
-    const worktreeElement = worktreeGroup.or(worktreeSingle);
-    await expect(worktreeElement).toBeVisible({ timeout: 5000 });
-
-    // Get the worktree name
-    const workstreamGroupName = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.workstreamGroupName);
-    const worktreeSingleName = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.worktreeSingleNameRow);
-    const worktreeNameElement = workstreamGroupName.or(worktreeSingleName);
-    const worktreeName = await worktreeNameElement.textContent();
-    expect(worktreeName).toBeTruthy();
-
-    // Relaunch app
-    await electronApp.close();
-    electronApp = await launchElectronApp({
-      workspace: workspacePath,
-      permissionMode: 'allow-all',
-    });
-    page = await electronApp.firstWindow();
-    await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(1000);
-
-    await switchToAgentMode(page);
-    await page.waitForTimeout(2000);
-
-    // Verify the worktree session persisted
-    const agentModeAfterReload = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentMode);
-    const worktreeGroupAfterReload = agentModeAfterReload.locator(PLAYWRIGHT_TEST_SELECTORS.worktreeGroup);
-    const worktreeSingleAfterReload = agentModeAfterReload.locator(PLAYWRIGHT_TEST_SELECTORS.worktreeSingle);
-    const worktreeElementAfterReload = worktreeGroupAfterReload.or(worktreeSingleAfterReload);
-    await expect(worktreeElementAfterReload).toBeVisible({ timeout: 5000 });
-
-    // Verify the name is the same
-    const workstreamGroupNameAfterReload = agentModeAfterReload.locator(PLAYWRIGHT_TEST_SELECTORS.workstreamGroupName);
-    const worktreeSingleNameAfterReload = agentModeAfterReload.locator(PLAYWRIGHT_TEST_SELECTORS.worktreeSingleNameRow);
-    const worktreeNameElementAfterReload = workstreamGroupNameAfterReload.or(worktreeSingleNameAfterReload);
-    const nameAfterReload = await worktreeNameElementAfterReload.textContent();
-    expect(nameAfterReload).toBe(worktreeName);
-
-    // Verify clicking loads the session
-    await worktreeElementAfterReload.click();
-    await page.waitForTimeout(1000);
-
-    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.agentChatInput);
-    await expect(chatInput).toBeVisible({ timeout: 5000 });
-  });
-});

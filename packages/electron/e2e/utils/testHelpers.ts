@@ -104,11 +104,14 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   newDropdownButton: '[data-testid="new-dropdown-button"]', // More specific selector for dropdown trigger
   newSessionButton: '[data-testid="new-session-button"]', // Menu item for new session
   newWorktreeSessionButton: '[data-testid="new-worktree-session-button"]', // Menu item for new worktree
-  sessionListItem: '.session-list-item',
+  sessionListItem: '[data-testid="session-list-item"]', // Regular (non-worktree, non-workstream) sessions
   sessionListItemTitle: '.session-list-item-title',
 
   // Agent mode container
   agentMode: '.agent-mode',
+
+  // All session items in sidebar (any type - regular, worktree, workstream)
+  anySessionItem: '.session-list-item',
 
   // Workstream session tabs (child sessions within a workstream)
   sessionTabBar: '.session-tab-bar',
@@ -116,20 +119,15 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   sessionTabActive: '.session-tab.active',
   sessionTabNew: '.session-tab-new',
   sessionTabTitle: '.session-tab-title',
-  workstreamSessionItem: '.workstream-session-item',
+  workstreamGroup: '[data-testid="workstream-group"]',
+  workstreamChildItem: '[data-testid="workstream-child-item"]',
   workstreamGroupName: '.workstream-group-name',
   sessionListItemRight: '.session-list-item-right',
   sessionListItemStatusUnread: '.session-list-item-status.unread',
 
   // Worktree sessions
   worktreeGroup: '[data-testid="worktree-group"]',
-  worktreeSingle: '[data-testid="worktree-single"]',
-  worktreeSingleActive: '.worktree-single.active',
-  worktreeSingleBadge: '.worktree-single-wt-badge',
-  worktreeSingleName: '.worktree-single-name',
-  worktreeSingleNameRow: '.worktree-single-name-row',
-  worktreeSingleTitle: '.worktree-single-title',
-  worktreeSingleMessageCount: '.worktree-single-message-count',
+  worktreeSessionItem: '[data-testid="worktree-session-item"]', // Single-session worktree (flat item)
 
   // Session containers
   sessionContainer: '[data-session-id]',
@@ -374,6 +372,14 @@ export async function createNewAgentSession(page: Page): Promise<void> {
   const agentSidebar = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistory);
   const newSessionButton = agentSidebar.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistoryNewButton);
   await newSessionButton.click({ timeout: 5000 });
+
+  // The button may open a dropdown if multiple options are available.
+  // If a dropdown appeared, click "New Session" inside it.
+  const dropdown = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistoryNewMenu);
+  const newSessionItem = agentMode.locator(PLAYWRIGHT_TEST_SELECTORS.newSessionButton);
+  if (await dropdown.isVisible({ timeout: 300 }).catch(() => false)) {
+    await newSessionItem.click({ timeout: 2000 });
+  }
   await page.waitForTimeout(500);
 }
 
