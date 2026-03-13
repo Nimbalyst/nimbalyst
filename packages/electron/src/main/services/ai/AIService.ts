@@ -5272,6 +5272,154 @@ export class AIService {
       return { sessionId: session.id, response };
     });
 
+    // Extension SDK: List available chat models
+    safeHandle('extensions:ai-list-models', async () => {
+      const CHAT_PROVIDERS: AIProviderType[] = ['claude', 'openai', 'lmstudio'];
+      const providerSettings = this.getNormalizedProviderSettings() as any;
+      const globalApiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
+
+      const allModels: Array<{ id: string; name: string; provider: string }> = [];
+
+      for (const provider of CHAT_PROVIDERS) {
+        // Check if provider is enabled
+        const settings = providerSettings?.[provider];
+        if (settings && settings.enabled === false) continue;
+
+        const apiKey = provider === 'claude' ? globalApiKeys['anthropic']
+          : provider === 'openai' ? globalApiKeys['openai']
+          : undefined;
+        const baseUrl = provider === 'lmstudio' ? (globalApiKeys['lmstudio_url'] || undefined) : undefined;
+
+        try {
+          const models = await ModelRegistry.getModelsForProvider(provider, apiKey, baseUrl);
+          const enabledModelIds = settings?.models as string[] | undefined;
+
+          for (const model of models) {
+            // If provider has specific model selections, filter to those
+            if (enabledModelIds && enabledModelIds.length > 0 && !enabledModelIds.includes(model.id)) {
+              continue;
+            }
+            allModels.push({
+              id: model.id,
+              name: model.name,
+              provider: model.provider,
+            });
+          }
+        } catch (err) {
+          // console.warn(`[AIService] Failed to list models for ${provider}:`, err);
+        }
+      }
+
+      return allModels;
+    });
+
+    // Extension SDK: Stateless chat completion (full response)
+    safeHandle('extensions:ai-chat-completion', async (
+      event,
+      options: {
+        messages: Array<{ role: string; content: string }>;
+        model?: string;
+        maxTokens?: number;
+        temperature?: number;
+        systemPrompt?: string;
+      }
+    ) => {
+      return this.handleExtensionChatCompletion(event, options);
+    });
+
+    // Extension SDK: Streaming chat completion - start
+    const activeStreams = new Map<string, AIProvider>();
+
+    safeHandle('extensions:ai-chat-completion-stream-start', async (
+      event,
+      options: {
+        streamId: string;
+        messages: Array<{ role: string; content: string }>;
+        model?: string;
+        maxTokens?: number;
+        temperature?: number;
+        systemPrompt?: string;
+      }
+    ) => {
+      const { streamId, ...completionOptions } = options;
+      const { provider, providerConfig, syntheticSessionId } = await this.resolveExtensionChatProvider(event, completionOptions);
+
+      activeStreams.set(streamId, provider);
+
+      // Build messages for the provider
+      const { currentMessage, previousMessages } = this.buildProviderMessages(completionOptions);
+
+      // Stream in the background
+      (async () => {
+        let fullContent = '';
+        let usage: { inputTokens: number; outputTokens: number } | undefined;
+
+        try {
+          const iterator = provider.sendMessage(
+            currentMessage,
+            undefined,  // no document context
+            syntheticSessionId,
+            previousMessages,
+          );
+
+          for await (const chunk of iterator) {
+            if (event.sender.isDestroyed()) break;
+
+            if (chunk.type === 'text' && chunk.content) {
+              fullContent += chunk.content;
+              safeSend(event, 'extensions:ai-chat-completion-stream-chunk', {
+                streamId,
+                chunk: { type: 'text', content: chunk.content },
+              });
+            } else if (chunk.type === 'error') {
+              safeSend(event, 'extensions:ai-chat-completion-stream-chunk', {
+                streamId,
+                chunk: { type: 'error', error: chunk.error || 'Unknown error' },
+              });
+              return;
+            } else if (chunk.type === 'complete') {
+              if (chunk.content) fullContent = chunk.content;
+              if (chunk.usage) {
+                usage = {
+                  inputTokens: chunk.usage.input_tokens,
+                  outputTokens: chunk.usage.output_tokens,
+                };
+              }
+            }
+          }
+
+          safeSend(event, 'extensions:ai-chat-completion-stream-chunk', {
+            streamId,
+            chunk: { type: 'done' },
+            result: {
+              content: fullContent,
+              model: providerConfig.model || '',
+              usage,
+            },
+          });
+        } catch (err: any) {
+          safeSend(event, 'extensions:ai-chat-completion-stream-chunk', {
+            streamId,
+            chunk: { type: 'error', error: err.message || 'Stream failed' },
+          });
+        } finally {
+          activeStreams.delete(streamId);
+          ProviderFactory.destroyProvider(syntheticSessionId);
+        }
+      })();
+
+      return { streamId };
+    });
+
+    // Extension SDK: Streaming chat completion - abort
+    safeHandle('extensions:ai-chat-completion-stream-abort', async (_event, streamId: string) => {
+      const provider = activeStreams.get(streamId);
+      if (provider) {
+        provider.abort();
+        activeStreams.delete(streamId);
+      }
+    });
+
     // Advance the FileSnapshotCache baseline after diff acceptance/rejection
     safeHandle('ai:advance-diff-baseline', async (_event, sessionId: string, filePath: string, content: string) => {
       this.advanceDiffBaseline(sessionId, filePath, content);
@@ -5756,6 +5904,175 @@ export class AIService {
       this.settingsStore = null;
     } catch (error) {
       console.error('[AIService] Error clearing references:', error);
+    }
+  }
+
+  // ============================================================================
+  // Extension Chat Completion helpers
+  // ============================================================================
+
+  /**
+   * Resolve which chat provider and config to use for an extension completion request.
+   * Only chat providers (claude, openai, lmstudio) are supported.
+   */
+  private async resolveExtensionChatProvider(
+    event: Electron.IpcMainInvokeEvent,
+    options: { model?: string; maxTokens?: number; temperature?: number }
+  ): Promise<{ provider: AIProvider; providerConfig: ProviderConfig; providerType: AIProviderType; syntheticSessionId: string }> {
+    const CHAT_PROVIDERS: AIProviderType[] = ['claude', 'openai', 'lmstudio'];
+
+    // Determine provider from model ID or find first available
+    let providerType: AIProviderType | undefined;
+    let modelId: string | undefined;
+
+    if (options.model) {
+      const parsed = ModelIdentifier.tryParse(options.model);
+      if (parsed && CHAT_PROVIDERS.includes(parsed.provider as AIProviderType)) {
+        providerType = parsed.provider as AIProviderType;
+        modelId = parsed.model;
+      } else {
+        // Try to find this model across providers
+        for (const p of CHAT_PROVIDERS) {
+          const models = await ModelRegistry.getModelsForProvider(p);
+          if (models.some(m => m.id === options.model)) {
+            providerType = p;
+            modelId = options.model;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!providerType) {
+      // Find first enabled chat provider
+      for (const p of CHAT_PROVIDERS) {
+        if (this.isProviderEnabledForWorkspace(p)) {
+          providerType = p;
+          break;
+        }
+      }
+    }
+
+    if (!providerType) {
+      throw new Error('No chat provider available. Enable Claude, OpenAI, or LM Studio in Settings > AI.');
+    }
+
+    // Get API key
+    const apiKey = this.getApiKeyForProvider(providerType);
+    if (providerType !== 'lmstudio' && !apiKey) {
+      throw new Error(`API key not configured for provider ${providerType}. Configure it in Settings > AI.`);
+    }
+
+    // Resolve model
+    if (!modelId) {
+      const defaultModel = await ModelRegistry.getDefaultModel(providerType);
+      const extracted = extractModelForProvider(defaultModel, providerType);
+      modelId = extracted || defaultModel;
+    }
+
+    const providerConfig: ProviderConfig = {
+      apiKey,
+      model: modelId,
+      maxTokens: options.maxTokens,
+      temperature: options.temperature,
+    };
+
+    // LM Studio needs baseUrl
+    if (providerType === 'lmstudio') {
+      const globalApiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
+      providerConfig.baseUrl = globalApiKeys['lmstudio_url'] || 'http://127.0.0.1:1234';
+    }
+
+    const syntheticSessionId = `ext-completion-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const provider = ProviderFactory.createProvider(providerType, syntheticSessionId);
+    await provider.initialize(providerConfig);
+
+    return { provider, providerConfig, providerType, syntheticSessionId };
+  }
+
+  /**
+   * Convert extension ChatCompletionMessage[] into the format expected by providers:
+   * a current user message string and an array of previous Message objects.
+   */
+  private buildProviderMessages(options: {
+    messages: Array<{ role: string; content: string }>;
+    systemPrompt?: string;
+  }): { currentMessage: string; previousMessages: Message[] } {
+    const msgs = [...options.messages];
+
+    // Prepend system prompt as a system message if provided
+    if (options.systemPrompt) {
+      msgs.unshift({ role: 'system', content: options.systemPrompt });
+    }
+
+    if (msgs.length === 0) {
+      throw new Error('At least one message is required');
+    }
+
+    // The last user message becomes the "current message" argument
+    // All previous messages become the messages array
+    const lastMessage = msgs[msgs.length - 1];
+    const currentMessage = lastMessage.content;
+
+    const previousMessages: Message[] = msgs.slice(0, -1).map(m => ({
+      role: m.role as Message['role'],
+      content: m.content,
+      timestamp: Date.now(),
+    }));
+
+    return { currentMessage, previousMessages };
+  }
+
+  /**
+   * Handle a stateless (non-session) chat completion from an extension.
+   */
+  private async handleExtensionChatCompletion(
+    event: Electron.IpcMainInvokeEvent,
+    options: {
+      messages: Array<{ role: string; content: string }>;
+      model?: string;
+      maxTokens?: number;
+      temperature?: number;
+      systemPrompt?: string;
+    }
+  ): Promise<{ content: string; model: string; usage?: { inputTokens: number; outputTokens: number } }> {
+    const { provider, providerConfig, providerType, syntheticSessionId } = await this.resolveExtensionChatProvider(event, options);
+    const { currentMessage, previousMessages } = this.buildProviderMessages(options);
+
+    try {
+      let fullContent = '';
+      let usage: { inputTokens: number; outputTokens: number } | undefined;
+
+      const iterator = provider.sendMessage(
+        currentMessage,
+        undefined,  // no document context
+        syntheticSessionId,
+        previousMessages,
+      );
+
+      for await (const chunk of iterator) {
+        if (chunk.type === 'text' && chunk.content) {
+          fullContent += chunk.content;
+        } else if (chunk.type === 'error') {
+          throw new Error(chunk.error || 'Provider error');
+        } else if (chunk.type === 'complete') {
+          if (chunk.content) fullContent = chunk.content;
+          if (chunk.usage) {
+            usage = {
+              inputTokens: chunk.usage.input_tokens,
+              outputTokens: chunk.usage.output_tokens,
+            };
+          }
+        }
+      }
+
+      return {
+        content: fullContent,
+        model: providerConfig.model || '',
+        usage,
+      };
+    } finally {
+      ProviderFactory.destroyProvider(syntheticSessionId, providerType);
     }
   }
 }

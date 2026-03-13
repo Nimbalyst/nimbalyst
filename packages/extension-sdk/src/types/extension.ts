@@ -591,7 +591,7 @@ export interface ExtensionAIService {
   /** Register a context provider */
   registerContextProvider(provider: ExtensionContextProvider): Disposable;
 
-  /** Send a prompt to the AI and get a response. Defaults to claude-code provider. */
+  /** Send a prompt to the AI and get a response. Defaults to claude-code provider. Creates a session. */
   sendPrompt(options: {
     prompt: string;
     sessionName?: string;
@@ -603,6 +603,101 @@ export interface ExtensionAIService {
     sessionId: string;
     response: string;
   }>;
+
+  /**
+   * List available chat models.
+   * Returns models from enabled chat providers (Claude, OpenAI, LM Studio),
+   * filtered to models the user has enabled in settings.
+   */
+  listModels(): Promise<ExtensionAIModel[]>;
+
+  /**
+   * Stateless chat completion. Sends messages to a model and returns the full response.
+   * Does not create a session in the session history.
+   */
+  chatCompletion(options: ChatCompletionOptions): Promise<ChatCompletionResult>;
+
+  /**
+   * Streaming chat completion. Sends messages to a model and streams the response
+   * token-by-token via the onChunk callback.
+   * Does not create a session in the session history.
+   */
+  chatCompletionStream(options: ChatCompletionStreamOptions): Promise<ChatCompletionStreamHandle>;
+}
+
+/**
+ * An AI model available for chat completions.
+ */
+export interface ExtensionAIModel {
+  /** Full model ID (e.g. "claude:claude-sonnet-4-6-20250514") */
+  id: string;
+  /** Display name (e.g. "Claude Sonnet 4.6") */
+  name: string;
+  /** Provider type (e.g. "claude", "openai", "lmstudio") */
+  provider: string;
+}
+
+/**
+ * A message in a chat completion conversation.
+ */
+export interface ChatCompletionMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+/**
+ * Options for a chat completion request.
+ */
+export interface ChatCompletionOptions {
+  /** Conversation messages. At minimum, include one user message. */
+  messages: ChatCompletionMessage[];
+  /** Model ID from listModels(). Uses the first available model's default if omitted. */
+  model?: string;
+  /** Maximum tokens in the response. */
+  maxTokens?: number;
+  /** Sampling temperature (0-1). */
+  temperature?: number;
+  /** Convenience: prepended as a system message before the messages array. */
+  systemPrompt?: string;
+}
+
+/**
+ * Result from a chat completion request.
+ */
+export interface ChatCompletionResult {
+  /** The assistant's response text. */
+  content: string;
+  /** The model that was actually used. */
+  model: string;
+  /** Token usage, if available from the provider. */
+  usage?: { inputTokens: number; outputTokens: number };
+}
+
+/**
+ * A streaming chunk delivered via the onChunk callback.
+ */
+export interface ChatCompletionStreamChunk {
+  type: 'text' | 'error' | 'done';
+  content?: string;
+  error?: string;
+}
+
+/**
+ * Options for a streaming chat completion request.
+ */
+export interface ChatCompletionStreamOptions extends ChatCompletionOptions {
+  /** Called for each streaming chunk (text deltas, errors, and completion signal). */
+  onChunk: (chunk: ChatCompletionStreamChunk) => void;
+}
+
+/**
+ * Handle returned from chatCompletionStream for controlling the stream.
+ */
+export interface ChatCompletionStreamHandle {
+  /** Abort the in-flight stream. */
+  abort(): void;
+  /** Resolves when the stream completes with the full result. */
+  result: Promise<ChatCompletionResult>;
 }
 
 export interface ExtensionContextProvider {

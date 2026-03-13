@@ -132,7 +132,7 @@ Available permissions:
 | Permission | Description |
 | --- | --- |
 | `filesystem` | Read and write files through extension services |
-| `ai` | Register AI tools and context providers |
+| `ai` | Register AI tools, context providers, and call AI chat/completion models directly (`listModels`, `chatCompletion`, `chatCompletionStream`) |
 | `network` | Reserved for network-enabled extensions |
 
 ## Contributions

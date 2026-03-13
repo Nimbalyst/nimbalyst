@@ -88,6 +88,82 @@ interface ExtensionConfigurationService {
 }
 ```
 
+### `ExtensionAIService`
+
+Available when `permissions.ai` is `true`. Provides AI tool registration and direct access to chat/completion models.
+
+```ts
+interface ExtensionAIService {
+  // Register AI tools that Claude can call
+  registerTool(tool: ExtensionAITool): Disposable;
+  registerContextProvider(provider: ExtensionContextProvider): Disposable;
+
+  // Session-backed prompt (creates a session in history)
+  sendPrompt(options: {
+    prompt: string;
+    sessionName?: string;
+    provider?: 'claude-code' | 'claude' | 'openai';
+    model?: string;
+  }): Promise<{ sessionId: string; response: string }>;
+
+  // List available chat models (Claude, OpenAI, LM Studio)
+  listModels(): Promise<ExtensionAIModel[]>;
+
+  // Stateless chat completion (no session created)
+  chatCompletion(options: ChatCompletionOptions): Promise<ChatCompletionResult>;
+
+  // Streaming chat completion (no session created)
+  chatCompletionStream(options: ChatCompletionStreamOptions): Promise<ChatCompletionStreamHandle>;
+}
+```
+
+### Chat Completion Types
+
+```ts
+interface ExtensionAIModel {
+  id: string;        // e.g. "claude:claude-sonnet-4-6-20250514"
+  name: string;      // e.g. "Claude Sonnet 4.6"
+  provider: string;  // "claude" | "openai" | "lmstudio"
+}
+
+interface ChatCompletionMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+interface ChatCompletionOptions {
+  messages: ChatCompletionMessage[];
+  model?: string;           // Model ID from listModels(). Provider default if omitted.
+  maxTokens?: number;
+  temperature?: number;     // 0-1
+  systemPrompt?: string;    // Prepended as system message
+}
+
+interface ChatCompletionResult {
+  content: string;          // Assistant response
+  model: string;            // Model that was used
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+  };
+}
+
+interface ChatCompletionStreamChunk {
+  type: 'text' | 'error' | 'done';
+  content?: string;         // Text delta (when type is 'text')
+  error?: string;           // Error message (when type is 'error')
+}
+
+interface ChatCompletionStreamOptions extends ChatCompletionOptions {
+  onChunk: (chunk: ChatCompletionStreamChunk) => void;
+}
+
+interface ChatCompletionStreamHandle {
+  abort(): void;                        // Cancel the stream
+  result: Promise<ChatCompletionResult>; // Resolves on completion
+}
+```
+
 ## Custom Editors
 
 Custom editors receive a single `host` prop.

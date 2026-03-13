@@ -31,6 +31,12 @@ import type {
   PanelHostProps,
   PanelGutterButtonProps,
   SettingsPanelProps,
+  ChatCompletionOptions,
+  ChatCompletionResult,
+  ChatCompletionStreamOptions,
+  ChatCompletionStreamHandle,
+  ChatCompletionStreamChunk,
+  ExtensionAIModel,
 } from './types';
 import { getExtensionPlatformService } from './ExtensionPlatformService';
 
@@ -463,12 +469,13 @@ function validateManifest(
             if (
               panelRecord.placement !== 'sidebar' &&
               panelRecord.placement !== 'fullscreen' &&
-              panelRecord.placement !== 'floating'
+              panelRecord.placement !== 'floating' &&
+              panelRecord.placement !== 'bottom'
             ) {
               errors.push({
                 error: `panels[${index}] has invalid 'placement'`,
                 field: `contributions.panels[${index}].placement`,
-                suggestion: 'Use "sidebar", "fullscreen", or "floating"',
+                suggestion: 'Use "sidebar", "fullscreen", "floating", or "bottom"',
               });
             }
           });
@@ -658,6 +665,71 @@ function createExtensionContext(
           throw new Error('electronAPI not available for sendPrompt');
         }
         return electronAPI.invoke('extensions:ai-send-prompt', options);
+      },
+      listModels: async (): Promise<ExtensionAIModel[]> => {
+        const electronAPI = (window as any).electronAPI;
+        if (!electronAPI) {
+          throw new Error('electronAPI not available for listModels');
+        }
+        return electronAPI.invoke('extensions:ai-list-models');
+      },
+      chatCompletion: async (options: ChatCompletionOptions): Promise<ChatCompletionResult> => {
+        const electronAPI = (window as any).electronAPI;
+        if (!electronAPI) {
+          throw new Error('electronAPI not available for chatCompletion');
+        }
+        return electronAPI.invoke('extensions:ai-chat-completion', options);
+      },
+      chatCompletionStream: async (options: ChatCompletionStreamOptions): Promise<ChatCompletionStreamHandle> => {
+        const electronAPI = (window as any).electronAPI;
+        if (!electronAPI) {
+          throw new Error('electronAPI not available for chatCompletionStream');
+        }
+
+        const streamId = `ext-stream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const { onChunk, ...ipcOptions } = options;
+
+        let resolveResult: (result: any) => void;
+        let rejectResult: (error: Error) => void;
+        const resultPromise = new Promise<any>((resolve, reject) => {
+          resolveResult = resolve;
+          rejectResult = reject;
+        });
+
+        // Listen for stream chunks
+        const removeListener = electronAPI.on(
+          'extensions:ai-chat-completion-stream-chunk',
+          (_event: any, data: { streamId: string; chunk: ChatCompletionStreamChunk; result?: ChatCompletionResult }) => {
+            if (data.streamId !== streamId) return;
+
+            if (data.chunk.type === 'done') {
+              removeListener();
+              resolveResult!(data.result || { content: '', model: '' });
+            } else if (data.chunk.type === 'error') {
+              removeListener();
+              onChunk(data.chunk);
+              rejectResult!(new Error(data.chunk.error || 'Stream error'));
+            } else {
+              onChunk(data.chunk);
+            }
+          }
+        );
+
+        // Start the stream
+        electronAPI.invoke('extensions:ai-chat-completion-stream-start', {
+          streamId,
+          ...ipcOptions,
+        }).catch((err: Error) => {
+          removeListener();
+          rejectResult!(err);
+        });
+
+        return {
+          abort: () => {
+            electronAPI.invoke('extensions:ai-chat-completion-stream-abort', streamId).catch(() => {});
+          },
+          result: resultPromise,
+        };
       },
     };
   }

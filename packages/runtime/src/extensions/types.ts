@@ -58,6 +58,13 @@ export type {
   ExecResult,
   ThemeContribution,
   ThemeColorKey,
+  ExtensionAIModel,
+  ChatCompletionMessage,
+  ChatCompletionOptions,
+  ChatCompletionResult,
+  ChatCompletionStreamChunk,
+  ChatCompletionStreamOptions,
+  ChatCompletionStreamHandle,
 } from '@nimbalyst/extension-sdk';
 
 /**

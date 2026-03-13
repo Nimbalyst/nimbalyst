@@ -511,8 +511,99 @@ export const aiTools: ExtensionAITool[] = [
 ];
 ```
 
+## Calling AI Models Directly
+
+Extensions can also call AI chat/completion models directly, without going through Claude. This is useful for summarization, classification, code generation, or any task where the extension itself needs an AI response.
+
+### Prerequisites
+
+Your manifest must declare `permissions.ai: true`.
+
+### Listing Available Models
+
+```typescript
+export async function activate(context: ExtensionContext) {
+  const models = await context.services.ai!.listModels();
+  // => [
+  //   { id: "claude:claude-sonnet-4-6-20250514", name: "Claude Sonnet 4.6", provider: "claude" },
+  //   { id: "openai:gpt-4o", name: "GPT-4o", provider: "openai" },
+  //   ...
+  // ]
+}
+```
+
+Only models from chat providers the user has enabled and configured are returned (Claude, OpenAI, LM Studio). Agent providers like Claude Code are not included.
+
+### Non-Streaming Completion
+
+```typescript
+const result = await context.services.ai!.chatCompletion({
+  messages: [
+    { role: 'user', content: 'Classify this text as positive or negative: "Great product!"' },
+  ],
+  model: 'claude:claude-sonnet-4-6-20250514', // optional, uses default if omitted
+  systemPrompt: 'Respond with a single word: positive or negative.',
+  temperature: 0,
+  maxTokens: 10,
+});
+
+console.log(result.content);  // "positive"
+console.log(result.model);    // "claude-sonnet-4-6-20250514"
+console.log(result.usage);    // { inputTokens: 42, outputTokens: 1 }
+```
+
+### Streaming Completion
+
+For longer responses where you want to show results incrementally:
+
+```typescript
+const handle = await context.services.ai!.chatCompletionStream({
+  messages: [
+    { role: 'user', content: 'Write a haiku about programming' },
+  ],
+  onChunk: (chunk) => {
+    if (chunk.type === 'text') {
+      // Append text to your UI
+      appendToOutput(chunk.content!);
+    } else if (chunk.type === 'error') {
+      showError(chunk.error!);
+    }
+    // chunk.type === 'done' means the stream is complete
+  },
+});
+
+// Optionally abort:
+// handle.abort();
+
+// Wait for the full result:
+const result = await handle.result;
+console.log(result.content); // Full response text
+```
+
+### Multi-Turn Conversations
+
+Pass multiple messages for conversation context:
+
+```typescript
+const result = await context.services.ai!.chatCompletion({
+  messages: [
+    { role: 'user', content: 'What is the capital of France?' },
+    { role: 'assistant', content: 'The capital of France is Paris.' },
+    { role: 'user', content: 'What is its population?' },
+  ],
+});
+```
+
+### Key Points
+
+- **Stateless**: These calls do not create sessions in the session history. Each call is independent.
+- **Model selection**: Use `listModels()` to discover available models, then pass an `id` to `chatCompletion()` or `chatCompletionStream()`. If you omit the model, the first available provider's default is used.
+- **Chat providers only**: Claude, OpenAI, and LM Studio. Agent providers (Claude Code, Codex) are not available through this API.
+- **User configuration**: The API respects the user's provider settings and API keys. If a provider is disabled or unconfigured, its models won't appear in `listModels()`.
+
 ## Next Steps
 
 - See [custom-editors.md](./custom-editors.md) to build the visual component
 - Check [manifest-reference.md](./manifest-reference.md) for all configuration options
 - Look at [examples/ai-tool](./examples/ai-tool/) for a complete working example
+- See [api-reference.md](./api-reference.md) for full type definitions

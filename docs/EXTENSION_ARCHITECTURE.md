@@ -44,6 +44,62 @@ Extensions receive `EditorHost` and must:
 - Handle `onFileChanged()` for external edits
 - NEVER depend on parent re-rendering them
 
+## AI Completion API
+
+Extensions with `permissions.ai: true` can call AI chat/completion models directly. This is a stateless API -- no sessions are created in the session history.
+
+### Available Methods
+
+```typescript
+// List models the user has enabled (Claude, OpenAI, LM Studio)
+const models = await services.ai.listModels();
+// => [{ id: "claude:claude-sonnet-4-6-...", name: "Claude Sonnet 4.6", provider: "claude" }, ...]
+
+// Non-streaming completion
+const result = await services.ai.chatCompletion({
+  messages: [{ role: 'user', content: 'Summarize this text: ...' }],
+  model: models[0].id,       // optional, uses provider default if omitted
+  systemPrompt: 'Be concise', // optional, prepended as system message
+  temperature: 0.7,           // optional
+  maxTokens: 1024,            // optional
+});
+// => { content: "Here is a summary...", model: "claude-sonnet-4-6-...", usage: { inputTokens: 50, outputTokens: 30 } }
+
+// Streaming completion
+const handle = await services.ai.chatCompletionStream({
+  messages: [{ role: 'user', content: 'Write a poem' }],
+  onChunk: (chunk) => {
+    if (chunk.type === 'text') appendToUI(chunk.content);
+    if (chunk.type === 'error') showError(chunk.error);
+    // chunk.type === 'done' signals completion
+  },
+});
+// Abort if needed: handle.abort();
+const finalResult = await handle.result;
+```
+
+### Key Points
+
+- **Chat providers only**: Claude, OpenAI, and LM Studio. Agent providers (Claude Code, Codex) are not available through this API.
+- **Model selection**: Pass a model `id` from `listModels()`, or omit to use the first available provider's default.
+- **Multi-turn**: Pass multiple messages with alternating `user`/`assistant` roles for conversation context.
+- **No sessions**: These completions are stateless and do not appear in session history. Use the existing `sendPrompt()` if you need session tracking.
+- **Streaming abort**: The `ChatCompletionStreamHandle.abort()` method cancels the in-flight request.
+
+### Types
+
+All types are exported from `@nimbalyst/extension-sdk`:
+
+| Type | Description |
+|------|-------------|
+| `ExtensionAIModel` | Model descriptor: `id`, `name`, `provider` |
+| `ChatCompletionMessage` | Message: `role` (`user`/`assistant`/`system`), `content` |
+| `ChatCompletionOptions` | Request: `messages`, `model?`, `maxTokens?`, `temperature?`, `systemPrompt?` |
+| `ChatCompletionResult` | Response: `content`, `model`, `usage?` |
+| `ChatCompletionStreamChunk` | Stream chunk: `type` (`text`/`error`/`done`), `content?`, `error?` |
+| `ChatCompletionStreamOptions` | Extends options with `onChunk` callback |
+| `ChatCompletionStreamHandle` | Stream control: `abort()`, `result` promise |
+
 ## Extension Development
 
 When working on extensions in `packages/extensions/`:
