@@ -194,6 +194,12 @@ function generateWindowsYml() {
   yamlString += `path: ${yamlContent.path}\n`;
   yamlString += `sha512: ${yamlContent.sha512}\n`;
   yamlString += `releaseDate: '${yamlContent.releaseDate}'\n`;
+  // publisherName tells electron-updater which Authenticode publisher to expect.
+  // Without this, it falls back to comparing against the installed app's registry
+  // publisher, which breaks when the signing certificate changes (e.g., personal
+  // Apple Dev ID -> corporate DigiCert).
+  yamlString += `publisherName:\n`;
+  yamlString += `  - "NIMBALYST, INC."\n`;
 
   // Write the file
   const outputPath = path.join(releaseDir, 'latest.yml');
