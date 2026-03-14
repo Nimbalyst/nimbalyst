@@ -18,7 +18,7 @@ export function CommitHoverCard({ detail, loading, anchorRect, author, date, onM
   }), [anchorRect]);
 
   const { refs, floatingStyles } = useFloating({
-    elements: { reference: virtualRef },
+    elements: { reference: virtualRef as unknown as Element },
     // No flip — this lives in a bottom panel and must ALWAYS open upward.
     placement: 'top-start',
     // Recompute position when the card resizes (e.g. content loads after loading state)

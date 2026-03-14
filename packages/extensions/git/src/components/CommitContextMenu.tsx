@@ -49,7 +49,7 @@ export function CommitContextMenu({
   const { refs, floatingStyles, context } = useFloating({
     open: true,
     onOpenChange: (open) => { if (!open) onClose(); },
-    elements: { reference: virtualRef },
+    elements: { reference: virtualRef as unknown as Element },
     placement: 'bottom-start',
     middleware: [flip({ padding: 8 }), shift({ padding: 8 })],
   });
