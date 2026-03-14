@@ -260,25 +260,83 @@ function handleAskUserQuestionResponse(
   cancelled: boolean,
   _findWindowByWorkspace: (workspacePath: string) => BrowserWindow | null | undefined
 ): void {
+  log.info(`[Mobile] AskUserQuestion response: questionId=${questionId}, sessionId=${sessionId}, cancelled=${cancelled}`);
+
+  let providerResolved = false;
   const provider = ProviderFactory.getProvider('claude-code', sessionId);
 
-  if (!provider) {
-    log.warn('No provider found for session:', sessionId);
-    return;
-  }
-
-  if (cancelled) {
-    if ('rejectAskUserQuestion' in provider) {
-      log.info('Rejecting question (cancelled):', questionId);
-      (provider as { rejectAskUserQuestion: (questionId: string, error: Error) => void })
-        .rejectAskUserQuestion(questionId, new Error('Question cancelled from mobile'));
+  if (provider) {
+    if (cancelled) {
+      if ('rejectAskUserQuestion' in provider) {
+        (provider as { rejectAskUserQuestion: (questionId: string, error: Error) => void })
+          .rejectAskUserQuestion(questionId, new Error('Question cancelled from mobile'));
+        providerResolved = true;
+      }
+    } else {
+      if ('resolveAskUserQuestion' in provider) {
+        providerResolved = (provider as { resolveAskUserQuestion: (questionId: string, answers: Record<string, string>, sessionId: string, source: string) => boolean })
+          .resolveAskUserQuestion(questionId, answers, sessionId, 'mobile');
+      }
     }
   } else {
-    if ('resolveAskUserQuestion' in provider) {
-      log.info('Resolving question:', questionId);
-      (provider as { resolveAskUserQuestion: (questionId: string, answers: Record<string, string>, sessionId: string, source: string) => void })
-        .resolveAskUserQuestion(questionId, answers, sessionId, 'mobile');
+    log.warn('[Mobile] No provider found for session:', sessionId);
+  }
+
+  // When AskUserQuestion comes through MCP, the provider's pendingAskUserQuestions map
+  // is empty, so resolveAskUserQuestion returns false. Fall back to IPC emission +
+  // database write so the MCP server's IPC listeners or database polling can resolve it.
+  if (!providerResolved) {
+    const { ipcMain } = require('electron');
+
+    // Try MCP-specific IPC channel
+    const mcpChannel = `ask-user-question-response:${sessionId}:${questionId}`;
+    const hasMcpWaiter = ipcMain.listenerCount(mcpChannel) > 0;
+    if (hasMcpWaiter) {
+      log.info(`[Mobile] Emitting on MCP channel: ${mcpChannel}`);
+      ipcMain.emit(mcpChannel, {}, {
+        questionId,
+        answers: cancelled ? {} : answers,
+        cancelled,
+        respondedBy: 'mobile',
+        sessionId,
+      });
     }
+
+    // Try session fallback IPC channel
+    const fallbackChannel = `ask-user-question:${sessionId}`;
+    const hasFallbackWaiter = ipcMain.listenerCount(fallbackChannel) > 0;
+    if (hasFallbackWaiter) {
+      log.info(`[Mobile] Emitting on session fallback channel: ${fallbackChannel}`);
+      ipcMain.emit(fallbackChannel, {}, {
+        questionId,
+        answers: cancelled ? {} : answers,
+        cancelled,
+        respondedBy: 'mobile',
+        sessionId,
+      });
+    }
+
+    // Database fallback: write response so MCP server's database polling can find it
+    import('@nimbalyst/runtime/storage/repositories/AgentMessagesRepository').then(({ AgentMessagesRepository }) => {
+      AgentMessagesRepository.create({
+        sessionId,
+        source: 'claude-code',
+        direction: 'output' as const,
+        createdAt: new Date(),
+        content: JSON.stringify({
+          type: 'ask_user_question_response',
+          questionId,
+          answers: cancelled ? {} : answers,
+          cancelled,
+          respondedBy: 'mobile',
+          respondedAt: Date.now()
+        })
+      }).catch(err => {
+        log.warn(`[Mobile] Failed to persist AskUserQuestion response to database: ${err}`);
+      });
+    });
+
+    log.info(`[Mobile] AskUserQuestion fallback resolution: hasMcpWaiter=${hasMcpWaiter}, hasFallbackWaiter=${hasFallbackWaiter}`);
   }
 
   // Notify renderer to clear the pending question UI
