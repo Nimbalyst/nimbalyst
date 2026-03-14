@@ -4316,7 +4316,7 @@ export class AIService {
     // Handle AskUserQuestion answer response from renderer
     // Used when Claude's AskUserQuestion tool needs user input
     safeHandle('claude-code:answer-question', async (event, { questionId, answers, sessionId }: { questionId: string; answers: Record<string, string>; sessionId?: string }) => {
-      // logger.main.info(`[AIService] AskUserQuestion answer received: questionId=${questionId}`);
+      logger.main.info(`[AIService] AskUserQuestion answer received: questionId=${questionId}, sessionId=${sessionId}`);
 
       // sessionId can be passed directly or extracted from legacy questionId format (ask-{sessionId}-{timestamp})
       let resolvedSessionId = sessionId;
@@ -4357,6 +4357,7 @@ export class AIService {
       const mcpQuestionResponseChannel = `ask-user-question-response:${resolvedSessionId || 'unknown'}:${questionId}`;
       const hasMcpWaiter = ipcMain.listenerCount(mcpQuestionResponseChannel) > 0;
       if (hasMcpWaiter) {
+        logger.main.info(`[AIService] AskUserQuestion emitting on MCP channel: ${mcpQuestionResponseChannel}`);
         ipcMain.emit(mcpQuestionResponseChannel, event, {
           questionId,
           answers,
@@ -4369,6 +4370,7 @@ export class AIService {
       const sessionFallbackChannel = `ask-user-question:${resolvedSessionId}`;
       const hasSessionFallbackWaiter = ipcMain.listenerCount(sessionFallbackChannel) > 0;
       if (hasSessionFallbackWaiter) {
+        logger.main.info(`[AIService] AskUserQuestion emitting on session fallback channel: ${sessionFallbackChannel}`);
         ipcMain.emit(sessionFallbackChannel, event, {
           questionId,
           answers,
@@ -4377,6 +4379,31 @@ export class AIService {
           sessionId: resolvedSessionId,
         });
       }
+
+      // When AskUserQuestion comes through the MCP server path (not the provider's canUseTool path),
+      // the provider's pendingAskUserQuestions map won't have the entry. In that case, also write
+      // the response to the database as a fallback so the MCP server's database polling can find it.
+      if (!providerResolved && resolvedSessionId) {
+        const { AgentMessagesRepository } = await import('@nimbalyst/runtime/storage/repositories/AgentMessagesRepository');
+        AgentMessagesRepository.create({
+          sessionId: resolvedSessionId,
+          source: 'claude-code',
+          direction: 'output' as const,
+          createdAt: new Date(),
+          content: JSON.stringify({
+            type: 'ask_user_question_response',
+            questionId,
+            answers,
+            cancelled: false,
+            respondedBy: 'desktop',
+            respondedAt: Date.now()
+          })
+        }).catch(err => {
+          logger.main.warn(`[AIService] Failed to persist AskUserQuestion response to database: ${err}`);
+        });
+      }
+
+      logger.main.info(`[AIService] AskUserQuestion resolution: providerResolved=${providerResolved}, hasMcpWaiter=${hasMcpWaiter}, hasSessionFallbackWaiter=${hasSessionFallbackWaiter}`);
 
       if (providerResolved || hasMcpWaiter || hasSessionFallbackWaiter) {
         return { success: true };
@@ -4446,6 +4473,27 @@ export class AIService {
           cancelled: true,
           respondedBy: 'desktop',
           sessionId: resolvedSessionId,
+        });
+      }
+
+      // Write cancellation to database as fallback for MCP server polling
+      if (!providerSupportsCancel && resolvedSessionId) {
+        const { AgentMessagesRepository } = await import('@nimbalyst/runtime/storage/repositories/AgentMessagesRepository');
+        AgentMessagesRepository.create({
+          sessionId: resolvedSessionId,
+          source: 'claude-code',
+          direction: 'output' as const,
+          createdAt: new Date(),
+          content: JSON.stringify({
+            type: 'ask_user_question_response',
+            questionId,
+            answers: {},
+            cancelled: true,
+            respondedBy: 'desktop',
+            respondedAt: Date.now()
+          })
+        }).catch(err => {
+          logger.main.warn(`[AIService] Failed to persist AskUserQuestion cancel to database: ${err}`);
         });
       }
 

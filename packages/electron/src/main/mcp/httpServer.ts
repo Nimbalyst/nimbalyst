@@ -2501,15 +2501,26 @@ The commit message should follow these guidelines:
           getAskUserQuestionResponseChannel(questionId);
         const fallbackSessionChannel = `ask-user-question:${sessionId || "unknown"}`;
 
+        console.log(`[MCP Server] AskUserQuestion waiting for response: questionId=${questionId}, sessionId=${sessionId}`);
+
         return new Promise((resolve) => {
           let settled = false;
+          let pollTimer: ReturnType<typeof setInterval> | null = null;
+
           const settle = (result: {
             answers?: Record<string, string>;
             cancelled?: boolean;
             respondedBy?: "desktop" | "mobile";
-          }) => {
+          }, source: string = 'unknown') => {
             if (settled) return;
             settled = true;
+
+            console.log(`[MCP Server] AskUserQuestion settled via ${source}: questionId=${questionId}, cancelled=${result?.cancelled}`);
+
+            if (pollTimer) {
+              clearInterval(pollTimer);
+              pollTimer = null;
+            }
             ipcMain.removeListener(questionResponseChannel, onQuestionIdResponse);
             ipcMain.removeListener(
               fallbackSessionChannel,
@@ -2562,7 +2573,7 @@ The commit message should follow these guidelines:
               cancelled?: boolean;
               respondedBy?: "desktop" | "mobile";
             }
-          ) => settle(result);
+          ) => settle(result, 'ipc-specific');
 
           const onSessionFallbackResponse = (
             _event: unknown,
@@ -2573,11 +2584,50 @@ The commit message should follow these guidelines:
               respondedBy?: "desktop" | "mobile";
             }
           ) => {
-            settle(result);
+            settle(result, 'ipc-fallback');
           };
 
           ipcMain.once(questionResponseChannel, onQuestionIdResponse);
           ipcMain.once(fallbackSessionChannel, onSessionFallbackResponse);
+
+          // Database polling fallback: if the IPC path fails (e.g., transport issues),
+          // poll for a response message written by the AIService answer handler.
+          if (sessionId) {
+            const POLL_INTERVAL = 1000;
+            const MAX_POLL_TIME = 10 * 60 * 1000;
+            const pollStart = Date.now();
+
+            pollTimer = setInterval(async () => {
+              if (settled || Date.now() - pollStart > MAX_POLL_TIME) {
+                if (pollTimer) {
+                  clearInterval(pollTimer);
+                  pollTimer = null;
+                }
+                return;
+              }
+
+              try {
+                const messages = await AgentMessagesRepository.list(sessionId, { limit: 20 });
+                for (const msg of messages) {
+                  try {
+                    const content = JSON.parse(msg.content);
+                    if (content.type === 'ask_user_question_response' && content.questionId === questionId) {
+                      if (content.cancelled) {
+                        settle({ cancelled: true, respondedBy: content.respondedBy }, 'db-poll');
+                      } else {
+                        settle({ answers: content.answers, respondedBy: content.respondedBy }, 'db-poll');
+                      }
+                      return;
+                    }
+                  } catch {
+                    // Not valid JSON, skip
+                  }
+                }
+              } catch {
+                // Database error, continue polling
+              }
+            }, POLL_INTERVAL);
+          }
         });
       }
 
