@@ -10,7 +10,6 @@ import { parse as parseUrl } from "url";
 import { randomUUID } from "crypto";
 
 // Extracted modules
-import { getBuiltInToolSchemas } from "./mcpToolSchemas";
 import {
   documentStateBySession,
   getAvailableExtensionTools,
@@ -18,15 +17,16 @@ import {
   ExtensionToolDefinition,
 } from "./mcpWorkspaceResolver";
 
-// Tool handlers
-import { handleVoiceAgentSpeak, handleVoiceAgentStop } from "./tools/voiceToolHandlers";
-import { handleDisplayToUser } from "./tools/displayToolHandler";
+// Tool handlers + schemas
+import { handleVoiceAgentSpeak, handleVoiceAgentStop, voiceToolSchemas } from "./tools/voiceToolHandlers";
+import { handleDisplayToUser, displayToolSchemas } from "./tools/displayToolHandler";
 import {
   handleApplyDiff,
   handleStreamContent,
   handleOpenWorkspace,
   handleCaptureEditorScreenshot,
   handleGetSessionEditedFiles,
+  getEditorToolSchemas,
 } from "./tools/editorToolHandlers";
 import {
   handleTrackerList,
@@ -34,10 +34,12 @@ import {
   handleTrackerCreate,
   handleTrackerUpdate,
   handleTrackerLinkSession,
+  trackerToolSchemas,
 } from "./tools/trackerToolHandlers";
 import {
   handleAskUserQuestion,
   handleGitCommitProposal,
+  getInteractiveToolSchemas,
 } from "./tools/interactiveToolHandlers";
 import { handleExtensionTool } from "./tools/extensionToolHandler";
 
@@ -268,7 +270,13 @@ function createSharedMcpServer(
       : undefined;
     const currentFilePath = currentDocState?.filePath;
 
-    const builtInTools = getBuiltInToolSchemas(sessionId);
+    const builtInTools = [
+      ...getEditorToolSchemas(sessionId),
+      ...displayToolSchemas,
+      ...voiceToolSchemas,
+      ...getInteractiveToolSchemas(sessionId),
+      ...trackerToolSchemas,
+    ];
 
     // Get extension tools for the current workspace/file
     const extensionTools = await getAvailableExtensionTools(

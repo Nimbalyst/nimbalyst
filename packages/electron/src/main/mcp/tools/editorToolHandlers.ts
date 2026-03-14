@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain } from "electron";
 import { isAbsolute } from "path";
 import { existsSync } from "fs";
 import {
@@ -12,6 +12,66 @@ type McpToolResult = {
   content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
   isError: boolean;
 };
+
+export function getEditorToolSchemas(sessionId: string | undefined) {
+  const tools: Array<{ name: string; description: string; inputSchema: any }> = [
+    {
+      name: "capture_editor_screenshot",
+      description:
+        "Capture a screenshot of any editor view. Works with all file types including custom editors (Excalidraw, CSV, mockups), markdown, code, etc. Use this to visually verify UI, diagrams, or any editor content.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          file_path: {
+            type: "string",
+            description:
+              "The absolute path to the file being edited (optional, uses active file if not specified)",
+          },
+          selector: {
+            type: "string",
+            description:
+              "CSS selector to capture a specific element (optional, captures full editor area if not specified)",
+          },
+        },
+      },
+    },
+  ];
+
+  // open_workspace is only available in development mode
+  if (!app.isPackaged) {
+    tools.push({
+      name: "open_workspace",
+      description:
+        "Open a workspace (project directory) in Nimbalyst. This allows switching between different projects or opening additional workspaces. The workspace will open in a new window.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          workspace_path: {
+            type: "string",
+            description:
+              "The absolute path to the workspace directory to open",
+          },
+        },
+        required: ["workspace_path"],
+      },
+    });
+  }
+
+  if (sessionId) {
+    tools.push({
+      name: "get_session_edited_files",
+      description:
+        "Get the list of files that were edited during this AI session. Use this when you need to know which files have been modified as part of the current session, for example when preparing a git commit. Returns file paths relative to the workspace.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        required: [],
+      },
+    });
+  }
+
+  return tools;
+}
 
 export async function handleApplyDiff(args: any): Promise<McpToolResult> {
   const typedArgs = args as

@@ -6,6 +6,119 @@ type McpToolResult = {
   isError: boolean;
 };
 
+export const displayToolSchemas = [
+  {
+    name: "display_to_user",
+    description:
+      'Display visual content inline in the conversation. Use this to show images or charts to the user. Provide an array of items, where each item has a description and exactly one content type: either "image" (for displaying a LOCAL file) or "chart" (for data visualizations). IMPORTANT: For images, you must provide an ABSOLUTE path to a LOCAL file on disk (e.g., "/Users/name/project/image.png"). URLs and relative paths are NOT supported. If a file does not exist, that specific image will show an error while other valid images still display.',
+    inputSchema: {
+      type: "object",
+      properties: {
+        items: {
+          type: "array",
+          description:
+            "Array of visual items to display. Each item must have a description and exactly one content type (image or chart).",
+          minItems: 1,
+          items: {
+            type: "object",
+            properties: {
+              description: {
+                type: "string",
+                description:
+                  "Brief description of what this visual content shows",
+              },
+              image: {
+                type: "object",
+                description:
+                  "Display a LOCAL image file from disk. Provide this OR chart, not both. The file must exist locally.",
+                properties: {
+                  path: {
+                    type: "string",
+                    description:
+                      'ABSOLUTE path to a LOCAL image file on disk (e.g., "/Users/name/project/screenshot.png"). URLs and relative paths are NOT supported. The file must exist.',
+                  },
+                },
+                required: ["path"],
+              },
+              chart: {
+                type: "object",
+                description:
+                  "Display a data chart. Provide this OR image, not both.",
+                properties: {
+                  chartType: {
+                    type: "string",
+                    enum: ["bar", "line", "pie", "area", "scatter"],
+                    description: "The type of chart to render",
+                  },
+                  data: {
+                    type: "array",
+                    items: { type: "object" },
+                    description:
+                      "Array of data objects with keys matching xAxisKey and yAxisKey",
+                  },
+                  xAxisKey: {
+                    type: "string",
+                    description:
+                      "Key in data objects for x-axis labels (or pie chart segment names)",
+                  },
+                  yAxisKey: {
+                    oneOf: [
+                      { type: "string" },
+                      { type: "array", items: { type: "string" } },
+                    ],
+                    description:
+                      "Key(s) in data objects for y-axis values. String for single series, array for multi-series",
+                  },
+                  colors: {
+                    type: "array",
+                    items: { type: "string" },
+                    description:
+                      "Optional colors for chart series (hex codes or CSS color names)",
+                  },
+                  errorBars: {
+                    type: "object",
+                    description:
+                      "Optional error bars configuration. Supports bar, line, area, and scatter charts.",
+                    properties: {
+                      dataKey: {
+                        type: "string",
+                        description:
+                          "Key in data objects for the y-axis series to add error bars to (required when yAxisKey is an array)",
+                      },
+                      errorKey: {
+                        type: "string",
+                        description:
+                          "Key in data objects containing error values (symmetric errors)",
+                      },
+                      errorKeyLower: {
+                        type: "string",
+                        description:
+                          "Key in data objects for lower error values (asymmetric errors)",
+                      },
+                      errorKeyUpper: {
+                        type: "string",
+                        description:
+                          "Key in data objects for upper error values (asymmetric errors)",
+                      },
+                      strokeWidth: {
+                        type: "number",
+                        description: "Width of error bar lines (default: 2)",
+                      },
+                    },
+                  },
+                },
+                required: ["chartType", "data", "xAxisKey", "yAxisKey"],
+              },
+            },
+            required: ["description"],
+          },
+        },
+      },
+      required: ["items"],
+    },
+  },
+];
+
 type ErrorBarsConfig = {
   dataKey?: string;
   errorKey?: string;

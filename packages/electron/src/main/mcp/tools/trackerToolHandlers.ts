@@ -3,6 +3,155 @@ type McpToolResult = {
   isError: boolean;
 };
 
+export const trackerToolSchemas = [
+  {
+    name: "tracker_list",
+    description:
+      "List tracker items (bugs, tasks, plans, ideas, decisions, etc.) with optional filtering. Returns a summary of each item. Use this to see what work items exist.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        type: {
+          type: "string",
+          description:
+            "Filter by item type (e.g., 'bug', 'task', 'plan', 'idea', 'decision')",
+        },
+        status: {
+          type: "string",
+          description:
+            "Filter by status (e.g., 'to-do', 'in-progress', 'done')",
+        },
+        priority: {
+          type: "string",
+          description:
+            "Filter by priority (e.g., 'low', 'medium', 'high', 'critical')",
+        },
+        archived: {
+          type: "boolean",
+          description: "Include archived items (default: false)",
+        },
+        search: {
+          type: "string",
+          description: "Search title and description text",
+        },
+        limit: {
+          type: "number",
+          description: "Maximum number of items to return (default: 50)",
+        },
+      },
+    },
+  },
+  {
+    name: "tracker_get",
+    description:
+      "Get a single tracker item with its full content (as markdown). Use this to read the detailed body of a bug, plan, task, etc.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        id: {
+          type: "string",
+          description: "The tracker item ID",
+        },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "tracker_create",
+    description:
+      "Create a new tracker item (bug, task, plan, idea, decision, or any custom type).",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        type: {
+          type: "string",
+          description:
+            "Item type (e.g., 'bug', 'task', 'plan', 'idea', 'decision')",
+        },
+        title: {
+          type: "string",
+          description: "Item title",
+        },
+        description: {
+          type: "string",
+          description:
+            "Plain text or markdown description (stored as rich content)",
+        },
+        status: {
+          type: "string",
+          description: "Status (default: 'to-do')",
+        },
+        priority: {
+          type: "string",
+          description:
+            "Priority level (e.g., 'low', 'medium', 'high', 'critical')",
+        },
+        tags: {
+          type: "array",
+          items: { type: "string" },
+          description: "Tags for categorization",
+        },
+      },
+      required: ["type", "title"],
+    },
+  },
+  {
+    name: "tracker_update",
+    description:
+      "Update an existing tracker item's metadata or content. Can change title, status, priority, tags, description, or archive state.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        id: {
+          type: "string",
+          description: "The tracker item ID to update",
+        },
+        title: {
+          type: "string",
+          description: "New title",
+        },
+        status: {
+          type: "string",
+          description: "New status",
+        },
+        priority: {
+          type: "string",
+          description: "New priority",
+        },
+        description: {
+          type: "string",
+          description: "New description content (replaces existing content)",
+        },
+        tags: {
+          type: "array",
+          items: { type: "string" },
+          description: "New tags (replaces existing tags)",
+        },
+        archived: {
+          type: "boolean",
+          description: "Set archive state",
+        },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "tracker_link_session",
+    description:
+      "Link the current AI session to a tracker item. This creates a bidirectional reference between the session and the work item.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        trackerId: {
+          type: "string",
+          description: "The tracker item ID to link to this session",
+        },
+      },
+      required: ["trackerId"],
+    },
+  },
+];
+
 export async function handleTrackerList(
   args: any,
   workspacePath: string | undefined

@@ -10,6 +10,35 @@ type McpToolResult = {
   isError: boolean;
 };
 
+export const voiceToolSchemas = [
+  {
+    name: "voice_agent_speak",
+    description:
+      "Send a message to the voice agent to be spoken aloud to the user. This tool serves as a communication bridge between the coding agent and the voice agent, enabling the coding agent to provide spoken updates, task completion notifications, or responses to the user during voice mode sessions. Use this when you want to inform the user about progress or results while they are interacting via voice. If voice mode is not active, this tool will return a non-error response indicating voice is unavailable. Keep messages concise and conversational.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        message: {
+          type: "string",
+          description:
+            "The message for the voice agent to speak to the user. Be concise and natural. This enables the coding agent to communicate with the user through the voice agent.",
+        },
+      },
+      required: ["message"],
+    },
+  },
+  {
+    name: "voice_agent_stop",
+    description:
+      "Stop the current voice mode session. Use this to end voice interactions when the conversation is complete, when the user requests to stop, or when transitioning away from voice mode. This will disconnect from the voice service and clean up resources. Returns success if a session was stopped, or indicates if no session was active.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+  },
+];
+
 export function handleVoiceAgentSpeak(args: any): McpToolResult {
   const message = args?.message as string | undefined;
 
