@@ -13,7 +13,7 @@ interface Query extends AsyncGenerator<SDKMessage, void> {
   streamInput(stream: AsyncIterable<any>): Promise<void>;
 }
 import { parse as parseShellCommand } from 'shell-quote';
-import type { MessageParam, TextBlockParam, ContentBlockParam } from '@anthropic-ai/sdk/resources';
+
 import { BaseAgentProvider } from './BaseAgentProvider';
 import {
   DocumentContext,
@@ -35,10 +35,10 @@ import path from 'path';
 import os from 'os';
 import { app } from 'electron';
 import { buildClaudeCodeSystemPrompt } from '../../prompt';
-import { setupClaudeCodeEnvironment, getClaudeCodeExecutableOptions, getClaudeCodeSpawnFunction, ClaudeHelperMethod } from '../../../electron/claudeCodeEnvironment';
+import type { ClaudeHelperMethod } from '../../../electron/claudeCodeEnvironment';
 import { SessionManager } from '../SessionManager';
 import { parseBashForFileOps, hasShellChainingOperators, splitOnShellOperators } from '../permissions/BashCommandAnalyzer';
-import { DEFAULT_EFFORT_LEVEL } from '../effortLevels';
+
 import { ToolPermissionService } from '../permissions/ToolPermissionService';
 import { AgentToolHooks } from '../permissions/AgentToolHooks';
 import { McpConfigService } from '../services/McpConfigService';
@@ -55,7 +55,6 @@ import {
   isSearchableAssistantChunk,
 } from './claudeCode/toolChunkUtils';
 import {
-  DEFAULT_PLANNING_TOOLS,
   INTERNAL_MCP_TOOLS,
   TEAM_TOOLS,
 } from './claudeCode/toolPolicy';
@@ -65,7 +64,7 @@ import {
   extractResultChunkErrorMessage,
   isAuthenticationSummary,
 } from './claudeCode/resultChunkUtils';
-import { resolveClaudeAgentCliPath } from './claudeCode/cliPathResolver';
+
 import {
   handleAskUserQuestionTool,
   pollForAskUserQuestionResponse,
@@ -78,6 +77,8 @@ import {
   handleToolPermissionFallback as handleToolPermissionFallbackHelper,
   handleToolPermissionWithService as handleToolPermissionWithServiceHelper,
 } from './claudeCode/toolAuthorization';
+import { ClaudeCodeDeps } from './claudeCode/dependencyInjection';
+import { buildSdkOptions } from './claudeCode/sdkOptionsBuilder';
 
 /**
  * SDK-native tools that are executed by the Claude Code SDK itself (not by Nimbalyst).
@@ -181,30 +182,12 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   // MCP configuration service for loading and processing MCP server configs
   private mcpConfigService: McpConfigService;
 
-  // Setting for using standalone binary (injected from electron main process)
-  // When true, use Bun-compiled standalone binary on macOS to hide dock icon
-  private static useStandaloneBinary: boolean = false;
+  // ---- Static dependency forwarding ----
+  // All static fields and setters live in ClaudeCodeDeps.
+  // These forwarding setters maintain backward compatibility for callers.
 
-  // Custom Claude Code executable path (injected from electron main process)
-  // When set, overrides the bundled CLI and standalone binary
-  private static customClaudeCodePath: string = '';
-
-  /**
-   * Set whether to use the standalone binary for spawning Claude Code.
-   * When true on macOS, uses the Bun-compiled binary to avoid dock icons.
-   */
-  public static setUseStandaloneBinary(enabled: boolean): void {
-    ClaudeCodeProvider.useStandaloneBinary = enabled;
-  }
-
-  /**
-   * Set a custom path to the Claude Code executable.
-   * When set, this overrides the bundled CLI and standalone binary.
-   * Used for corporate SSO wrappers or custom Claude installations.
-   */
-  public static setCustomClaudeCodePath(path: string): void {
-    ClaudeCodeProvider.customClaudeCodePath = path;
-  }
+  public static setUseStandaloneBinary(enabled: boolean): void { ClaudeCodeDeps.setUseStandaloneBinary(enabled); }
+  public static setCustomClaudeCodePath(path: string): void { ClaudeCodeDeps.setCustomClaudeCodePath(path); }
 
   constructor() {
     super();
@@ -233,13 +216,13 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     // can fall back to inline logic if not configured (e.g., in tests)
     if (
       BaseAgentProvider.trustChecker &&
-      ClaudeCodeProvider.claudeSettingsPatternSaver &&
-      ClaudeCodeProvider.claudeSettingsPatternChecker
+      ClaudeCodeDeps.claudeSettingsPatternSaver &&
+      ClaudeCodeDeps.claudeSettingsPatternChecker
     ) {
       this.permissionService = new ToolPermissionService({
         trustChecker: BaseAgentProvider.trustChecker,
-        patternSaver: ClaudeCodeProvider.claudeSettingsPatternSaver,
-        patternChecker: ClaudeCodeProvider.claudeSettingsPatternChecker,
+        patternSaver: ClaudeCodeDeps.claudeSettingsPatternSaver,
+        patternChecker: ClaudeCodeDeps.claudeSettingsPatternChecker,
         securityLogger: BaseAgentProvider.securityLogger ?? undefined,
         emit: this.emit.bind(this),
       });
@@ -247,15 +230,15 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
 
     // Initialize MCP configuration service
     this.mcpConfigService = new McpConfigService({
-      mcpServerPort: ClaudeCodeProvider.mcpServerPort,
-      sessionNamingServerPort: ClaudeCodeProvider.sessionNamingServerPort,
-      extensionDevServerPort: ClaudeCodeProvider.extensionDevServerPort,
+      mcpServerPort: ClaudeCodeDeps.mcpServerPort,
+      sessionNamingServerPort: ClaudeCodeDeps.sessionNamingServerPort,
+      extensionDevServerPort: ClaudeCodeDeps.extensionDevServerPort,
       superLoopProgressServerPort: null, // Disabled - was leaking into non-super-loop sessions
-      sessionContextServerPort: ClaudeCodeProvider.sessionContextServerPort,
-      mcpConfigLoader: ClaudeCodeProvider.mcpConfigLoader,
-      extensionPluginsLoader: ClaudeCodeProvider.extensionPluginsLoader,
-      claudeSettingsEnvLoader: ClaudeCodeProvider.claudeSettingsEnvLoader,
-      shellEnvironmentLoader: ClaudeCodeProvider.shellEnvironmentLoader,
+      sessionContextServerPort: ClaudeCodeDeps.sessionContextServerPort,
+      mcpConfigLoader: ClaudeCodeDeps.mcpConfigLoader,
+      extensionPluginsLoader: ClaudeCodeDeps.extensionPluginsLoader,
+      claudeSettingsEnvLoader: ClaudeCodeDeps.claudeSettingsEnvLoader,
+      shellEnvironmentLoader: ClaudeCodeDeps.shellEnvironmentLoader,
     });
   }
 
@@ -289,9 +272,9 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       logAgentMessage: this.logAgentMessage.bind(this),
       logSecurity: this.logSecurity.bind(this),
       trustChecker: BaseAgentProvider.trustChecker || undefined,
-      patternChecker: ClaudeCodeProvider.claudeSettingsPatternChecker || undefined,
-      patternSaver: ClaudeCodeProvider.claudeSettingsPatternSaver || undefined,
-      extensionFileTypesLoader: ClaudeCodeProvider.extensionFileTypesLoader || undefined,
+      patternChecker: ClaudeCodeDeps.claudeSettingsPatternChecker || undefined,
+      patternSaver: ClaudeCodeDeps.claudeSettingsPatternSaver || undefined,
+      extensionFileTypesLoader: ClaudeCodeDeps.extensionFileTypesLoader || undefined,
       getCurrentMode: () => this.currentMode,
       setCurrentMode: (mode) => { this.currentMode = mode; },
       getPendingExitPlanModeConfirmations: () => this.pendingExitPlanModeConfirmations,
@@ -343,237 +326,25 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   // When Claude calls AskUserQuestion, we block until the UI provides answers via IPC
   private pendingAskUserQuestions: Map<string, PendingAskUserQuestionEntry> = new Map();
 
-  // Shared MCP server port (injected from electron main process)
-  // This server provides capture_editor_screenshot tool only.
-  // applyDiff and streamContent are NOT exposed via MCP - they're only for chat providers via IPC.
-  private static mcpServerPort: number | null = null;
+  static readonly DEFAULT_MODEL = ClaudeCodeDeps.DEFAULT_MODEL;
 
-  // Session naming MCP server port (injected from electron main process)
-  private static sessionNamingServerPort: number | null = null;
-
-  // Extension dev MCP server port (injected from electron main process)
-  // Provides tools for building, installing, and reloading extensions
-  private static extensionDevServerPort: number | null = null;
-
-  // Super Loop progress MCP server port (injected from electron main process)
-  private static superLoopProgressServerPort: number | null = null;
-
-  // Session context MCP server port (injected from electron main process)
-  // Provides session summary, workstream overview, and recent sessions tools
-  private static sessionContextServerPort: number | null = null;
-
-  // MCP config loader (injected from electron main process)
-  // Returns merged user + workspace MCP servers
-  private static mcpConfigLoader: ((workspacePath?: string) => Promise<Record<string, any>>) | null = null;
-
-  // Extension plugins loader (injected from electron main process)
-  // Returns plugin paths from enabled extensions with Claude plugins
-  // Accepts optional workspace path to include project-scoped CLI plugins
-  private static extensionPluginsLoader: ((workspacePath?: string) => Promise<Array<{ type: 'local'; path: string }>>) | null = null;
-
-  // Claude Code settings loader (injected from electron main process)
-  // Returns settings for project/user commands
-  private static claudeCodeSettingsLoader: (() => Promise<{ projectCommandsEnabled: boolean; userCommandsEnabled: boolean }>) | null = null;
-
-  // Claude settings env vars loader (injected from electron main process)
-  // Returns env vars from ~/.claude/settings.json to pass directly to the SDK
-  private static claudeSettingsEnvLoader: (() => Promise<Record<string, string>>) | null = null;
-
-  // Shell environment loader (injected from electron main process)
-  // Returns full env vars from user's login shell (e.g., AWS_*, NODE_EXTRA_CA_CERTS)
-  // Ensures env vars are available even when launched from Dock/Finder
-  private static shellEnvironmentLoader: (() => Record<string, string> | null) | null = null;
-
-  // Additional directories loader (injected from electron main process)
-  // Returns additional directories Claude should have access to based on workspace context
-  // (e.g., SDK docs when working on an extension project)
-  private static additionalDirectoriesLoader: ((workspacePath: string) => string[]) | null = null;
-
-  // Claude settings pattern saver (injected from electron main process)
-  // Writes tool patterns to .claude/settings.local.json when user approves with "Always"
-  private static claudeSettingsPatternSaver: ((
-    workspacePath: string,
-    pattern: string
-  ) => Promise<void>) | null = null;
-
-  // Claude settings pattern checker (injected from electron main process)
-  // Checks if a pattern is in the allow list of .claude/settings.local.json
-  private static claudeSettingsPatternChecker: ((
-    workspacePath: string,
-    pattern: string
-  ) => Promise<boolean>) | null = null;
-
-  // Image compressor (injected from electron main process)
-  // Compresses images to fit within API limits before sending
-  private static imageCompressor: ((
-    buffer: Buffer,
-    mimeType: string,
-    options?: { targetSizeBytes?: number }
-  ) => Promise<{ buffer: Buffer; mimeType: string; wasCompressed: boolean }>) | null = null;
-
-  // Extension file types loader (injected from electron main process)
-  // Returns file extensions that have custom editors registered via extensions
-  // Used in planning mode to allow editing extension-registered file types (e.g., .mockup.html)
-  private static extensionFileTypesLoader: (() => Set<string>) | null = null;
-
-  static readonly DEFAULT_MODEL = 'claude-code:sonnet';
-
-  /**
-   * Set the shared MCP server port (called from electron main process)
-   * This allows the runtime package to use the MCP server without directly depending on electron code
-   */
-  public static setMcpServerPort(port: number | null): void {
-    ClaudeCodeProvider.mcpServerPort = port;
-  }
-
-  /**
-   * Set the session naming MCP server port (called from electron main process)
-   * This allows the runtime package to use the MCP server without directly depending on electron code
-   */
-  public static setSessionNamingServerPort(port: number | null): void {
-    ClaudeCodeProvider.sessionNamingServerPort = port;
-  }
-
-  /**
-   * Set the extension dev MCP server port (called from electron main process)
-   * This provides build, install, reload, and uninstall tools for extension development
-   */
-  public static setExtensionDevServerPort(port: number | null): void {
-    ClaudeCodeProvider.extensionDevServerPort = port;
-  }
-
-  /**
-   * Set the Super Loop progress MCP server port (called from electron main process)
-   * This provides the super_loop_progress_update tool for Super Loop iterations
-   */
-  public static setSuperLoopProgressServerPort(port: number | null): void {
-    ClaudeCodeProvider.superLoopProgressServerPort = port;
-  }
-
-  /**
-   * Set the session context MCP server port (called from electron main process)
-   * This provides session summary, workstream overview, and recent sessions tools
-   */
-  public static setSessionContextServerPort(port: number | null): void {
-    ClaudeCodeProvider.sessionContextServerPort = port;
-  }
-
-  /**
-   * Set the MCP config loader function (called from electron main process)
-   * This allows the runtime package to load merged user + workspace MCP configs
-   * without directly depending on electron code
-   */
-  public static setMCPConfigLoader(loader: ((workspacePath?: string) => Promise<Record<string, any>>) | null): void {
-    ClaudeCodeProvider.mcpConfigLoader = loader;
-  }
-
-  /**
-   * Set the extension plugins loader function (called from electron main process)
-   * This allows the runtime package to load Claude SDK plugins from extensions
-   * without directly depending on electron extension loader code
-   */
-  public static setExtensionPluginsLoader(loader: ((workspacePath?: string) => Promise<Array<{ type: 'local'; path: string }>>) | null): void {
-    ClaudeCodeProvider.extensionPluginsLoader = loader;
-  }
-
-  /**
-   * Set the Claude Code settings loader function (called from electron main process)
-   * This allows the runtime package to get user/project command settings
-   */
-  public static setClaudeCodeSettingsLoader(loader: (() => Promise<{ projectCommandsEnabled: boolean; userCommandsEnabled: boolean }>) | null): void {
-    ClaudeCodeProvider.claudeCodeSettingsLoader = loader;
-  }
-
-  /**
-   * Set the env vars loader function (called from electron main process)
-   * Returns env vars from ~/.claude/settings.json to pass directly to the SDK env option.
-   * This ensures experimental feature flags like CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
-   * are passed both via settings.json AND the SDK env for maximum reliability.
-   */
-  public static setClaudeSettingsEnvLoader(loader: (() => Promise<Record<string, string>>) | null): void {
-    ClaudeCodeProvider.claudeSettingsEnvLoader = loader;
-  }
-
-  /**
-   * Set the shell environment loader (called from electron main process).
-   * Provides the full set of env vars from the user's login shell (excluding PATH).
-   * This ensures env vars like AWS credentials, NODE_EXTRA_CA_CERTS, etc.
-   * are available to the Claude Code subprocess even when launched from Dock/Finder.
-   */
-  public static setShellEnvironmentLoader(loader: (() => Record<string, string> | null) | null): void {
-    ClaudeCodeProvider.shellEnvironmentLoader = loader;
-  }
-
-  /**
-   * Set the additional directories loader function (called from electron main process)
-   * This allows the runtime package to get additional directories Claude should have access to
-   * based on workspace context (e.g., SDK docs when working on an extension project)
-   */
-  public static setAdditionalDirectoriesLoader(loader: ((workspacePath: string) => string[]) | null): void {
-    ClaudeCodeProvider.additionalDirectoriesLoader = loader;
-  }
-
-  /**
-   * Set the security logger function (called from electron main process)
-   * Only enabled in dev mode for reviewing permission decisions
-   */
-  public static setSecurityLogger(logger: ((message: string, data?: any) => void) | null): void {
-    BaseAgentProvider.setSecurityLogger(logger);
-  }
-
-  /**
-   * Set the image compressor function (called from electron main process)
-   * Compresses images to fit within API limits before sending
-   */
-  public static setImageCompressor(compressor: ((
-    buffer: Buffer,
-    mimeType: string,
-    options?: { targetSizeBytes?: number }
-  ) => Promise<{ buffer: Buffer; mimeType: string; wasCompressed: boolean }>) | null): void {
-    ClaudeCodeProvider.imageCompressor = compressor;
-  }
-
-  /**
-   * Set the Claude settings pattern saver function (called from electron main process)
-   * Writes tool patterns to .claude/settings.local.json when user approves with "Always"
-   */
-  public static setClaudeSettingsPatternSaver(saver: ((
-    workspacePath: string,
-    pattern: string
-  ) => Promise<void>) | null): void {
-    ClaudeCodeProvider.claudeSettingsPatternSaver = saver;
-  }
-
-  /**
-   * Set the Claude settings pattern checker function (called from electron main process)
-   * Checks if a pattern is in the allow list of Claude settings files
-   */
-  public static setClaudeSettingsPatternChecker(checker: ((
-    workspacePath: string,
-    pattern: string
-  ) => Promise<boolean>) | null): void {
-    ClaudeCodeProvider.claudeSettingsPatternChecker = checker;
-  }
-
-  /**
-   * Set the trust checker function (called from electron main process)
-   * Checks if a workspace is trusted before allowing tool execution.
-   * NOTE: For worktree sessions, the caller should pass the parent project path.
-   */
-  public static setTrustChecker(checker: ((
-    workspacePath: string
-  ) => { trusted: boolean; mode: 'ask' | 'allow-all' | 'bypass-all' | null }) | null): void {
-    BaseAgentProvider.setTrustChecker(checker);
-  }
-
-  /**
-   * Set the extension file types loader function (called from electron main process)
-   * Returns file extensions that have custom editors registered via extensions.
-   * Used in planning mode to allow editing extension-registered file types.
-   */
-  public static setExtensionFileTypesLoader(loader: (() => Set<string>) | null): void {
-    ClaudeCodeProvider.extensionFileTypesLoader = loader;
-  }
+  public static setMcpServerPort(port: number | null): void { ClaudeCodeDeps.setMcpServerPort(port); }
+  public static setSessionNamingServerPort(port: number | null): void { ClaudeCodeDeps.setSessionNamingServerPort(port); }
+  public static setExtensionDevServerPort(port: number | null): void { ClaudeCodeDeps.setExtensionDevServerPort(port); }
+  public static setSuperLoopProgressServerPort(port: number | null): void { ClaudeCodeDeps.setSuperLoopProgressServerPort(port); }
+  public static setSessionContextServerPort(port: number | null): void { ClaudeCodeDeps.setSessionContextServerPort(port); }
+  public static setMCPConfigLoader(loader: ((workspacePath?: string) => Promise<Record<string, any>>) | null): void { ClaudeCodeDeps.setMCPConfigLoader(loader); }
+  public static setExtensionPluginsLoader(loader: ((workspacePath?: string) => Promise<Array<{ type: 'local'; path: string }>>) | null): void { ClaudeCodeDeps.setExtensionPluginsLoader(loader); }
+  public static setClaudeCodeSettingsLoader(loader: (() => Promise<{ projectCommandsEnabled: boolean; userCommandsEnabled: boolean }>) | null): void { ClaudeCodeDeps.setClaudeCodeSettingsLoader(loader); }
+  public static setClaudeSettingsEnvLoader(loader: (() => Promise<Record<string, string>>) | null): void { ClaudeCodeDeps.setClaudeSettingsEnvLoader(loader); }
+  public static setShellEnvironmentLoader(loader: (() => Record<string, string> | null) | null): void { ClaudeCodeDeps.setShellEnvironmentLoader(loader); }
+  public static setAdditionalDirectoriesLoader(loader: ((workspacePath: string) => string[]) | null): void { ClaudeCodeDeps.setAdditionalDirectoriesLoader(loader); }
+  public static setSecurityLogger(logger: ((message: string, data?: any) => void) | null): void { BaseAgentProvider.setSecurityLogger(logger); }
+  public static setImageCompressor(compressor: ((buffer: Buffer, mimeType: string, options?: { targetSizeBytes?: number }) => Promise<{ buffer: Buffer; mimeType: string; wasCompressed: boolean }>) | null): void { ClaudeCodeDeps.setImageCompressor(compressor); }
+  public static setClaudeSettingsPatternSaver(saver: ((workspacePath: string, pattern: string) => Promise<void>) | null): void { ClaudeCodeDeps.setClaudeSettingsPatternSaver(saver); }
+  public static setClaudeSettingsPatternChecker(checker: ((workspacePath: string, pattern: string) => Promise<boolean>) | null): void { ClaudeCodeDeps.setClaudeSettingsPatternChecker(checker); }
+  public static setTrustChecker(checker: ((workspacePath: string) => { trusted: boolean; mode: 'ask' | 'allow-all' | 'bypass-all' | null }) | null): void { BaseAgentProvider.setTrustChecker(checker); }
+  public static setExtensionFileTypesLoader(loader: (() => Set<string>) | null): void { ClaudeCodeDeps.setExtensionFileTypesLoader(loader); }
 
   async initialize(config: ProviderConfig): Promise<void> {
     const safeConfig = { ...config, apiKey: config.apiKey ? '***' : undefined };
@@ -632,7 +403,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     } = await prepareClaudeCodeAttachments({
       attachments,
       largeAttachmentCharThreshold: LARGE_ATTACHMENT_CHAR_THRESHOLD,
-      imageCompressor: ClaudeCodeProvider.imageCompressor || undefined,
+      imageCompressor: ClaudeCodeDeps.imageCompressor || undefined,
     });
 
     // Abort any existing request before starting a new one
@@ -681,9 +452,9 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       // Load env vars from ~/.claude/settings.json early so they're available for both
       // system prompt building (agent teams flag) and SDK environment setup
       let settingsEnv: Record<string, string> = {};
-      if (ClaudeCodeProvider.claudeSettingsEnvLoader) {
+      if (ClaudeCodeDeps.claudeSettingsEnvLoader) {
         try {
-          settingsEnv = await ClaudeCodeProvider.claudeSettingsEnvLoader();
+          settingsEnv = await ClaudeCodeDeps.claudeSettingsEnvLoader();
         } catch (error) {
           console.warn('[CLAUDE-CODE] Failed to load settings env vars:', error);
         }
@@ -693,9 +464,9 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       // These fill in env vars that are missing from Electron's minimal environment
       // when launched from Dock/Finder instead of terminal
       let shellEnv: Record<string, string> = {};
-      if (ClaudeCodeProvider.shellEnvironmentLoader) {
+      if (ClaudeCodeDeps.shellEnvironmentLoader) {
         try {
-          shellEnv = ClaudeCodeProvider.shellEnvironmentLoader() || {};
+          shellEnv = ClaudeCodeDeps.shellEnvironmentLoader() || {};
         } catch (error) {
           console.warn('[CLAUDE-CODE] Failed to load shell environment:', error);
         }
@@ -739,267 +510,39 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         throw new Error('[CLAUDE-CODE] workspacePath is required but was not provided');
       }
 
-      // Build options for claude-code SDK
-
-      // Determine which settings sources to use based on user preferences
-      // 'local' is always included (machine-level settings)
-      // 'user' includes ~/.claude/commands/
-      // 'project' includes .claude/commands/ in workspace
-      let settingSources: string[] = ['local'];
-      if (ClaudeCodeProvider.claudeCodeSettingsLoader) {
-        try {
-          const ccSettings = await ClaudeCodeProvider.claudeCodeSettingsLoader();
-          if (ccSettings.userCommandsEnabled) {
-            settingSources.push('user');
-          }
-          if (ccSettings.projectCommandsEnabled) {
-            settingSources.push('project');
-          }
-        } catch (error) {
-          // Fall back to all sources enabled
-          console.warn('[CLAUDE-CODE] Failed to load Claude Code settings, using defaults:', error);
-          settingSources = ['user', 'project', 'local'];
-        }
-      } else {
-        // No loader configured, enable all sources
-        settingSources = ['user', 'project', 'local'];
-      }
-
-      // Log the complete system prompt being sent to SDK for debugging
-      // console.log('[CLAUDE-CODE] ========================================');
-      // console.log('[CLAUDE-CODE] COMPLETE SYSTEM PROMPT BEING APPENDED TO SDK:');
-      // console.log('[CLAUDE-CODE] Length:', systemPrompt.length, 'characters');
-      // console.log('[CLAUDE-CODE] ========================================');
-      // console.log(systemPrompt);
-      // console.log('[CLAUDE-CODE] ========================================');
-
-      const options: any = {
-        // Custom path takes priority over bundled CLI
-        pathToClaudeCodeExecutable: ClaudeCodeProvider.customClaudeCodePath || await resolveClaudeAgentCliPath().catch(() => undefined),
-        // BREAKING CHANGE: Claude Agent SDK requires explicit system prompt preset
-        systemPrompt: {
-          type: 'preset',
-          preset: 'claude_code',
-          append: systemPrompt
+      // Build SDK options (settings, MCP config, env, session resumption, prompt input)
+      const sdkResult = await buildSdkOptions(
+        {
+          resolveModelVariant: () => this.resolveModelVariant(),
+          mcpConfigService: this.mcpConfigService,
+          createCanUseToolHandler: (sid, wp, pp) => this.createCanUseToolHandler(sid, wp, pp),
+          toolHooksService: this.toolHooksService!,
+          teammateManager: this.teammateManager,
+          sessions: this.sessions,
+          config: this.config,
+          abortController: this.abortController!,
+          sdkNativeTools: SDK_NATIVE_TOOLS,
         },
-        // BREAKING CHANGE: Claude Agent SDK requires explicit settings sources
-        settingSources,
-        mcpServers: await this.mcpConfigService.getMcpServersConfig({ sessionId, workspacePath }),
-        cwd: workspacePath,
-        abortController: this.abortController,
-        // Model variant includes [1m] suffix when extended context is selected,
-        // which tells the SDK to auto-detect the 1M beta (--betas is ignored for OAuth users)
-        model: this.resolveModelVariant(),
-        // Use 'default' permission mode so canUseTool fires for AskUserQuestion and Bash
-        // We auto-approve most tools in canUseTool, but check permissions for Bash
-        permissionMode: 'default',
-        // canUseTool callback handles permission requests
-        // Auto-approves most tools, but checks Bash commands and blocks on AskUserQuestion
-        canUseTool: this.createCanUseToolHandler(sessionId, workspacePath, permissionsPath),
-        // PHASE 3: PreToolUse hook for tagging "before" state
-        // PostToolUse hook for triggering file watcher (no snapshot creation)
-        hooks: {
-          'PreToolUse': [
-            {
-              hooks: [this.toolHooksService!.createPreToolUseHook()]
-            }
-          ],
-          'PostToolUse': [
-            {
-              hooks: [this.toolHooksService!.createPostToolUseHook()]
-            }
-          ]
-        },
-        // API key is passed via environment variable if configured (see env setup below)
-      };
-
-      // Capture lead config for teammate spawning
-      this.teammateManager.lastUsedCwd = workspacePath;
-      this.teammateManager.lastUsedSessionId = sessionId;
-      this.teammateManager.lastUsedPermissionsPath = permissionsPath;
-
-      // Load extension plugins if available
-      // These are Claude SDK plugins bundled with Nimbalyst extensions
-      // Also includes CLI-installed plugins from ~/.claude/plugins/
-      if (ClaudeCodeProvider.extensionPluginsLoader) {
-        try {
-          const extensionPlugins = await ClaudeCodeProvider.extensionPluginsLoader(workspacePath);
-          if (extensionPlugins.length > 0) {
-            options.plugins = extensionPlugins;
-            // console.log(`[CLAUDE-CODE] Loaded ${extensionPlugins.length} extension plugin(s):`, extensionPlugins.map(p => p.path));
-          }
-        } catch (error) {
-          console.warn('[CLAUDE-CODE] Failed to load extension plugins:', error);
-          // Continue without extension plugins
+        {
+          message,
+          workspacePath,
+          sessionId,
+          documentContext,
+          settingsEnv,
+          shellEnv,
+          systemPrompt,
+          currentMode: this.currentMode,
+          imageContentBlocks,
+          documentContentBlocks,
+          permissionsPath,
         }
-      }
-
-      // Add additional directories based on workspace context
-      // (e.g., SDK docs when working on an extension project)
-      if (ClaudeCodeProvider.additionalDirectoriesLoader) {
-        try {
-          const additionalDirs = ClaudeCodeProvider.additionalDirectoriesLoader(workspacePath);
-          if (additionalDirs.length > 0) {
-            options.additionalDirectories = additionalDirs;
-            // console.log(`[CLAUDE-CODE] Added ${additionalDirs.length} additional directory(ies):`, additionalDirs);
-          }
-        } catch (error) {
-          console.warn('[CLAUDE-CODE] Failed to load additional directories:', error);
-          // Continue without additional directories
-        }
-      }
-
-      // Apply tool restrictions based on session mode
-      // Planning mode: restrict to read-only tools + Write/Edit/MultiEdit for markdown files
-      // In planning mode, enforce read-only toolset
-      // In agent mode, we do NOT set allowedTools so that tools flow through to canUseTool
-      // where our permission system can prompt the user
-      if (this.currentMode === 'planning') {
-        (options as any).allowedTools = DEFAULT_PLANNING_TOOLS;
-        // Workaround for SDK bug: also pass all disallowed tools explicitly
-        const disallowed = SDK_NATIVE_TOOLS.filter(t => !DEFAULT_PLANNING_TOOLS.includes(t));
-        (options as any).disallowedTools = disallowed;
-        (options as any).blockedTools = disallowed;
-      }
-
-
-      // Set up environment variables for the SDK
-      // shellEnv and settingsEnv were loaded earlier (before system prompt build) and are reused here
-      const env: any = {
-        ...process.env,
-        // Shell env vars fill in what's missing from Dock-launched Electron
-        ...shellEnv,
-        // ~/.claude/settings.json env vars override shell env (explicit user config wins)
-        ...settingsEnv,
-        // Enable MCP tool search when MCP tools exceed 10% of context (same as CLI default)
-        // Options: 'auto' (10%), 'auto:N' (custom N%), 'true' (always), 'false' (never)
-        ENABLE_TOOL_SEARCH: 'auto:10',
-        // Set effort level for adaptive reasoning (same as CLI's /model effort slider)
-        // Only set when not 'high' (the default) to avoid overriding CLI defaults
-        ...(this.config.effortLevel && this.config.effortLevel !== DEFAULT_EFFORT_LEVEL && {
-          CLAUDE_CODE_EFFORT_LEVEL: this.config.effortLevel
-        }),
-      };
-
-      // Task tools are disabled by default in non-interactive SDK sessions.
-      // Enable them so TeamCreate/TaskCreate/TaskList/TaskUpdate flows work in Nimbalyst.
-      if (enableAgentTeams) {
-        env.CLAUDE_CODE_ENABLE_TASKS = '1';
-      }
-
-      const effectiveTeamContext = enableAgentTeams
-        ? await this.teammateManager.resolveTeamContext(sessionId)
-        : undefined;
-
-      // Preserve team context across lead query turns so TeamDelete/broadcast work
-      // even after the TeamCreate call happened in a previous query process.
-      if (effectiveTeamContext) {
-        env.CLAUDE_CODE_TEAM_NAME = effectiveTeamContext;
-        env.CLAUDE_CODE_TASK_LIST_ID = effectiveTeamContext;
-        env.CLAUDE_CODE_AGENT_ID = `team-lead@${effectiveTeamContext}`;
-        env.CLAUDE_CODE_AGENT_NAME = 'team-lead';
-        env.CLAUDE_CODE_AGENT_TYPE = 'team-lead';
-      }
-
-      // In production, we need to spawn claude-code differently
-      // The SDK expects to spawn with 'node', but we need to use Electron in node mode
-      if (app.isPackaged) {
-        // Use shared environment setup utility
-        const packagedEnv = setupClaudeCodeEnvironment();
-        Object.assign(env, packagedEnv);
-
-        // Custom executable path is a standalone binary that runs directly -
-        // skip Electron/standalone binary options to avoid overwriting pathToClaudeCodeExecutable
-        if (!ClaudeCodeProvider.customClaudeCodePath) {
-          // Set executable options (macOS can use standalone binary if enabled)
-          const { options: executableOptions, method } = getClaudeCodeExecutableOptions(
-            ClaudeCodeProvider.useStandaloneBinary,
-            (message, data) => console.log(`[ClaudeCodeProvider] ${message}`, data || '')
-          );
-          Object.assign(options, executableOptions);
-          this.helperMethod = method;
-        }
-
-        // Set custom spawn function (Windows uses windowsHide to hide console)
-        const spawnFunction = getClaudeCodeSpawnFunction();
-        if (spawnFunction) {
-          (options as any).spawnClaudeCodeProcess = spawnFunction;
-        }
-
-        // Share packaged-build options with TeammateManager so sub-agents
-        // can also spawn Claude Code subprocesses in production builds
-        const executableOptionsForTeammates = ClaudeCodeProvider.customClaudeCodePath
-          ? { pathToClaudeCodeExecutable: ClaudeCodeProvider.customClaudeCodePath }
-          : getClaudeCodeExecutableOptions(
-              ClaudeCodeProvider.useStandaloneBinary,
-              (message, data) => console.log(`[ClaudeCodeProvider] ${message}`, data || '')
-            ).options;
-        this.teammateManager.packagedBuildOptions = {
-          env: packagedEnv as Record<string, string | undefined>,
-          ...executableOptionsForTeammates,
-          ...(spawnFunction ? { spawnClaudeCodeProcess: spawnFunction } : {}),
-        };
-      }
-
-      // If a per-session API key is explicitly configured, prefer it.
-      // Otherwise leave inherited environment values untouched.
-      if (this.config.apiKey) {
-        env.ANTHROPIC_API_KEY = this.config.apiKey;
-        if (this.teammateManager.packagedBuildOptions?.env) {
-          this.teammateManager.packagedBuildOptions.env.ANTHROPIC_API_KEY = this.config.apiKey;
-        }
-      }
-
-      options.env = env;
-
-      // Handle session resumption and branching
-      if (sessionId) {
-        const claudeSessionId = this.sessions.getSessionId(sessionId);
-        if (claudeSessionId) {
-          options.resume = claudeSessionId;
-        } else {
-          // Check if this is a branched session (forked from another session)
-          const branchedFromSessionId = (documentContext as any)?.branchedFromSessionId;
-          const branchedFromProviderSessionId = (documentContext as any)?.branchedFromProviderSessionId;
-          if (branchedFromSessionId && branchedFromProviderSessionId) {
-            // Resume from source session's provider session ID and fork it
-            options.resume = branchedFromProviderSessionId;
-            options.forkSession = true;
-          } else if (branchedFromSessionId) {
-            // Fallback: try the in-memory map (if source was used in this app session)
-            const sourceClaudeSessionId = this.sessions.getSessionId(branchedFromSessionId);
-            if (sourceClaudeSessionId) {
-              options.resume = sourceClaudeSessionId;
-              options.forkSession = true;
-            } else {
-              console.warn('[CLAUDE-CODE] Cannot branch: source provider session ID not available. branchedFromSessionId:', branchedFromSessionId);
-            }
-          }
-        }
-      }
-
-      // Use claude-code-sdk query function
-      // const optionsSummary = {
-      //   model: options.model,
-      //   hasSystemPrompt: !!options.systemPrompt,
-      //   hasMcpServers: !!options.mcpServers,
-      //   mcpServers: options.mcpServers ? Object.keys(options.mcpServers) : [],
-      //   cwd: options.cwd,
-      //   resume: options.resume,
-      //   hasAbortController: !!options.abortController,
-      //   executable: options.executable,
-      //   executableArgs: options.executableArgs,
-      //   pathToClaudeCodeExecutable: options.pathToClaudeCodeExecutable,
-      //   hasEnv: !!options.env,
-      //   envKeys: options.env ? Object.keys(options.env).filter(k => k.includes('ANTHROPIC') || k.includes('NODE') || k.includes('ELECTRON') || k.includes('HOME') || k.includes('PATH')) : []
-      // };
+      );
+      const { options, promptInput } = sdkResult;
+      this.helperMethod = sdkResult.helperMethod;
 
       const queryStartTime = Date.now();
 
-
       // Log the raw input to the SDK (include attachments and mode in metadata for UI restoration)
-      // CRITICAL: Must await to ensure user message is persisted before proceeding
-      // Mark as searchable so user prompts are included in FTS index
       if (sessionId) {
         const metadataToLog: Record<string, any> = {};
         if (attachments && attachments.length > 0) {
@@ -1008,7 +551,6 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         if (documentContext?.mode) {
           metadataToLog.mode = documentContext.mode;
         }
-        // Detect teammate messages by content pattern and tag metadata for UI reconstruction
         const teammateMatch = message.match(/^\[Teammate message from "([^"]+)"\]/);
         if (teammateMatch) {
           metadataToLog.messageType = 'teammate_message_injected';
@@ -1028,56 +570,6 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
             permissionMode: options.permissionMode
           }
         }), metadataToLog, hideMessages, undefined, true /* searchable */);
-      }
-
-      // TODO: Debug logging - uncomment if needed for MCP troubleshooting
-      // Log MCP servers being passed to SDK (CONTAINS SENSITIVE CONFIG - commented out for production)
-
-      // Build the prompt - use streaming input mode when we have attachments (images or documents)
-      // This allows us to send content directly as content blocks instead of file paths
-      // See: https://platform.claude.com/docs/en/agent-sdk/streaming-vs-single-mode
-      type SDKUserMessage = {
-        type: 'user';
-        message: MessageParam;
-        parent_tool_use_id: string | null;
-      };
-
-      let promptInput: string | AsyncIterable<SDKUserMessage>;
-
-      const hasAttachmentBlocks = imageContentBlocks.length > 0 || documentContentBlocks.length > 0;
-
-      if (hasAttachmentBlocks) {
-        // Use streaming input mode with content blocks for attachments + text
-        const contentBlocks: ContentBlockParam[] = [
-          ...imageContentBlocks,
-          ...documentContentBlocks,
-          { type: 'text', text: message } as TextBlockParam
-        ];
-
-        // Debug logging - uncomment if needed for troubleshooting
-        //   type: b.type,
-        //   ...(b.type === 'image' ? { media_type: (b as any).source?.media_type, data_length: (b as any).source?.data?.length } : {}),
-        //   ...(b.type === 'document' ? { title: (b as any).title, data_length: (b as any).source?.data?.length } : {}),
-        //   ...(b.type === 'text' ? { text_length: (b as any).text?.length } : {})
-        // })), null, 2));
-
-        // Create an async generator that yields a single user message with the content blocks
-        async function* createStreamingInput(): AsyncGenerator<SDKUserMessage> {
-          const msg: SDKUserMessage = {
-            type: 'user',
-            message: {
-              role: 'user',
-              content: contentBlocks
-            },
-            parent_tool_use_id: null
-          };
-          yield msg;
-        }
-
-        promptInput = createStreamingInput();
-      } else {
-        // Simple string prompt when no attachments
-        promptInput = message;
       }
 
       // console.log('[CLAUDE-CODE] Calling SDK query() - this spawns the claude process...');
@@ -3117,8 +2609,8 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         emit: (event, payload) => this.emit(event, payload),
         pollForPermissionResponse: (resolvedSessionId, requestId, signal) =>
           this.pollForPermissionResponse(resolvedSessionId, requestId, signal),
-        savePattern: ClaudeCodeProvider.claudeSettingsPatternSaver
-          ? (path, pattern) => ClaudeCodeProvider.claudeSettingsPatternSaver!(path, pattern)
+        savePattern: ClaudeCodeDeps.claudeSettingsPatternSaver
+          ? (path, pattern) => ClaudeCodeDeps.claudeSettingsPatternSaver!(path, pattern)
           : undefined,
         logError: (message, error) => console.error(message, error),
       },
@@ -3168,7 +2660,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
 
 
   protected buildSystemPrompt(documentContext?: DocumentContext, enableAgentTeams?: boolean): string {
-    const hasSessionNaming = ClaudeCodeProvider.sessionNamingServerPort !== null;
+    const hasSessionNaming = ClaudeCodeDeps.sessionNamingServerPort !== null;
     const worktreePath = documentContext?.worktreePath;
     const isVoiceMode = (documentContext as any)?.isVoiceMode;
     const voiceModeCodingAgentPrompt = (documentContext as any)?.voiceModeCodingAgentPrompt;

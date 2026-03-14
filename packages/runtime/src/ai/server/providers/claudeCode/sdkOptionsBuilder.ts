@@ -1,0 +1,294 @@
+/**
+ * Builds the SDK options object for a Claude Code query() call.
+ *
+ * Consolidates all the configuration loading, environment setup, session
+ * resumption, tool restrictions, and prompt construction that happens
+ * before the streaming loop begins.
+ */
+
+import type { ContentBlockParam, TextBlockParam, MessageParam } from '@anthropic-ai/sdk/resources';
+import path from 'path';
+import { app } from 'electron';
+import { ClaudeCodeDeps } from './dependencyInjection';
+import { resolveClaudeAgentCliPath } from './cliPathResolver';
+import {
+  DEFAULT_PLANNING_TOOLS,
+} from './toolPolicy';
+import { setupClaudeCodeEnvironment, getClaudeCodeExecutableOptions, getClaudeCodeSpawnFunction, type ClaudeHelperMethod } from '../../../../electron/claudeCodeEnvironment';
+import { DEFAULT_EFFORT_LEVEL } from '../../effortLevels';
+
+// SDK_NATIVE_TOOLS must be passed in from ClaudeCodeProvider since it's defined there
+type SessionMode = 'planning' | 'agent' | undefined;
+
+type SDKUserMessage = {
+  type: 'user';
+  message: MessageParam;
+  parent_tool_use_id: string | null;
+};
+
+export interface BuildSdkOptionsDeps {
+  resolveModelVariant: () => string;
+  mcpConfigService: { getMcpServersConfig: (params: { sessionId?: string; workspacePath: string }) => Promise<Record<string, any>> };
+  createCanUseToolHandler: (sessionId?: string, workspacePath?: string, permissionsPath?: string) => any;
+  toolHooksService: { createPreToolUseHook: () => any; createPostToolUseHook: () => any };
+  teammateManager: {
+    lastUsedCwd?: string | undefined;
+    lastUsedSessionId?: string | undefined;
+    lastUsedPermissionsPath?: string | undefined;
+    packagedBuildOptions?: any;
+    resolveTeamContext: (sessionId?: string) => Promise<string | undefined>;
+  };
+  sessions: { getSessionId: (sessionId: string) => string | null | undefined };
+  config: { model?: string; apiKey?: string; effortLevel?: string };
+  abortController: AbortController;
+  sdkNativeTools: readonly string[];
+}
+
+export interface BuildSdkOptionsParams {
+  message: string;
+  workspacePath: string;
+  sessionId?: string;
+  documentContext?: any;
+  settingsEnv: Record<string, string>;
+  shellEnv: Record<string, string>;
+  systemPrompt: string;
+  currentMode: SessionMode;
+  imageContentBlocks: ContentBlockParam[];
+  documentContentBlocks: ContentBlockParam[];
+  permissionsPath?: string;
+}
+
+export interface BuildSdkOptionsResult {
+  options: any;
+  promptInput: string | AsyncIterable<SDKUserMessage>;
+  helperMethod: ClaudeHelperMethod;
+}
+
+export async function buildSdkOptions(
+  deps: BuildSdkOptionsDeps,
+  params: BuildSdkOptionsParams
+): Promise<BuildSdkOptionsResult> {
+  const {
+    resolveModelVariant,
+    mcpConfigService,
+    createCanUseToolHandler,
+    toolHooksService,
+    teammateManager,
+    sessions,
+    config,
+    abortController,
+    sdkNativeTools,
+  } = deps;
+
+  const {
+    message,
+    workspacePath,
+    sessionId,
+    documentContext,
+    settingsEnv,
+    shellEnv,
+    systemPrompt,
+    currentMode,
+    imageContentBlocks,
+    documentContentBlocks,
+    permissionsPath,
+  } = params;
+
+  let helperMethod: ClaudeHelperMethod = 'electron';
+
+  // Determine which settings sources to use based on user preferences
+  let settingSources: string[] = ['local'];
+  if (ClaudeCodeDeps.claudeCodeSettingsLoader) {
+    try {
+      const ccSettings = await ClaudeCodeDeps.claudeCodeSettingsLoader();
+      if (ccSettings.userCommandsEnabled) {
+        settingSources.push('user');
+      }
+      if (ccSettings.projectCommandsEnabled) {
+        settingSources.push('project');
+      }
+    } catch (error) {
+      console.warn('[CLAUDE-CODE] Failed to load Claude Code settings, using defaults:', error);
+      settingSources = ['user', 'project', 'local'];
+    }
+  } else {
+    settingSources = ['user', 'project', 'local'];
+  }
+
+  const options: any = {
+    pathToClaudeCodeExecutable: ClaudeCodeDeps.customClaudeCodePath || await resolveClaudeAgentCliPath().catch(() => undefined),
+    systemPrompt: {
+      type: 'preset',
+      preset: 'claude_code',
+      append: systemPrompt
+    },
+    settingSources,
+    mcpServers: await mcpConfigService.getMcpServersConfig({ sessionId, workspacePath }),
+    cwd: workspacePath,
+    abortController,
+    model: resolveModelVariant(),
+    permissionMode: 'default',
+    canUseTool: createCanUseToolHandler(sessionId, workspacePath, permissionsPath),
+    hooks: {
+      'PreToolUse': [{ hooks: [toolHooksService.createPreToolUseHook()] }],
+      'PostToolUse': [{ hooks: [toolHooksService.createPostToolUseHook()] }],
+    },
+  };
+
+  // Capture lead config for teammate spawning
+  teammateManager.lastUsedCwd = workspacePath;
+  teammateManager.lastUsedSessionId = sessionId;
+  teammateManager.lastUsedPermissionsPath = permissionsPath;
+
+  // Load extension plugins
+  if (ClaudeCodeDeps.extensionPluginsLoader) {
+    try {
+      const extensionPlugins = await ClaudeCodeDeps.extensionPluginsLoader(workspacePath);
+      if (extensionPlugins.length > 0) {
+        options.plugins = extensionPlugins;
+      }
+    } catch (error) {
+      console.warn('[CLAUDE-CODE] Failed to load extension plugins:', error);
+    }
+  }
+
+  // Add additional directories based on workspace context
+  if (ClaudeCodeDeps.additionalDirectoriesLoader) {
+    try {
+      const additionalDirs = ClaudeCodeDeps.additionalDirectoriesLoader(workspacePath);
+      if (additionalDirs.length > 0) {
+        options.additionalDirectories = additionalDirs;
+      }
+    } catch (error) {
+      console.warn('[CLAUDE-CODE] Failed to load additional directories:', error);
+    }
+  }
+
+  // Apply tool restrictions based on session mode
+  if (currentMode === 'planning') {
+    options.allowedTools = DEFAULT_PLANNING_TOOLS;
+    const disallowed = sdkNativeTools.filter(t => !DEFAULT_PLANNING_TOOLS.includes(t));
+    options.disallowedTools = disallowed;
+    options.blockedTools = disallowed;
+  }
+
+  // Set up environment variables
+  const enableAgentTeams = settingsEnv.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS === '1';
+  const env: any = {
+    ...process.env,
+    ...shellEnv,
+    ...settingsEnv,
+    ENABLE_TOOL_SEARCH: 'auto:10',
+    ...(config.effortLevel && config.effortLevel !== DEFAULT_EFFORT_LEVEL && {
+      CLAUDE_CODE_EFFORT_LEVEL: config.effortLevel
+    }),
+  };
+
+  if (enableAgentTeams) {
+    env.CLAUDE_CODE_ENABLE_TASKS = '1';
+  }
+
+  const effectiveTeamContext = enableAgentTeams
+    ? await teammateManager.resolveTeamContext(sessionId)
+    : undefined;
+
+  if (effectiveTeamContext) {
+    env.CLAUDE_CODE_TEAM_NAME = effectiveTeamContext;
+    env.CLAUDE_CODE_TASK_LIST_ID = effectiveTeamContext;
+    env.CLAUDE_CODE_AGENT_ID = `team-lead@${effectiveTeamContext}`;
+    env.CLAUDE_CODE_AGENT_NAME = 'team-lead';
+    env.CLAUDE_CODE_AGENT_TYPE = 'team-lead';
+  }
+
+  // Production packaged build setup
+  if (app.isPackaged) {
+    const packagedEnv = setupClaudeCodeEnvironment();
+    Object.assign(env, packagedEnv);
+
+    if (!ClaudeCodeDeps.customClaudeCodePath) {
+      const { options: executableOptions, method } = getClaudeCodeExecutableOptions(
+        ClaudeCodeDeps.useStandaloneBinary,
+        (msg, data) => console.log(`[ClaudeCodeProvider] ${msg}`, data || '')
+      );
+      Object.assign(options, executableOptions);
+      helperMethod = method;
+    }
+
+    const spawnFunction = getClaudeCodeSpawnFunction();
+    if (spawnFunction) {
+      options.spawnClaudeCodeProcess = spawnFunction;
+    }
+
+    // Share packaged-build options with TeammateManager
+    const executableOptionsForTeammates = ClaudeCodeDeps.customClaudeCodePath
+      ? { pathToClaudeCodeExecutable: ClaudeCodeDeps.customClaudeCodePath }
+      : getClaudeCodeExecutableOptions(
+          ClaudeCodeDeps.useStandaloneBinary,
+          (msg, data) => console.log(`[ClaudeCodeProvider] ${msg}`, data || '')
+        ).options;
+    teammateManager.packagedBuildOptions = {
+      env: packagedEnv as Record<string, string | undefined>,
+      ...executableOptionsForTeammates,
+      ...(spawnFunction ? { spawnClaudeCodeProcess: spawnFunction } : {}),
+    };
+  }
+
+  // Per-session API key
+  if (config.apiKey) {
+    env.ANTHROPIC_API_KEY = config.apiKey;
+    if (teammateManager.packagedBuildOptions?.env) {
+      teammateManager.packagedBuildOptions.env.ANTHROPIC_API_KEY = config.apiKey;
+    }
+  }
+
+  options.env = env;
+
+  // Handle session resumption and branching
+  if (sessionId) {
+    const claudeSessionId = sessions.getSessionId(sessionId);
+    if (claudeSessionId) {
+      options.resume = claudeSessionId;
+    } else {
+      const branchedFromSessionId = documentContext?.branchedFromSessionId;
+      const branchedFromProviderSessionId = documentContext?.branchedFromProviderSessionId;
+      if (branchedFromSessionId && branchedFromProviderSessionId) {
+        options.resume = branchedFromProviderSessionId;
+        options.forkSession = true;
+      } else if (branchedFromSessionId) {
+        const sourceClaudeSessionId = sessions.getSessionId(branchedFromSessionId);
+        if (sourceClaudeSessionId) {
+          options.resume = sourceClaudeSessionId;
+          options.forkSession = true;
+        } else {
+          console.warn('[CLAUDE-CODE] Cannot branch: source provider session ID not available. branchedFromSessionId:', branchedFromSessionId);
+        }
+      }
+    }
+  }
+
+  // Build prompt input
+  let promptInput: string | AsyncIterable<SDKUserMessage>;
+  const hasAttachmentBlocks = imageContentBlocks.length > 0 || documentContentBlocks.length > 0;
+
+  if (hasAttachmentBlocks) {
+    const contentBlocks: ContentBlockParam[] = [
+      ...imageContentBlocks,
+      ...documentContentBlocks,
+      { type: 'text', text: message } as TextBlockParam
+    ];
+
+    async function* createStreamingInput(): AsyncGenerator<SDKUserMessage> {
+      yield {
+        type: 'user',
+        message: { role: 'user', content: contentBlocks },
+        parent_tool_use_id: null
+      };
+    }
+
+    promptInput = createStreamingInput();
+  } else {
+    promptInput = message;
+  }
+
+  return { options, promptInput, helperMethod };
+}
