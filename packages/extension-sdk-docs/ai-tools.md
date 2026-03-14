@@ -615,17 +615,14 @@ const result = await context.services.ai!.chatCompletion({
   messages: [{ role: 'user', content: 'Classify this issue: login page crashes on Safari' }],
   responseFormat: {
     type: 'json_schema',
-    jsonSchema: {
-      name: 'issue_classification',
-      schema: {
-        type: 'object',
-        properties: {
-          category: { type: 'string', enum: ['bug', 'feature', 'question'] },
-          severity: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
-          component: { type: 'string' },
-        },
-        required: ['category', 'severity', 'component'],
+    schema: {
+      type: 'object',
+      properties: {
+        category: { type: 'string', enum: ['bug', 'feature', 'question'] },
+        severity: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
+        component: { type: 'string' },
       },
+      required: ['category', 'severity', 'component'],
     },
   },
 });

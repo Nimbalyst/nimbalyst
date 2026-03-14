@@ -5370,6 +5370,7 @@ export class AIService {
         maxTokens?: number;
         temperature?: number;
         systemPrompt?: string;
+        responseFormat?: any;
       }
     ) => {
       return this.handleExtensionChatCompletion(event, options);
@@ -5387,6 +5388,7 @@ export class AIService {
         maxTokens?: number;
         temperature?: number;
         systemPrompt?: string;
+        responseFormat?: any;
       }
     ) => {
       const { streamId, ...completionOptions } = options;
@@ -6024,6 +6026,7 @@ export class AIService {
       maxTokens: options.maxTokens,
       temperature: options.temperature,
       responseFormat: options.responseFormat,
+      skipLogging: true,
     };
 
     // LM Studio needs baseUrl
@@ -6083,6 +6086,7 @@ export class AIService {
       maxTokens?: number;
       temperature?: number;
       systemPrompt?: string;
+      responseFormat?: any;
     }
   ): Promise<{ content: string; model: string; usage?: { inputTokens: number; outputTokens: number } }> {
     const { provider, providerConfig, providerType, syntheticSessionId } = await this.resolveExtensionChatProvider(event, options);

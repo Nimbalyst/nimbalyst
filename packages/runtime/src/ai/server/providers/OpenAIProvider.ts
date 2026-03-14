@@ -247,13 +247,13 @@ export class OpenAIProvider extends BaseAIProvider {
       if (this.config.responseFormat && this.config.responseFormat.type !== 'text') {
         if (this.config.responseFormat.type === 'json_object') {
           completionParams.response_format = { type: 'json_object' };
-        } else if (this.config.responseFormat.type === 'json_schema') {
+        } else if (this.config.responseFormat.type === 'json_schema' && this.config.responseFormat.schema) {
           completionParams.response_format = {
             type: 'json_schema',
             json_schema: {
-              name: this.config.responseFormat.jsonSchema.name,
-              schema: this.config.responseFormat.jsonSchema.schema,
-              strict: this.config.responseFormat.jsonSchema.strict ?? true,
+              name: this.config.responseFormat.name || 'response',
+              schema: this.config.responseFormat.schema,
+              strict: this.config.responseFormat.strict ?? true,
             },
           };
         }
@@ -293,35 +293,15 @@ export class OpenAIProvider extends BaseAIProvider {
         tools: completionParams.tools?.length,
         stream: completionParams.stream
       });
-      console.log(`[OpenAIProvider] Actual completionParams keys:`, Object.keys(completionParams));
+      // console.log(`[OpenAIProvider] Actual completionParams keys:`, Object.keys(completionParams));
 
       const apiCallStartTime = Date.now();
 
-      console.log(`[OpenAIProvider] About to call OpenAI completions.create...`);
-      console.log(`[OpenAIProvider] Full API URL: https://api.openai.com/v1/chat/completions`);
-      console.log(`[OpenAIProvider] Headers: Authorization: Bearer [REDACTED]`);
-
       let response;
       try {
-        const createStartTime = Date.now();
-        console.log(`[OpenAIProvider] Calling openai.chat.completions.create at ${new Date().toISOString()}`);
-
-        const beforeAwait = Date.now();
-
-        // Track if we're in Electron
-        console.log(`[OpenAIProvider] Running in Electron: ${!!process.versions.electron}`);
-        console.log(`[OpenAIProvider] Process type: ${process.type || 'node'}`);
-
         response = await this.openai.chat.completions.create(completionParams, {
           signal: this.abortController.signal
         });
-
-        const afterAwait = Date.now();
-        console.log(`[OpenAIProvider] await returned after ${afterAwait - beforeAwait}ms`);
-
-        console.log(`[OpenAIProvider] completions.create returned after ${Date.now() - createStartTime}ms`);
-        const hasAsyncIterator = !!(response as any)?.[Symbol.asyncIterator];
-        console.log(`[OpenAIProvider] Response type: ${typeof response}, has Symbol.asyncIterator: ${hasAsyncIterator}`);
       } catch (error: any) {
         console.error(`[OpenAIProvider] completions.create failed after ${Date.now() - apiCallStartTime}ms:`, error);
         console.error(`[OpenAIProvider] Error details:`, {
@@ -333,8 +313,6 @@ export class OpenAIProvider extends BaseAIProvider {
         });
         throw error;
       }
-      console.log(`[OpenAIProvider] Got response object after ${Date.now() - apiCallStartTime}ms`);
-
       let fullContent = '';
       let currentToolCall: any = null;
       let toolCallAccumulator: any = {};
@@ -343,8 +321,6 @@ export class OpenAIProvider extends BaseAIProvider {
       let toolCallCount = 0;
       let usageData: any = null;
 
-      // Stream the response
-      console.log(`[OpenAIProvider] About to start iterating response stream at ${new Date().toISOString()}`);
       const iteratorStartTime = Date.now();
 
       // Add a timeout check
@@ -357,19 +333,10 @@ export class OpenAIProvider extends BaseAIProvider {
       const responseStream = response as unknown as AsyncIterable<any>;
       for await (const chunk of responseStream) {
         if (chunkCount === 0) {
-          console.log(`[OpenAIProvider] Iteration started, first chunk arriving after ${Date.now() - iteratorStartTime}ms`);
+          firstChunkTime = Date.now();
+          clearTimeout(timeoutCheck);
         }
         chunkCount++;
-
-        // Debug: Log chunk structure to understand usage data format
-        if (chunkCount <= 3 || chunk.usage || chunk.choices?.[0]?.finish_reason) {
-          console.log(`[OpenAIProvider] Chunk #${chunkCount} structure:`, {
-            hasUsage: !!chunk.usage,
-            hasChoices: !!chunk.choices,
-            finishReason: chunk.choices?.[0]?.finish_reason,
-            keys: Object.keys(chunk)
-          });
-        }
 
         // Check for error in the chunk (some providers send errors in the stream)
         if ((chunk as any).error) {
@@ -386,23 +353,12 @@ export class OpenAIProvider extends BaseAIProvider {
           return;
         }
 
-        if (!firstChunkTime) {
-          firstChunkTime = Date.now();
-          clearTimeout(timeoutCheck);  // Clear the timeout check
-          const timeToFirstChunk = firstChunkTime - apiCallStartTime;
-          const timeFromIteratorStart = firstChunkTime - iteratorStartTime;
-          console.log(`[OpenAIProvider] First chunk received:`);
-          console.log(`  - Time from API call start: ${timeToFirstChunk}ms`);
-          console.log(`  - Time from iterator start: ${timeFromIteratorStart}ms`);
-          console.log(`  - Total time from request start: ${firstChunkTime - startTime}ms`);
-          console.log(`  - Chunk data:`, chunk?.choices?.[0]?.delta);
-        }
         const delta = chunk.choices[0]?.delta;
 
         if (delta?.content) {
           // Text chunk
           fullContent += delta.content;
-          console.log(`[OpenAIProvider] Text chunk #${chunkCount}: "${delta.content.substring(0, 50)}..." (${delta.content.length} chars)`);
+          // console.log(`[OpenAIProvider] Text chunk #${chunkCount}: "${delta.content.substring(0, 50)}..." (${delta.content.length} chars)`);
           yield {
             type: 'text',
             content: delta.content
@@ -561,12 +517,9 @@ export class OpenAIProvider extends BaseAIProvider {
 
         const finishReason = chunk.choices[0]?.finish_reason;
         if (finishReason) {
-          console.log(`[OpenAIProvider] Chunk #${chunkCount} finish_reason: '${finishReason}'`);
-
           if (finishReason === 'stop') {
-            // Message complete - log it but don't yield complete yet
-            const totalTime = Date.now() - startTime;
-            console.log(`[OpenAIProvider] Stream complete - Total time: ${totalTime}ms, Chunks: ${chunkCount}, Tool calls: ${toolCallCount}, Content length: ${fullContent.length}`);
+            // Message complete
+            // console.log(`[OpenAIProvider] Stream complete - Total time: ${Date.now() - startTime}ms, Chunks: ${chunkCount}, Content length: ${fullContent.length}`);
           } else if (finishReason !== 'tool_calls') {
             console.warn(`[OpenAIProvider] Unexpected finish_reason: ${finishReason}`);
           }
@@ -575,14 +528,12 @@ export class OpenAIProvider extends BaseAIProvider {
         // Check for usage data in the chunk (OpenAI includes it in the final chunk)
         if (chunk.usage) {
           usageData = chunk.usage;
-          console.log('[OpenAIProvider] Usage data from stream:', usageData);
         }
 
         // Check if this is the last chunk with usage
         if (chunk.x_groq && chunk.x_groq.usage) {
           // Some providers send usage in x_groq
           usageData = chunk.x_groq.usage;
-          console.log('[OpenAIProvider] Usage data from x_groq:', usageData);
         }
       }
 

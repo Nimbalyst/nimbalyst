@@ -299,16 +299,18 @@ export interface ProviderConfig {
   allowedTools?: string[];  // List of allowed tool names, ['*'] for all tools
   effortLevel?: EffortLevel;  // Effort level for Opus 4.6 adaptive reasoning (low/medium/high/max)
   responseFormat?: ProviderResponseFormat;  // Response format constraint (extension chat completions)
+  skipLogging?: boolean;  // Skip message logging to DB (extension stateless completions)
 }
 
 /**
  * Response format constraint passed to providers.
  * Maps to provider-specific API format in each provider implementation.
+ * Normalized from extension SDK format in resolveExtensionChatProvider.
  */
 export type ProviderResponseFormat =
   | { type: 'text' }
   | { type: 'json_object' }
-  | { type: 'json_schema'; jsonSchema: { name: string; schema: Record<string, unknown>; strict?: boolean } };
+  | { type: 'json_schema'; schema: Record<string, unknown>; name?: string; strict?: boolean };
 
 export interface ProviderCapabilities {
   streaming: boolean;

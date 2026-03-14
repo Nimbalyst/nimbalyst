@@ -218,13 +218,13 @@ export class LMStudioProvider extends BaseAIProvider {
     if (this.config.responseFormat && this.config.responseFormat.type !== 'text') {
       if (this.config.responseFormat.type === 'json_object') {
         requestBody.response_format = { type: 'json_object' };
-      } else if (this.config.responseFormat.type === 'json_schema') {
+      } else if (this.config.responseFormat.type === 'json_schema' && this.config.responseFormat.schema) {
         requestBody.response_format = {
           type: 'json_schema',
           json_schema: {
-            name: this.config.responseFormat.jsonSchema.name,
-            schema: this.config.responseFormat.jsonSchema.schema,
-            strict: this.config.responseFormat.jsonSchema.strict ?? true,
+            name: this.config.responseFormat.name || 'response',
+            schema: this.config.responseFormat.schema,
+            strict: this.config.responseFormat.strict ?? true,
           },
         };
       }

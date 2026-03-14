@@ -663,7 +663,7 @@ export interface ChatCompletionOptions {
    * Response format constraint.
    * - `{ type: 'text' }` or omitted: plain text (default)
    * - `{ type: 'json_object' }`: model returns valid JSON
-   * - `{ type: 'json_schema', jsonSchema: { name, schema } }`: model returns JSON matching the schema
+   * - `{ type: 'json_schema', schema: { ... } }`: model returns JSON matching the schema
    *
    * When using json_object or json_schema, include "respond in JSON" in your system prompt
    * or messages for best results.
@@ -673,11 +673,17 @@ export interface ChatCompletionOptions {
 
 /**
  * Response format constraint for chat completions.
+ *
+ * For json_schema, pass your JSON Schema object directly:
+ *   `{ type: 'json_schema', schema: { type: 'object', properties: { ... } } }`
+ *
+ * You can optionally provide a name and strict flag:
+ *   `{ type: 'json_schema', schema: { ... }, name: 'my_schema', strict: true }`
  */
 export type ResponseFormat =
   | { type: 'text' }
   | { type: 'json_object' }
-  | { type: 'json_schema'; jsonSchema: { name: string; schema: JSONSchema; strict?: boolean } };
+  | { type: 'json_schema'; schema: JSONSchema; name?: string; strict?: boolean };
 
 /**
  * Result from a chat completion request.

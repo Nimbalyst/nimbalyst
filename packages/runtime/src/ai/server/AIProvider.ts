@@ -248,6 +248,9 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
     providerMessageId?: string,  // Provider-assigned message ID (e.g., SDK uuid) for deduplication
     searchable?: boolean  // Whether to include in FTS index (user prompts and assistant text only)
   ): Promise<void> {
+    // Skip logging for stateless extension completions (no session row in DB)
+    if (this.config.skipLogging) return;
+
     // Create timestamp HERE - this is the authoritative source
     // This same timestamp must be used for message.created_at, session.updated_at, and sync index
     const createdAt = new Date();

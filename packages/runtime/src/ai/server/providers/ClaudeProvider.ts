@@ -294,10 +294,10 @@ export class ClaudeProvider extends BaseAIProvider {
       if (this.config.responseFormat && this.config.responseFormat.type !== 'text') {
         if (this.config.responseFormat.type === 'json_object') {
           apiRequest.response_format = { type: 'json' };
-        } else if (this.config.responseFormat.type === 'json_schema') {
+        } else if (this.config.responseFormat.type === 'json_schema' && this.config.responseFormat.schema) {
           apiRequest.response_format = {
             type: 'json',
-            schema: this.config.responseFormat.jsonSchema.schema,
+            schema: this.config.responseFormat.schema,
           };
         }
       }

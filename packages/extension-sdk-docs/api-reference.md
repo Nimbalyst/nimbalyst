@@ -143,11 +143,11 @@ interface ChatCompletionOptions {
 type ResponseFormat =
   | { type: 'text' }                                          // Default: plain text
   | { type: 'json_object' }                                   // Valid JSON output
-  | { type: 'json_schema'; jsonSchema: {                      // JSON matching a schema
-      name: string;
+  | { type: 'json_schema';                                    // JSON matching a schema
       schema: JSONSchema;
+      name?: string;     // Optional schema name (default: 'response')
       strict?: boolean;  // default: true for OpenAI
-    } };
+    };
 
 interface ChatCompletionResult {
   content: string;          // Assistant response
