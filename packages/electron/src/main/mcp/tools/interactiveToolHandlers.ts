@@ -1,0 +1,646 @@
+import { BrowserWindow, ipcMain } from "electron";
+import {
+  AgentMessagesRepository,
+  AISessionsRepository,
+} from "@nimbalyst/runtime";
+import { notificationService } from "../../services/NotificationService";
+import { TrayManager } from "../../tray/TrayManager";
+import { findWindowIdForWorkspacePath } from "../mcpWorkspaceResolver";
+
+type McpToolResult = {
+  content: Array<{ type: string; text: string }>;
+  isError: boolean;
+};
+
+/**
+ * Extract tool use ID from MCP request metadata.
+ * Checks multiple possible field names across different providers.
+ */
+export function extractToolUseIdFromMcpRequest(request: any): string | undefined {
+  const requestMeta =
+    request?.params && typeof request.params._meta === "object"
+      ? (request.params._meta as Record<string, unknown>)
+      : undefined;
+  return [
+    requestMeta?.["claudecode/toolUseId"],
+    requestMeta?.["openai/toolUseId"],
+    requestMeta?.["openai/toolCallId"],
+    requestMeta?.["toolUseId"],
+    requestMeta?.["tool_use_id"],
+    requestMeta?.["toolCallId"],
+    typeof request?.id === "string" || typeof request?.id === "number"
+      ? String(request.id)
+      : undefined,
+  ].find(
+    (value): value is string => typeof value === "string" && value.length > 0
+  );
+}
+
+export async function handleAskUserQuestion(
+  args: any,
+  sessionId: string | undefined,
+  request: any
+): Promise<McpToolResult> {
+  const typedArgs = args as
+    | {
+        questions?: Array<{
+          header?: string;
+          question?: string;
+          options?: Array<{ label?: string; description?: string }>;
+          multiSelect?: boolean;
+        }>;
+      }
+    | undefined;
+
+  const rawQuestions = Array.isArray(typedArgs?.questions)
+    ? typedArgs.questions
+    : [];
+
+  if (rawQuestions.length === 0) {
+    return {
+      content: [
+        { type: "text", text: "Error: questions is required and must be a non-empty array" },
+      ],
+      isError: true,
+    };
+  }
+
+  const normalizedQuestions = rawQuestions
+    .map((question) => {
+      if (!question || typeof question !== "object") {
+        return null;
+      }
+
+      const header = typeof question.header === "string" ? question.header : "";
+      const prompt = typeof question.question === "string" ? question.question : "";
+      const rawOptions = Array.isArray(question.options) ? question.options : [];
+      if (!header || !prompt || rawOptions.length === 0) {
+        return null;
+      }
+
+      const options = rawOptions
+        .map((option) => {
+          const label =
+            option && typeof option.label === "string" ? option.label : "";
+          const description =
+            option && typeof option.description === "string"
+              ? option.description
+              : "";
+          if (!label || !description) {
+            return null;
+          }
+          return { label, description };
+        })
+        .filter(
+          (option): option is { label: string; description: string } =>
+            option !== null
+        );
+
+      if (options.length === 0) {
+        return null;
+      }
+
+      return {
+        header,
+        question: prompt,
+        options,
+        multiSelect: question.multiSelect === true,
+      };
+    })
+    .filter(
+      (
+        question
+      ): question is {
+        header: string;
+        question: string;
+        options: Array<{ label: string; description: string }>;
+        multiSelect: boolean;
+      } => question !== null
+    );
+
+  if (normalizedQuestions.length === 0) {
+    return {
+      content: [
+        { type: "text", text: "Error: No valid questions found in request" },
+      ],
+      isError: true,
+    };
+  }
+
+  const questionId =
+    extractToolUseIdFromMcpRequest(request) ||
+    `ask-${sessionId || "unknown"}-${Date.now()}`;
+  const questionResponseChannel = `ask-user-question-response:${sessionId || "unknown"}:${questionId}`;
+  const fallbackSessionChannel = `ask-user-question:${sessionId || "unknown"}`;
+
+  console.log(`[MCP Server] AskUserQuestion waiting for response: questionId=${questionId}, sessionId=${sessionId}`);
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+    const settle = (result: {
+      answers?: Record<string, string>;
+      cancelled?: boolean;
+      respondedBy?: "desktop" | "mobile";
+    }, source: string = 'unknown') => {
+      if (settled) return;
+      settled = true;
+
+      console.log(`[MCP Server] AskUserQuestion settled via ${source}: questionId=${questionId}, cancelled=${result?.cancelled}`);
+
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+      ipcMain.removeListener(questionResponseChannel, onQuestionIdResponse);
+      ipcMain.removeListener(fallbackSessionChannel, onSessionFallbackResponse);
+
+      const cancelled = result?.cancelled === true;
+      const answers =
+        result?.answers && typeof result.answers === "object"
+          ? result.answers
+          : {};
+      const respondedBy = result?.respondedBy || "desktop";
+
+      if (cancelled) {
+        resolve({
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                cancelled: true,
+                respondedBy,
+                respondedAt: Date.now(),
+              }),
+            },
+          ],
+          isError: true,
+        });
+        return;
+      }
+
+      resolve({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              answers,
+              respondedBy,
+              respondedAt: Date.now(),
+            }),
+          },
+        ],
+        isError: false,
+      });
+    };
+
+    const onQuestionIdResponse = (
+      _event: unknown,
+      result: {
+        answers?: Record<string, string>;
+        cancelled?: boolean;
+        respondedBy?: "desktop" | "mobile";
+      }
+    ) => settle(result, 'ipc-specific');
+
+    const onSessionFallbackResponse = (
+      _event: unknown,
+      result: {
+        questionId?: string;
+        answers?: Record<string, string>;
+        cancelled?: boolean;
+        respondedBy?: "desktop" | "mobile";
+      }
+    ) => {
+      settle(result, 'ipc-fallback');
+    };
+
+    ipcMain.once(questionResponseChannel, onQuestionIdResponse);
+    ipcMain.once(fallbackSessionChannel, onSessionFallbackResponse);
+
+    // Database polling fallback: if the IPC path fails (e.g., transport issues),
+    // poll for a response message written by the AIService answer handler.
+    if (sessionId) {
+      const POLL_INTERVAL = 1000;
+      const MAX_POLL_TIME = 10 * 60 * 1000;
+      const pollStart = Date.now();
+
+      pollTimer = setInterval(async () => {
+        if (settled || Date.now() - pollStart > MAX_POLL_TIME) {
+          if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+          }
+          return;
+        }
+
+        try {
+          const messages = await AgentMessagesRepository.list(sessionId, { limit: 20 });
+          for (const msg of messages) {
+            try {
+              const content = JSON.parse(msg.content);
+              if (content.type === 'ask_user_question_response' && content.questionId === questionId) {
+                if (content.cancelled) {
+                  settle({ cancelled: true, respondedBy: content.respondedBy }, 'db-poll');
+                } else {
+                  settle({ answers: content.answers, respondedBy: content.respondedBy }, 'db-poll');
+                }
+                return;
+              }
+            } catch {
+              // Not valid JSON, skip
+            }
+          }
+        } catch {
+          // Database error, continue polling
+        }
+      }, POLL_INTERVAL);
+    }
+  });
+}
+
+export async function handleGitCommitProposal(
+  args: any,
+  sessionId: string | undefined,
+  workspacePath: string | undefined,
+  request: any
+): Promise<McpToolResult> {
+  type FileToStage =
+    | string
+    | { path: string; status: "added" | "modified" | "deleted" };
+
+  const rawProposalArgs = args as
+    | {
+        filesToStage?: FileToStage[] | string;
+        commitMessage?: string;
+        reasoning?: string;
+      }
+    | undefined;
+
+  // The model sometimes sends filesToStage as a JSON-encoded string instead of an array
+  let parsedFilesToStage = rawProposalArgs?.filesToStage;
+  if (typeof parsedFilesToStage === "string") {
+    console.warn(
+      "[MCP Server] developer_git_commit_proposal: filesToStage received as string instead of array, parsing JSON"
+    );
+    try {
+      parsedFilesToStage = JSON.parse(parsedFilesToStage);
+    } catch (e) {
+      console.error(
+        "[MCP Server] developer_git_commit_proposal: Failed to parse filesToStage string as JSON:",
+        e
+      );
+      parsedFilesToStage = undefined;
+    }
+  }
+  if (parsedFilesToStage && !Array.isArray(parsedFilesToStage)) {
+    console.error(
+      "[MCP Server] developer_git_commit_proposal: filesToStage is not an array after parsing, got:",
+      typeof parsedFilesToStage
+    );
+    parsedFilesToStage = undefined;
+  }
+  const proposalArgs = rawProposalArgs
+    ? {
+        ...rawProposalArgs,
+        filesToStage: Array.isArray(parsedFilesToStage)
+          ? parsedFilesToStage
+          : undefined,
+      }
+    : undefined;
+
+  if (!proposalArgs?.filesToStage || !proposalArgs?.commitMessage) {
+    return {
+      content: [{ type: "text", text: "Error: filesToStage and commitMessage are required" }],
+      isError: true,
+    };
+  }
+
+  if (!workspacePath) {
+    return {
+      content: [{ type: "text", text: "Error: workspacePath is required for git commit proposal" }],
+      isError: true,
+    };
+  }
+
+  // Find the target window (resolves worktree paths to parent project)
+  const commitWindowId = await findWindowIdForWorkspacePath(workspacePath);
+  if (!commitWindowId) {
+    return {
+      content: [{ type: "text", text: `Error: No window found for workspace: ${workspacePath}` }],
+      isError: true,
+    };
+  }
+
+  const commitWindow = BrowserWindow.fromId(commitWindowId);
+  if (!commitWindow || commitWindow.isDestroyed()) {
+    return {
+      content: [{ type: "text", text: "Error: Window no longer exists" }],
+      isError: true,
+    };
+  }
+
+  // Use provider tool-call ID as the proposal ID when available
+  const toolUseId = extractToolUseIdFromMcpRequest(request);
+  const proposalId =
+    toolUseId ||
+    `git-commit-proposal-${Date.now()}-${Math.random()
+      .toString(36)
+      .substring(7)}`;
+
+  const targetSessionId = sessionId || "unknown";
+
+  // Persist the proposal to database for durability
+  try {
+    const now = new Date();
+    await AgentMessagesRepository.create({
+      sessionId: targetSessionId,
+      source: "mcp",
+      direction: "output",
+      content: JSON.stringify({
+        type: "git_commit_proposal",
+        proposalId,
+        toolUseId,
+        filesToStage: proposalArgs.filesToStage,
+        commitMessage: proposalArgs.commitMessage,
+        reasoning: proposalArgs.reasoning,
+        workspacePath,
+        timestamp: now.getTime(),
+        status: "pending",
+      }),
+      hidden: false,
+      createdAt: now,
+    });
+    console.log(
+      `[MCP Server] Persisted git commit proposal: ${proposalId}, notifying renderer for session: ${targetSessionId}`
+    );
+    if (commitWindow) {
+      commitWindow.webContents.send("ai:gitCommitProposal", {
+        sessionId: targetSessionId,
+        proposalId,
+      });
+    } else {
+      console.warn("[MCP Server] No commitWindow found to send IPC event");
+    }
+
+    // Notify tray of pending prompt
+    TrayManager.getInstance().onPromptCreated(targetSessionId);
+  } catch (error) {
+    console.error("[MCP Server] Failed to persist git commit proposal:", error);
+    // Continue anyway - worst case is no durability
+  }
+
+  // Check if auto-commit is enabled
+  let isAutoCommit = false;
+  try {
+    const Store = (await import("electron-store")).default;
+    const aiSettingsStore = new Store({ name: "ai-settings" });
+    isAutoCommit = aiSettingsStore.get("autoCommitEnabled", false) as boolean;
+  } catch {
+    // If we can't read settings, fall through to manual mode
+  }
+
+  if (isAutoCommit) {
+    console.log(
+      `[MCP Server] Auto-commit enabled, executing commit directly for proposal: ${proposalId}`
+    );
+
+    const getFilePath = (f: FileToStage) =>
+      typeof f === "string" ? f : f.path;
+    const filePaths = proposalArgs.filesToStage!.map(getFilePath);
+    const commitMessage = proposalArgs.commitMessage!;
+
+    try {
+      const simpleGit = (await import("simple-git")).default;
+      const { gitOperationLock } = await import(
+        "../../services/GitOperationLock"
+      );
+
+      const commitResult = await gitOperationLock.withLock(
+        workspacePath,
+        "git:commit",
+        async () => {
+          const git = simpleGit(workspacePath);
+
+          // Reset staging area, then add only selected files
+          try {
+            await git.reset(["HEAD"]);
+          } catch {
+            // May fail in fresh repo with no commits - that's OK
+          }
+          await git.add(filePaths);
+          return await git.commit(commitMessage);
+        }
+      );
+
+      // Get commit date
+      let commitDate: string | undefined;
+      if (commitResult.commit) {
+        try {
+          const git = simpleGit(workspacePath);
+          const showResult = await git.show([
+            commitResult.commit,
+            "--no-patch",
+            "--format=%aI",
+          ]);
+          commitDate = showResult.trim();
+        } catch {
+          // Non-critical
+        }
+      }
+
+      const response = {
+        action: (commitResult.commit
+          ? "committed"
+          : "cancelled") as "committed" | "cancelled",
+        commitHash: commitResult.commit || undefined,
+        commitDate,
+        error: commitResult.commit
+          ? undefined
+          : "No changes were committed",
+        filesCommitted: commitResult.commit ? filePaths : undefined,
+        commitMessage: commitResult.commit ? commitMessage : undefined,
+      };
+
+      // Persist the response to DB
+      const { database } = await import(
+        "../../database/PGLiteDatabaseWorker"
+      );
+      const timestamp = Date.now();
+      const responseContent = {
+        type: "git_commit_proposal_response",
+        proposalId,
+        ...response,
+        respondedAt: timestamp,
+        respondedBy: "auto_commit",
+      };
+      await database.query(
+        `INSERT INTO ai_agent_messages (session_id, source, direction, content, created_at, hidden)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          targetSessionId,
+          "nimbalyst",
+          "output",
+          JSON.stringify(responseContent),
+          new Date(timestamp),
+          false,
+        ]
+      );
+
+      // Notify renderer to clear the pending interactive prompt indicator
+      if (commitWindow && !commitWindow.isDestroyed()) {
+        commitWindow.webContents.send("ai:gitCommitProposalResolved", {
+          sessionId: targetSessionId,
+          proposalId,
+        });
+        commitWindow.webContents.send("mcp:gitCommitProposal", {
+          proposalId,
+          workspacePath,
+          sessionId: targetSessionId,
+          filesToStage: proposalArgs.filesToStage,
+          commitMessage: proposalArgs.commitMessage,
+          reasoning: proposalArgs.reasoning,
+        });
+      }
+
+      console.log(
+        `[MCP Server] Auto-commit completed: ${commitResult.commit || "no changes"}`
+      );
+
+      if (response.action === "committed" && response.commitHash) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Auto-committed ${filePaths.length} file(s).\nCommit hash: ${
+                response.commitHash
+              }${
+                response.commitDate
+                  ? `\nCommit date: ${response.commitDate}`
+                  : ""
+              }\nCommit message: ${commitMessage}`,
+            },
+          ],
+          isError: false,
+        };
+      } else {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Auto-commit failed: ${
+                response.error || "No changes were committed"
+              }`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    } catch (error) {
+      console.error("[MCP Server] Auto-commit failed:", error);
+      // Fall through to manual mode on error
+    }
+  }
+
+  // Show OS notification if app is backgrounded
+  let sessionTitle = "AI Session";
+  try {
+    const session = await AISessionsRepository.get(targetSessionId);
+    if (session?.title) {
+      sessionTitle = session.title;
+    }
+  } catch {
+    // Ignore - use default title
+  }
+  notificationService.showBlockedNotification(
+    targetSessionId,
+    sessionTitle,
+    "git_commit",
+    workspacePath
+  );
+
+  // Wait indefinitely for user confirmation.
+  return new Promise((resolve) => {
+    const getFilePath = (f: FileToStage) =>
+      typeof f === "string" ? f : f.path;
+
+    const responseChannel = `git-commit-proposal-response:${sessionId || "unknown"}:${proposalId}`;
+    console.log(
+      `[MCP Server] Registering git commit proposal listener on channel: ${responseChannel}`
+    );
+    ipcMain.once(
+      responseChannel,
+      async (
+        _event,
+        result: {
+          action: "committed" | "cancelled";
+          commitHash?: string;
+          commitDate?: string;
+          error?: string;
+          filesCommitted?: string[];
+          commitMessage?: string;
+        }
+      ) => {
+        console.log(
+          `[MCP Server] Git commit proposal response received: action=${result.action}, hash=${result.commitHash || "none"}`
+        );
+
+        if (result.action === "committed" && result.commitHash) {
+          const filesCount =
+            result.filesCommitted?.length ||
+            proposalArgs.filesToStage!.map(getFilePath).length;
+          resolve({
+            content: [
+              {
+                type: "text",
+                text: `User confirmed and committed ${filesCount} file(s).\nCommit hash: ${
+                  result.commitHash
+                }${
+                  result.commitDate
+                    ? `\nCommit date: ${result.commitDate}`
+                    : ""
+                }\nCommit message: ${
+                  result.commitMessage || proposalArgs.commitMessage
+                }`,
+              },
+            ],
+            isError: false,
+          });
+        } else if (result.action === "committed" && !result.commitHash) {
+          resolve({
+            content: [
+              {
+                type: "text",
+                text: `Commit failed: No commit hash returned. The files may not have been staged correctly.`,
+              },
+            ],
+            isError: true,
+          });
+        } else {
+          resolve({
+            content: [
+              {
+                type: "text",
+                text: result.error
+                  ? `Commit failed: ${result.error}`
+                  : "User cancelled the commit proposal.",
+              },
+            ],
+            isError: result.error ? true : false,
+          });
+        }
+      }
+    );
+
+    // Send the proposal to the renderer
+    commitWindow.webContents.send("mcp:gitCommitProposal", {
+      proposalId,
+      workspacePath,
+      sessionId: sessionId || "unknown",
+      filesToStage: proposalArgs.filesToStage,
+      commitMessage: proposalArgs.commitMessage,
+      reasoning: proposalArgs.reasoning,
+    });
+  });
+}

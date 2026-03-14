@@ -29,7 +29,9 @@ Many source files exceed 1,000 lines, making them difficult for AI agents (and h
 
 | Lines | File | Package |
 | --- | --- | --- |
+| 4,258 | `main/mcp/httpServer.ts` | electron |
 | 3,461 | `main/services/ai/ClaudeCodeProvider.ts` | electron |
+| 2,399 | `main/mcp/extensionDevServer.ts` | electron |
 | 2,657 | `renderer/components/TabEditor/TabEditor.tsx` | electron |
 | 2,029 | `plugins/TablePlugin/TablePlugin.tsx` | rexical |
 | 1,958 | `renderer/components/AgentMode/AgentMode.tsx` | electron |
@@ -73,6 +75,50 @@ Many source files exceed 1,000 lines, making them difficult for AI agents (and h
 ---
 
 ## Cluster Analysis
+
+### Cluster 0: MCP Server Layer (9,708 lines total) -- PRIORITY: HIGHEST
+
+**Directory:** `packages/electron/src/main/mcp/`
+
+The heaviest directory in the project, previously missed from the inventory. Contains the internal MCP servers that expose Nimbalyst tools to Claude Code.
+
+#### 0a. httpServer.ts (4,258 lines) -- PRIORITY: HIGHEST
+
+The single largest file in the entire project. A monolith containing:
+- Image compression utility (lines 32-149)
+- Module-level state maps for transports, sessions, workspace mappings (lines 151-181)
+- Window/workspace resolution logic (lines 183-606)
+- Extension tool management (lines 266-438)
+- Server lifecycle (cleanup, shutdown, startup) (lines 608-762)
+- `createSharedMcpServer()` which contains:
+  - Tool schema definitions (~550 lines of inline JSON in ListToolsRequestSchema handler)
+  - Giant switch statement for tool execution (~2,500 lines in CallToolRequestSchema handler)
+    - applyDiff, streamContent, open_workspace, capture_editor_screenshot
+    - display_to_user (350 lines of validation)
+    - voice_agent_speak, voice_agent_stop
+    - AskUserQuestion (230 lines with IPC + DB polling)
+    - get_session_edited_files
+    - developer_git_commit_proposal (440 lines with auto-commit)
+    - tracker_list, tracker_get, tracker_create, tracker_update, tracker_link_session
+    - Extension tool execution (default case)
+- HTTP transport routing (SSE + Streamable HTTP) (lines 3939-4258)
+
+| Extractable Module | Est. Lines | Description |
+| --- | --- | --- |
+| `mcpToolSchemas.ts` | ~550 | Tool schema definitions. Export `getBuiltInToolSchemas()` that returns the tools array. |
+| `tools/trackerToolHandlers.ts` | ~510 | tracker_list/get/create/update/link_session. Self-contained DB queries. |
+| `tools/interactiveToolHandlers.ts` | ~670 | AskUserQuestion + developer_git_commit_proposal. Both wait for user response via IPC promises. |
+| `tools/editorToolHandlers.ts` | ~350 | applyDiff, streamContent, capture_editor_screenshot, open_workspace, get_session_edited_files. |
+| `tools/displayToolHandler.ts` | ~350 | display_to_user validation and result formatting. |
+| `tools/voiceToolHandlers.ts` | ~90 | voice_agent_speak, voice_agent_stop. Thin wrappers around VoiceModeService. |
+| `mcpWorkspaceResolver.ts` | ~440 | Window/workspace resolution, extension tool registration/filtering, worktree path cache. |
+| `mcpImageCompression.ts` | ~120 | `compressImageIfNeeded()` using Electron nativeImage. |
+
+**Net effect:** httpServer.ts drops from 4,258 to ~600 lines (state maps, server lifecycle, `createSharedMcpServer()` dispatch skeleton, HTTP transport routing).
+
+#### 0b. extensionDevServer.ts (2,399 lines) -- PRIORITY: MEDIUM
+
+Second largest MCP server. Similar structure to httpServer.ts (tool schemas + handlers in one file). Future candidate for the same treatment.
 
 ### Cluster 1: AI Provider Layer (9,627 lines total)
 
@@ -315,6 +361,10 @@ Could extract `getFileType()` and `categorizeError()` to shared utilities (see D
 ## Recommended Execution Order
 
 Ordered by impact and risk, with independent work items that can be parallelized.
+
+### Phase 0: httpServer.ts Decomposition (IN PROGRESS)
+
+The largest file in the project (4,258 lines). Extract tool schemas, tool handlers by domain, workspace resolution, and image compression into separate files.
 
 ### Phase 1: High-Impact, Low-Risk Extractions
 
