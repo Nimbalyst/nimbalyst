@@ -300,8 +300,10 @@ export function getTerminalPanelState(workspacePath: string): TerminalPanelState
       panelVisible: ws.panelVisible ?? DEFAULT_PANEL_STATE.panelVisible,
     };
   }
-  // Fall back to legacy global state for migration
-  return getTerminalStore().get('panel', DEFAULT_PANEL_STATE);
+  // For workspaces with no saved panel state, use defaults (panel closed).
+  // Previously fell back to the legacy global panel state, which caused
+  // new projects to inherit panelVisible:true from unrelated workspaces.
+  return { ...DEFAULT_PANEL_STATE };
 }
 
 /**
