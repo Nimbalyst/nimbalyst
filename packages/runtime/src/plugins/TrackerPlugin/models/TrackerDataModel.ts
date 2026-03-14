@@ -29,6 +29,7 @@ export interface FieldDefinition {
   required?: boolean;
   default?: any;
   displayInline?: boolean;
+  readOnly?: boolean;
 
   // For string/text
   minLength?: number;

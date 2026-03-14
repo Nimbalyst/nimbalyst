@@ -180,12 +180,33 @@ export function updateTrackerInFrontmatter(
   const cleanedTrackerData: Record<string, any> = { type: existingData.type || trackerUpdates.type };
   if (trackerUpdates.type) cleanedTrackerData.type = trackerUpdates.type;
 
-  return updateFrontmatter(content, {
-    ...topLevelUpdates,
-    [frontmatterKey]: frontmatterKey === 'trackerStatus' ? cleanedTrackerData : {
+  const now = new Date().toISOString();
+
+  if (frontmatterKey === 'trackerStatus') {
+    // Set updated at top level; set created if not already present
+    if (!frontmatter.created && !topLevelUpdates.created) {
+      topLevelUpdates.created = now;
+    }
+    topLevelUpdates.updated = now;
+
+    return updateFrontmatter(content, {
+      ...topLevelUpdates,
+      [frontmatterKey]: cleanedTrackerData,
+    });
+  } else {
+    // plan/decision: timestamps live inside the status block
+    const mergedData: Record<string, any> = {
       ...existingData,
       ...trackerUpdates,
-      updated: new Date().toISOString(),
-    },
-  });
+      updated: now,
+    };
+    if (!existingData.created && !trackerUpdates.created) {
+      mergedData.created = now;
+    }
+
+    return updateFrontmatter(content, {
+      ...topLevelUpdates,
+      [frontmatterKey]: mergedData,
+    });
+  }
 }

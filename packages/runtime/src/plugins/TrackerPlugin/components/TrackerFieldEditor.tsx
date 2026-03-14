@@ -30,6 +30,39 @@ function formatFieldLabel(name: string): string {
     .trim();
 }
 
+/**
+ * Format a datetime value for read-only display.
+ * Shows relative date (e.g. "Mar 14, 2026") with full timestamp on hover.
+ */
+export function formatDateTimeDisplay(value: any): { display: string; title: string } {
+  if (!value) return { display: '--', title: '' };
+
+  let date: Date;
+  if (value instanceof Date) {
+    date = value;
+  } else {
+    date = new Date(String(value));
+  }
+
+  if (isNaN(date.getTime())) return { display: String(value), title: '' };
+
+  const display = date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+
+  const title = date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+
+  return { display, title };
+}
+
 export const TrackerFieldEditor: React.FC<TrackerFieldEditorProps> = ({
   field,
   value,
@@ -42,6 +75,22 @@ export const TrackerFieldEditor: React.FC<TrackerFieldEditorProps> = ({
   const wrapperClasses = layout === 'horizontal'
     ? "flex flex-row items-center gap-2 min-w-[120px]"
     : "flex flex-col gap-1 min-w-[120px]";
+
+  // Read-only datetime fields show a formatted display instead of an input
+  if (field.readOnly && (field.type === 'datetime' || field.type === 'date')) {
+    const { display, title } = formatDateTimeDisplay(value);
+    return (
+      <div className={wrapperClasses}>
+        <label className={labelClasses}>{label}</label>
+        <span
+          className="text-[13px] text-[var(--nim-text-muted)] py-1.5"
+          title={title}
+        >
+          {display}
+        </span>
+      </div>
+    );
+  }
 
   switch (field.type) {
     case 'select':

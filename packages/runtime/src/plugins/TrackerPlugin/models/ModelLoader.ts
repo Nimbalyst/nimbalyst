@@ -64,8 +64,8 @@ const builtinTrackers: TrackerDataModel[] = [
       { name: 'owner', type: 'string', displayInline: true },
       { name: 'stakeholders', type: 'array', itemType: 'string', displayInline: false },
       { name: 'tags', type: 'array', itemType: 'string', displayInline: false },
-      { name: 'created', type: 'string', displayInline: false },
-      { name: 'updated', type: 'string', displayInline: false },
+      { name: 'created', type: 'datetime', displayInline: false, readOnly: true },
+      { name: 'updated', type: 'datetime', displayInline: false, readOnly: true },
       { name: 'startDate', type: 'date', displayInline: false },
       { name: 'agentSessions', type: 'array', itemType: 'object', displayInline: false },
     ],
@@ -125,8 +125,8 @@ const builtinTrackers: TrackerDataModel[] = [
       { name: 'owner', type: 'string', displayInline: false },
       { name: 'stakeholders', type: 'array', itemType: 'string', displayInline: false },
       { name: 'tags', type: 'array', itemType: 'string', displayInline: false },
-      { name: 'created', type: 'string', displayInline: false },
-      { name: 'updated', type: 'string', displayInline: false },
+      { name: 'created', type: 'datetime', displayInline: false, readOnly: true },
+      { name: 'updated', type: 'datetime', displayInline: false, readOnly: true },
     ],
     statusBarLayout: [
       {

@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { TrackerDataModel, FieldDefinition } from '../models/TrackerDataModel';
 import { MaterialSymbol } from '../../../ui/icons/MaterialSymbol';
-import { TrackerFieldEditor } from './TrackerFieldEditor';
+import { TrackerFieldEditor, formatDateTimeDisplay } from './TrackerFieldEditor';
 import './StatusBarSlider.css';
 
 export interface StatusBarProps {
@@ -76,7 +76,23 @@ export const StatusBar: React.FC<StatusBarProps> = ({ model, data, onChange, onC
           <MaterialSymbol icon={model.icon} size={20} />
           <span>{model.displayName}</span>
         </div>
-        <div className="status-bar-actions flex gap-1">
+        <div className="flex items-center gap-3">
+          {localData.created && (() => {
+            const { display, title } = formatDateTimeDisplay(localData.created);
+            return (
+              <span className="text-[11px] text-[var(--nim-text-faint)]" title={`Created: ${title}`}>
+                Created {display}
+              </span>
+            );
+          })()}
+          {localData.updated && (() => {
+            const { display, title } = formatDateTimeDisplay(localData.updated);
+            return (
+              <span className="text-[11px] text-[var(--nim-text-faint)]" title={`Updated: ${title}`}>
+                Updated {display}
+              </span>
+            );
+          })()}
           {onClose && (
             <button
               className="status-bar-close-btn bg-transparent border-none p-1 cursor-pointer rounded text-[var(--nim-text-muted)] flex items-center gap-1 transition-all duration-200 relative z-[1] hover:bg-[var(--nim-bg-tertiary)] hover:text-[var(--nim-text)]"
