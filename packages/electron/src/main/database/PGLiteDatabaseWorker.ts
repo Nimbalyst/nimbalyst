@@ -34,6 +34,145 @@ interface PendingRequest {
   reject: (error: Error) => void;
 }
 
+// ============================================================================
+// Database Performance Stats
+// ============================================================================
+
+interface QuerySample {
+  duration: number;
+  execMs: number;    // actual PGLite execution time in worker
+  blockedMs: number; // time waiting in queue (duration - execMs)
+  timestamp: number;
+}
+
+interface TableStats {
+  reads: QuerySample[];
+  writes: QuerySample[];
+}
+
+interface SampleSummary {
+  count: number;
+  p50: number;
+  p95: number;
+  p99: number;
+  max: number;
+  totalMs: number;
+  blockedP50: number;
+  blockedP95: number;
+  blockedMax: number;
+  blockedTotalMs: number;
+}
+
+/**
+ * Collects per-table read/write timing samples in a rolling window.
+ * Computes count, p50, p95, p99, and max on demand.
+ */
+class DatabaseStats {
+  private tables = new Map<string, TableStats>();
+  private windowMs: number;
+
+  constructor(windowMs: number = 5 * 60 * 1000) { // default 5 min window
+    this.windowMs = windowMs;
+  }
+
+  record(table: string, operation: 'read' | 'write', durationMs: number, execMs?: number): void {
+    let stats = this.tables.get(table);
+    if (!stats) {
+      stats = { reads: [], writes: [] };
+      this.tables.set(table, stats);
+    }
+    const actualExecMs = execMs ?? durationMs;
+    const blockedMs = Math.max(0, durationMs - actualExecMs);
+    const samples = operation === 'read' ? stats.reads : stats.writes;
+    samples.push({ duration: durationMs, execMs: actualExecMs, blockedMs, timestamp: performance.now() });
+  }
+
+  private prune(samples: QuerySample[]): QuerySample[] {
+    const cutoff = performance.now() - this.windowMs;
+    // Remove old samples in-place
+    let writeIdx = 0;
+    for (let i = 0; i < samples.length; i++) {
+      if (samples[i].timestamp >= cutoff) {
+        samples[writeIdx++] = samples[i];
+      }
+    }
+    samples.length = writeIdx;
+    return samples;
+  }
+
+  private percentile(sorted: number[], p: number): number {
+    if (sorted.length === 0) return 0;
+    const idx = Math.ceil((p / 100) * sorted.length) - 1;
+    return sorted[Math.max(0, idx)];
+  }
+
+  private summarizeSamples(samples: QuerySample[]): SampleSummary {
+    this.prune(samples);
+    if (samples.length === 0) {
+      return { count: 0, p50: 0, p95: 0, p99: 0, max: 0, totalMs: 0, blockedP50: 0, blockedP95: 0, blockedMax: 0, blockedTotalMs: 0 };
+    }
+    const durations = samples.map(s => s.duration).sort((a, b) => a - b);
+    const blocked = samples.map(s => s.blockedMs).sort((a, b) => a - b);
+    const totalMs = durations.reduce((sum, d) => sum + d, 0);
+    const blockedTotalMs = blocked.reduce((sum, d) => sum + d, 0);
+    return {
+      count: durations.length,
+      p50: Math.round(this.percentile(durations, 50)),
+      p95: Math.round(this.percentile(durations, 95)),
+      p99: Math.round(this.percentile(durations, 99)),
+      max: Math.round(durations[durations.length - 1]),
+      totalMs: Math.round(totalMs),
+      blockedP50: Math.round(this.percentile(blocked, 50)),
+      blockedP95: Math.round(this.percentile(blocked, 95)),
+      blockedMax: Math.round(blocked[blocked.length - 1]),
+      blockedTotalMs: Math.round(blockedTotalMs),
+    };
+  }
+
+  getSnapshot(): Record<string, { reads: SampleSummary; writes: SampleSummary }> {
+    const result: Record<string, any> = {};
+    for (const [table, stats] of this.tables) {
+      const reads = this.summarizeSamples(stats.reads);
+      const writes = this.summarizeSamples(stats.writes);
+      // Skip tables with no activity in the window
+      if (reads.count === 0 && writes.count === 0) continue;
+      result[table] = { reads, writes };
+    }
+    return result;
+  }
+
+  getSummaryLog(): string {
+    const snapshot = this.getSnapshot();
+    const tables = Object.keys(snapshot).sort();
+    if (tables.length === 0) return '[PGLite Stats] No queries in window';
+
+    let totalReads = 0;
+    let totalWrites = 0;
+    const lines = ['[PGLite Stats] Rolling 5min window:'];
+    for (const table of tables) {
+      const { reads, writes } = snapshot[table];
+      totalReads += reads.count;
+      totalWrites += writes.count;
+      if (reads.count > 0) {
+        let line = `  ${table} R: ${reads.count} queries, p50=${reads.p50}ms p95=${reads.p95}ms p99=${reads.p99}ms max=${reads.max}ms total=${reads.totalMs}ms`;
+        if (reads.blockedTotalMs > 0) {
+          line += ` | blocked: p50=${reads.blockedP50}ms p95=${reads.blockedP95}ms max=${reads.blockedMax}ms total=${reads.blockedTotalMs}ms`;
+        }
+        lines.push(line);
+      }
+      if (writes.count > 0) {
+        let line = `  ${table} W: ${writes.count} queries, p50=${writes.p50}ms p95=${writes.p95}ms p99=${writes.p99}ms max=${writes.max}ms total=${writes.totalMs}ms`;
+        if (writes.blockedTotalMs > 0) {
+          line += ` | blocked: p50=${writes.blockedP50}ms p95=${writes.blockedP95}ms max=${writes.blockedMax}ms total=${writes.blockedTotalMs}ms`;
+        }
+        lines.push(line);
+      }
+    }
+    lines.splice(1, 0, `  Total: ${totalReads} reads, ${totalWrites} writes`);
+    return lines.join('\n');
+  }
+}
+
 export class PGLiteDatabaseWorker {
   private worker: Worker | null = null;
   private pendingRequests = new Map<string, PendingRequest>();
@@ -41,6 +180,9 @@ export class PGLiteDatabaseWorker {
   private initPromise: Promise<void> | null = null;
   private analytics = AnalyticsService.getInstance();
   private backupService: DatabaseBackupService | null = null;
+  private stats = new DatabaseStats();
+  private statsInterval: ReturnType<typeof setInterval> | null = null;
+  private lastExecMs: number | undefined;
 
   // ============================================================================
   // Helper methods for dialogs and common operations
@@ -183,6 +325,10 @@ export class PGLiteDatabaseWorker {
       if (pending) {
         this.pendingRequests.delete(response.id);
         if (response.success) {
+          // Store worker-reported execution time for stats
+          if (response.execMs !== undefined) {
+            this.lastExecMs = response.execMs;
+          }
           pending.resolve(response.data);
         } else {
           pending.reject(new Error(response.error || 'Unknown error'));
@@ -352,6 +498,16 @@ export class PGLiteDatabaseWorker {
       // Create schemas
       logger.main.info('[PGLite Worker] Database schemas created');
 
+      // Start periodic stats logging (every 60s, dev mode only)
+      if (!app.isPackaged) {
+        this.statsInterval = setInterval(() => {
+          const summary = this.stats.getSummaryLog();
+          if (!summary.includes('No queries in window')) {
+            logger.main.info(summary);
+          }
+        }, 60_000);
+      }
+
       this.initialized = true;
     } catch (error: any) {
       logger.main.error('[PGLite Worker] Failed to initialize:', error);
@@ -517,31 +673,41 @@ export class PGLiteDatabaseWorker {
       throw new Error('Database not initialized. Call initialize() first.');
     }
     const startTime = performance.now();
+    const tableName = this.extractTableName(sql);
     try {
       const result = await this.sendMessage('query', { sql, params });
       const duration = performance.now() - startTime;
+      const execMs = this.lastExecMs;
+      this.lastExecMs = undefined;
+
+      // Record stats with worker execution time for blocked calculation
+      this.stats.record(tableName, 'read', duration, execMs);
 
       // Log slow queries
       if (duration >= PGLiteDatabaseWorker.SLOW_QUERY_THRESHOLD_MS) {
-        const tableName = this.extractTableName(sql);
         const rowCount = result?.rows?.length ?? 0;
+        const blockedMs = execMs !== undefined ? Math.round(duration - execMs) : undefined;
         // Truncate SQL for logging (first 200 chars)
         const truncatedSql = sql.length > 200 ? sql.substring(0, 400) + '...' : sql;
-        logger.main.warn(`[PGLite] Slow query (${duration.toFixed(0)}ms): table=${tableName}, rows=${rowCount}, sql="${truncatedSql}"`);
+        logger.main.warn(`[PGLite] Slow query (${duration.toFixed(0)}ms, exec=${execMs?.toFixed(0) ?? '?'}ms, blocked=${blockedMs ?? '?'}ms): table=${tableName}, rows=${rowCount}, sql="${truncatedSql}"`);
       }
 
       return result;
     } catch (error) {
       const duration = performance.now() - startTime;
+      const execMs = this.lastExecMs;
+      this.lastExecMs = undefined;
+      // Record stats even for failures
+      this.stats.record(tableName, 'read', duration, execMs);
       // Track database error
       this.analytics.sendEvent('database_error', {
         operation: 'read',
         errorType: categorizeDBError(error),
-        tableName: this.extractTableName(sql)
+        tableName
       });
       // Also log slow failed queries
       if (duration >= PGLiteDatabaseWorker.SLOW_QUERY_THRESHOLD_MS) {
-        logger.main.warn(`[PGLite] Slow query failed (${duration.toFixed(0)}ms): table=${this.extractTableName(sql)}`);
+        logger.main.warn(`[PGLite] Slow query failed (${duration.toFixed(0)}ms): table=${tableName}`);
       }
       throw error;
     }
@@ -556,27 +722,37 @@ export class PGLiteDatabaseWorker {
       throw new Error('Database not initialized. Call initialize() first.');
     }
     const startTime = performance.now();
+    const tableName = this.extractTableName(sql);
     try {
       await this.sendMessage('exec', { sql }, timeoutMs);
       const duration = performance.now() - startTime;
+      const execMs = this.lastExecMs;
+      this.lastExecMs = undefined;
+
+      // Record stats with worker execution time for blocked calculation
+      this.stats.record(tableName, 'write', duration, execMs);
 
       // Log slow exec operations
       if (duration >= PGLiteDatabaseWorker.SLOW_QUERY_THRESHOLD_MS) {
-        const tableName = this.extractTableName(sql);
+        const blockedMs = execMs !== undefined ? Math.round(duration - execMs) : undefined;
         const truncatedSql = sql.length > 200 ? sql.substring(0, 200) + '...' : sql;
-        logger.main.warn(`[PGLite] Slow exec (${duration.toFixed(0)}ms): table=${tableName}, sql="${truncatedSql}"`);
+        logger.main.warn(`[PGLite] Slow exec (${duration.toFixed(0)}ms, exec=${execMs?.toFixed(0) ?? '?'}ms, blocked=${blockedMs ?? '?'}ms): table=${tableName}, sql="${truncatedSql}"`);
       }
     } catch (error) {
       const duration = performance.now() - startTime;
+      const execMs = this.lastExecMs;
+      this.lastExecMs = undefined;
+      // Record stats even for failures
+      this.stats.record(tableName, 'write', duration, execMs);
       // Track database error
       this.analytics.sendEvent('database_error', {
         operation: 'write',
         errorType: categorizeDBError(error),
-        tableName: this.extractTableName(sql)
+        tableName
       });
       // Also log slow failed exec operations
       if (duration >= PGLiteDatabaseWorker.SLOW_QUERY_THRESHOLD_MS) {
-        logger.main.warn(`[PGLite] Slow exec failed (${duration.toFixed(0)}ms): table=${this.extractTableName(sql)}`);
+        logger.main.warn(`[PGLite] Slow exec failed (${duration.toFixed(0)}ms): table=${tableName}`);
       }
       throw error;
     }
@@ -586,8 +762,24 @@ export class PGLiteDatabaseWorker {
    * Extract table name from SQL query (simple heuristic)
    */
   private extractTableName(sql: string): string {
-    const match = sql.match(/(?:FROM|INTO|UPDATE|TABLE)\s+([a-zA-Z_][a-zA-Z0-9_]*)/i);
-    return match ? match[1] : 'unknown';
+    // Normalize whitespace for easier matching
+    const normalized = sql.replace(/\s+/g, ' ').trim();
+    // Try specific DML patterns in priority order
+    const patterns = [
+      /^SELECT\b.+?\bFROM\s+([a-zA-Z_][a-zA-Z0-9_]*)/i,    // SELECT ... FROM table
+      /^INSERT\s+INTO\s+([a-zA-Z_][a-zA-Z0-9_]*)/i,          // INSERT INTO table
+      /^UPDATE\s+([a-zA-Z_][a-zA-Z0-9_]*)/i,                  // UPDATE table
+      /^DELETE\s+FROM\s+([a-zA-Z_][a-zA-Z0-9_]*)/i,           // DELETE FROM table
+      /^CREATE\s+(?:TABLE|INDEX)\b.*?\bON\s+([a-zA-Z_][a-zA-Z0-9_]*)/i, // CREATE INDEX ... ON table
+      /^CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-zA-Z_][a-zA-Z0-9_]*)/i, // CREATE TABLE table
+      /^ALTER\s+TABLE\s+([a-zA-Z_][a-zA-Z0-9_]*)/i,           // ALTER TABLE table
+      /^DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?([a-zA-Z_][a-zA-Z0-9_]*)/i, // DROP TABLE table
+    ];
+    for (const pattern of patterns) {
+      const match = normalized.match(pattern);
+      if (match) return match[1];
+    }
+    return 'unknown';
   }
 
   /**
@@ -607,6 +799,17 @@ export class PGLiteDatabaseWorker {
    * Close the database connection
    */
   async close(): Promise<void> {
+    if (this.statsInterval) {
+      clearInterval(this.statsInterval);
+      this.statsInterval = null;
+    }
+    // Log final stats on shutdown (dev mode only)
+    if (!app.isPackaged) {
+      const summary = this.stats.getSummaryLog();
+      if (!summary.includes('No queries in window')) {
+        logger.main.info(`[PGLite] Final stats before shutdown:\n${summary}`);
+      }
+    }
     if (this.worker) {
       await this.sendMessage('close');
       await this.worker.terminate();
@@ -631,7 +834,11 @@ export class PGLiteDatabaseWorker {
     if (!this.initialized) {
       throw new Error('Database not initialized. Call initialize() first.');
     }
-    return await this.sendMessage('getStats');
+    const dbStats = await this.sendMessage('getStats');
+    return {
+      ...dbStats,
+      queryStats: this.stats.getSnapshot(),
+    };
   }
 
   /**

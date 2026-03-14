@@ -1561,21 +1561,27 @@ class PGLiteWorker {
   async query(message) {
     if (!this.db) throw new Error('Database not initialized');
 
+    const execStart = performance.now();
     const result = await this.db.query(message.payload.sql, message.payload.params);
+    const execMs = performance.now() - execStart;
     return {
       id: message.id,
       success: true,
-      data: result
+      data: result,
+      execMs
     };
   }
 
   async exec(message) {
     if (!this.db) throw new Error('Database not initialized');
 
+    const execStart = performance.now();
     await this.db.exec(message.payload.sql);
+    const execMs = performance.now() - execStart;
     return {
       id: message.id,
-      success: true
+      success: true,
+      execMs
     };
   }
 
