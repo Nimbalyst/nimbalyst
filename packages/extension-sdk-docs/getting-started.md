@@ -136,53 +136,33 @@ export function deactivate() {
 Create `src/HelloEditor.tsx`:
 
 ```tsx
-import React, { useState, useEffect } from 'react';
+import React, { useRef, useReducer } from 'react';
+import { useEditorLifecycle } from '@nimbalyst/runtime';
 import type { EditorHostProps } from '@nimbalyst/extension-sdk';
 
 export function HelloEditor({ host }: EditorHostProps) {
-  const [text, setText] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+  const textRef = useRef('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [, forceRender] = useReducer((x) => x + 1, 0);
 
-  // Load content from disk on mount
-  useEffect(() => {
-    let mounted = true;
-
-    host.loadContent().then((content) => {
-      if (!mounted) return;
-      setText(content);
-      setIsLoading(false);
-    });
-
-    return () => {
-      mounted = false;
-    };
-  }, [host]);
-
-  // Save when the host requests it (autosave / Cmd+S)
-  useEffect(() => {
-    return host.onSaveRequested(async () => {
-      await host.saveContent(text);
-      host.setDirty(false);
-    });
-  }, [host, text]);
-
-  // Reload if the file changes on disk
-  useEffect(() => {
-    return host.onFileChanged((newContent) => {
-      setText(newContent);
-      host.setDirty(false);
-    });
-  }, [host]);
+  const { isLoading, error, markDirty } = useEditorLifecycle(host, {
+    applyContent: (content: string) => {
+      textRef.current = content;
+      if (textareaRef.current) {
+        textareaRef.current.value = content;
+      }
+      forceRender();
+    },
+    getCurrentContent: () => textRef.current,
+  });
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newText = e.target.value;
-    setText(newText);
-    host.setDirty(true);
+    textRef.current = e.target.value;
+    markDirty();
   };
 
-  if (isLoading) {
-    return <div style={{ padding: '20px' }}>Loading...</div>;
-  }
+  if (error) return <div style={{ padding: '20px' }}>Error: {error.message}</div>;
+  if (isLoading) return <div style={{ padding: '20px' }}>Loading...</div>;
 
   return (
     <div style={{
@@ -196,7 +176,8 @@ export function HelloEditor({ host }: EditorHostProps) {
         Editing: {host.filePath}
       </p>
       <textarea
-        value={text}
+        ref={textareaRef}
+        defaultValue={textRef.current}
         onChange={handleChange}
         style={{
           flex: 1,
@@ -216,10 +197,11 @@ export function HelloEditor({ host }: EditorHostProps) {
 ```
 
 **Key points:**
-- Call `host.loadContent()` on mount instead of expecting a `content` prop
-- Subscribe with `host.onSaveRequested()` and call `host.saveContent()` when the host asks you to save
-- Call `host.setDirty(true)` when the user edits the document
-- Subscribe with `host.onFileChanged()` to handle external edits or AI edits
+- `useEditorLifecycle` handles loading, saving, file watching, echo detection, and dirty state
+- `applyContent` pushes content into the editor (on load, external changes)
+- `getCurrentContent` pulls content from the editor (on save)
+- Call `markDirty()` when the user edits -- the hook manages `host.setDirty()` for you
+- Content lives in a ref, not React state -- the textarea uses `defaultValue`
 
 ## Step 8: Add Build Script
 

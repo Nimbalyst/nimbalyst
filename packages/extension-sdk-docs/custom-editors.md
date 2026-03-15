@@ -8,7 +8,107 @@ When a user opens a file, Nimbalyst checks if any extension has registered a cus
 
 Your component receives a single `host` prop from Nimbalyst. The host handles loading, saving, dirty tracking, file change notifications, and optional features like diff mode.
 
-## Editor Component Interface
+## The useEditorLifecycle Hook
+
+The recommended way to build custom editors is with the `useEditorLifecycle` hook. It replaces all manual `EditorHost` subscription boilerplate (loading, saving, echo detection, file watching, diff mode, theme) with a single hook call.
+
+```tsx
+import { useEditorLifecycle } from '@nimbalyst/runtime';
+import type { EditorHostProps } from '@nimbalyst/extension-sdk';
+
+export function MyEditor({ host }: EditorHostProps) {
+  const editorRef = useRef<MyEditorAPI>(null);
+
+  const { isLoading, error, theme, markDirty, diffState } = useEditorLifecycle(host, {
+    applyContent: (data) => editorRef.current?.load(data),
+    getCurrentContent: () => editorRef.current?.getData() ?? defaultValue,
+    parse: (raw) => JSON.parse(raw),
+    serialize: (data) => JSON.stringify(data),
+  });
+
+  if (error) return <div>Failed to load: {error.message}</div>;
+  if (isLoading) return <div>Loading...</div>;
+
+  return <MyEditorComponent ref={editorRef} onChange={markDirty} theme={theme} />;
+}
+```
+
+### How It Works
+
+The hook interacts with your editor through pull/push callbacks -- content never lives in React state:
+
+- **`applyContent(parsed)`**: Called to push content INTO the editor (on initial load, on external file change). Update your editor's internal state here.
+- **`getCurrentContent()`**: Called to pull content FROM the editor (on save). Return the current state. Omit for read-only editors.
+- **`parse(raw)`**: Convert raw file string into your editor's format. Omit if your editor works with raw strings.
+- **`serialize(data)`**: Convert your editor's format back to a string for saving. Omit if already a string.
+
+### What It Returns
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `isLoading` | `boolean` | `true` until initial content is loaded |
+| `error` | `Error \| null` | Error from initial load |
+| `theme` | `string` | Current theme name (reactive) |
+| `markDirty` | `() => void` | Call when the user makes an edit |
+| `isDirty` | `boolean` | Whether unsaved changes exist |
+| `diffState` | `DiffState<T> \| null` | AI edit diff with `accept`/`reject` callbacks |
+| `toggleSourceMode` | `(() => void) \| undefined` | Toggle to Monaco source view |
+| `isSourceMode` | `boolean` | Whether source mode is active |
+
+### Editor Architecture Patterns
+
+The hook supports three common architectures:
+
+**Library-managed** (Excalidraw, Three.js) -- callbacks talk to the library's imperative API via refs:
+```tsx
+const apiRef = useRef<ExcalidrawImperativeAPI>(null);
+useEditorLifecycle(host, {
+  applyContent: (elements) => apiRef.current?.updateScene({ elements }),
+  getCurrentContent: () => apiRef.current?.getSceneElements() ?? [],
+  parse: (raw) => JSON.parse(raw).elements,
+  serialize: (elements) => JSON.stringify({ elements }),
+});
+```
+
+**Store-managed** (Zustand, custom stores) -- callbacks talk to a store:
+```tsx
+const storeRef = useRef(createMyStore());
+useEditorLifecycle(host, {
+  applyContent: (doc) => storeRef.current.getState().loadDocument(doc),
+  getCurrentContent: () => storeRef.current.getState().document,
+  parse: parseDocument,
+  serialize: serializeDocument,
+});
+```
+
+**Read-only** (PDF viewer, SQLite browser) -- only `applyContent`, no save:
+```tsx
+const dataRef = useRef<ArrayBuffer | null>(null);
+const [, forceRender] = useReducer((x) => x + 1, 0);
+useEditorLifecycle(host, {
+  applyContent: (data) => { dataRef.current = data; forceRender(); },
+  binary: true,
+});
+```
+
+### Additional Options
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `binary` | `boolean` | Use `loadBinaryContent()` instead of `loadContent()`. For PDFs, images, SQLite, etc. |
+| `onLoaded` | `() => void` | Called after initial content is loaded and applied |
+| `onExternalChange` | `(content: T) => void` | Called when an external file change is detected (not from our own save) |
+| `onSave` | `() => Promise<void>` | Replace the default save flow. Use for async content extraction (e.g., RevoGrid) |
+| `onDiffRequested` | `(config: DiffConfig) => void` | Replace default diff handling. Use for specialized diff rendering (e.g., cell-level CSV diff) |
+| `onDiffCleared` | `() => Promise<void>` | Replace default diff cleanup. Paired with `onDiffRequested` |
+
+### Echo Detection
+
+The hook automatically ignores file change notifications caused by our own saves. This prevents the editor from reloading content immediately after saving -- a common source of bugs in manual implementations.
+
+## EditorHost Interface
+
+The `useEditorLifecycle` hook wraps this interface. You rarely need to use it directly, but it's useful to understand what's available:
 
 ```typescript
 interface EditorHostProps {
@@ -28,80 +128,39 @@ interface EditorHost {
   setDirty(isDirty: boolean): void;
   saveContent(content: string | ArrayBuffer): Promise<void>;
   onSaveRequested(callback: () => void): () => void;
+  onThemeChanged(callback: (theme: string) => void): () => void;
   openHistory(): void;
-}
-```
 
-## Basic Editor Structure
+  // Diff mode (AI edits)
+  onDiffRequested?(callback: (config: DiffConfig) => void): () => void;
+  reportDiffResult?(result: DiffResult): void;
+  onDiffCleared?(callback: () => void): () => void;
 
-```tsx
-import React, { useState, useEffect } from 'react';
-import type { EditorHostProps } from '@nimbalyst/extension-sdk';
-
-export function MyEditor({ host }: EditorHostProps) {
-  const [content, setContent] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    let mounted = true;
-
-    host.loadContent().then((initialContent) => {
-      if (!mounted) return;
-      setContent(initialContent);
-      setIsLoading(false);
-    });
-
-    return () => {
-      mounted = false;
-    };
-  }, [host]);
-
-  useEffect(() => {
-    return host.onSaveRequested(async () => {
-      await host.saveContent(content);
-      host.setDirty(false);
-    });
-  }, [host, content]);
-
-  useEffect(() => {
-    return host.onFileChanged((newContent) => {
-      setContent(newContent);
-      host.setDirty(false);
-    });
-  }, [host]);
-
-  const handleEdit = (nextContent: string) => {
-    setContent(nextContent);
-    host.setDirty(true);
-  };
-
-  if (isLoading) {
-    return <div className="my-editor">Loading...</div>;
-  }
-
-  return <div className="my-editor">{/* Your editor UI */}</div>;
+  // Source mode (toggle to Monaco)
+  toggleSourceMode?(): void;
+  onSourceModeChanged?(callback: (isActive: boolean) => void): () => void;
+  isSourceModeActive?(): boolean;
 }
 ```
 
 ## Key Concepts
 
-### Content Management
+### Content Ownership
 
-Nimbalyst uses a **host-driven save model**:
+Nimbalyst editors use a **host-driven save model** where the editor owns its content state:
 
-1. **Initial load**: Call `host.loadContent()` when the editor mounts
-2. **Dirty tracking**: Call `host.setDirty(true)` when the user makes changes
-3. **Saving**: Subscribe with `host.onSaveRequested()` and push the current content via `host.saveContent()`
-4. **External reloads**: Subscribe with `host.onFileChanged()` to react to disk changes
+1. **Initial load**: The hook calls `host.loadContent()` and passes the result to your `applyContent` callback
+2. **Dirty tracking**: Call `markDirty()` when the user makes changes
+3. **Saving**: The hook subscribes to save events and calls your `getCurrentContent` to get the data
+4. **External changes**: The hook detects external file changes, filters echoes, and calls `applyContent`
 
-This lets complex editors own their in-memory state while still integrating cleanly with tabs, autosave, file watching, and AI edits.
-
-### Why not just pass `content` as a prop?
+### Why Not Pass Content as a Prop?
 
 The `EditorHost` model is more efficient for complex editors:
 - Spreadsheets with thousands of cells do not need to serialize on every keystroke
 - Diagram editors can maintain rich object graphs internally
 - Binary editors can load and save `ArrayBuffer` data without pretending everything is text
+- Imperative editor libraries (Excalidraw, RevoGrid, Three.js) cannot be re-rendered anyway
 
 ## Registering the Editor
 
@@ -308,56 +367,56 @@ function MyEditor({ content, onChange }) {
 }
 ```
 
-## Example: CSV Editor
+## Example: Simple Table Editor
 
-A complete example of a CSV editor:
+A complete example using `useEditorLifecycle`:
 
 ```tsx
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useRef } from 'react';
+import { useEditorLifecycle } from '@nimbalyst/runtime';
+import type { EditorHostProps } from '@nimbalyst/extension-sdk';
 
-interface CSVEditorProps {
-  content: string;
-  filePath: string;
-  onChange: (content: string) => void;
-}
+export function TableEditor({ host }: EditorHostProps) {
+  const dataRef = useRef<string[][]>([]);
+  const tableRef = useRef<HTMLTableElement>(null);
 
-export function CSVEditor({ content, onChange }: CSVEditorProps) {
-  // Parse CSV into 2D array
-  const parseCSV = (text: string): string[][] => {
-    return text.split('\n').map(row =>
-      row.split(',').map(cell => cell.trim())
-    );
-  };
+  const parseCSV = (text: string): string[][] =>
+    text.split('\n').map(row => row.split(',').map(cell => cell.trim()));
 
-  const serializeCSV = (data: string[][]): string => {
-    return data.map(row => row.join(',')).join('\n');
-  };
+  const serializeCSV = (data: string[][]): string =>
+    data.map(row => row.join(',')).join('\n');
 
-  const [data, setData] = useState(() => parseCSV(content));
+  const { isLoading, error, theme, markDirty } = useEditorLifecycle(host, {
+    applyContent: (data: string[][]) => {
+      dataRef.current = data;
+      renderTable();
+    },
+    getCurrentContent: () => dataRef.current,
+    parse: parseCSV,
+    serialize: serializeCSV,
+  });
 
-  useEffect(() => {
-    setData(parseCSV(content));
-  }, [content]);
+  function renderTable() {
+    // Re-render table imperatively or use forceUpdate
+  }
 
-  const handleCellChange = (row: number, col: number, value: string) => {
-    const newData = data.map((r, i) =>
-      i === row ? r.map((c, j) => j === col ? value : c) : r
-    );
-    setData(newData);
-    onChange(serializeCSV(newData));
-  };
+  if (error) return <div>Error: {error.message}</div>;
+  if (isLoading) return <div>Loading...</div>;
 
   return (
     <div style={{ padding: '10px', overflow: 'auto', height: '100%' }}>
-      <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+      <table ref={tableRef} style={{ borderCollapse: 'collapse', width: '100%' }}>
         <tbody>
-          {data.map((row, rowIndex) => (
+          {dataRef.current.map((row, rowIndex) => (
             <tr key={rowIndex}>
               {row.map((cell, colIndex) => (
                 <td key={colIndex} style={{ border: '1px solid var(--nim-border)' }}>
                   <input
-                    value={cell}
-                    onChange={e => handleCellChange(rowIndex, colIndex, e.target.value)}
+                    defaultValue={cell}
+                    onChange={e => {
+                      dataRef.current[rowIndex][colIndex] = e.target.value;
+                      markDirty();
+                    }}
                     style={{
                       width: '100%',
                       padding: '4px',
@@ -379,11 +438,11 @@ export function CSVEditor({ content, onChange }: CSVEditorProps) {
 
 ## Best Practices
 
-1. **Always sync with content prop** - The file may be reloaded from disk
-2. **Use CSS variables** - Your editor should respect the user's theme
-3. **Handle empty content** - The file might be new or empty
-4. **Debounce onChange** - Don't call it on every keystroke for large files
-5. **Clean up effects** - Remove event listeners in cleanup functions
+1. **Use `useEditorLifecycle`** - Handles loading, saving, echo detection, file watching, diff mode, and theme
+2. **Keep content out of React state** - Use refs or external stores for editor data
+3. **Use CSS variables** - Your editor should respect the user's theme
+4. **Handle empty content** - The file might be new or empty
+5. **Call `markDirty()`** - Not `host.setDirty()` directly -- the hook tracks dirty state for you
 6. **Test with large files** - Ensure your editor performs well
 
 ## Next Steps

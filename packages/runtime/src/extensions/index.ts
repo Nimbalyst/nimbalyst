@@ -96,9 +96,13 @@ export type {
   DiffResult,
 } from './editorHost';
 
-// Editor Host Hook
-export { useEditorHost } from './useEditorHost';
-export type { UseEditorHostOptions, UseEditorHostResult } from './useEditorHost';
+// Editor Lifecycle Hook
+export { useEditorLifecycle } from './useEditorLifecycle';
+export type {
+  UseEditorLifecycleOptions,
+  UseEditorLifecycleResult,
+  DiffState,
+} from './useEditorLifecycle';
 
 // Extension Storage
 export {

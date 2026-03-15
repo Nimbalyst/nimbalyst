@@ -30,18 +30,83 @@ interface EditorHost {
   saveContent(content: string): void;  // Save when user saves
   setDirty(dirty: boolean): void;      // Track unsaved changes
   onFileChanged(callback): void;       // Handle external file changes
+  onSaveRequested(callback): void;     // Subscribe to save events
+  onThemeChanged(callback): void;      // Subscribe to theme changes
+  onDiffRequested?(callback): void;    // AI edit diff mode
+  onDiffCleared?(callback): void;      // Diff mode dismissed
 }
 ```
 
 This contract ensures that extensions integrate seamlessly with tabs, dirty indicators, file watching, and AI edit streaming regardless of the underlying editor technology.
 
+## useEditorLifecycle Hook (Recommended)
+
+The `useEditorLifecycle` hook replaces all manual `EditorHost` subscription boilerplate with a single hook call. **All new custom editors should use this hook.**
+
+```typescript
+import { useEditorLifecycle } from '@nimbalyst/runtime';
+import type { EditorHostProps } from '@nimbalyst/extension-sdk';
+
+function MyEditor({ host }: EditorHostProps) {
+  const editorRef = useRef<MyEditorAPI>(null);
+
+  const { isLoading, error, theme, markDirty, diffState } = useEditorLifecycle(host, {
+    applyContent: (parsed) => editorRef.current?.load(parsed),
+    getCurrentContent: () => editorRef.current?.getData() ?? defaultValue,
+    parse: (raw) => JSON.parse(raw),
+    serialize: (data) => JSON.stringify(data),
+  });
+
+  return isLoading ? <Loading /> : <MyEditorComponent ref={editorRef} onChange={markDirty} />;
+}
+```
+
+The hook handles:
+- **Loading**: Calls `host.loadContent()` on mount, provides `isLoading` and `error` state
+- **Saving**: Subscribes to `host.onSaveRequested()`, pulls content via `getCurrentContent`, serializes, and saves
+- **Echo detection**: Ignores file change notifications caused by our own saves
+- **External file changes**: Calls `applyContent` when the file changes on disk (not from our save)
+- **Theme**: Tracks theme changes reactively
+- **Diff mode**: Parses AI edit diffs and provides `diffState` with `accept`/`reject` callbacks
+- **Source mode**: Tracks source mode toggle state
+
+Content state **never** lives in this hook or in React state. The hook interacts with the editor through pull/push callbacks:
+- `applyContent`: push content INTO the editor (load, external change)
+- `getCurrentContent`: pull content FROM the editor (save)
+
+This design works for all editor architectures:
+- **Library-managed** (Excalidraw, Three.js): callbacks talk to the library's imperative API via refs
+- **Store-managed** (Mindmap, DatamodelLM): callbacks talk to a Zustand store
+- **Read-only** (PDF, SQLite): only `applyContent`, no `getCurrentContent`
+
+### Advanced: Custom Save and Diff Overrides
+
+For editors with specialized needs (async content extraction, cell-level diff), the hook provides override options:
+
+```typescript
+useEditorLifecycle(host, {
+  applyContent: (content) => { /* ... */ },
+  onSave: async () => {
+    // Custom save flow (e.g., async serialization from RevoGrid)
+    const content = await gridOps.toCSV();
+    await host.saveContent(content);
+  },
+  onDiffRequested: (config) => {
+    // Custom diff rendering (e.g., cell-level CSV diff with phantom rows)
+  },
+  onDiffCleared: async () => {
+    // Custom diff cleanup
+  },
+});
+```
+
 ## Extension Contract
 
 Extensions receive `EditorHost` and must:
-- Call `loadContent()` on mount (not expect content prop)
-- Own all internal state
+- Use `useEditorLifecycle` hook (recommended) or manually subscribe to host events
+- Own all internal state -- content NEVER in React state for complex editors
 - Call `saveContent()` when save requested
-- Handle `onFileChanged()` for external edits
+- Handle external file changes (hook does this automatically)
 - NEVER depend on parent re-rendering them
 
 ## AI Completion API

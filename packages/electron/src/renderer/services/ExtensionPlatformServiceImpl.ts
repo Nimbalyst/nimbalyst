@@ -36,7 +36,7 @@ import * as lexicalMarkdown from '@lexical/markdown';
 import { MaterialSymbol } from '@nimbalyst/runtime/ui/icons/MaterialSymbol';
 
 // Import screenshot service and document path context from runtime
-import { screenshotService, useDocumentPath, useEditorHost } from '@nimbalyst/runtime';
+import { screenshotService, useDocumentPath, useEditorLifecycle } from '@nimbalyst/runtime';
 
 // Import DataModel platform service for datamodellm extension
 import { DataModelPlatformServiceImpl } from './DataModelPlatformServiceImpl';
@@ -432,11 +432,11 @@ CHECK:
         getInstance: () => DataModelPlatformServiceImpl.getInstance(),
       },
       // @nimbalyst/runtime - umbrella re-export of common extension dependencies
-      // Extensions can import { MaterialSymbol, useDocumentPath, useEditorHost } from '@nimbalyst/runtime'
+      // Extensions can import { MaterialSymbol, useDocumentPath, useEditorLifecycle } from '@nimbalyst/runtime'
       '@nimbalyst/runtime': {
         MaterialSymbol,
         useDocumentPath,
-        useEditorHost,
+        useEditorLifecycle,
       },
     };
 

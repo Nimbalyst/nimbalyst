@@ -1,56 +1,41 @@
-import React, { useState, useEffect } from 'react';
+import React, { useRef, useReducer } from 'react';
+import { useEditorLifecycle } from '@nimbalyst/runtime';
 import type { EditorHostProps } from '@nimbalyst/extension-sdk';
 
 /**
  * A minimal custom editor component.
  *
- * This demonstrates the basic structure every custom editor needs:
- * - Load content from the host on mount
- * - Mark the tab dirty when the user edits
- * - Save when the host requests it
- * - Reload when the file changes on disk
+ * Uses the useEditorLifecycle hook to handle all lifecycle concerns:
+ * - Loading content from disk
+ * - Saving when the host requests it (autosave / Cmd+S)
+ * - Echo detection (ignoring file changes from our own saves)
+ * - Reloading when the file changes externally
+ * - Theme tracking
  */
 export function MinimalEditor({ host }: EditorHostProps) {
-  const [text, setText] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+  const textRef = useRef('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [, forceRender] = useReducer((x) => x + 1, 0);
 
-  useEffect(() => {
-    let mounted = true;
-
-    host.loadContent().then((content) => {
-      if (!mounted) return;
-      setText(content);
-      setIsLoading(false);
-    }).catch(() => {
-      if (!mounted) return;
-      setText('');
-      setIsLoading(false);
-    });
-
-    return () => {
-      mounted = false;
-    };
-  }, [host]);
-
-  useEffect(() => {
-    return host.onSaveRequested(async () => {
-      await host.saveContent(text);
-      host.setDirty(false);
-    });
-  }, [host, text]);
-
-  useEffect(() => {
-    return host.onFileChanged((newContent) => {
-      setText(newContent);
-      host.setDirty(false);
-    });
-  }, [host]);
+  const { isLoading, error, markDirty } = useEditorLifecycle(host, {
+    applyContent: (content: string) => {
+      textRef.current = content;
+      if (textareaRef.current) {
+        textareaRef.current.value = content;
+      }
+      forceRender();
+    },
+    getCurrentContent: () => textRef.current,
+  });
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newText = e.target.value;
-    setText(newText);
-    host.setDirty(true);
+    textRef.current = e.target.value;
+    markDirty();
   };
+
+  if (error) {
+    return <div style={{ padding: '16px' }}>Error: {error.message}</div>;
+  }
 
   if (isLoading) {
     return <div style={{ padding: '16px' }}>Loading...</div>;
@@ -76,7 +61,8 @@ export function MinimalEditor({ host }: EditorHostProps) {
         Editing: {host.filePath}
       </div>
       <textarea
-        value={text}
+        ref={textareaRef}
+        defaultValue={textRef.current}
         onChange={handleChange}
         placeholder="Start typing..."
         style={{

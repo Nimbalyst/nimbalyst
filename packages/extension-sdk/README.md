@@ -36,22 +36,33 @@ export default createExtensionConfig({
 
 ## Custom Editor Example
 
+Use the `useEditorLifecycle` hook from `@nimbalyst/runtime` to handle all editor lifecycle concerns (loading, saving, echo detection, file watching, diff mode, theme):
+
 ```tsx
+import { useRef } from 'react';
+import { useEditorLifecycle } from '@nimbalyst/runtime';
 import type { EditorHostProps } from '@nimbalyst/extension-sdk';
 
 export function ExampleEditor({ host }: EditorHostProps) {
-  async function handleSave(content: string) {
-    await host.saveContent(content);
-    host.setDirty(false);
-  }
+  const dataRef = useRef<MyData>(defaultData);
 
-  return null;
+  const { isLoading, markDirty, theme } = useEditorLifecycle(host, {
+    applyContent: (data: MyData) => { dataRef.current = data; },
+    getCurrentContent: () => dataRef.current,
+    parse: (raw) => JSON.parse(raw),
+    serialize: (data) => JSON.stringify(data),
+  });
+
+  if (isLoading) return <div>Loading...</div>;
+  return <MyEditorUI data={dataRef.current} onChange={markDirty} />;
 }
 
 export const components = {
   ExampleEditor,
 };
 ```
+
+See the [custom editors guide](packages/extension-sdk-docs/custom-editors.md) for architecture patterns and advanced options.
 
 ## AI Tool Example
 

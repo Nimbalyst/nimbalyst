@@ -5,8 +5,9 @@
  * Uses EditorHost to get the file path and loads the database automatically.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { EditorHostProps } from '@nimbalyst/extension-sdk';
+import { useEditorLifecycle } from '@nimbalyst/runtime';
 import type { Database } from 'sql.js';
 import { SQLiteBrowserCore, getSqlJs, getFileName, type DatabaseInfo } from './SQLiteBrowserCore';
 
@@ -16,22 +17,22 @@ export function SQLiteEditor({ host }: EditorHostProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Load database from the file path provided by EditorHost
-  const loadDatabase = useCallback(async () => {
+  // Ref for cleanup (db state may be stale in unmount effect)
+  const dbRef = useRef<Database | null>(null);
+
+  const loadFromBinary = useCallback(async (arrayBuffer: ArrayBuffer) => {
     setError(null);
     setLoading(true);
 
     try {
-      // Load binary content via EditorHost
-      const arrayBuffer = await host.loadBinaryContent();
       const data = new Uint8Array(arrayBuffer);
-
       const SQL = await getSqlJs();
 
       // Close existing database if any
-      db?.close();
+      dbRef.current?.close();
 
       const newDb = new SQL.Database(data);
+      dbRef.current = newDb;
       setDb(newDb);
 
       const tablesResult = newDb.exec(
@@ -56,31 +57,23 @@ export function SQLiteEditor({ host }: EditorHostProps) {
     } finally {
       setLoading(false);
     }
-  }, [host, db]);
+  }, [host.filePath]);
 
-  // Load database on mount
-  useEffect(() => {
-    loadDatabase();
-  }, []);  // Only on mount - don't re-run when loadDatabase changes
+  // useEditorLifecycle handles initial load, file change detection, and theme.
+  // applyContent triggers async database loading.
+  useEditorLifecycle<ArrayBuffer>(host, {
+    applyContent: (data: ArrayBuffer) => {
+      loadFromBinary(data);
+    },
+    binary: true,
+  });
 
   // Cleanup database on unmount
   useEffect(() => {
     return () => {
-      db?.close();
+      dbRef.current?.close();
     };
-  }, [db]);
-
-  // Subscribe to file changes (external edits to the database file)
-  useEffect(() => {
-    const unsubscribe = host.onFileChanged(async () => {
-      // Reload the database when the file changes externally
-      await loadDatabase();
-    });
-    return unsubscribe;
-  }, [host, loadDatabase]);
-
-  // Note: Custom editors are read-only for SQLite, so no AI context or saving needed
-  // The document context will come from the EditorHost automatically
+  }, []);
 
   return (
     <SQLiteBrowserCore
@@ -88,7 +81,7 @@ export function SQLiteEditor({ host }: EditorHostProps) {
       db={db}
       loading={loading}
       error={error}
-      showHeader={false}  // No header in editor mode - file name is in tab
+      showHeader={false}
       storage={host.storage}
     />
   );

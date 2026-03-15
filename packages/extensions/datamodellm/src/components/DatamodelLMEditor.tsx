@@ -2,13 +2,8 @@
  * DatamodelLM Editor
  *
  * The main editor component that integrates with Nimbalyst's custom editor system.
- * Uses the EditorHost API for all host communication.
- *
- * Content Ownership Pattern:
- * - This editor OWNS its content state
- * - Host notifies us of file changes via onFileChanged
- * - We track lastKnownDiskContentRef to ignore echoes from our own saves
- * - Host triggers saves via onSaveRequested, we respond by calling saveContent
+ * Uses useEditorLifecycle for load/save/echo detection lifecycle.
+ * Content state lives in a Zustand store, not React state.
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
@@ -16,143 +11,68 @@ import { ReactFlowProvider } from '@xyflow/react';
 import { DataModelCanvas, type DataModelCanvasRef } from './DataModelCanvas';
 import { DataModelToolbar } from './DataModelToolbar';
 import { createDataModelStore, type DataModelStoreApi } from '../store';
-import { createEmptyDataModel } from '../types';
+import { createEmptyDataModel, type DataModelFile } from '../types';
 import { parsePrismaSchema, serializeToPrismaSchema } from '../prismaParser';
 import { registerEditorStore, unregisterEditorStore } from '../aiTools';
 import { captureDataModelCanvas, copyScreenshotToClipboard } from '../utils/screenshotUtils';
 import type { EditorHostProps } from '@nimbalyst/runtime';
+import { useEditorLifecycle } from '@nimbalyst/runtime';
 
 export function DatamodelLMEditor({ host }: EditorHostProps) {
-  // Extract frequently used values from host
-  const { filePath, theme } = host;
+  const { filePath } = host;
 
-  // Loading state
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<Error | null>(null);
-
-  // Create a store instance for this editor
+  // Create a store instance for this editor (content lives here, not React state)
   const storeRef = useRef<DataModelStoreApi | null>(null);
   const canvasRef = useRef<DataModelCanvasRef>(null);
 
-  // Track what we believe is on disk to ignore echoes from our own saves
-  const lastKnownDiskContentRef = useRef<string>('');
-
-  // Initialize store on mount
   if (!storeRef.current) {
     storeRef.current = createDataModelStore();
   }
-
   const store = storeRef.current;
 
-  // Ref to track if initial load has completed (prevents infinite loop)
-  const hasLoadedRef = useRef(false);
+  // useEditorLifecycle handles: loading, saving, echo detection, file changes, theme
+  const { markDirty, isLoading, error, theme } = useEditorLifecycle<DataModelFile>(host, {
+    parse: (raw: string): DataModelFile => {
+      if (!raw) return createEmptyDataModel();
+      try {
+        return parsePrismaSchema(raw);
+      } catch (err) {
+        // console.error('[DatamodelLM] Failed to parse Prisma schema:', err);
+        return createEmptyDataModel();
+      }
+    },
 
-  // Load content on mount (only once)
-  useEffect(() => {
-    // Skip if already loaded
-    if (hasLoadedRef.current) return;
+    serialize: (data: DataModelFile): string => {
+      return serializeToPrismaSchema(data);
+    },
 
-    let mounted = true;
+    // Push: load data into the Zustand store
+    applyContent: (data: DataModelFile) => {
+      store.getState().loadFromFile(data);
+      store.getState().markClean();
+    },
 
-    host.loadContent()
-      .then((content) => {
-        if (!mounted) return;
+    // Pull: get current data from the Zustand store
+    getCurrentContent: (): DataModelFile => {
+      return store.getState().toFileData();
+    },
 
-        hasLoadedRef.current = true;
+    onLoaded: () => {
+      // Give React Flow time to complete fitView before tracking dirty changes
+      setTimeout(() => {
+        store.getState().markInitialLoadComplete();
+      }, 100);
+    },
+  });
 
-        if (content) {
-          try {
-            const data = parsePrismaSchema(content);
-            store.getState().loadFromFile(data);
-            lastKnownDiskContentRef.current = content;
-          } catch (error) {
-            console.error('[DatamodelLM] Failed to parse Prisma schema:', error);
-            store.getState().loadFromFile(createEmptyDataModel());
-          }
-        } else {
-          // New file - create empty data model
-          store.getState().loadFromFile(createEmptyDataModel());
-        }
-        setIsLoading(false);
-      })
-      .catch((error) => {
-        if (mounted) {
-          hasLoadedRef.current = true;
-          console.error('[DatamodelLM] Failed to load content:', error);
-          setLoadError(error);
-          setIsLoading(false);
-        }
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [host, store]);
-
-  // Mark initial load as complete after a short delay
-  // This allows React Flow's fitView to finish before we start tracking dirty state
-  useEffect(() => {
-    if (isLoading) return;
-
-    // Give React Flow time to complete fitView, then start tracking dirty changes
-    const timer = setTimeout(() => {
-      store.getState().markInitialLoadComplete();
-    }, 100);
-
-    return () => clearTimeout(timer);
-  }, [isLoading, store]);
-
-  // Set up callbacks for dirty tracking (only once on mount)
+  // Set up callbacks for dirty tracking via markDirty from the lifecycle hook
   useEffect(() => {
     store.getState().setCallbacks({
       onDirtyChange: (isDirty) => {
-        host.setDirty(isDirty);
+        if (isDirty) markDirty();
       },
     });
-    // Intentionally only run once - host.setDirty is stable
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store]);
-
-  // Subscribe to file change notifications (only depends on host for subscription)
-  useEffect(() => {
-    return host.onFileChanged((newContent) => {
-      // Check if this is just an echo of our own save
-      if (newContent === lastKnownDiskContentRef.current) {
-        console.log('[DatamodelLM] File change notification ignored - matches our last known disk state');
-        return;
-      }
-
-      console.log('[DatamodelLM] External file change detected, reloading');
-
-      try {
-        const data = parsePrismaSchema(newContent);
-        store.getState().loadFromFile(data);
-        // Mark as clean since we just loaded fresh content
-        store.getState().markClean();
-        // Update our disk state
-        lastKnownDiskContentRef.current = newContent;
-      } catch (error) {
-        console.error('[DatamodelLM] Failed to parse reloaded content:', error);
-      }
-    });
-  }, [host]); // Only depend on host - store is accessed via closure
-
-  // Subscribe to save requests from host
-  useEffect(() => {
-    return host.onSaveRequested(async () => {
-      try {
-        const data = store.getState().toFileData();
-        const content = serializeToPrismaSchema(data);
-        // Update disk state BEFORE saving to prevent echo
-        lastKnownDiskContentRef.current = content;
-        await host.saveContent(content);
-        store.getState().markClean();
-        console.log('[DatamodelLM] Saved');
-      } catch (error) {
-        console.error('[DatamodelLM] Save failed:', error);
-      }
-    });
-  }, [host]); // Only depend on host - store is accessed via closure
+  }, [store, markDirty]);
 
   // Subscribe to store changes and force re-render
   const [, forceUpdate] = useState(0);
@@ -174,21 +94,17 @@ export function DatamodelLMEditor({ host }: EditorHostProps) {
   // Handle screenshot capture
   const handleScreenshot = useCallback(async () => {
     const canvasElement = canvasRef.current?.getCanvasElement();
-    if (!canvasElement) {
-      console.error('[DatamodelLM] Could not find canvas element for screenshot');
-      return;
-    }
+    if (!canvasElement) return;
 
     try {
       const base64Data = await captureDataModelCanvas(canvasElement);
       await copyScreenshotToClipboard(base64Data);
-      console.log('[DatamodelLM] Screenshot copied to clipboard');
-    } catch (error) {
-      console.error('[DatamodelLM] Failed to capture screenshot:', error);
+      // console.log('[DatamodelLM] Screenshot copied to clipboard');
+    } catch (err) {
+      // console.error('[DatamodelLM] Failed to capture screenshot:', err);
     }
   }, []);
 
-  // Show loading state
   if (isLoading) {
     return (
       <div className="datamodel-editor" data-theme={theme}>
@@ -197,12 +113,11 @@ export function DatamodelLMEditor({ host }: EditorHostProps) {
     );
   }
 
-  // Show error state
-  if (loadError) {
+  if (error) {
     return (
       <div className="datamodel-editor" data-theme={theme}>
         <div className="p-5 text-nim-error">
-          Failed to load: {loadError.message}
+          Failed to load: {error.message}
         </div>
       </div>
     );

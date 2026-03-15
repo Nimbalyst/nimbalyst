@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useReducer } from 'react';
+import { useEditorLifecycle } from '@nimbalyst/runtime';
 import type { EditorHostProps } from '@nimbalyst/extension-sdk';
 
 interface JsonNodeProps {
@@ -99,7 +100,7 @@ function JsonNode({ keyName, value, depth, onValueChange, path }: JsonNodeProps)
       </div>
       {isObject && expanded && (
         <div className="json-viewer-children">
-          {entries.map(([k, v], i) => (
+          {entries.map(([k, v]) => (
             <JsonNode
               key={k}
               keyName={k}
@@ -117,68 +118,33 @@ function JsonNode({ keyName, value, depth, onValueChange, path }: JsonNodeProps)
 
 /**
  * Main JSON Viewer component.
+ *
+ * Uses useEditorLifecycle to handle all host lifecycle concerns
+ * (loading, saving, echo detection, file watching, theme).
+ * Parsed JSON data lives in a ref, not React state.
  */
 export function JsonViewer({ host }: EditorHostProps) {
-  const [content, setContent] = useState('');
-  const [data, setData] = useState<unknown>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const dataRef = useRef<unknown>(null);
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [, forceRender] = useReducer((x) => x + 1, 0);
 
-  useEffect(() => {
-    let mounted = true;
-
-    host.loadContent().then((initialContent) => {
-      if (!mounted) return;
-      setContent(initialContent || '{}');
-      setIsLoading(false);
-    }).catch(() => {
-      if (!mounted) return;
-      setContent('{}');
-      setIsLoading(false);
-    });
-
-    return () => {
-      mounted = false;
-    };
-  }, [host]);
-
-  useEffect(() => {
-    return host.onSaveRequested(async () => {
-      await host.saveContent(content);
-      host.setDirty(false);
-    });
-  }, [host, content]);
-
-  useEffect(() => {
-    return host.onFileChanged((newContent) => {
-      setContent(newContent);
-      host.setDirty(false);
-    });
-  }, [host]);
-
-  // Parse JSON content
-  useEffect(() => {
-    try {
-      const parsed = JSON.parse(content || '{}');
-      setData(parsed);
-      setError(null);
-    } catch (e) {
-      setError(`Invalid JSON: ${(e as Error).message}`);
-      setData(null);
-    }
-  }, [content]);
-
-  const updateContent = useCallback((nextContent: string) => {
-    setContent(nextContent);
-    host.setDirty(true);
-  }, [host]);
+  const { isLoading, error: loadError, markDirty } = useEditorLifecycle(host, {
+    applyContent: (parsed: unknown) => {
+      dataRef.current = parsed;
+      setParseError(null);
+      forceRender();
+    },
+    getCurrentContent: () => dataRef.current,
+    parse: (raw) => JSON.parse(raw || '{}'),
+    serialize: (data) => JSON.stringify(data, null, 2),
+  });
 
   // Handle value changes from nodes
   const handleValueChange = useCallback((path: string[], newValue: unknown) => {
-    if (data === null) return;
+    if (dataRef.current === null) return;
 
     // Deep clone and update
-    const newData = JSON.parse(JSON.stringify(data));
+    const newData = JSON.parse(JSON.stringify(dataRef.current));
     let current: any = newData;
 
     for (let i = 0; i < path.length - 1; i++) {
@@ -189,28 +155,27 @@ export function JsonViewer({ host }: EditorHostProps) {
       current[path[path.length - 1]] = newValue;
     }
 
-    setData(newData);
-    updateContent(JSON.stringify(newData, null, 2));
-  }, [data, updateContent]);
+    dataRef.current = newData;
+    markDirty();
+    forceRender();
+  }, [markDirty]);
 
   // Toolbar actions
   const handleFormat = () => {
-    try {
-      const parsed = JSON.parse(content);
-      updateContent(JSON.stringify(parsed, null, 2));
-    } catch {
-      // Already invalid
-    }
+    if (dataRef.current === null) return;
+    // Data is already parsed, just force a re-render
+    // (serialize will produce formatted output on save)
+    forceRender();
   };
 
   const handleMinify = () => {
-    try {
-      const parsed = JSON.parse(content);
-      updateContent(JSON.stringify(parsed));
-    } catch {
-      // Already invalid
-    }
+    // Minify is a display concern -- not applicable to tree view
+    // but kept for API compatibility
   };
+
+  if (loadError) {
+    return <div className="json-viewer">Error: {loadError.message}</div>;
+  }
 
   if (isLoading) {
     return <div className="json-viewer">Loading...</div>;
@@ -231,12 +196,12 @@ export function JsonViewer({ host }: EditorHostProps) {
       </div>
 
       <div className="json-viewer-content">
-        {error ? (
-          <div className="json-viewer-error">{error}</div>
-        ) : data !== null ? (
+        {parseError ? (
+          <div className="json-viewer-error">{parseError}</div>
+        ) : dataRef.current !== null ? (
           <JsonNode
             keyName={null}
-            value={data}
+            value={dataRef.current}
             depth={0}
             path={[]}
             onValueChange={handleValueChange}

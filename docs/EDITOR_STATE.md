@@ -97,7 +97,7 @@ Located in `packages/runtime/src/store/atoms/editors.ts`:
 
 **EditorHost:**
 - `packages/runtime/src/extensions/editorHost.ts` - Host implementation
-- `packages/runtime/src/extensions/useEditorHost.ts` - React hook
+- `packages/runtime/src/extensions/useEditorLifecycle.ts` - Lifecycle hook for custom editors
 - `packages/extension-sdk/src/types/editor.ts` - Type definitions
 
 **State Atoms:**

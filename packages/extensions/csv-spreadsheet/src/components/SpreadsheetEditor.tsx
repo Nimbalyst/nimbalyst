@@ -15,6 +15,7 @@ import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { RevoGrid, type RevoGridCustomEvent, type ColumnRegular } from '@revolist/react-datagrid';
 import type { RevoGridElement } from '../revogrid-types';
 import type { EditorHostProps, NormalizedSelectionRange, ColumnFormat, DiffState, CellDiff } from '../types';
+import { useEditorLifecycle, type DiffConfig } from '@nimbalyst/runtime';
 import { useSpreadsheetMetadata } from '../hooks/useSpreadsheetMetadata';
 import { createGridOperations, type GridOperations } from '../utils/gridOperations';
 import { UndoRedoPlugin } from '../plugins/UndoRedoPlugin';
@@ -147,11 +148,7 @@ function normalizeRange(
 }
 
 export function SpreadsheetEditor({ host }: EditorHostProps) {
-  const { filePath, theme, isActive } = host;
-
-  // Loading state
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<Error | null>(null);
+  const { filePath, isActive } = host;
 
   // Metadata hook (manages headers, frozen cols, formats - NOT cell data)
   const spreadsheetMeta = useSpreadsheetMetadata('', filePath, {
@@ -165,7 +162,10 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
   const formulaBarRef = useRef<FormulaBarHandle>(null);
   const undoPluginRef = useRef<UndoRedoPlugin | null>(null);
   const gridOpsRef = useRef<GridOperations | null>(null);
-  const hasLoadedRef = useRef(false);
+
+  // Ref for spreadsheetMeta so callbacks stay current
+  const spreadsheetMetaRef = useRef(spreadsheetMeta);
+  spreadsheetMetaRef.current = spreadsheetMeta;
 
   // Selection state (refs to avoid re-renders)
   const selectedCellRef = useRef<{ row: number; col: number } | null>(null);
@@ -201,6 +201,184 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
 
   // Diff mode state for AI edit review
   const [diffState, setDiffState] = useState<DiffState | null>(null);
+
+  // Ref for diffState so callbacks stay current
+  const diffStateRef = useRef(diffState);
+  diffStateRef.current = diffState;
+
+  // ---- EditorHost lifecycle (loading, echo detection, file changes, save, theme) ----
+  const { isLoading, error: loadError, theme, markDirty: _markDirty } = useEditorLifecycle(host, {
+    applyContent: (content: string) => {
+      // Parse CSV and set RevoGrid source imperatively
+      const { data } = parseCSV(content);
+      const gridData = convertToGridSource(data.rows, data.headerRowCount);
+
+      // Store data to be loaded imperatively once grid is mounted
+      pendingDataRef.current = gridData;
+
+      // If grid already mounted, load immediately
+      const grid = revoGridRef.current;
+      if (grid) {
+        grid.source = gridData.source;
+        grid.pinnedTopSource = gridData.pinnedTop;
+        dataLoadedRef.current = true;
+      }
+
+      // Update metadata
+      spreadsheetMetaRef.current.loadFromCSV(content);
+      spreadsheetMetaRef.current.markClean();
+    },
+    onExternalChange: () => {
+      // Clear diff state when file changes externally (e.g., after accept/reject)
+      if (diffStateRef.current?.isActive) {
+        // console.log('[CSV] Clearing diff state after file change');
+        setDiffState(null);
+      }
+    },
+    onSave: async () => {
+      const gridOps = gridOpsRef.current;
+      if (!gridOps) {
+        console.warn('[CSV] Grid operations not available for save');
+        return;
+      }
+
+      // Generate CSV from RevoGrid's current data
+      const content = await gridOps.toCSV();
+
+      // Update disk content tracking for echo detection
+      spreadsheetMetaRef.current.updateDiskContent(content);
+      spreadsheetMetaRef.current.markClean();
+
+      // Save to disk
+      await host.saveContent(content);
+      // console.log('[CSV] Saved');
+    },
+    onDiffRequested: (config: DiffConfig) => {
+      // console.log('[CSV] Diff requested:', config.tagId);
+
+      // Compute cell-level diff between original and modified content
+      const diff = computeDiff(
+        config.originalContent,
+        config.modifiedContent,
+        config.tagId,
+        config.sessionId
+      );
+
+      // Parse the modified content to get the actual data to display
+      const { data: modifiedData } = parseCSV(config.modifiedContent);
+      const gridData = convertToGridSource(modifiedData.rows, modifiedData.headerRowCount);
+
+      // Update grid with modified content so the new data is visible
+      const grid = revoGridRef.current;
+      if (grid) {
+        const actualDataRowCount = modifiedData.rows.length - modifiedData.headerRowCount;
+
+        // If there are phantom rows (deleted rows), insert them at their correct positions
+        if (diff.phantomRows.length > 0) {
+          const dataRows = gridData.source.slice(0, actualDataRowCount);
+          const bufferRows = gridData.source.slice(actualDataRowCount);
+
+          type RowEntry = { row: Record<string, string | number>; isPhantom: boolean; position: number };
+          const entries: RowEntry[] = [];
+
+          for (let i = 0; i < dataRows.length; i++) {
+            entries.push({ row: dataRows[i], isPhantom: false, position: i });
+          }
+
+          for (let i = 0; i < diff.phantomRows.length; i++) {
+            const phantomRow = diff.phantomRows[i];
+            const position = diff.phantomRowPositions[i] - modifiedData.headerRowCount;
+
+            const rowData: Record<string, string | number> = {};
+            phantomRow.forEach((cell, colIdx) => {
+              const colKey = columnIndexToLetter(colIdx);
+              rowData[colKey] = cell.raw || '';
+            });
+            rowData._rowClass = 'row-diff-deleted';
+            entries.push({ row: rowData, isPhantom: true, position: position + 0.5 });
+          }
+
+          entries.sort((a, b) => a.position - b.position);
+
+          const indexMapping = new Map<number, number>();
+          let gridIdx = 0;
+          for (const entry of entries) {
+            if (!entry.isPhantom) {
+              indexMapping.set(Math.floor(entry.position), gridIdx);
+            }
+            gridIdx++;
+          }
+
+          const newCells = new Map<string, CellDiff>();
+          for (const [key, value] of diff.cells.entries()) {
+            if (key.startsWith('data:')) {
+              const parts = key.split(':');
+              const oldIdx = parseInt(parts[1], 10);
+              const colProp = parts[2];
+              const newIdx = indexMapping.get(oldIdx);
+              if (newIdx !== undefined) {
+                newCells.set(`data:${newIdx}:${colProp}`, value);
+              }
+            } else {
+              newCells.set(key, value);
+            }
+          }
+
+          gridIdx = 0;
+          for (const entry of entries) {
+            if (entry.isPhantom) {
+              const rowData = entry.row;
+              for (const [key, value] of Object.entries(rowData)) {
+                if (key !== '_rowClass' && value !== '') {
+                  newCells.set(`data:${gridIdx}:${key}`, {
+                    type: 'deleted',
+                    previousValue: String(value),
+                  });
+                }
+              }
+            }
+            gridIdx++;
+          }
+
+          diff.cells.clear();
+          for (const [key, value] of newCells.entries()) {
+            diff.cells.set(key, value);
+          }
+
+          const finalDataRows = entries.map(e => e.row);
+          grid.source = [...finalDataRows, ...bufferRows];
+        } else {
+          grid.source = gridData.source;
+        }
+        grid.pinnedTopSource = gridData.pinnedTop;
+      }
+
+      spreadsheetMetaRef.current.loadFromCSV(config.modifiedContent);
+      setDiffState(diff);
+    },
+    onDiffCleared: async () => {
+      // console.log('[CSV] Diff cleared externally');
+      setDiffState(null);
+
+      // Reload content from disk to remove phantom rows
+      try {
+        const content = await host.loadContent();
+        const { data } = parseCSV(content);
+        const gridData = convertToGridSource(data.rows, data.headerRowCount);
+
+        const grid = revoGridRef.current;
+        if (grid) {
+          grid.source = gridData.source;
+          grid.pinnedTopSource = gridData.pinnedTop;
+        }
+
+        spreadsheetMetaRef.current.loadFromCSV(content);
+        spreadsheetMetaRef.current.markClean();
+      } catch (error) {
+        console.error('[CSV] Failed to reload content after diff cleared:', error);
+      }
+    },
+  });
 
   // Stable editors object
   const editors = useMemo(() => ({ sheets: SheetsTextEditor }), []);
@@ -262,285 +440,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
     };
   }, [revoGridRef.current, spreadsheetMeta.metadata, spreadsheetMeta.delimiter, host]);
 
-  // Load content on mount
-  useEffect(() => {
-    if (hasLoadedRef.current) return;
-
-    let mounted = true;
-
-    host.loadContent()
-      .then((content) => {
-        if (!mounted) return;
-        hasLoadedRef.current = true;
-
-        // Parse content and set grid data
-        const { data } = parseCSV(content);
-        const gridData = convertToGridSource(data.rows, data.headerRowCount);
-
-        // Store data to be loaded imperatively once grid is mounted
-        pendingDataRef.current = gridData;
-
-        // If grid already mounted, load immediately
-        const grid = revoGridRef.current;
-        if (grid) {
-          grid.source = gridData.source;
-          grid.pinnedTopSource = gridData.pinnedTop;
-          dataLoadedRef.current = true;
-        }
-
-        // Update metadata
-        spreadsheetMeta.loadFromCSV(content);
-        spreadsheetMeta.markClean();
-        setIsLoading(false);
-      })
-      .catch((error) => {
-        if (!mounted) return;
-        hasLoadedRef.current = true;
-        console.error('[CSV] Failed to load content:', error);
-        setLoadError(error);
-        setIsLoading(false);
-      });
-
-    return () => { mounted = false; };
-  }, [host]);
-
-  // Subscribe to file change notifications
-  useEffect(() => {
-    return host.onFileChanged((newContent) => {
-      // Check if this is just an echo of our own save
-      if (spreadsheetMeta.contentMatchesDisk(newContent)) {
-        console.log('[CSV] File change notification ignored - disk content unchanged');
-        return;
-      }
-
-      // External change detected - reload by setting RevoGrid's source directly
-      console.log('[CSV] External file change detected, reloading');
-      const gridData = spreadsheetMeta.loadFromCSV(newContent);
-
-      // Update RevoGrid directly - it owns the data
-      const grid = revoGridRef.current;
-      if (grid) {
-        grid.source = gridData.source;
-        grid.pinnedTopSource = gridData.pinnedTop;
-      }
-      spreadsheetMeta.markClean();
-
-      // Clear diff state when file changes (e.g., after accept/reject)
-      if (diffState?.isActive) {
-        console.log('[CSV] Clearing diff state after file change');
-        setDiffState(null);
-      }
-    });
-  }, [host, spreadsheetMeta, diffState]);
-
-  // Subscribe to save requests
-  useEffect(() => {
-    return host.onSaveRequested(async () => {
-      try {
-        const gridOps = gridOpsRef.current;
-        if (!gridOps) {
-          console.warn('[CSV] Grid operations not available for save');
-          return;
-        }
-
-        // Generate CSV from RevoGrid's current data
-        const content = await gridOps.toCSV();
-
-        // Update disk content and mark clean BEFORE saving to prevent
-        // file watcher from seeing isDirty=true when it fires after the write
-        spreadsheetMeta.updateDiskContent(content);
-        spreadsheetMeta.markClean();
-        host.setDirty(false);
-
-        // Now save the content
-        await host.saveContent(content);
-        console.log('[CSV] Saved');
-      } catch (error) {
-        console.error('[CSV] Save failed:', error);
-        // If save fails, mark dirty again
-        spreadsheetMeta.markDirty();
-        host.setDirty(true);
-      }
-    });
-  }, [host, spreadsheetMeta]);
-
-  // Subscribe to diff mode requests (AI edit review)
-  useEffect(() => {
-    if (!host.onDiffRequested) return;
-
-    return host.onDiffRequested((config) => {
-      console.log('[CSV] Diff requested:', config.tagId);
-
-      // Compute cell-level diff between original and modified content
-      const diff = computeDiff(
-        config.originalContent,
-        config.modifiedContent,
-        config.tagId,
-        config.sessionId
-      );
-
-      // Parse the modified content to get the actual data to display
-      const { data: modifiedData } = parseCSV(config.modifiedContent);
-      const gridData = convertToGridSource(modifiedData.rows, modifiedData.headerRowCount);
-
-      // Update grid with modified content so the new data is visible
-      const grid = revoGridRef.current;
-      if (grid) {
-        // Calculate how many actual data rows we have (excluding buffer rows)
-        const actualDataRowCount = modifiedData.rows.length - modifiedData.headerRowCount;
-        console.log('[CSV] modifiedData.rows.length:', modifiedData.rows.length,
-          'headerRowCount:', modifiedData.headerRowCount,
-          'actualDataRowCount:', actualDataRowCount,
-          'gridData.source.length:', gridData.source.length);
-
-        // If there are phantom rows (deleted rows), insert them at their correct positions
-        if (diff.phantomRows.length > 0) {
-          console.log('[CSV] Phantom rows:', diff.phantomRows.length,
-            'positions:', diff.phantomRowPositions,
-            'data:', diff.phantomRows);
-
-          // Build the final source by inserting phantom rows at their correct positions
-          // phantomRowPositions[i] tells us where phantomRows[i] should go (data row index)
-          // We need to account for previously inserted phantoms when calculating indices
-
-          // Start with actual data rows (no buffer)
-          const dataRows = gridData.source.slice(0, actualDataRowCount);
-          const bufferRows = gridData.source.slice(actualDataRowCount);
-
-          // Create array of { row, isPhantom, originalPosition } for sorting
-          type RowEntry = { row: Record<string, string | number>; isPhantom: boolean; position: number };
-          const entries: RowEntry[] = [];
-
-          // Add data rows
-          for (let i = 0; i < dataRows.length; i++) {
-            entries.push({ row: dataRows[i], isPhantom: false, position: i });
-          }
-
-          // Add phantom rows at their positions
-          for (let i = 0; i < diff.phantomRows.length; i++) {
-            const phantomRow = diff.phantomRows[i];
-            const position = diff.phantomRowPositions[i] - modifiedData.headerRowCount; // Convert to data index
-
-            const rowData: Record<string, string | number> = {};
-            phantomRow.forEach((cell, colIdx) => {
-              const colKey = columnIndexToLetter(colIdx);
-              rowData[colKey] = cell.raw || '';
-            });
-            rowData._rowClass = 'row-diff-deleted';
-
-            // Position is where this phantom row was in the original sequence
-            // Use position + 0.5 to sort it after data rows at that position
-            entries.push({ row: rowData, isPhantom: true, position: position + 0.5 });
-          }
-
-          // Sort by position to get correct order
-          entries.sort((a, b) => a.position - b.position);
-
-          // Build a mapping from original data index to new grid index
-          // This accounts for phantom rows being inserted
-          const indexMapping = new Map<number, number>();
-          let gridIdx = 0;
-          for (const entry of entries) {
-            if (!entry.isPhantom) {
-              // This is a real data row - map its original position to its new grid position
-              const originalDataIdx = Math.floor(entry.position);
-              indexMapping.set(originalDataIdx, gridIdx);
-            }
-            gridIdx++;
-          }
-
-          // Remap all cell diff entries to use the new grid indices
-          const newCells = new Map<string, CellDiff>();
-          for (const [key, value] of diff.cells.entries()) {
-            if (key.startsWith('data:')) {
-              const parts = key.split(':');
-              const oldIdx = parseInt(parts[1], 10);
-              const colProp = parts[2];
-              const newIdx = indexMapping.get(oldIdx);
-              if (newIdx !== undefined) {
-                newCells.set(`data:${newIdx}:${colProp}`, value);
-              }
-            } else {
-              // Preserve pinned row entries
-              newCells.set(key, value);
-            }
-          }
-
-          // Add phantom row cell entries
-          gridIdx = 0;
-          for (const entry of entries) {
-            if (entry.isPhantom) {
-              // Add cell diff entries for this phantom row
-              const rowData = entry.row;
-              for (const [key, value] of Object.entries(rowData)) {
-                if (key !== '_rowClass' && value !== '') {
-                  newCells.set(`data:${gridIdx}:${key}`, {
-                    type: 'deleted',
-                    previousValue: String(value),
-                  });
-                }
-              }
-              console.log('[CSV] Phantom row at grid index:', gridIdx, rowData);
-            }
-            gridIdx++;
-          }
-
-          // Replace diff.cells with remapped entries
-          diff.cells.clear();
-          for (const [key, value] of newCells.entries()) {
-            diff.cells.set(key, value);
-          }
-
-          // Build final source
-          const finalDataRows = entries.map(e => e.row);
-          grid.source = [...finalDataRows, ...bufferRows];
-          console.log('[CSV] Grid source: data+phantoms=', finalDataRows.length, 'buffer=', bufferRows.length, 'total=', grid.source.length);
-        } else {
-          grid.source = gridData.source;
-        }
-        grid.pinnedTopSource = gridData.pinnedTop;
-      }
-
-      // Update metadata to reflect modified content structure (column count, etc.)
-      spreadsheetMeta.loadFromCSV(config.modifiedContent);
-
-      setDiffState(diff);
-    });
-  }, [host, spreadsheetMeta]);
-
-  // Subscribe to diff being cleared externally (user accepts/rejects via unified header)
-  useEffect(() => {
-    if (!host.onDiffCleared) return;
-
-    return host.onDiffCleared(async () => {
-      console.log('[CSV] Diff cleared externally');
-
-      // Clear diff state first
-      setDiffState(null);
-
-      // Reload content from disk to remove phantom rows
-      // During diff mode, the grid may contain phantom rows (deleted rows shown for visualization)
-      // After accepting, we need to reload from disk which has the correct content
-      try {
-        const content = await host.loadContent();
-        const { data } = parseCSV(content);
-        const gridData = convertToGridSource(data.rows, data.headerRowCount);
-
-        const grid = revoGridRef.current;
-        if (grid) {
-          grid.source = gridData.source;
-          grid.pinnedTopSource = gridData.pinnedTop;
-        }
-
-        // Update metadata to match the reloaded content
-        spreadsheetMeta.loadFromCSV(content);
-        spreadsheetMeta.markClean();
-        console.log('[CSV] Reloaded content from disk after diff cleared');
-      } catch (error) {
-        console.error('[CSV] Failed to reload content after diff cleared:', error);
-      }
-    });
-  }, [host, spreadsheetMeta]);
+  // (Loading, saving, file changes, echo detection, diff mode are all handled by useEditorLifecycle above)
 
   // Register for AI tool access
   useEffect(() => {

@@ -1,7 +1,7 @@
 /**
  * MockupEditor - Custom editor for .mockup.html files
  *
- * Uses the EditorHost API via useEditorHost hook for all host communication:
+ * Uses the EditorHost API via useEditorLifecycle hook for all host communication:
  * - Content loading and state management
  * - File change notifications with echo detection
  * - Save handling
@@ -9,9 +9,9 @@
  * - Diff mode via host.onDiffRequested() + host.reportDiffResult()
  */
 
-import React, { useState, useEffect, useRef, useCallback, useMemo, forwardRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, forwardRef } from 'react';
 import type { EditorHostProps } from '@nimbalyst/runtime';
-import { useEditorHost } from '@nimbalyst/runtime';
+import { useEditorLifecycle } from '@nimbalyst/runtime';
 import { captureMockupComposite } from '../utils/screenshotUtils';
 import { renderMockupHtml } from '../utils/mockupDomUtils';
 import { MockupDiffViewer } from './MockupDiffViewer';
@@ -24,7 +24,7 @@ import '@nimbalyst/runtime';
 // electronAPI is declared globally in electron.d.ts
 
 export const MockupEditor = forwardRef<any, EditorHostProps>(function MockupEditor({ host }, ref) {
-  const { filePath, fileName, theme, isActive } = host;
+  const { filePath, fileName, isActive } = host;
 
   // Refs for clearAllAnnotations (defined early so hook can reference)
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -33,12 +33,15 @@ export const MockupEditor = forwardRef<any, EditorHostProps>(function MockupEdit
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
   const drawingPathsRef = useRef<DrawingPath[]>([]);
 
+  // Content lives in a ref -- iframe rendering is imperative, not React state
+  const contentRef = useRef<string | null>(null);
+
   // UI state that clearAllAnnotations modifies
   const [drawingDataUrl, setDrawingDataUrl] = useState<string | null>(null);
   const [selectedElement, setSelectedElement] = useState<MockupSelection | null>(null);
   const [annotationTimestamp, setAnnotationTimestamp] = useState<number | null>(null);
 
-  // Clear all annotations - defined before useEditorHost so it can be passed to onExternalChange
+  // Clear all annotations
   const clearAllAnnotations = useCallback(() => {
     const canvas = drawingCanvasRef.current;
     if (canvas) {
@@ -60,78 +63,29 @@ export const MockupEditor = forwardRef<any, EditorHostProps>(function MockupEdit
     }
   }, []);
 
-  // Use the EditorHost hook for content management
-  // This handles: content loading, file change subscriptions, save handling, dirty state
-  const editorHostOptions = useMemo(() => ({
-    logPrefix: '[MockupEditor]',
-    onExternalChange: () => {
-      // Clear annotations when content changes externally
+  // Track content version to trigger iframe re-render
+  const [contentVersion, setContentVersion] = useState(0);
+
+  // useEditorLifecycle handles: loading, saving, echo detection, file changes, theme, diff mode
+  const { markDirty, isLoading, error, theme, diffState } = useEditorLifecycle<string>(host, {
+    applyContent: (html: string) => {
+      contentRef.current = html;
+      setContentVersion((v) => v + 1);
       clearAllAnnotations();
     },
-  }), [clearAllAnnotations]);
 
-  const {
-    content,
-    isLoading,
-    error,
-  } = useEditorHost(host, editorHostOptions);
+    getCurrentContent: () => contentRef.current ?? '',
 
-  // Diff mode state (not handled by useEditorHost - it's a mockup-specific feature)
-  // Accept/reject is handled by TabEditor's UnifiedDiffHeader; we just show the visual diff
-  const [diffData, setDiffData] = useState<{
-    originalContent: string;
-    modifiedContent: string;
-    tagId: string;
-    sessionId: string;
-  } | null>(null);
+    onExternalChange: () => {
+      clearAllAnnotations();
+    },
+  });
 
   // Additional UI state
   const [isCapturing, setIsCapturing] = useState(false);
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [drawingColor, setDrawingColor] = useState('#FF0000');
   const [scrollOffset, setScrollOffset] = useState({ x: 0, y: 0 });
-
-  // Subscribe to diff requests (not handled by useEditorHost)
-  useEffect(() => {
-    if (!host.onDiffRequested) return;
-
-    return host.onDiffRequested((config) => {
-      console.log('[MockupEditor] Diff requested:', {
-        tagId: config.tagId,
-        sessionId: config.sessionId,
-        originalContentLength: config.originalContent?.length,
-        modifiedContentLength: config.modifiedContent?.length,
-        originalContentPreview: config.originalContent?.substring(0, 100),
-      });
-      setDiffData(config);
-    });
-  }, [host]);
-
-  // State to hold reloaded content after diff is cleared
-  // This is needed because useEditorHost's content state is stale after diff mode
-  const [reloadedContent, setReloadedContent] = useState<string | null>(null);
-
-  // Subscribe to diff cleared events (when user accepts/rejects via unified diff header)
-  useEffect(() => {
-    if (!host.onDiffCleared) {
-      return;
-    }
-
-    return host.onDiffCleared(async () => {
-      console.log('[MockupEditor] Diff cleared');
-      setDiffData(null);
-
-      // Reload content from disk via EditorHost to show the accepted/current content
-      // The useEditorHost hook's content state is stale (shows pre-diff content)
-      try {
-        const newContent = await host.loadContent();
-        setReloadedContent(newContent);
-        console.log('[MockupEditor] Reloaded content from disk after diff cleared');
-      } catch (error) {
-        console.error('[MockupEditor] Failed to reload content after diff cleared:', error);
-      }
-    });
-  }, [host]);
 
   // Clear annotations when filePath changes
   useEffect(() => {
@@ -215,19 +169,13 @@ export const MockupEditor = forwardRef<any, EditorHostProps>(function MockupEdit
   }, []);
 
   // Update iframe when content changes or when exiting diff mode
-  // Must include diffData in dependencies so the effect runs when diff mode exits,
-  // otherwise the iframe won't be populated after accepting changes
-  // Use reloadedContent if available (after diff mode exit), otherwise use content from hook
-  const effectiveContent = reloadedContent ?? content;
-
   useEffect(() => {
     // Skip if in diff mode - MockupDiffViewer handles its own rendering
-    // Also skip if iframeRef not yet attached (will be null during diff mode)
-    if (diffData || !iframeRef.current || !effectiveContent) {
+    if (diffState || !iframeRef.current || !contentRef.current) {
       return;
     }
 
-    renderMockupHtml(iframeRef.current, effectiveContent, {
+    renderMockupHtml(iframeRef.current, contentRef.current, {
       onAfterRender: (iframeDoc) => {
         const style = iframeDoc.createElement('style');
         style.textContent = `
@@ -242,17 +190,13 @@ export const MockupEditor = forwardRef<any, EditorHostProps>(function MockupEdit
       },
     });
 
-    // NOTE: We do NOT clear reloadedContent here because the useEditorHost hook's
-    // content state is stale after diff mode. We keep reloadedContent as the source
-    // of truth until the component unmounts or a new file is loaded.
-
     return () => {
       const iframeDoc = iframeRef.current?.contentDocument;
       if (iframeDoc) {
         iframeDoc.removeEventListener('click', handleElementClick as any);
       }
     };
-  }, [effectiveContent, handleElementClick, diffData]);
+  }, [contentVersion, handleElementClick, diffState]);
 
   // Store annotations in per-file map so they persist when tab becomes inactive.
   // This is critical for screenshot capture which may happen when tab is not focused.
@@ -670,11 +614,11 @@ export const MockupEditor = forwardRef<any, EditorHostProps>(function MockupEdit
 
   // Render diff mode - MockupDiffViewer shows the visual comparison,
   // UnifiedDiffHeader (from TabEditor) handles accept/reject actions
-  if (diffData) {
+  if (diffState) {
     return (
       <MockupDiffViewer
-        originalHtml={diffData.originalContent}
-        updatedHtml={diffData.modifiedContent}
+        originalHtml={diffState.original}
+        updatedHtml={diffState.modified}
         fileName={fileName}
       />
     );
@@ -786,7 +730,7 @@ export const MockupEditor = forwardRef<any, EditorHostProps>(function MockupEdit
         )}
 
         {/* Floating action buttons */}
-        {host.supportsSourceMode && (
+        {host.toggleSourceMode && (
           <div className="absolute bottom-4 right-4 flex gap-2 z-[1000]">
             <button
               onClick={() => host.toggleSourceMode?.()}

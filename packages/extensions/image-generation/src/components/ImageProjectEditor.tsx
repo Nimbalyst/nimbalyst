@@ -10,6 +10,7 @@
 
 import { useEffect, useRef, useCallback, useState, forwardRef } from 'react';
 import type { EditorHostProps } from '@nimbalyst/runtime';
+import { useEditorLifecycle } from '@nimbalyst/runtime';
 import type {
   ImageProject,
   ImageProjectV2,
@@ -83,14 +84,10 @@ function ApiKeyMissingBanner({ theme }: { theme: 'light' | 'dark' }) {
 
 export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
   function ImageProjectEditor({ host }, _ref) {
-    const { filePath, theme: hostTheme } = host;
-    const theme = hostTheme === 'dark' || hostTheme === 'crystal-dark' ? 'dark' : 'light';
-
-    // Loading state
-    const [isLoading, setIsLoading] = useState(true);
-    const [loadError, setLoadError] = useState<Error | null>(null);
+    const { filePath } = host;
 
     // Project state - always stored as v2 internally
+    const projectRef = useRef<ImageProjectV2 | null>(null);
     const [project, setProject] = useState<ImageProjectV2 | null>(null);
 
     // Currently active session
@@ -102,12 +99,6 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
 
     // API key state
     const [apiKeyConfigured, setApiKeyConfigured] = useState(false);
-
-    // Track what we believe is on disk to ignore echoes from our own saves
-    const lastKnownDiskContentRef = useRef<string>('');
-
-    // Track if initial load has completed
-    const hasLoadedRef = useRef(false);
 
     // Load API key and model from extension storage on mount
     useEffect(() => {
@@ -165,101 +156,25 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
       return createEmptyProjectV2('New Image Project');
     };
 
-    // Load content on mount
-    useEffect(() => {
-      if (hasLoadedRef.current) return;
+    // useEditorLifecycle handles: loading, saving, echo detection, file changes, theme
+    const { markDirty, isLoading, error: loadError, theme: hostTheme } = useEditorLifecycle<ImageProjectV2>(host, {
+      parse: (raw: string): ImageProjectV2 => parseAndMigrateProject(raw),
+      serialize: (data: ImageProjectV2): string => JSON.stringify(data, null, 2),
 
-      let mounted = true;
+      applyContent: (data: ImageProjectV2) => {
+        projectRef.current = data;
+        setProject(data);
 
-      host
-        .loadContent()
-        .then((content) => {
-          if (!mounted) return;
+        // Set/update active session
+        const activeSessionId = data.activeSessionId || data.sessions[0]?.id;
+        const session = data.sessions.find((s) => s.id === activeSessionId) || data.sessions[0];
+        setActiveSession(session || null);
+      },
 
-          hasLoadedRef.current = true;
+      getCurrentContent: () => projectRef.current!,
+    });
 
-          let data: ImageProjectV2;
-          try {
-            data = parseAndMigrateProject(content);
-          } catch (error) {
-            console.error('[ImageGen] Failed to parse file:', error);
-            data = createEmptyProjectV2('New Image Project');
-          }
-
-          setProject(data);
-
-          // Set active session
-          const activeSessionId = data.activeSessionId || data.sessions[0]?.id;
-          const session = data.sessions.find((s) => s.id === activeSessionId) || data.sessions[0];
-          setActiveSession(session || null);
-
-          lastKnownDiskContentRef.current = content || '';
-          setIsLoading(false);
-        })
-        .catch((error) => {
-          if (mounted) {
-            hasLoadedRef.current = true;
-            console.error('[ImageGen] Failed to load content:', error);
-            setLoadError(error);
-            setIsLoading(false);
-          }
-        });
-
-      return () => {
-        mounted = false;
-      };
-    }, [host]);
-
-    // Subscribe to file change notifications
-    useEffect(() => {
-      return host.onFileChanged((newContent) => {
-        if (newContent === lastKnownDiskContentRef.current) {
-          return;
-        }
-
-        console.log('[ImageGen] External file change detected, reloading');
-
-        try {
-          const data = parseAndMigrateProject(newContent);
-          setProject(data);
-
-          // Update active session if it still exists
-          if (activeSession) {
-            const updatedSession = data.sessions.find((s) => s.id === activeSession.id);
-            if (updatedSession) {
-              setActiveSession(updatedSession);
-            } else {
-              // Active session was deleted, select first
-              setActiveSession(data.sessions[0] || null);
-            }
-          }
-
-          lastKnownDiskContentRef.current = newContent;
-        } catch (error) {
-          console.error('[ImageGen] Failed to parse reloaded content:', error);
-        }
-      });
-    }, [host, activeSession]);
-
-    // Subscribe to save requests from host
-    useEffect(() => {
-      return host.onSaveRequested(async () => {
-        if (!project) {
-          console.error('[ImageGen] Cannot save: no project loaded');
-          return;
-        }
-
-        try {
-          const content = JSON.stringify(project, null, 2);
-          lastKnownDiskContentRef.current = content;
-          await host.saveContent(content);
-          host.setDirty(false);
-          console.log('[ImageGen] Saved');
-        } catch (error) {
-          console.error('[ImageGen] Save failed:', error);
-        }
-      });
-    }, [host, project]);
+    const theme = (hostTheme === 'dark' || hostTheme === 'crystal-dark') ? 'dark' : 'light';
 
     // Update project and mark dirty
     const updateProject = useCallback(
@@ -267,11 +182,12 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
         setProject((prev) => {
           if (!prev) return prev;
           const updated = updater(prev);
-          host.setDirty(true);
+          projectRef.current = updated;
           return updated;
         });
+        markDirty();
       },
-      [host]
+      [markDirty]
     );
 
     // Update active session and sync to project

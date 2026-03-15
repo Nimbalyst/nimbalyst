@@ -11,33 +11,21 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import type { EditorHostProps } from '@nimbalyst/extension-sdk';
+import { useEditorLifecycle } from '@nimbalyst/runtime';
 import { usePDFDocument } from './hooks/usePDFDocument';
 import { PDFScrollView } from './components/PDFScrollView';
 import { Toolbar } from './components/Toolbar';
 
-// Import EditorHostProps type from runtime
-// Note: Extensions access runtime types via the host's exposed modules
-interface EditorHost {
-  readonly filePath: string;
-  readonly fileName: string;
-  readonly theme: 'light' | 'dark' | 'crystal-dark';
-  readonly isActive: boolean;
-  readonly workspaceId?: string;
-  loadContent(): Promise<string>;
-  loadBinaryContent(): Promise<ArrayBuffer>;
-  onFileChanged(callback: (newContent: string) => void): () => void;
-  setDirty(isDirty: boolean): void;
-  saveContent(content: string | ArrayBuffer): Promise<void>;
-  onSaveRequested(callback: () => void): () => void;
-  openHistory(): void;
-}
-
-interface EditorHostProps {
-  host: EditorHost;
-}
-
 export function PDFViewerEditor({ host }: EditorHostProps) {
-  const { filePath, theme, isActive } = host;
+  const { filePath, isActive } = host;
+
+  // useEditorLifecycle handles theme reactivity. PDF loading is delegated
+  // to usePDFDocument since it has PDF.js-specific logic (worker setup, etc.)
+  const { theme } = useEditorLifecycle<ArrayBuffer>(host, {
+    applyContent: () => {}, // PDF loading handled by usePDFDocument
+    binary: true,
+  });
 
   // Use the EditorHost's loadBinaryContent for cross-platform compatibility
   const { document, totalPages, loading, error } = usePDFDocument(
@@ -46,11 +34,6 @@ export function PDFViewerEditor({ host }: EditorHostProps) {
   );
   const [scale, setScale] = useState(1.0);
   const [fitToWidth, setFitToWidth] = useState(true); // Start with fit-to-width enabled
-
-  // PDFs are read-only - mark as never dirty
-  useEffect(() => {
-    host.setDirty(false);
-  }, [host]);
 
   // Handle scale changes from user zoom actions
   const handleScaleChange = useCallback((newScale: number) => {

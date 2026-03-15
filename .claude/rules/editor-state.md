@@ -6,7 +6,7 @@ globs:
   - packages/runtime/src/editor/**/*.ts
   - packages/electron/src/renderer/components/TabEditor/**/*
   - packages/runtime/src/extensions/editorHost.ts
-  - packages/runtime/src/extensions/useEditorHost.ts
+  - packages/runtime/src/extensions/useEditorLifecycle.ts
   - packages/extension-sdk/src/types/editor.ts
   - packages/extensions/**/src/components/**Editor.tsx
   - packages/extensions/**/src/editors/**/*

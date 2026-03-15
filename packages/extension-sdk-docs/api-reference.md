@@ -176,7 +176,57 @@ interface ChatCompletionStreamHandle {
 
 ## Custom Editors
 
-Custom editors receive a single `host` prop.
+Custom editors receive a single `host` prop. Use the `useEditorLifecycle` hook (from `@nimbalyst/runtime`) to handle all lifecycle concerns.
+
+### useEditorLifecycle Hook
+
+```ts
+import { useEditorLifecycle } from '@nimbalyst/runtime';
+
+function useEditorLifecycle<T = string>(
+  host: EditorHost,
+  options: UseEditorLifecycleOptions<T>
+): UseEditorLifecycleResult<T>;
+```
+
+```ts
+interface UseEditorLifecycleOptions<T> {
+  applyContent: (content: T) => void;       // Push content into the editor
+  getCurrentContent?: () => T;               // Pull content from the editor (omit for read-only)
+  parse?: (raw: string) => T;                // Parse raw file string into editor format
+  serialize?: (content: T) => string;        // Serialize editor format to string
+  binary?: boolean;                          // Use loadBinaryContent() for binary files
+  onLoaded?: () => void;                     // Called after initial load
+  onExternalChange?: (content: T) => void;   // Called on external file changes (not echoes)
+  onSave?: () => Promise<void>;              // Custom save flow (replaces default)
+  onDiffRequested?: (config: DiffConfig) => void;  // Custom diff handling
+  onDiffCleared?: () => Promise<void>;       // Custom diff cleanup
+}
+
+interface UseEditorLifecycleResult<T> {
+  isLoading: boolean;                        // True until initial content loads
+  error: Error | null;                       // Load error
+  theme: string;                             // Current theme (reactive)
+  markDirty: () => void;                     // Call on user edit
+  isDirty: boolean;                          // Unsaved changes exist
+  diffState: DiffState<T> | null;            // AI edit diff (null when inactive)
+  toggleSourceMode: (() => void) | undefined;
+  isSourceMode: boolean;
+}
+
+interface DiffState<T> {
+  original: T;                               // Content before AI edit
+  modified: T;                               // Content after AI edit
+  tagId: string;                             // History tag ID
+  sessionId: string;                         // AI session that made the edit
+  accept: () => void;                        // Accept changes
+  reject: () => void;                        // Revert to original
+}
+```
+
+### EditorHost Interface
+
+The `useEditorLifecycle` hook wraps this interface. You rarely need to use it directly.
 
 ```ts
 interface EditorHostProps {
