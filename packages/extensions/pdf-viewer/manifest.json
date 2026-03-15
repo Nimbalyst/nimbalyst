@@ -18,12 +18,8 @@
         "component": "PDFViewerEditor"
       }
     ],
-    "fileIcons": [
-      {
-        "pattern": "*.pdf",
-        "icon": "picture_as_pdf",
-        "color": "#FF0000"
-      }
-    ]
+    "fileIcons": {
+      "*.pdf": "picture_as_pdf"
+    }
   }
 }
