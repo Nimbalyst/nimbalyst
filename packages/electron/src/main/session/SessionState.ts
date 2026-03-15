@@ -58,13 +58,15 @@ export async function saveSessionState() {
 }
 
 // Restore session state
-export async function restoreSessionState(): Promise<boolean> {
+// Returns the last created window (highest focus order) so the caller can activate it,
+// or null if no windows were restored.
+export async function restoreSessionState(): Promise<BrowserWindow | null> {
     // In test mode (PLAYWRIGHT=1), always clear and skip session restoration
     // Tests that want to test restoration will not set PLAYWRIGHT env var at all
     if (process.env.PLAYWRIGHT === '1') {
         logger.session.info('Test mode: clearing and skipping session restoration');
         clearSessionState();
-        return false;
+        return null;
     }
 
     const sessionState = getSessionState();
@@ -73,7 +75,7 @@ export async function restoreSessionState(): Promise<boolean> {
 
     if (!sessionState || !sessionState.windows || sessionState.windows.length === 0) {
         logger.session.info('[RESTORE] No session state to restore (empty or missing)');
-        return false;
+        return null;
     }
 
     // logger.session.info(`[RESTORE] Restoring session with ${sessionState.windows.length} window(s)`);
@@ -92,6 +94,9 @@ export async function restoreSessionState(): Promise<boolean> {
 
     // Restore each window in order
     // Use async creation to ensure windows are created sequentially
+    // Track the last successfully created window (highest focus order) for activation
+    let lastWindow: BrowserWindow | null = null;
+
     for (let index = 0; index < sortedWindows.length; index++) {
         const sessionWindow = sortedWindows[index];
 
@@ -154,8 +159,8 @@ export async function restoreSessionState(): Promise<boolean> {
                             logger.session.error('Error tracking workspace_opened event:', error);
                         }
 
-                        // Restore workspace window
-                        window = createWindow(false, true, sessionWindow.workspacePath, sessionWindow.bounds);
+                        // Restore workspace window (showInactive to avoid repeated app activation)
+                        window = createWindow(false, true, sessionWindow.workspacePath, sessionWindow.bounds, { showInactive: true });
                         logger.session.info(`Restored workspace window: ${sessionWindow.workspacePath}`);
 
                         const restoredWorkspacePath = sessionWindow.workspacePath;
@@ -173,8 +178,8 @@ export async function restoreSessionState(): Promise<boolean> {
                 } else if (sessionWindow.mode === 'document' && sessionWindow.filePath) {
                     // Check if file still exists
                     if (existsSync(sessionWindow.filePath)) {
-                        // Restore document window
-                        window = createWindow(true, false, undefined, sessionWindow.bounds);
+                        // Restore document window (showInactive to avoid repeated app activation)
+                        window = createWindow(true, false, undefined, sessionWindow.bounds, { showInactive: true });
                         if (window) {
                             window.once('ready-to-show', () => {
                                 loadFileIntoWindow(window!, sessionWindow.filePath!);
@@ -194,10 +199,14 @@ export async function restoreSessionState(): Promise<boolean> {
                     });
                 }
 
+                if (window) {
+                    lastWindow = window;
+                }
+
                 resolve();
             }, 300); // 300ms delay between each window creation
         });
     }
 
-    return true;
+    return lastWindow;
 }

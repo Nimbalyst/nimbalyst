@@ -124,7 +124,6 @@ function buildSplashHTML(): string {
  */
 export function showSplashScreen(): BrowserWindow | null {
     if (splashWindow && !splashWindow.isDestroyed()) {
-        splashWindow.focus();
         return splashWindow;
     }
 
@@ -150,7 +149,9 @@ export function showSplashScreen(): BrowserWindow | null {
 
     splashWindow.once('ready-to-show', () => {
         if (splashWindow && !splashWindow.isDestroyed()) {
-            splashWindow.show();
+            // Use showInactive to avoid activating the app prematurely.
+            // The splash has alwaysOnTop:true so it will be visible regardless.
+            splashWindow.showInactive();
         }
     });
 

@@ -91,11 +91,17 @@ export function getFocusedOrNewWindow(): BrowserWindow {
     return createWindow();
 }
 
+export interface CreateWindowOptions {
+    /** Show the window without activating the app (no focus steal). */
+    showInactive?: boolean;
+}
+
 export function createWindow(
     isOpeningFile: boolean = false,
     isWorkspaceMode: boolean = false,
     workspacePath: string | null = null,
-    savedBounds?: { x: number; y: number; width: number; height: number }
+    savedBounds?: { x: number; y: number; width: number; height: number },
+    options?: CreateWindowOptions
 ): BrowserWindow {
     const startTime = Date.now();
     try {
@@ -476,7 +482,11 @@ export function createWindow(
         // Show window when ready
         window.once('ready-to-show', () => {
             // console.log('[MAIN] Window ready to show at', new Date().toISOString(), 'elapsed:', Date.now() - startTime, 'ms');
-            window.show();
+            if (options?.showInactive) {
+                window.showInactive();
+            } else {
+                window.show();
+            }
         });
 
         // Handle renderer process crashes
