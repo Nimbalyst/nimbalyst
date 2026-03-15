@@ -1,0 +1,37 @@
+package com.nimbalyst.app.pairing
+
+data class PairingCredentials(
+    val serverUrl: String,
+    val encryptionSeed: String,
+    val pairedUserId: String? = null,
+    val authJwt: String? = null,
+    val authUserId: String? = null,
+    val orgId: String? = null,
+    val personalUserId: String? = null,
+    val personalOrgId: String? = null,
+    val sessionToken: String? = null,
+    val authEmail: String? = null,
+    val authExpiresAt: String? = null,
+) {
+    val routingUserId: String?
+        get() = personalUserId ?: authUserId ?: pairedUserId
+
+    val cryptoUserId: String?
+        get() = authUserId
+
+    val routingOrgId: String?
+        get() = personalOrgId ?: orgId
+
+    val hasAuthToken: Boolean
+        get() = !authJwt.isNullOrBlank()
+}
+
+data class PairingState(
+    val credentials: PairingCredentials? = null,
+) {
+    val isPaired: Boolean
+        get() = credentials != null
+
+    val isSyncConfigured: Boolean
+        get() = credentials?.hasAuthToken == true
+}

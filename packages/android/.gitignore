@@ -1,0 +1,7 @@
+.gradle/
+build/
+local.properties
+app/build/
+dist-transcript/
+node_modules/
+

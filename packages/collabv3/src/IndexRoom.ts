@@ -67,6 +67,9 @@ export class IndexRoom implements DurableObject {
   private cachedAPNsJWT: string | null = null;
   private cachedAPNsJWTExpiry: number = 0;
   private cachedAPNsKey: CryptoKey | null = null;
+  private cachedFCMAccessToken: string | null = null;
+  private cachedFCMAccessTokenExpiry: number = 0;
+  private cachedFCMKey: CryptoKey | null = null;
 
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
@@ -995,7 +998,17 @@ export class IndexRoom implements DurableObject {
           await this.state.storage.delete(key);
         }
       }
-      // TODO: Add FCM support for Android
+      if (tokenData.platform === 'android') {
+        const result = await this.sendFCMPush(tokenData.token, {
+          title: message.title,
+          body: message.body,
+          sessionId: message.sessionId,
+        });
+        if (result.badToken) {
+          log.warn('Removing bad Android token for device:', tokenData.deviceId);
+          await this.state.storage.delete(key);
+        }
+      }
     }
   }
 
@@ -1051,6 +1064,67 @@ export class IndexRoom implements DurableObject {
       return { success: false, badToken };
     } catch (error) {
       log.error('APNs push error:', error);
+      return { success: false, badToken: false };
+    }
+  }
+
+  /**
+   * Send a push notification via FCM HTTP v1.
+   */
+  private async sendFCMPush(
+    deviceToken: string,
+    payload: { title: string; body: string; sessionId: string }
+  ): Promise<{ success: boolean; badToken: boolean }> {
+    const env = this.env as Env;
+    if (!env.FCM_PROJECT_ID || !env.FCM_CLIENT_EMAIL || !env.FCM_PRIVATE_KEY) {
+      log.warn('FCM not configured, skipping Android push');
+      return { success: false, badToken: false };
+    }
+
+    try {
+      const accessToken = await this.generateFCMAccessToken(
+        env.FCM_CLIENT_EMAIL,
+        env.FCM_PRIVATE_KEY
+      );
+      const response = await fetch(
+        `https://fcm.googleapis.com/v1/projects/${env.FCM_PROJECT_ID}/messages:send`,
+        {
+          method: 'POST',
+          headers: {
+            'authorization': `Bearer ${accessToken}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            message: {
+              token: deviceToken,
+              notification: {
+                title: payload.title,
+                body: payload.body,
+              },
+              data: {
+                sessionId: payload.sessionId,
+              },
+              android: {
+                priority: 'high',
+                notification: {
+                  sound: 'default',
+                },
+              },
+            },
+          }),
+        }
+      );
+
+      if (response.ok) {
+        return { success: true, badToken: false };
+      }
+
+      const errorBody = await response.text();
+      log.error('FCM push failed:', response.status, errorBody);
+      const badToken = errorBody.includes('UNREGISTERED') || errorBody.includes('INVALID_ARGUMENT');
+      return { success: false, badToken };
+    } catch (error) {
+      log.error('FCM push error:', error);
       return { success: false, badToken: false };
     }
   }
@@ -1115,6 +1189,74 @@ export class IndexRoom implements DurableObject {
     this.cachedAPNsJWTExpiry = now + 50 * 60 * 1000;
 
     return jwt;
+  }
+
+  private async generateFCMAccessToken(
+    clientEmail: string,
+    privateKeyBase64: string
+  ): Promise<string> {
+    const now = Date.now();
+    if (this.cachedFCMAccessToken && now < this.cachedFCMAccessTokenExpiry) {
+      return this.cachedFCMAccessToken;
+    }
+
+    if (!this.cachedFCMKey) {
+      const privateKeyPem = atob(privateKeyBase64);
+      this.cachedFCMKey = await crypto.subtle.importKey(
+        'pkcs8',
+        this.pemToArrayBuffer(privateKeyPem),
+        { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+        false,
+        ['sign']
+      );
+    }
+
+    const issuedAt = Math.floor(now / 1000);
+    const header = { alg: 'RS256', typ: 'JWT' };
+    const payload = {
+      iss: clientEmail,
+      scope: 'https://www.googleapis.com/auth/firebase.messaging',
+      aud: 'https://oauth2.googleapis.com/token',
+      iat: issuedAt,
+      exp: issuedAt + 3600,
+    };
+
+    const encodedHeader = this.base64UrlEncode(JSON.stringify(header));
+    const encodedPayload = this.base64UrlEncode(JSON.stringify(payload));
+    const signingInput = `${encodedHeader}.${encodedPayload}`;
+    const signature = await crypto.subtle.sign(
+      'RSASSA-PKCS1-v1_5',
+      this.cachedFCMKey,
+      new TextEncoder().encode(signingInput)
+    );
+    const assertion = `${signingInput}.${this.base64UrlEncode(
+      String.fromCharCode(...new Uint8Array(signature))
+    )}`;
+
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        assertion,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`Failed to obtain FCM access token: ${response.status} ${errorBody}`);
+    }
+
+    const data = await response.json<{ access_token?: string; expires_in?: number }>();
+    if (!data.access_token) {
+      throw new Error('FCM access token response did not include access_token');
+    }
+
+    this.cachedFCMAccessToken = data.access_token;
+    this.cachedFCMAccessTokenExpiry = now + ((data.expires_in ?? 3600) - 300) * 1000;
+    return data.access_token;
   }
 
   /**

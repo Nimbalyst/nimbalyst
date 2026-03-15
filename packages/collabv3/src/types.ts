@@ -996,6 +996,10 @@ export interface Env {
   APNS_TEAM_ID?: string;    // Team ID from Apple Developer Portal
   APNS_BUNDLE_ID?: string;  // App bundle ID (e.g., com.nimbalyst.app)
   APNS_SANDBOX?: string;    // 'true' for sandbox, otherwise production
+  // Android FCM Push Notifications
+  FCM_PROJECT_ID?: string;   // Firebase project ID
+  FCM_CLIENT_EMAIL?: string; // Service account client email
+  FCM_PRIVATE_KEY?: string;  // Base64-encoded service account private key PEM
   // Test-only: bypass JWT auth in dev mode (parse user_id/org_id from query params)
   TEST_AUTH_BYPASS?: string;
 }
