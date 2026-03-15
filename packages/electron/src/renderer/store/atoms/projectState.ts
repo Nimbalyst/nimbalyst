@@ -74,6 +74,20 @@ export interface AgentModeSettings {
 }
 
 /**
+ * IDs of gutter buttons that can be hidden via context menu.
+ * Mode buttons (files, agent, tracker) and user menu are not hideable.
+ */
+export type HideableGutterButton =
+  | 'voice-mode'
+  | 'trust-indicator'
+  | 'sync-status'
+  | 'theme-toggle'
+  | 'feedback'
+  | 'claude-usage'
+  | 'codex-usage'
+  | 'extension-dev';
+
+/**
  * Complete project state for persistence.
  */
 export interface ProjectState {
@@ -85,6 +99,8 @@ export interface ProjectState {
   agentMode: AgentModeSettings;
   lastOpenedFile: string | null;
   recentFiles: string[];
+  /** Gutter buttons hidden by the user via context menu */
+  hiddenGutterButtons: HideableGutterButton[];
 }
 
 /**
@@ -118,6 +134,7 @@ const defaultProjectState: ProjectState = {
   },
   lastOpenedFile: null,
   recentFiles: [],
+  hiddenGutterButtons: [],
 };
 
 /**
@@ -390,6 +407,42 @@ export const setAgentFileScopeModeAtom = atom(
     }
   }
 );
+
+// === Hidden Gutter Buttons ===
+
+/**
+ * Which gutter buttons are currently hidden.
+ */
+export const hiddenGutterButtonsAtom = atom(
+  (get) => get(projectStateAtom).hiddenGutterButtons ?? []
+);
+
+/**
+ * Toggle a gutter button's hidden state.
+ */
+export const toggleGutterButtonHiddenAtom = atom(
+  null,
+  (get, set, buttonId: HideableGutterButton) => {
+    const state = get(projectStateAtom);
+    const current = state.hiddenGutterButtons ?? [];
+    const hidden = current.includes(buttonId)
+      ? current.filter((id) => id !== buttonId)
+      : [...current, buttonId];
+    const newState = { ...state, hiddenGutterButtons: hidden };
+    set(projectStateAtom, newState);
+    schedulePersist(newState);
+  }
+);
+
+/**
+ * Show all hidden gutter buttons (reset).
+ */
+export const showAllGutterButtonsAtom = atom(null, (get, set) => {
+  const state = get(projectStateAtom);
+  const newState = { ...state, hiddenGutterButtons: [] };
+  set(projectStateAtom, newState);
+  schedulePersist(newState);
+});
 
 /**
  * Add a file to recent files.

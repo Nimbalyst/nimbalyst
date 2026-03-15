@@ -19,6 +19,8 @@ import { terminalFeatureAvailableAtom, syncEnabledAtom, syncEnabledProjectsAtom 
 import { workspaceHasTeamAtom } from '../../store/atoms/collabDocuments';
 import { useAlphaFeature } from '../../hooks/useAlphaFeature';
 import { UserMenuPopover } from './UserMenuPopover';
+import { GutterContextMenu } from './GutterContextMenu';
+import { type HideableGutterButton, hiddenGutterButtonsAtom } from '../../store/atoms/projectState';
 
 export type NavigationMode = 'planning' | 'coding';
 export type SidebarView = 'files' | 'settings';
@@ -90,6 +92,23 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   const posthog = usePostHog();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Gutter button visibility
+  const hiddenButtons = useAtomValue(hiddenGutterButtonsAtom);
+  const isHidden = useCallback((id: HideableGutterButton) => hiddenButtons.includes(id), [hiddenButtons]);
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    targetButton?: HideableGutterButton;
+  } | null>(null);
+
+  const openContextMenu = useCallback((e: React.MouseEvent, targetButton?: HideableGutterButton) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, targetButton });
+  }, []);
 
   const handleNavigateSettings = useCallback((scope: SettingsScope, category?: SettingsCategory) => {
     if (onNavigateSettings) {
@@ -211,7 +230,11 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   };
 
   return (
-    <div className="navigation-gutter w-12 h-screen bg-nim-secondary border-r border-nim flex flex-col items-center py-2 shrink-0">
+    <div className="navigation-gutter w-12 h-screen bg-nim-secondary border-r border-nim flex flex-col items-center py-2 shrink-0" onContextMenu={(e) => {
+      // Only open background context menu if right-clicking empty space (not a button)
+      if ((e.target as HTMLElement).closest('button, [data-panel-id]')) return;
+      openContextMenu(e);
+    }}>
       {/* Content Mode Switcher - Top Group (Files) */}
       <div className="nav-section nav-content-modes flex flex-col items-center gap-1 w-full px-1.5 py-1">
         {contentModeButtonsTop.map((button) => {
@@ -438,9 +461,11 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
       )}
 
       {/* Voice Mode - persistent button with integrated context ring */}
-      <div className="nav-section nav-voice-mode flex flex-col items-center gap-1 w-full px-1.5 py-1">
-        <VoiceModeButton workspacePath={workspacePath} />
-      </div>
+      {!isHidden('voice-mode') && (
+        <div className="nav-section nav-voice-mode flex flex-col items-center gap-1 w-full px-1.5 py-1" onContextMenu={(e) => openContextMenu(e, 'voice-mode')}>
+          <VoiceModeButton workspacePath={workspacePath} />
+        </div>
+      )}
 
       {/* Bottom Panel Toggles - Above Settings */}
       <div className="nav-section nav-bottom-panels flex flex-col items-center gap-1 w-full px-1.5 py-1">
@@ -495,48 +520,73 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
       <div className="nav-section nav-settings flex flex-col items-center gap-1 w-full px-1.5 py-1 mt-auto pt-2 border-t border-nim">
 
         {/* Claude Usage Indicator - Shows API usage limits */}
-        <ClaudeUsageIndicator />
+        {!isHidden('claude-usage') && (
+          <div onContextMenu={(e) => openContextMenu(e, 'claude-usage')}>
+            <ClaudeUsageIndicator />
+          </div>
+        )}
 
         {/* Codex Usage Indicator - Shows Codex subscription usage limits */}
-        <CodexUsageIndicator />
+        {!isHidden('codex-usage') && (
+          <div onContextMenu={(e) => openContextMenu(e, 'codex-usage')}>
+            <CodexUsageIndicator />
+          </div>
+        )}
 
         {/* Extension Dev Indicator - Shows when extension dev tools are enabled */}
-        <ExtensionDevIndicator onOpenSettings={onOpenSettings} />
+        {!isHidden('extension-dev') && (
+          <div onContextMenu={(e) => openContextMenu(e, 'extension-dev')}>
+            <ExtensionDevIndicator onOpenSettings={onOpenSettings} />
+          </div>
+        )}
 
         {/* Trust Indicator - Shows agent trust status */}
-        <TrustIndicator
-          workspacePath={workspacePath}
-          onOpenSettings={onOpenPermissions || (() => {})}
-          onChangeMode={onChangeTrustMode}
-        />
+        {!isHidden('trust-indicator') && (
+          <div onContextMenu={(e) => openContextMenu(e, 'trust-indicator')}>
+            <TrustIndicator
+              workspacePath={workspacePath}
+              onOpenSettings={onOpenPermissions || (() => {})}
+              onChangeMode={onChangeTrustMode}
+            />
+          </div>
+        )}
 
         {/* Sync Status - Above Theme Toggle */}
-        <SyncStatusButton
-          workspacePath={workspacePath || undefined}
-          onOpenSettings={onOpenSettings}
-        />
+        {!isHidden('sync-status') && (
+          <div onContextMenu={(e) => openContextMenu(e, 'sync-status')}>
+            <SyncStatusButton
+              workspacePath={workspacePath || undefined}
+              onOpenSettings={onOpenSettings}
+            />
+          </div>
+        )}
 
         {/* Theme Toggle - Above Settings */}
-        <div className="nav-section nav-theme flex flex-col items-center gap-1 w-full px-1.5 py-1">
-          <ThemeToggleButton />
-        </div>
+        {!isHidden('theme-toggle') && (
+          <div className="nav-section nav-theme flex flex-col items-center gap-1 w-full px-1.5 py-1" onContextMenu={(e) => openContextMenu(e, 'theme-toggle')}>
+            <ThemeToggleButton />
+          </div>
+        )}
 
-        <HelpTooltip testId="gutter-feedback-button" placement="right">
-          <button
-            className="nimbalyst-feedback-button nav-button relative w-9 h-9 flex items-center justify-center bg-transparent border-none rounded-md text-nim-muted cursor-pointer transition-all duration-150 p-0 hover:bg-nim-tertiary hover:text-nim active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2"
-            onClick={() => {
-              console.log('[NavigationGutter] Feedback button clicked');
-              onOpenFeedback?.();
-            }}
-            aria-label={feedbackButton.label}
-            data-testid="gutter-feedback-button"
-          >
-            <MaterialSymbol
-              icon={feedbackButton.icon}
-              size={20}
-            />
-          </button>
-        </HelpTooltip>
+        {!isHidden('feedback') && (
+          <HelpTooltip testId="gutter-feedback-button" placement="right">
+            <button
+              className="nimbalyst-feedback-button nav-button relative w-9 h-9 flex items-center justify-center bg-transparent border-none rounded-md text-nim-muted cursor-pointer transition-all duration-150 p-0 hover:bg-nim-tertiary hover:text-nim active:scale-95 focus-visible:outline-2 focus-visible:outline-[var(--nim-primary)] focus-visible:outline-offset-2"
+              onClick={() => {
+                // console.log('[NavigationGutter] Feedback button clicked');
+                onOpenFeedback?.();
+              }}
+              onContextMenu={(e) => openContextMenu(e, 'feedback')}
+              aria-label={feedbackButton.label}
+              data-testid="gutter-feedback-button"
+            >
+              <MaterialSymbol
+                icon={feedbackButton.icon}
+                size={20}
+              />
+            </button>
+          </HelpTooltip>
+        )}
 
         <div>
           {userMenuOpen && (
@@ -564,6 +614,16 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
           </HelpTooltip>
         </div>
       </div>
+
+      {/* Gutter context menu */}
+      {contextMenu && (
+        <GutterContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          targetButton={contextMenu.targetButton}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 };
