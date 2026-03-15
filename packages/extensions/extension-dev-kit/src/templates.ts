@@ -97,39 +97,41 @@ The manifest declares what the extension contributes to Nimbalyst. Key fields:
 
   // EditorHost contract
   if (hasEditor) {
-    sections.push(`## EditorHost Contract
+    sections.push(`## useEditorLifecycle Hook
 
-Custom editors receive an \`EditorHost\` via props and **must** follow this contract:
+Use the \`useEditorLifecycle\` hook from \`@nimbalyst/runtime\` to handle all editor lifecycle concerns. It replaces manual \`useEffect\` subscriptions for loading, saving, file watching, echo detection, dirty state, diff mode, and theme tracking.
 
 \`\`\`typescript
+import { useRef } from 'react';
+import { useEditorLifecycle } from '@nimbalyst/runtime';
 import type { EditorHostProps } from '@nimbalyst/extension-sdk';
 
 function MyEditor({ host }: EditorHostProps) {
-  // 1. Load content on mount -- do NOT expect a content prop
-  useEffect(() => { host.loadContent().then(setContent); }, [host]);
+  const dataRef = useRef<MyData>(defaultData);
 
-  // 2. Save when the host asks (autosave / Cmd+S)
-  useEffect(() => host.onSaveRequested(async () => {
-    await host.saveContent(content);
-    host.setDirty(false);
-  }), [host, content]);
+  const { isLoading, error, theme, markDirty, diffState } = useEditorLifecycle(host, {
+    applyContent: (data: MyData) => { dataRef.current = data; },
+    getCurrentContent: () => dataRef.current,
+    parse: (raw) => JSON.parse(raw),        // raw file string -> editor format
+    serialize: (data) => JSON.stringify(data), // editor format -> file string
+  });
 
-  // 3. Handle external file changes (AI edits, other processes)
-  useEffect(() => host.onFileChanged((newContent) => {
-    setContent(newContent);
-    host.setDirty(false);
-  }), [host]);
-
-  // 4. Mark dirty when the user edits
-  const onChange = (val: string) => { setContent(val); host.setDirty(true); };
+  if (isLoading) return <div>Loading...</div>;
+  return <MyEditorUI data={dataRef.current} onChange={markDirty} />;
 }
 \`\`\`
+
+The hook uses pull/push callbacks -- content **never** lives in React state:
+- **\`applyContent\`**: push content INTO the editor (on load, external change)
+- **\`getCurrentContent\`**: pull content FROM the editor (on save)
 
 **Key rules:**
 - The editor owns its content state. The parent never stores or passes content.
 - Never depend on the parent re-rendering your component.
-- Use \`host.theme\` and \`host.onThemeChanged()\` for theme-aware rendering.
-- Use \`host.storage\` for persisting editor-specific state (workspace-scoped or global).`);
+- Use the \`theme\` return value (reactive) for theme-aware rendering.
+- Use \`host.storage\` for persisting editor-specific state (workspace-scoped or global).
+- For editors with async content extraction, use \`onSave\` override instead of \`getCurrentContent\`.
+- For editors with specialized diff rendering, use \`onDiffRequested\` / \`onDiffCleared\` overrides.`);
   }
 
   // AI tools
@@ -270,10 +272,12 @@ Always use these variables instead of hardcoded colors so the extension works wi
   // SDK reference
   sections.push(`## SDK Reference
 
-The \`@nimbalyst/extension-sdk\` package provides all types and the Vite build helper.
+The \`@nimbalyst/extension-sdk\` package provides types and the Vite build helper.
+The \`@nimbalyst/runtime\` package provides the \`useEditorLifecycle\` hook (provided by the host at runtime -- do not add it to package.json).
 
 Key imports:
 \`\`\`typescript
+// Types from SDK
 import type {
   EditorHostProps,      // Props for custom editor components
   ExtensionAITool,      // AI tool definition
@@ -285,6 +289,9 @@ import type {
 } from '@nimbalyst/extension-sdk';
 
 import { createExtensionConfig } from '@nimbalyst/extension-sdk/vite';
+
+// Hook from runtime (provided by host -- do NOT add to dependencies)
+import { useEditorLifecycle } from '@nimbalyst/runtime';
 \`\`\``);
 
   return sections.join('\n\n');
@@ -400,50 +407,34 @@ export function deactivate() {
 }
 `,
 
-    [`src/${componentName}.tsx`]: `import React, { useState, useEffect } from 'react';
+    [`src/${componentName}.tsx`]: `import React, { useRef, useReducer } from 'react';
+import { useEditorLifecycle } from '@nimbalyst/runtime';
 import type { EditorHostProps } from '@nimbalyst/extension-sdk';
 
 export function ${componentName}({ host }: EditorHostProps) {
-  const [text, setText] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+  const textRef = useRef('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [, forceRender] = useReducer((x: number) => x + 1, 0);
 
-  useEffect(() => {
-    let mounted = true;
-
-    host.loadContent().then((content) => {
-      if (!mounted) return;
-      setText(content);
-      setIsLoading(false);
-    }).catch(() => {
-      if (!mounted) return;
-      setText('');
-      setIsLoading(false);
-    });
-
-    return () => {
-      mounted = false;
-    };
-  }, [host]);
-
-  useEffect(() => {
-    return host.onSaveRequested(async () => {
-      await host.saveContent(text);
-      host.setDirty(false);
-    });
-  }, [host, text]);
-
-  useEffect(() => {
-    return host.onFileChanged((newContent) => {
-      setText(newContent);
-      host.setDirty(false);
-    });
-  }, [host]);
+  const { isLoading, error, markDirty } = useEditorLifecycle(host, {
+    applyContent: (content: string) => {
+      textRef.current = content;
+      if (textareaRef.current) {
+        textareaRef.current.value = content;
+      }
+      forceRender();
+    },
+    getCurrentContent: () => textRef.current,
+  });
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newText = e.target.value;
-    setText(newText);
-    host.setDirty(true);
+    textRef.current = e.target.value;
+    markDirty();
   };
+
+  if (error) {
+    return <div style={{ padding: '16px' }}>Error: {error.message}</div>;
+  }
 
   if (isLoading) {
     return <div style={{ padding: '16px' }}>Loading...</div>;
@@ -465,7 +456,8 @@ export function ${componentName}({ host }: EditorHostProps) {
         Editing: {host.filePath}
       </div>
       <textarea
-        value={text}
+        ref={textareaRef}
+        defaultValue={textRef.current}
         onChange={handleChange}
         placeholder="Start typing..."
         style={{
@@ -600,49 +592,34 @@ export function deactivate() {
 }
 `,
 
-    [`src/${componentName}.tsx`]: `import React, { useState, useEffect } from 'react';
+    [`src/${componentName}.tsx`]: `import React, { useRef, useReducer } from 'react';
+import { useEditorLifecycle } from '@nimbalyst/runtime';
 import type { EditorHostProps } from '@nimbalyst/extension-sdk';
 
 export function ${componentName}({ host }: EditorHostProps) {
-  const [data, setData] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+  const dataRef = useRef('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [, forceRender] = useReducer((x: number) => x + 1, 0);
 
-  useEffect(() => {
-    let mounted = true;
+  const { isLoading, error, markDirty } = useEditorLifecycle(host, {
+    applyContent: (content: string) => {
+      dataRef.current = content;
+      if (textareaRef.current) {
+        textareaRef.current.value = content;
+      }
+      forceRender();
+    },
+    getCurrentContent: () => dataRef.current,
+  });
 
-    host.loadContent().then((content) => {
-      if (!mounted) return;
-      setData(content);
-      setIsLoading(false);
-    }).catch(() => {
-      if (!mounted) return;
-      setData('');
-      setIsLoading(false);
-    });
-
-    return () => {
-      mounted = false;
-    };
-  }, [host]);
-
-  useEffect(() => {
-    return host.onSaveRequested(async () => {
-      await host.saveContent(data);
-      host.setDirty(false);
-    });
-  }, [host, data]);
-
-  useEffect(() => {
-    return host.onFileChanged((newContent) => {
-      setData(newContent);
-      host.setDirty(false);
-    });
-  }, [host]);
-
-  const handleChange = (newData: string) => {
-    setData(newData);
-    host.setDirty(true);
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    dataRef.current = e.target.value;
+    markDirty();
   };
+
+  if (error) {
+    return <div className="${toolPrefix}-editor">Error: {error.message}</div>;
+  }
 
   if (isLoading) {
     return <div className="${toolPrefix}-editor">Loading...</div>;
@@ -659,8 +636,9 @@ export function ${componentName}({ host }: EditorHostProps) {
       </div>
       <div className="${toolPrefix}-editor-content">
         <textarea
-          value={data}
-          onChange={(e) => handleChange(e.target.value)}
+          ref={textareaRef}
+          defaultValue={dataRef.current}
+          onChange={handleChange}
           placeholder="Start editing..."
         />
       </div>
