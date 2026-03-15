@@ -57,12 +57,27 @@ class ClaudeUsageServiceImpl {
   private isPolling: boolean = false;
   private isSleeping: boolean = true;
   private inflightRefresh: Promise<ClaudeUsageData> | null = null;
+  private claudeCodeVersion: string | null = null;
 
   /**
    * Initialize the service. Does not start polling until activity is detected.
    */
   initialize(): void {
     logger.main.info('[ClaudeUsageService] Initialized (sleeping until activity detected)');
+  }
+
+  private getClaudeCodeVersion(): string {
+    if (this.claudeCodeVersion) return this.claudeCodeVersion;
+    try {
+      // Read the real Claude Code version from the SDK's manifest.json
+      // (package.json has the npm version e.g. 0.2.69, but manifest.json has the actual CLI version e.g. 2.1.69)
+      const sdkDir = path.dirname(require.resolve('@anthropic-ai/claude-agent-sdk'));
+      const manifest = JSON.parse(fs.readFileSync(path.join(sdkDir, 'manifest.json'), 'utf-8'));
+      this.claudeCodeVersion = manifest.version || 'unknown';
+    } catch {
+      this.claudeCodeVersion = 'unknown';
+    }
+    return this.claudeCodeVersion;
   }
 
   /**
@@ -271,7 +286,7 @@ class ClaudeUsageServiceImpl {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
             'anthropic-beta': 'oauth-2025-04-20',
-            'User-Agent': 'Nimbalyst/1.0',
+            'User-Agent': `claude-code/${this.getClaudeCodeVersion()}`,
           },
         });
 
