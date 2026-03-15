@@ -142,7 +142,7 @@ interface CustomEditorComponentProps {
   filePath: string;           // Absolute path to the file
   fileName: string;           // Just the filename
   initialContent: string;     // Initial content (may be empty for binary)
-  theme: 'light' | 'dark' | 'crystal-dark';
+  theme: string;
   isActive: boolean;          // Is this tab active?
   workspaceId?: string;
   onContentChange?: () => void;

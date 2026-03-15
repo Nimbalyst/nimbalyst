@@ -121,7 +121,7 @@ interface PanelHost {
   readonly extensionId: string;
 
   // Environment
-  readonly theme: 'light' | 'dark' | 'crystal-dark';
+  readonly theme: string;
   readonly workspacePath: string;
   readonly isSettingsOpen: boolean;
 

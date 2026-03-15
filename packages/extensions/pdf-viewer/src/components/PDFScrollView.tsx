@@ -10,7 +10,7 @@ interface PDFScrollViewProps {
   totalPages: number;
   scale: number;
   fitToWidth: boolean;
-  theme: 'light' | 'dark' | 'crystal-dark';
+  theme: string;
   onFitWidthScaleChange?: (scale: number) => void;
 }
 

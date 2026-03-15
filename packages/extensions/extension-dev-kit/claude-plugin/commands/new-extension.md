@@ -321,95 +321,37 @@ When updating the manifest during implementation, use these schemas:
 | `--nim-border` | Main borders |
 | `--nim-primary` | Accent/brand color |
 
-## Reference: EditorHost API
+## Reference: useEditorLifecycle Hook
 
-Custom editors receive an `EditorHost` object that handles all communication with Nimbalyst:
-
-```typescript
-import type { EditorHostProps } from '@nimbalyst/extension-sdk';
-
-interface EditorHost {
-  // File info (read-only)
-  readonly filePath: string;      // Absolute path to file
-  readonly fileName: string;      // File basename
-  readonly theme: 'light' | 'dark' | 'crystal-dark';
-  readonly isActive: boolean;     // Whether tab is focused
-  readonly workspaceId?: string;  // Workspace path if applicable
-
-  // Content loading - call on mount instead of receiving initialContent
-  loadContent(): Promise<string>;
-  loadBinaryContent(): Promise<ArrayBuffer>;  // For binary files
-
-  // File change notifications - subscribe to external changes
-  onFileChanged(callback: (newContent: string) => void): () => void;
-
-  // Dirty state - call when editor has unsaved changes
-  setDirty(isDirty: boolean): void;
-
-  // Save - editor pushes content when save is requested
-  saveContent(content: string | ArrayBuffer): Promise<void>;
-  onSaveRequested(callback: () => void): () => void;
-
-  // History
-  openHistory(): void;
-
-  // Optional: Diff mode for AI edits
-  onDiffRequested?(callback: (config: DiffConfig) => void): () => void;
-  reportDiffResult?(result: DiffResult): void;
-
-  // Optional: Source mode toggle
-  toggleSourceMode?(): void;
-  onSourceModeChanged?(callback: (isSourceMode: boolean) => void): () => void;
-  readonly supportsSourceMode?: boolean;
-}
-```
-
-### Basic Pattern
+Use the `useEditorLifecycle` hook from `@nimbalyst/runtime` to handle all editor lifecycle concerns. It replaces manual `useEffect` subscriptions for loading, saving, file watching, echo detection, dirty state, diff mode, and theme tracking.
 
 ```tsx
+import { useRef } from 'react';
+import { useEditorLifecycle } from '@nimbalyst/runtime';
 import type { EditorHostProps } from '@nimbalyst/extension-sdk';
 
 export function MyEditor({ host }: EditorHostProps) {
-  const [data, setData] = useState<MyData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const dataRef = useRef(data);
+  const dataRef = useRef<MyData>(defaultData);
 
-  useEffect(() => { dataRef.current = data; }, [data]);
-
-  // Load content on mount
-  useEffect(() => {
-    host.loadContent().then(content => {
-      setData(parse(content));
-      setIsLoading(false);
-    });
-  }, [host]);
-
-  // Handle save requests from host (autosave, Cmd+S)
-  useEffect(() => {
-    return host.onSaveRequested(async () => {
-      if (dataRef.current) {
-        const content = serialize(dataRef.current);
-        await host.saveContent(content);
-      }
-    });
-  }, [host]);
-
-  // Handle external file changes
-  useEffect(() => {
-    return host.onFileChanged(newContent => {
-      setData(parse(newContent));
-    });
-  }, [host]);
-
-  const handleEdit = (newData: MyData) => {
-    setData(newData);
-    host.setDirty(true);  // Mark dirty - triggers autosave
-  };
+  const { isLoading, error, theme, markDirty, diffState } = useEditorLifecycle(host, {
+    applyContent: (data: MyData) => { dataRef.current = data; },
+    getCurrentContent: () => dataRef.current,
+    parse: (raw) => JSON.parse(raw),        // raw file string -> editor format
+    serialize: (data) => JSON.stringify(data), // editor format -> file string
+  });
 
   if (isLoading) return <div>Loading...</div>;
-  return <div>...</div>;
+  return <MyEditorUI data={dataRef.current} onChange={markDirty} />;
 }
 ```
+
+The hook uses pull/push callbacks -- content **never** lives in React state:
+- **`applyContent`**: push content INTO the editor (on load, external change)
+- **`getCurrentContent`**: pull content FROM the editor (on save)
+
+Additional options: `binary` (for binary files), `onLoaded`, `onExternalChange`, `onSave` (custom save flow), `onDiffRequested` / `onDiffCleared` (custom diff handling).
+
+`@nimbalyst/runtime` is provided by the host at runtime -- do NOT add it to package.json dependencies.
 
 ## Key Principles
 
