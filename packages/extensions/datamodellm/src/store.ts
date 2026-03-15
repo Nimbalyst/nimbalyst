@@ -14,7 +14,7 @@ import type {
   DataModelFile,
   Database,
 } from './types';
-import { autoLayoutEntities } from './utils/autoLayout';
+import { autoLayoutEntitiesAsync } from './utils/autoLayout';
 
 // Simple ID generator
 function nanoid(): string {
@@ -72,7 +72,7 @@ interface DataModelStore {
   setDatabase: (database: Database) => void;
 
   // Actions - Layout
-  autoLayout: () => void;
+  autoLayout: () => Promise<void>;
 
   // Actions - Reset dirty state (after save)
   markClean: () => void;
@@ -310,18 +310,16 @@ export function createDataModelStore() {
     },
 
     // Auto-layout entities based on relationships
-    autoLayout: () => {
+    autoLayout: async () => {
+      const { entities, relationships, entityViewMode } = get();
+      const positions = await autoLayoutEntitiesAsync(entities, relationships, entityViewMode);
       set((state) => {
-        const positions = autoLayoutEntities(state.entities, state.relationships);
-        const entities = state.entities.map((entity) => {
+        const updated = state.entities.map((entity) => {
           const newPos = positions.get(entity.id);
-          if (newPos) {
-            return { ...entity, position: newPos };
-          }
-          return entity;
+          return newPos ? { ...entity, position: newPos } : entity;
         });
         state.onDirtyChange?.(true);
-        return { entities, isDirty: true };
+        return { entities: updated, isDirty: true };
       });
     },
 

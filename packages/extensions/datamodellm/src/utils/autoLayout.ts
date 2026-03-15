@@ -1,297 +1,103 @@
 /**
  * Auto-Layout Algorithm for Data Model Entities
  *
- * Uses a graph-based approach to position entities:
- * 1. Build a relationship graph
- * 2. Find connected components (groups of related entities)
- * 3. Position entities within each group using a layered approach
- * 4. Position groups relative to each other
+ * Uses ELK (Eclipse Layout Kernel) for high-quality layered graph layout.
+ * ELK handles edge crossing minimization, proper spacing, and variable node sizes.
  */
 
-import type { Entity, Relationship } from '../types';
+import ELK, { type ElkNode } from 'elkjs/lib/elk.bundled.js';
+import type { Entity, EntityViewMode, Relationship } from '../types';
 
-interface LayoutConfig {
-  /** Horizontal spacing between entities */
-  horizontalGap: number;
-  /** Vertical spacing between entities */
-  verticalGap: number;
-  /** Estimated entity width for layout calculations */
-  entityWidth: number;
-  /** Estimated entity height for layout calculations */
-  entityHeight: number;
-  /** Spacing between disconnected groups */
-  groupGap: number;
-}
-
-const DEFAULT_CONFIG: LayoutConfig = {
-  horizontalGap: 100,
-  verticalGap: 80,
-  entityWidth: 280,
-  entityHeight: 200,
-  groupGap: 150,
-};
+const elk = new ELK();
 
 /**
- * Build an adjacency list from relationships
+ * Estimate the rendered dimensions of an entity node based on view mode and field count.
  */
-function buildAdjacencyList(
-  entities: Entity[],
-  relationships: Relationship[]
-): Map<string, Set<string>> {
-  const nameToId = new Map(entities.map((e) => [e.name, e.id]));
-  const adjacency = new Map<string, Set<string>>();
-
-  // Initialize all entities
-  for (const entity of entities) {
-    adjacency.set(entity.id, new Set());
+function estimateEntitySize(
+  entity: Entity,
+  viewMode: EntityViewMode
+): { width: number; height: number } {
+  if (viewMode === 'compact') {
+    // Compact: name + field count badge + optional description line
+    const baseHeight = 52;
+    const descHeight = entity.description ? 24 : 0;
+    return { width: 220, height: baseHeight + descHeight };
   }
 
-  // Add relationship edges (bidirectional for layout purposes)
-  for (const rel of relationships) {
-    const sourceId = nameToId.get(rel.sourceEntityName);
-    const targetId = nameToId.get(rel.targetEntityName);
+  // Standard/full: header + field rows
+  const headerHeight = 44;
+  const fieldHeight = viewMode === 'full' ? 38 : 32;
+  const padding = 16;
+  const descHeight = viewMode === 'full' && entity.description ? 28 : 0;
+  const fieldsHeight = Math.max(1, entity.fields.length) * fieldHeight;
 
-    if (sourceId && targetId) {
-      adjacency.get(sourceId)?.add(targetId);
-      adjacency.get(targetId)?.add(sourceId);
-    }
-  }
-
-  return adjacency;
+  return {
+    width: 300,
+    height: headerHeight + fieldsHeight + descHeight + padding,
+  };
 }
 
 /**
- * Find connected components using DFS
+ * Auto-layout all entities considering relationships using ELK.
  */
-function findConnectedComponents(
-  entities: Entity[],
-  adjacency: Map<string, Set<string>>
-): Entity[][] {
-  const visited = new Set<string>();
-  const components: Entity[][] = [];
-  const idToEntity = new Map(entities.map((e) => [e.id, e]));
-
-  function dfs(entityId: string, component: Entity[]) {
-    if (visited.has(entityId)) return;
-    visited.add(entityId);
-
-    const entity = idToEntity.get(entityId);
-    if (entity) {
-      component.push(entity);
-    }
-
-    const neighbors = adjacency.get(entityId) || new Set();
-    for (const neighborId of neighbors) {
-      dfs(neighborId, component);
-    }
-  }
-
-  for (const entity of entities) {
-    if (!visited.has(entity.id)) {
-      const component: Entity[] = [];
-      dfs(entity.id, component);
-      if (component.length > 0) {
-        components.push(component);
-      }
-    }
-  }
-
-  return components;
-}
-
-/**
- * Topological sort with levels for layered layout
- * Returns entities grouped by their "level" in the graph
- */
-function assignLayers(
-  entities: Entity[],
-  relationships: Relationship[]
-): Map<string, number> {
-  const nameToEntity = new Map(entities.map((e) => [e.name, e]));
-  const levels = new Map<string, number>();
-
-  // Find entities that are not targets (roots)
-  const targetNames = new Set(relationships.map((r) => r.targetEntityName));
-  const roots = entities.filter((e) => !targetNames.has(e.name));
-
-  // If no roots found, just use the first entity
-  if (roots.length === 0 && entities.length > 0) {
-    roots.push(entities[0]);
-  }
-
-  // BFS to assign levels
-  const queue: { entity: Entity; level: number }[] = roots.map((e) => ({
-    entity: e,
-    level: 0,
-  }));
-  const visited = new Set<string>();
-
-  while (queue.length > 0) {
-    const { entity, level } = queue.shift()!;
-
-    if (visited.has(entity.id)) {
-      // Update level if we found a longer path
-      const currentLevel = levels.get(entity.id) || 0;
-      if (level > currentLevel) {
-        levels.set(entity.id, level);
-      }
-      continue;
-    }
-
-    visited.add(entity.id);
-    levels.set(entity.id, level);
-
-    // Find relationships where this entity is the source
-    for (const rel of relationships) {
-      if (rel.sourceEntityName === entity.name) {
-        const targetEntity = nameToEntity.get(rel.targetEntityName);
-        if (targetEntity && !visited.has(targetEntity.id)) {
-          queue.push({ entity: targetEntity, level: level + 1 });
-        }
-      }
-    }
-  }
-
-  // Handle unvisited entities (disconnected within the component)
-  for (const entity of entities) {
-    if (!levels.has(entity.id)) {
-      levels.set(entity.id, 0);
-    }
-  }
-
-  return levels;
-}
-
-/**
- * Layout a single connected component
- * Returns the bounding box width and height
- */
-function layoutComponent(
+export async function autoLayoutEntitiesAsync(
   entities: Entity[],
   relationships: Relationship[],
-  startX: number,
-  startY: number,
-  config: LayoutConfig
-): { positions: Map<string, { x: number; y: number }>; width: number; height: number } {
+  viewMode: EntityViewMode = 'standard'
+): Promise<Map<string, { x: number; y: number }>> {
   const positions = new Map<string, { x: number; y: number }>();
 
   if (entities.length === 0) {
-    return { positions, width: 0, height: 0 };
+    return positions;
   }
 
-  if (entities.length === 1) {
-    positions.set(entities[0].id, { x: startX, y: startY });
-    return { positions, width: config.entityWidth, height: config.entityHeight };
+  const nameToId = new Map(entities.map((e) => [e.name, e.id]));
+
+  const children: ElkNode[] = entities.map((entity) => {
+    const size = estimateEntitySize(entity, viewMode);
+    return {
+      id: entity.id,
+      width: size.width,
+      height: size.height,
+    };
+  });
+
+  const edges = relationships
+    .map((rel, i) => {
+      const sourceId = nameToId.get(rel.sourceEntityName);
+      const targetId = nameToId.get(rel.targetEntityName);
+      if (!sourceId || !targetId) return null;
+      return { id: `e${i}`, sources: [sourceId], targets: [targetId] };
+    })
+    .filter((e): e is NonNullable<typeof e> => e !== null);
+
+  const nodeSpacing = viewMode === 'compact' ? '60' : '80';
+  const layerSpacing = viewMode === 'compact' ? '100' : '140';
+
+  const graph: ElkNode = {
+    id: 'root',
+    layoutOptions: {
+      'elk.algorithm': 'layered',
+      'elk.direction': 'RIGHT',
+      'elk.spacing.nodeNode': nodeSpacing,
+      'elk.layered.spacing.nodeNodeBetweenLayers': layerSpacing,
+      'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
+      'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
+      'elk.separateConnectedComponents': 'true',
+      'elk.spacing.componentComponent': '120',
+      'elk.padding': '[top=50,left=50,bottom=50,right=50]',
+      // Improve compactness
+      'elk.layered.compaction.postCompaction.strategy': 'EDGE_LENGTH',
+    },
+    children,
+    edges,
+  };
+
+  const layoutResult = await elk.layout(graph);
+
+  for (const node of layoutResult.children || []) {
+    positions.set(node.id, { x: node.x ?? 0, y: node.y ?? 0 });
   }
 
-  // Assign layers based on relationship direction
-  const levels = assignLayers(entities, relationships);
-
-  // Group entities by level
-  const levelGroups = new Map<number, Entity[]>();
-  for (const entity of entities) {
-    const level = levels.get(entity.id) || 0;
-    if (!levelGroups.has(level)) {
-      levelGroups.set(level, []);
-    }
-    levelGroups.get(level)!.push(entity);
-  }
-
-  // Sort levels
-  const sortedLevels = Array.from(levelGroups.keys()).sort((a, b) => a - b);
-
-  // Calculate positions
-  let maxWidth = 0;
-  let currentY = startY;
-
-  for (const level of sortedLevels) {
-    const group = levelGroups.get(level)!;
-    const groupWidth =
-      group.length * config.entityWidth + (group.length - 1) * config.horizontalGap;
-    maxWidth = Math.max(maxWidth, groupWidth);
-
-    // Center the group
-    let currentX = startX;
-
-    for (let i = 0; i < group.length; i++) {
-      positions.set(group[i].id, {
-        x: currentX + i * (config.entityWidth + config.horizontalGap),
-        y: currentY,
-      });
-    }
-
-    currentY += config.entityHeight + config.verticalGap;
-  }
-
-  const totalHeight = currentY - startY - config.verticalGap;
-
-  return { positions, width: maxWidth, height: totalHeight };
-}
-
-/**
- * Auto-layout all entities considering relationships
- */
-export function autoLayoutEntities(
-  entities: Entity[],
-  relationships: Relationship[],
-  config: Partial<LayoutConfig> = {}
-): Map<string, { x: number; y: number }> {
-  const fullConfig = { ...DEFAULT_CONFIG, ...config };
-  const allPositions = new Map<string, { x: number; y: number }>();
-
-  if (entities.length === 0) {
-    return allPositions;
-  }
-
-  // Build adjacency list and find connected components
-  const adjacency = buildAdjacencyList(entities, relationships);
-  const components = findConnectedComponents(entities, adjacency);
-
-  // Sort components by size (largest first)
-  components.sort((a, b) => b.length - a.length);
-
-  // Layout each component
-  let currentX = 100;
-  let currentY = 100;
-  let maxHeightInRow = 0;
-  let rowWidth = 0;
-  const maxRowWidth = 1500; // Max width before wrapping to next row
-
-  for (const component of components) {
-    // Filter relationships to only those within this component
-    const componentNames = new Set(component.map((e) => e.name));
-    const componentRelationships = relationships.filter(
-      (r) =>
-        componentNames.has(r.sourceEntityName) && componentNames.has(r.targetEntityName)
-    );
-
-    const { positions, width, height } = layoutComponent(
-      component,
-      componentRelationships,
-      currentX,
-      currentY,
-      fullConfig
-    );
-
-    // Merge positions
-    for (const [id, pos] of positions) {
-      allPositions.set(id, pos);
-    }
-
-    // Update position for next component
-    rowWidth += width + fullConfig.groupGap;
-    maxHeightInRow = Math.max(maxHeightInRow, height);
-
-    if (rowWidth > maxRowWidth) {
-      // Start new row
-      currentX = 100;
-      currentY += maxHeightInRow + fullConfig.groupGap;
-      rowWidth = 0;
-      maxHeightInRow = 0;
-    } else {
-      currentX += width + fullConfig.groupGap;
-    }
-  }
-
-  return allPositions;
+  return positions;
 }
