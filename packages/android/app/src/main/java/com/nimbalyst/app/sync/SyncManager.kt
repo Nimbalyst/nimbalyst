@@ -14,10 +14,17 @@ import com.nimbalyst.app.data.SessionEntity
 import com.nimbalyst.app.notifications.NotificationManager
 import com.nimbalyst.app.pairing.PairingCredentials
 import com.nimbalyst.app.pairing.PairingStore
+import android.content.Context
+import android.util.Log
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,12 +32,17 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class SyncManager(
+    private val context: Context,
     private val repository: NimbalystRepository,
     private val pairingStore: PairingStore,
     private val notificationManager: NotificationManager,
     private val scope: CoroutineScope,
 ) {
     private val gson = Gson()
+
+    companion object {
+        private const val TAG = "SyncManager"
+    }
     private val indexClient = WebSocketClient(scope)
     private val sessionClient = WebSocketClient(scope)
     private val _state = MutableStateFlow(SyncConnectionState())
@@ -40,6 +52,7 @@ class SyncManager(
 
     private var activeCredentials: PairingCredentials? = null
     private var crypto: CryptoManager? = null
+    private var jwtRefreshJob: Job? = null
 
     val state: StateFlow<SyncConnectionState> = _state.asStateFlow()
     val connectedDevices: StateFlow<List<DeviceInfo>> = _connectedDevices.asStateFlow()
@@ -58,6 +71,7 @@ class SyncManager(
             if (connected) {
                 notificationManager.state.value.deviceToken?.let(::registerPushToken)
                 requestFullSync()
+                startJwtRefreshTimer()
             }
         }
         indexClient.onTextMessage = { message ->
@@ -154,6 +168,7 @@ class SyncManager(
     }
 
     fun disconnect() {
+        stopJwtRefreshTimer()
         leaveSessionRoom()
         indexClient.disconnect()
         _connectedDevices.value = emptyList()
@@ -354,7 +369,7 @@ class SyncManager(
         val message = RegisterPushTokenMessage(
             token = token,
             platform = "android",
-            deviceId = WebSocketClient.deviceId
+            deviceId = WebSocketClient.getDeviceId(context)
         )
         return if (indexClient.sendRaw(gson.toJson(message))) {
             Result.success(Unit)
@@ -494,8 +509,55 @@ class SyncManager(
         _state.update { it.copy(sessionConnected = false, activeSessionId = null) }
     }
 
+    suspend fun updateDraftInput(sessionId: String, draftInput: String) {
+        val crypto = crypto ?: return
+        if (!indexClient.isConnected) return
+
+        val session = repository.getSession(sessionId) ?: return
+        val now = System.currentTimeMillis()
+        val storeDraft = draftInput.ifBlank { null }
+
+        // Persist locally first
+        repository.updateDraftInput(sessionId, storeDraft, now)
+
+        // Build encrypted client metadata with draft
+        val clientMetadata = ClientMetadata(
+            draftInput = draftInput,  // Send "" explicitly to clear on other devices
+            draftUpdatedAt = now,
+            phase = session.phase,
+            tags = session.tagsJson?.let {
+                try { gson.fromJson(it, Array<String>::class.java).toList() } catch (_: Exception) { null }
+            }
+        )
+        val metaJson = gson.toJson(clientMetadata)
+        val encryptedMeta = crypto.encrypt(metaJson)
+        val encryptedProjectId = crypto.encryptProjectId(session.projectId)
+
+        val update = IndexUpdateMessage(
+            session = IndexUpdateEntry(
+                sessionId = sessionId,
+                encryptedProjectId = encryptedProjectId,
+                projectIdIv = CryptoManager.projectIdIvBase64,
+                encryptedTitle = session.titleEncrypted,
+                titleIv = session.titleIv,
+                provider = session.provider ?: "claude-code",
+                model = session.model,
+                mode = session.mode,
+                messageCount = repository.messageCount(sessionId),
+                lastMessageAt = session.lastMessageAt ?: now,
+                createdAt = session.createdAt,
+                updatedAt = now,
+                encryptedClientMetadata = encryptedMeta.encrypted,
+                clientMetadataIv = encryptedMeta.iv
+            )
+        )
+
+        indexClient.sendRaw(gson.toJson(update))
+    }
+
     private suspend fun handleIndexMessage(message: String) {
-        when (decodeEnvelope(message)?.type) {
+        val type = decodeEnvelope(message)?.type
+        when (type) {
             "indexSyncResponse" -> handleIndexSyncResponse(message)
             "indexBroadcast" -> handleIndexBroadcast(message)
             "indexDeleteBroadcast" -> handleIndexDeleteBroadcast(message)
@@ -506,22 +568,28 @@ class SyncManager(
             "deviceJoined" -> handleDeviceJoined(message)
             "deviceLeft" -> handleDeviceLeft(message)
             "error" -> handleServerError(message)
+            null -> Log.w(TAG, "Index message with no type field")
+            else -> Log.d(TAG, "Unhandled index message type: $type")
         }
     }
 
     private suspend fun handleSessionMessage(message: String) {
-        when (decodeEnvelope(message)?.type) {
+        val type = decodeEnvelope(message)?.type
+        when (type) {
             "syncResponse" -> handleSessionSyncResponse(message)
             "messageBroadcast" -> handleMessageBroadcast(message)
             "metadataBroadcast" -> handleMetadataBroadcast(message)
             "error" -> handleServerError(message)
+            null -> Log.w(TAG, "Session message with no type field")
+            else -> Log.d(TAG, "Unhandled session message type: $type")
         }
     }
 
     private fun decodeEnvelope(message: String): ServerMessageEnvelope? {
         return try {
             gson.fromJson(message, ServerMessageEnvelope::class.java)
-        } catch (_: JsonSyntaxException) {
+        } catch (e: JsonSyntaxException) {
+            Log.w(TAG, "Failed to decode message envelope: ${e.message}")
             null
         }
     }
@@ -827,7 +895,8 @@ class SyncManager(
     private inline fun <reified T> parse(json: String): T? {
         return try {
             gson.fromJson(json, T::class.java)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to parse ${T::class.java.simpleName}: ${e.message}")
             null
         }
     }
@@ -877,7 +946,96 @@ class SyncManager(
             orgId = orgId
         )
     }
+
+    // -- JWT Refresh --
+    // Stytch JWTs expire after ~5 minutes. Refresh every 4 minutes to stay connected.
+
+    private fun startJwtRefreshTimer() {
+        stopJwtRefreshTimer()
+        jwtRefreshJob = scope.launch {
+            while (isActive) {
+                delay(JWT_REFRESH_INTERVAL_MS)
+                refreshJwt()
+            }
+        }
+    }
+
+    private fun stopJwtRefreshTimer() {
+        jwtRefreshJob?.cancel()
+        jwtRefreshJob = null
+    }
+
+    private suspend fun refreshJwt() {
+        val credentials = pairingStore.state.value.credentials ?: return
+        val sessionToken = credentials.sessionToken
+        if (sessionToken.isNullOrBlank()) {
+            Log.d(TAG, "No session token available for JWT refresh")
+            return
+        }
+
+        val baseUrl = credentials.serverUrl
+            .replace("wss://", "https://")
+            .replace("ws://", "http://")
+            .trimEnd('/')
+
+        try {
+            val url = URL("$baseUrl/auth/refresh")
+            val connection = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                setRequestProperty("Content-Type", "application/json")
+                doOutput = true
+                outputStream.write("""{"session_token":"$sessionToken"}""".toByteArray())
+            }
+
+            val responseCode = connection.responseCode
+            if (responseCode != 200) {
+                Log.w(TAG, "JWT refresh failed with status $responseCode")
+                return
+            }
+
+            val responseBody = connection.inputStream.bufferedReader().readText()
+            val json = parse<JsonObject>(responseBody) ?: return
+
+            val newJwt = json.get("session_jwt")?.takeIf { !it.isJsonNull }?.asString
+            if (newJwt.isNullOrBlank()) {
+                Log.w(TAG, "JWT refresh response missing session_jwt")
+                return
+            }
+
+            val newSessionToken = json.get("session_token")?.takeIf { !it.isJsonNull }?.asString
+                ?: sessionToken
+            val newUserId = json.get("user_id")?.takeIf { !it.isJsonNull }?.asString
+                ?: credentials.authUserId
+            val newEmail = json.get("email")?.takeIf { !it.isJsonNull }?.asString
+                ?: credentials.authEmail
+            val newExpiresAt = json.get("expires_at")?.takeIf { !it.isJsonNull }?.asString
+                ?: credentials.authExpiresAt
+            val newOrgId = json.get("org_id")?.takeIf { !it.isJsonNull }?.asString
+                ?: credentials.orgId
+
+            pairingStore.savePairing(
+                credentials.copy(
+                    authJwt = newJwt,
+                    sessionToken = newSessionToken,
+                    authUserId = newUserId,
+                    authEmail = newEmail,
+                    authExpiresAt = newExpiresAt,
+                    orgId = newOrgId
+                )
+            )
+
+            // Reconnect with the fresh JWT
+            disconnect()
+            connect()
+
+            Log.d(TAG, "JWT refreshed successfully")
+        } catch (e: Exception) {
+            Log.w(TAG, "JWT refresh request failed: ${e.message}")
+        }
+    }
 }
+
+private const val JWT_REFRESH_INTERVAL_MS = 4L * 60L * 1000L  // 4 minutes
 
 private data class JwtClaims(
     val sub: String?,

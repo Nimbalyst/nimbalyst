@@ -6,6 +6,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import com.nimbalyst.app.analytics.AnalyticsManager
 import com.nimbalyst.app.auth.AuthCallbackParseResult
 import com.nimbalyst.app.ui.NimbalystAndroidApp
 import com.nimbalyst.app.ui.theme.NimbalystAndroidTheme
@@ -38,6 +39,7 @@ class MainActivity : ComponentActivity() {
                 if (pairingData == null) {
                     "Invalid pairing link."
                 } else {
+                    AnalyticsManager.setDistinctIdFromPairing(pairingData.analyticsId)
                     val existing = app.pairingStore.state.value.credentials
                     app.pairingStore.savePairing(
                         com.nimbalyst.app.pairing.PairingCredentials(
@@ -66,6 +68,8 @@ class MainActivity : ComponentActivity() {
             ) {
                 is AuthCallbackParseResult.Success -> {
                     app.pairingStore.saveAuthSession(result.data)
+                    result.data.email?.let { AnalyticsManager.setEmail(it) }
+                    AnalyticsManager.capture("mobile_login_completed")
                     app.syncManager.connectIfConfigured()
                     "Authentication updated for ${result.data.email ?: "paired account"}."
                 }

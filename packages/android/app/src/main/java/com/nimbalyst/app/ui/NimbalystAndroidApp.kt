@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -24,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.browser.customtabs.CustomTabsIntent
 import com.nimbalyst.app.NimbalystApplication
+import com.nimbalyst.app.analytics.AnalyticsManager
 import kotlinx.coroutines.launch
 
 @Composable
@@ -42,6 +44,19 @@ fun NimbalystAndroidApp() {
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         app.notificationManager.handlePermissionResult(granted)
+    }
+
+    LaunchedEffect(Unit) {
+        val packageInfo = runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0)
+        }.getOrNull()
+        AnalyticsManager.capture(
+            "mobile_app_opened",
+            mapOf(
+                "platform" to "android",
+                "nimbalyst_mobile_version" to (packageInfo?.versionName ?: "unknown")
+            )
+        )
     }
 
     LaunchedEffect(pairingState.credentials) {
@@ -74,7 +89,7 @@ fun NimbalystAndroidApp() {
                     NavigationBarItem(
                         selected = currentScreen == screen,
                         onClick = { currentScreen = screen },
-                        icon = {},
+                        icon = { Icon(screen.icon, contentDescription = screen.label) },
                         label = { Text(screen.label) }
                     )
                 }
@@ -129,6 +144,8 @@ fun NimbalystAndroidApp() {
                             app.repository.clearPrototypeData()
                         }
                         app.pairingStore.clearPairing()
+                        AnalyticsManager.capture("mobile_device_unpairing")
+                        AnalyticsManager.reset()
                     }
                 )
             }

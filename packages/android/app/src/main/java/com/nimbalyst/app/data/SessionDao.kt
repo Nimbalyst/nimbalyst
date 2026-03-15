@@ -49,6 +49,9 @@ interface SessionDao {
         lastReadAt: Long
     )
 
+    @Query("UPDATE sessions SET draftInput = :draftInput, draftUpdatedAt = :draftUpdatedAt WHERE id = :sessionId")
+    suspend fun updateDraftInput(sessionId: String, draftInput: String?, draftUpdatedAt: Long)
+
     @Upsert
     suspend fun upsertAll(sessions: List<SessionEntity>)
 }

@@ -1,5 +1,7 @@
 package com.nimbalyst.app.sync
 
+import android.content.Context
+import android.content.SharedPreferences
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.util.UUID
@@ -19,7 +21,21 @@ class WebSocketClient(
     private val reconnectDelayMs: Long = 3_000L,
 ) {
     companion object {
-        val deviceId: String = UUID.randomUUID().toString()
+        private const val PREFS_NAME = "nimbalyst_device"
+        private const val KEY_DEVICE_ID = "device_id"
+
+        @Volatile
+        private var cachedDeviceId: String? = null
+
+        fun getDeviceId(context: Context): String {
+            cachedDeviceId?.let { return it }
+            val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val id = prefs.getString(KEY_DEVICE_ID, null) ?: UUID.randomUUID().toString().also {
+                prefs.edit().putString(KEY_DEVICE_ID, it).apply()
+            }
+            cachedDeviceId = id
+            return id
+        }
     }
 
     private val okHttpClient = OkHttpClient.Builder()

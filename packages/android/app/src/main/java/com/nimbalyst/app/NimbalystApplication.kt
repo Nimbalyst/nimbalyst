@@ -5,7 +5,9 @@ import com.nimbalyst.app.data.NimbalystDatabase
 import com.nimbalyst.app.data.NimbalystRepository
 import com.nimbalyst.app.notifications.NotificationManager
 import com.nimbalyst.app.pairing.PairingStore
+import com.nimbalyst.app.analytics.AnalyticsManager
 import com.nimbalyst.app.sync.SyncManager
+import com.nimbalyst.app.transcript.TranscriptWebViewPool
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -34,11 +36,18 @@ class NimbalystApplication : Application() {
 
     val syncManager: SyncManager by lazy {
         SyncManager(
+            context = this,
             repository = repository,
             pairingStore = pairingStore,
             notificationManager = notificationManager,
             scope = applicationScope
         )
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        AnalyticsManager.initialize(this)
+        TranscriptWebViewPool.warmup(this)
     }
 
     override fun onTerminate() {

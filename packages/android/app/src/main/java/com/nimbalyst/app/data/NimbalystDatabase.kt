@@ -17,7 +17,7 @@ import org.json.JSONObject
         SyncStateEntity::class,
     ],
     version = 1,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class NimbalystDatabase : RoomDatabase() {
     abstract fun projectDao(): ProjectDao
@@ -37,6 +37,8 @@ abstract class NimbalystDatabase : RoomDatabase() {
                     NimbalystDatabase::class.java,
                     "nimbalyst-android.db"
                 )
+                    // Add explicit migrations here as schema evolves (e.g., .addMigrations(MIGRATION_1_2))
+                    // Only fall back to destructive migration if no migration path exists (pre-release safety net)
                     .fallbackToDestructiveMigration()
                     .addCallback(object : Callback() {
                         override fun onCreate(db: SupportSQLiteDatabase) {
