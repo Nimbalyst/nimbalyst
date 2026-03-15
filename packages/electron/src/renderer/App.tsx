@@ -1,3 +1,7 @@
+// Side-effect: patch window.addEventListener to guard text inputs from extension key handlers.
+// MUST be the very first import so it patches before any listeners are registered.
+import './hooks/useExtensionInputGuard';
+
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
