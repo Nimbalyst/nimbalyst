@@ -78,6 +78,13 @@ Extensions are built with Vite and installed into the running Nimbalyst app usin
 **First-time setup:**
 1. \`npm install\` in this directory
 2. \`extension_build\` then \`extension_install\`
+3. When the extension can be exercised with a sample file, create one and open it to test the integration end-to-end
+
+### After Installation
+
+- Tell the user the extension is now installed in Nimbalyst
+- Explain that installed extensions are available across all of their Nimbalyst projects, not just this workspace
+- When possible, create a representative sample file for the extension and present it to the user for testing immediately after install or reload
 
 ### Debugging
 
@@ -364,6 +371,8 @@ Use these docs in this order:
 - Check status with \`mcp__nimbalyst-extension-dev__extension_get_status\`
 - Use main and renderer log MCP tools for debugging
 - Do not restart Nimbalyst unless the user explicitly asks
+- When possible, create a representative sample file and use it to verify the extension after install or reload
+- After a successful install, tell the user the extension is installed and available across all of their Nimbalyst projects
 
 ## Validation Checklist
 
