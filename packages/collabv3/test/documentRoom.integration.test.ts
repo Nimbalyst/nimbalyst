@@ -1,5 +1,5 @@
 /**
- * Integration tests for DocumentRoom Durable Object.
+ * Integration tests for TeamDocumentRoom Durable Object.
  *
  * Runs against a local wrangler dev server with TEST_AUTH_BYPASS enabled.
  * Tests the full WebSocket protocol: connect, sync, update, compaction, awareness, key envelopes.
@@ -29,7 +29,7 @@ function connect(docId: string, userId: string): WebSocket {
   return ws;
 }
 
-describe('DocumentRoom integration', () => {
+describe('TeamDocumentRoom integration', () => {
 
   afterEach(async () => {
     // Close any remaining sockets

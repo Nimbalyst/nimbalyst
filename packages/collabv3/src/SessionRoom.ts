@@ -1,5 +1,5 @@
 /**
- * SessionRoom Durable Object
+ * PersonalSessionRoom Durable Object
  *
  * Manages a single AI session's messages and real-time sync.
  * Uses DO SQLite for message storage (no 2MB BLOB limit).
@@ -16,7 +16,7 @@ import type {
 } from './types';
 import { createLogger } from './logger';
 
-const log = createLogger('SessionRoom');
+const log = createLogger('PersonalSessionRoom');
 
 /** Session TTL: 30 days in milliseconds */
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -33,7 +33,7 @@ const TAG_ORG = 'org:';
 // Message batch size for sync responses
 const SYNC_BATCH_SIZE = 100;
 
-export class SessionRoom implements DurableObject {
+export class PersonalSessionRoom implements DurableObject {
   private state: DurableObjectState;
   private env: Env;
   // Note: This map is rebuilt after hibernation using getWebSockets() and tags
@@ -155,7 +155,7 @@ export class SessionRoom implements DurableObject {
       return this.handleStatusRequest();
     }
 
-    // Account deletion - purge all data in this SessionRoom
+    // Account deletion - purge all data in this PersonalSessionRoom
     if (url.pathname.endsWith('/delete-account') && request.method === 'DELETE') {
       return this.handleDeleteAccount();
     }

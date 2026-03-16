@@ -45,6 +45,7 @@ import type { EditorHost, DiffConfig } from '@nimbalyst/runtime';
 import { createExtensionStorage } from '@nimbalyst/runtime';
 import { store, editorHasUnacceptedChangesAtom, makeEditorKey } from '@nimbalyst/runtime/store';
 import { UnifiedEditorHeaderBar } from './UnifiedEditorHeaderBar';
+import { usePersonalDocSync } from '../../hooks/usePersonalDocSync';
 
 /** Normalize a file path for comparison: backslashes to forward slashes, strip trailing slashes. */
 function normalizePathForCompare(p: string): string {
@@ -189,6 +190,13 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   // Source mode state - unified for both markdown and custom editors
   // When true, shows Monaco with raw content; when false, shows rich editor (Lexical or custom)
   const [sourceMode, setSourceMode] = useState(false);
+
+  // Personal document sync (multi-device sync for .md files)
+  const { collaborationConfig: personalSyncConfig } = usePersonalDocSync(
+    filePath,
+    initialContent,
+    isMarkdown,
+  );
 
   // NOTE: content state has been removed. Editors own their content.
   // TabEditor extracts content via getContentFnRef.current() when needed for saves, diffs, etc.
@@ -2581,6 +2589,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                       />
                     ),
                   }}
+                  collaborationConfig={personalSyncConfig || undefined}
                   onEditorReady={(editor) => {
                     editorRef.current = editor;
                     setIsEditorReady(true);

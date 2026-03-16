@@ -266,12 +266,36 @@ async function handleGetSessionSummary(
     return `Error: Session ${sessionId} not found`;
   }
 
-  const messages = await AgentMessagesRepository.list(sessionId, {
-    limit: 500,
-  });
+  // Fetch ALL input messages (user prompts) - no limit, since there are
+  // typically far fewer input messages than total messages
+  const { getDatabase } = await import("../database/initialize");
+  const db = getDatabase();
+  const { rows: inputRows } = await db.query<any>(
+    `SELECT content FROM ai_agent_messages
+     WHERE session_id = $1 AND direction = 'input' AND hidden = FALSE
+     ORDER BY id ASC`,
+    [sessionId]
+  );
+  const inputMessages = inputRows.map((row: any) => ({
+    direction: "input" as const,
+    content: row.content,
+  }));
+  const userPrompts = extractUserPrompts(inputMessages as AgentMessage[]);
 
-  const userPrompts = extractUserPrompts(messages);
-  const lastResponse = extractLastAgentResponse(messages);
+  // For last agent response, fetch recent output messages (last 50 is plenty)
+  const { rows: outputRows } = await db.query<any>(
+    `SELECT content FROM ai_agent_messages
+     WHERE session_id = $1 AND direction = 'output' AND hidden = FALSE
+     ORDER BY id DESC
+     LIMIT 50`,
+    [sessionId]
+  );
+  // Reverse to get chronological order for extractLastAgentResponse
+  const outputMessages = outputRows.reverse().map((row: any) => ({
+    direction: "output" as const,
+    content: row.content,
+  }));
+  const lastResponse = extractLastAgentResponse(outputMessages as AgentMessage[]);
 
   let editedFiles: string[] = [];
   try {
@@ -318,9 +342,7 @@ async function handleGetSessionSummary(
     lines.push(`User prompts (${userPrompts.length} turns):`);
     for (let i = 0; i < userPrompts.length; i++) {
       const prompt = userPrompts[i];
-      const truncated =
-        prompt.length > 200 ? prompt.substring(0, 200) + "..." : prompt;
-      lines.push(`${i + 1}. "${truncated}"`);
+      lines.push(`${i + 1}. "${prompt}"`);
     }
   } else {
     lines.push("No user prompts found.");

@@ -1,5 +1,5 @@
 /**
- * DocumentRoom Durable Object
+ * TeamDocumentRoom Durable Object
  *
  * Manages realtime collaborative document editing with E2E encryption.
  * The DO acts as a dumb encrypted relay -- it never reads or merges Yjs state.
@@ -19,7 +19,7 @@ import type {
 import { createLogger } from './logger';
 import { validateP256PublicKey } from './validatePublicKey';
 
-const log = createLogger('DocumentRoom');
+const log = createLogger('TeamDocumentRoom');
 
 /** Document TTL: 30 days in milliseconds */
 const DOCUMENT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -52,7 +52,7 @@ interface StoredDocumentAsset {
 const TAG_USER = 'user:';
 const TAG_ORG = 'org:';
 
-export class DocumentRoom implements DurableObject {
+export class TeamDocumentRoom implements DurableObject {
   private state: DurableObjectState;
   private env: Env;
   private connections: Map<WebSocket, ConnectionState> = new Map();

@@ -24,6 +24,7 @@
     "clean:full": "rm -rf packages/*/node_modules packages/*/dist node_modules && npm install",
     "ios:test:swift": "npm run test:swift --prefix packages/ios",
     "ios:build:transcript": "npm run build:transcript --prefix packages/ios",
+    "ios:build:editor": "npm run build:editor --prefix packages/ios",
     "collab:dev": "npm run dev --prefix packages/collab",
     "collab:build": "npm run build --prefix packages/collab",
     "collab:start": "npm start --prefix packages/collab",

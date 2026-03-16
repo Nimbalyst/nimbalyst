@@ -1,7 +1,7 @@
 /**
  * Shared ECDH P-256 public key validation.
  *
- * Used by DocumentRoom, TeamRoom, and REST endpoints to validate
+ * Used by TeamDocumentRoom, TeamRoom, and REST endpoints to validate
  * senderPublicKey fields before storing them.
  */
 

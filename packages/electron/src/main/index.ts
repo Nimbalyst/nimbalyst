@@ -655,6 +655,46 @@ function parseCommandLineArgs() {
 }
 
 
+// --- ACTIVATION DEBUGGING ---
+// Log every app activation and browser-window-focus event to trace focus stealing during launch
+const appLaunchTime = Date.now();
+function activationLog(msg: string) {
+    const elapsed = Date.now() - appLaunchTime;
+    console.log(`[ACTIVATION +${elapsed}ms] ${msg}`);
+}
+
+app.on('browser-window-focus', (_event, win) => {
+    activationLog(`browser-window-focus: window id=${win.id} title="${win.getTitle()}"`);
+});
+
+app.on('browser-window-blur', (_event, win) => {
+    activationLog(`browser-window-blur: window id=${win.id} title="${win.getTitle()}"`);
+});
+
+app.on('activate', () => {
+    activationLog('app activate event fired');
+});
+
+// Monkey-patch BrowserWindow prototype to log show/focus calls with stack traces
+const origShow = BrowserWindow.prototype.show;
+BrowserWindow.prototype.show = function(this: BrowserWindow) {
+    activationLog(`BrowserWindow.show() called on id=${this.id} title="${this.getTitle()}"\n  stack: ${new Error().stack?.split('\n').slice(1, 4).join('\n  ')}`);
+    return origShow.call(this);
+};
+
+const origShowInactive = BrowserWindow.prototype.showInactive;
+BrowserWindow.prototype.showInactive = function(this: BrowserWindow) {
+    activationLog(`BrowserWindow.showInactive() called on id=${this.id} title="${this.getTitle()}"\n  stack: ${new Error().stack?.split('\n').slice(1, 4).join('\n  ')}`);
+    return origShowInactive.call(this);
+};
+
+const origFocus = BrowserWindow.prototype.focus;
+BrowserWindow.prototype.focus = function(this: BrowserWindow) {
+    activationLog(`BrowserWindow.focus() called on id=${this.id} title="${this.getTitle()}"\n  stack: ${new Error().stack?.split('\n').slice(1, 4).join('\n  ')}`);
+    return origFocus.call(this);
+};
+// --- END ACTIVATION DEBUGGING ---
+
 // App ready handler
 app.whenReady().then(async () => {
     checkpoint('app-ready');

@@ -15,6 +15,12 @@ export interface SyncStats {
   lastSyncedAt: number | null;
 }
 
+export interface DocSyncStats {
+  projectCount: number;
+  fileCount: number;
+  connected: boolean;
+}
+
 export interface SyncStatus {
   appConfigured: boolean;       // Is sync configured at the app level?
   projectEnabled: boolean;      // Is current project enabled for sync?
@@ -22,6 +28,7 @@ export interface SyncStatus {
   syncing: boolean;             // Is a sync in progress?
   error: string | null;
   stats: SyncStats;
+  docSyncStats?: DocSyncStats;  // Document file sync stats
   userEmail?: string | null;    // Logged in user's email
 }
 
@@ -303,6 +310,30 @@ export const SyncStatusButton: React.FC<SyncStatusButtonProps> = ({ workspacePat
               </span>
             </div>
           </div>
+
+          {status.docSyncStats && status.docSyncStats.fileCount > 0 && (
+            <>
+              <div className="sync-menu-divider h-px bg-[var(--nim-border)] m-0" />
+              <div className="px-3.5 py-3">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <MaterialSymbol icon="description" size={14} className="text-[var(--nim-text-muted)]" />
+                  <span className="text-[11px] font-semibold text-[var(--nim-text-muted)] uppercase tracking-wider">Document Sync</span>
+                </div>
+                <div className="sync-stat flex justify-between items-center py-1">
+                  <span className="sync-stat-label text-xs text-[var(--nim-text-muted)]">Files tracked</span>
+                  <span className="sync-stat-value text-xs font-medium text-[var(--nim-text)]">
+                    {status.docSyncStats.fileCount}
+                  </span>
+                </div>
+                <div className="sync-stat flex justify-between items-center py-1">
+                  <span className="sync-stat-label text-xs text-[var(--nim-text-muted)]">Status</span>
+                  <span className={`sync-stat-value text-xs font-medium ${status.docSyncStats.connected ? 'text-[#22c55e]' : 'text-[var(--nim-text-faint)]'}`}>
+                    {status.docSyncStats.connected ? 'Connected' : 'Disconnected'}
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
 
           <div className="sync-menu-divider h-px bg-[var(--nim-border)] m-0" />
 

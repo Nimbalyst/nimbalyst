@@ -14,6 +14,7 @@ import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { isPathInWorkspace, getRelativeWorkspacePath } from '../utils/workspaceDetection';
 import { SessionFileWatcher } from '../file/SessionFileWatcher';
 import { addGitignoreBypass, removeGitignoreBypass } from '../file/WorkspaceEventBus';
+import { pushFileToIndex } from '../services/DocSyncService';
 
 // Helper function to get file type from extension
 function getFileType(filePath: string): string {
@@ -219,6 +220,11 @@ export function registerFileHandlers() {
                 hasFrontmatter: hasFrontmatter(content),
                 wordCount: getWordCountCategory(content)
             });
+
+            // Push file index update for .md files in sync-enabled projects
+            if (filePath.endsWith('.md') && state?.workspacePath) {
+              pushFileToIndex(filePath, state.workspacePath).catch(() => {});
+            }
 
             return { success: true, filePath };
         } catch (error) {

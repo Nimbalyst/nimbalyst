@@ -10,6 +10,7 @@ import * as chardet from 'chardet';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { openWorkspaceFile, openFile } from '../file/FileOpener';
 import { fuzzyMatchPath } from '@nimbalyst/runtime';
+import { getSyncId, removeFileFromIndex } from '../services/DocSyncService';
 
 const { writeFile, mkdir, rename, unlink, rmdir, copyFile, readFile, rm, stat, cp } = fsPromises;
 
@@ -751,6 +752,14 @@ export function registerWorkspaceHandlers() {
             const stats = await stat(filePath);
             const isDirectory = stats.isDirectory();
 
+            // Read syncId before trashing so we can remove from file index
+            let deletedSyncId: string | null = null;
+            if (!isDirectory && filePath.endsWith('.md')) {
+              try {
+                deletedSyncId = await getSyncId(filePath);
+              } catch { /* ignore */ }
+            }
+
             // Move to system trash (Recycle Bin on Windows, Trash on macOS/Linux)
             // so the user can recover accidentally deleted files
             await shell.trashItem(filePath);
@@ -759,6 +768,11 @@ export function registerWorkspaceHandlers() {
                 // Prevent autosave from recreating the file (race condition with in-flight save timers)
                 recentlyDeletedFiles.add(filePath);
                 setTimeout(() => recentlyDeletedFiles.delete(filePath), 10000);
+
+                // Remove from file index if it had a syncId
+                if (deletedSyncId) {
+                  removeFileFromIndex(deletedSyncId);
+                }
             }
 
             // Track file deletion (only for files, not directories)

@@ -4,11 +4,11 @@
  * Monkey-patches window.addEventListener so that any keydown handler
  * registered on `window` is automatically wrapped with a text-input guard.
  *
- * When focus is in a text input (input, textarea, contentEditable) and no
- * modifier key (Cmd/Ctrl/Alt) is held, the handler is silently skipped.
- * This prevents extensions from hijacking keystrokes meant for text inputs
- * (e.g., an extension using Space for "toggle collapse" breaking every
- * text input in the app).
+ * When focus is in a text input (input, textarea, contentEditable) and the
+ * key is a printable/typing character (letters, digits, space, symbols) with
+ * no modifier key, the handler is silently skipped. Navigation keys (Escape,
+ * arrows, Tab, Enter, F-keys) always pass through so host dialogs (QuickOpen,
+ * etc.) can handle them even when their search input has focus.
  *
  * The patch must be installed BEFORE any extensions load. Import this
  * module as a side-effect at the top of the app entry point.
@@ -32,10 +32,27 @@ function isTextInput(el: Element | null): boolean {
   return false;
 }
 
+/**
+ * Keys that should NEVER be guarded — they are navigation/control keys
+ * that host components legitimately handle via window-level listeners
+ * even when an input has focus (e.g., QuickOpen uses Escape to close
+ * and arrows to navigate the list).
+ */
+const PASSTHROUGH_KEYS = new Set([
+  'Escape',
+  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+  'Tab',
+  'Enter',
+  'Home', 'End', 'PageUp', 'PageDown',
+  'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12',
+]);
+
 function shouldGuard(e: KeyboardEvent): boolean {
   // Let modified keys through — host shortcuts use Cmd/Ctrl
   if (e.metaKey || e.ctrlKey || e.altKey) return false;
-  // Only guard when focus is in a text input
+  // Let navigation/control keys through — host dialogs need Escape, arrows, etc.
+  if (PASSTHROUGH_KEYS.has(e.key)) return false;
+  // Only guard printable/typing keys when focus is in a text input
   return isTextInput(document.activeElement);
 }
 

@@ -1,5 +1,5 @@
 /**
- * TrackerRoom Durable Object
+ * TeamTrackerRoom Durable Object
  *
  * Manages realtime collaborative tracker item sync with E2E encryption.
  * The DO acts as a dumb encrypted relay -- it never reads tracker item content.
@@ -17,7 +17,7 @@ import type {
 } from './types';
 import { createLogger } from './logger';
 
-const log = createLogger('TrackerRoom');
+const log = createLogger('TeamTrackerRoom');
 
 /** Tracker TTL: 90 days in milliseconds (longer than documents since trackers are long-lived) */
 const TRACKER_TTL_MS = 90 * 24 * 60 * 60 * 1000;
@@ -34,7 +34,7 @@ interface ConnectionState {
 const TAG_USER = 'user:';
 const TAG_ORG = 'org:';
 
-export class TrackerRoom implements DurableObject {
+export class TeamTrackerRoom implements DurableObject {
   private state: DurableObjectState;
   private env: Env;
   private connections: Map<WebSocket, ConnectionState> = new Map();

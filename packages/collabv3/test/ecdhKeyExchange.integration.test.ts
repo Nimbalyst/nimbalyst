@@ -5,7 +5,7 @@
  * 1. Identity key pair generation and serialization
  * 2. Public key upload/fetch via REST API
  * 3. Document key wrapping (sender wraps for recipient)
- * 4. Key envelope storage/retrieval in DocumentRoom
+ * 4. Key envelope storage/retrieval in TeamDocumentRoom
  * 5. Document key unwrapping (recipient unwraps)
  * 6. End-to-end: both users can encrypt/decrypt with the shared key
  */
@@ -296,7 +296,7 @@ describe('ECDH Key Exchange', () => {
     });
   });
 
-  describe('End-to-end key exchange via DocumentRoom', () => {
+  describe('End-to-end key exchange via TeamDocumentRoom', () => {
     it('should complete full key exchange flow through the server', async () => {
       const docId = `ecdh-e2e-${Date.now()}`;
       const aliceId = `alice-${Date.now()}`;
@@ -343,7 +343,7 @@ describe('ECDH Key Exchange', () => {
         alicePubJwk
       );
 
-      // Step 5: Alice stores the key envelope in the DocumentRoom via WebSocket
+      // Step 5: Alice stores the key envelope in the TeamDocumentRoom via WebSocket
       const aliceWs = connect(docId, aliceId);
       await waitForOpen(aliceWs);
 

@@ -521,13 +521,13 @@ export class TeamRoom implements DurableObject {
     this.broadcast({ type: 'docIndexRemoveBroadcast', documentId }, ws);
     this.setMetadataValue('updated_at', String(Date.now()));
 
-    // Cascade: delete the DocumentRoom DO state so resharing gets a fresh document
+    // Cascade: delete the TeamDocumentRoom DO state so resharing gets a fresh document
     const orgId = connState.auth.orgId;
     const roomId = `org:${orgId}:doc:${documentId}`;
     const doId = this.env.DOCUMENT_ROOM.idFromName(roomId);
     const stub = this.env.DOCUMENT_ROOM.get(doId);
     stub.fetch(new Request(`https://internal/sync/${roomId}/delete`, { method: 'DELETE' }))
-      .catch((err: unknown) => log.warn('Failed to delete DocumentRoom for', documentId, err));
+      .catch((err: unknown) => log.warn('Failed to delete TeamDocumentRoom for', documentId, err));
   }
 
   // ==========================================================================

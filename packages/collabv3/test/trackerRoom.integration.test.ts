@@ -1,5 +1,5 @@
 /**
- * Integration tests for TrackerRoom Durable Object.
+ * Integration tests for TeamTrackerRoom Durable Object.
  *
  * Runs against a local wrangler dev server with TEST_AUTH_BYPASS enabled.
  * Tests the full WebSocket protocol: connect, sync, upsert, delete, batch, broadcast.
@@ -29,7 +29,7 @@ function connect(projectId: string, userId: string): WebSocket {
   return ws;
 }
 
-describe('TrackerRoom integration', () => {
+describe('TeamTrackerRoom integration', () => {
 
   afterEach(async () => {
     await Promise.all(openSockets.map(ws => closeWS(ws)));

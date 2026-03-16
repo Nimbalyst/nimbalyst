@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 63;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -13,6 +13,7 @@
 		8861F70DF98177EB5D6F8FAD /* DebugMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 988E8A7EF37C4B495EEC60EB /* DebugMenu.swift */; };
 		8CCF7ABD0E97B52B81EAE4BB /* ScreenshotHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AD3D7B50527B2E106E5D1EA /* ScreenshotHostView.swift */; };
 		D61148B64AD2C6754C306505 /* transcript-dist in Resources */ = {isa = PBXBuildFile; fileRef = CCD597478FE1DE96262222D2 /* transcript-dist */; };
+		EB13BE7D51392A464842B098 /* editor-dist in Resources */ = {isa = PBXBuildFile; fileRef = 75CD8A296AB450A034395E94 /* editor-dist */; };
 		FE00B6A23CEE6253684F19C8 /* NimbalystAppMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61EF9877A6E8685EEDBAC2DB /* NimbalystAppMain.swift */; };
 /* End PBXBuildFile section */
 
@@ -23,10 +24,11 @@
 		410140D418FDDE3F17C78BB9 /* NimbalystApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = NimbalystApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4AD3D7B50527B2E106E5D1EA /* ScreenshotHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotHostView.swift; sourceTree = "<group>"; };
 		61EF9877A6E8685EEDBAC2DB /* NimbalystAppMain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NimbalystAppMain.swift; sourceTree = "<group>"; };
+		75CD8A296AB450A034395E94 /* editor-dist */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "editor-dist"; path = "Resources/editor-dist"; sourceTree = SOURCE_ROOT; };
 		988E8A7EF37C4B495EEC60EB /* DebugMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugMenu.swift; sourceTree = "<group>"; };
 		CCD597478FE1DE96262222D2 /* transcript-dist */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "transcript-dist"; path = "Resources/transcript-dist"; sourceTree = SOURCE_ROOT; };
 		EB11A131E099B9309C58DE20 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		EC6BD8ABB212746BF377C59C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		EC6BD8ABB212746BF377C59C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -83,6 +85,7 @@
 			isa = PBXGroup;
 			children = (
 				EB11A131E099B9309C58DE20 /* Assets.xcassets */,
+				75CD8A296AB450A034395E94 /* editor-dist */,
 				EC6BD8ABB212746BF377C59C /* PrivacyInfo.xcprivacy */,
 				CCD597478FE1DE96262222D2 /* transcript-dist */,
 			);
@@ -97,6 +100,7 @@
 			buildConfigurationList = B15D5525281076E76EC8ECCB /* Build configuration list for PBXNativeTarget "NimbalystApp" */;
 			buildPhases = (
 				A1281D1B3FB2BBEF46421DE4 /* Build Transcript Web Bundle */,
+				48095340A952A1D8522E6E53 /* Build Editor Web Bundle */,
 				50C2FEBF94050C22DD324BB5 /* Sources */,
 				2F4B5CDF9CFF5BB75876454C /* Resources */,
 				1CF71BE172B86741F16A20DA /* Frameworks */,
@@ -141,6 +145,7 @@
 			packageReferences = (
 				ABD8257BB05FBCA15B4E04B1 /* XCLocalSwiftPackageReference "../NimbalystNative" */,
 			);
+			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -156,6 +161,7 @@
 			files = (
 				2430D292FD676E64EB569585 /* Assets.xcassets in Resources */,
 				07375C6E0FB269FD76F1EBC7 /* PrivacyInfo.xcprivacy in Resources */,
+				EB13BE7D51392A464842B098 /* editor-dist in Resources */,
 				D61148B64AD2C6754C306505 /* transcript-dist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -163,6 +169,25 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		48095340A952A1D8522E6E53 /* Build Editor Web Bundle */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build Editor Web Bundle";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "cd \"${SRCROOT}/..\"\nif [ -f \"node_modules/.bin/vite\" ]; then\n  npx vite build --config vite.config.editor.ts 2>&1 || echo \"Warning: Vite build failed, using existing dist\"\nfi\n# Copy editor dist to Resources (clean first to remove stale hashed assets)\nrm -rf \"${SRCROOT}/Resources/editor-dist\"\nmkdir -p \"${SRCROOT}/Resources/editor-dist\"\nif [ -d \"dist-editor\" ]; then\n  cp dist-editor/editor.html \"${SRCROOT}/Resources/editor-dist/\"\n  cp -R dist-editor/assets \"${SRCROOT}/Resources/editor-dist/\"\nfi\n";
+		};
 		A1281D1B3FB2BBEF46421DE4 /* Build Transcript Web Bundle */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;

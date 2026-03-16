@@ -5,9 +5,9 @@
  * associated data. Required for Apple App Store compliance (guideline 5.1.1).
  *
  * Deletion order:
- * 1. Get session list from IndexRoom DO
- * 2. Delete each SessionRoom DO's data
- * 3. Delete IndexRoom DO's data (sessions, projects, devices, push tokens)
+ * 1. Get session list from PersonalIndexRoom DO
+ * 2. Delete each PersonalSessionRoom DO's data
+ * 3. Delete PersonalIndexRoom DO's data (sessions, projects, devices, push tokens)
  * 4. Delete D1 shared_sessions rows and R2 share objects
  * 5. Delete Stytch B2B member (last - invalidates the JWT)
  */
@@ -44,7 +44,7 @@ export async function handleAccountDeletion(
       stytchMemberDeleted: false,
     };
 
-    // Step 1: Get session list from IndexRoom and purge it
+    // Step 1: Get session list from PersonalIndexRoom and purge it
     let sessionIds: string[] = [];
     try {
       const indexId = env.INDEX_ROOM.idFromName(`user:${auth.userId}:index`);
@@ -57,15 +57,15 @@ export async function handleAccountDeletion(
       if (indexResponse.ok) {
         const data = await indexResponse.json() as { sessionIds?: string[] };
         sessionIds = data.sessionIds ?? [];
-        log.info('IndexRoom purged, found', sessionIds.length, 'sessions to clean up');
+        log.info('PersonalIndexRoom purged, found', sessionIds.length, 'sessions to clean up');
       } else {
-        log.warn('IndexRoom deletion returned', indexResponse.status);
+        log.warn('PersonalIndexRoom deletion returned', indexResponse.status);
       }
     } catch (err) {
-      log.error('IndexRoom deletion failed (continuing):', err);
+      log.error('PersonalIndexRoom deletion failed (continuing):', err);
     }
 
-    // Step 2: Delete each SessionRoom's data
+    // Step 2: Delete each PersonalSessionRoom's data
     for (const sessionId of sessionIds) {
       try {
         const roomId = `org:${auth.orgId}:user:${auth.userId}:session:${sessionId}`;
@@ -79,13 +79,13 @@ export async function handleAccountDeletion(
         if (sessionResponse.ok) {
           result.sessionsDeleted++;
         } else {
-          log.warn('SessionRoom deletion failed for', sessionId, ':', sessionResponse.status);
+          log.warn('PersonalSessionRoom deletion failed for', sessionId, ':', sessionResponse.status);
         }
       } catch (err) {
-        log.error('SessionRoom deletion failed for', sessionId, '(continuing):', err);
+        log.error('PersonalSessionRoom deletion failed for', sessionId, '(continuing):', err);
       }
     }
-    log.info('Deleted', result.sessionsDeleted, '/', sessionIds.length, 'SessionRooms');
+    log.info('Deleted', result.sessionsDeleted, '/', sessionIds.length, 'PersonalSessionRooms');
 
     // Step 3: Delete D1 shared_sessions and R2 objects
     try {

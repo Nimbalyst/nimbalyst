@@ -1,7 +1,7 @@
 /**
  * Integration tests for TrackerSyncProvider (client-side).
  *
- * Tests the full flow: TrackerSyncProvider -> encrypted WebSocket -> TrackerRoom DO.
+ * Tests the full flow: TrackerSyncProvider -> encrypted WebSocket -> TeamTrackerRoom DO.
  * Verifies encryption, decryption, sync, broadcast, and field-level LWW merge.
  */
 

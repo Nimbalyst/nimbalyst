@@ -2,7 +2,7 @@
  * Integration tests for DocumentSyncProvider.
  *
  * Tests the full client-side Yjs + encryption layer against a local wrangler dev server.
- * Two DocumentSyncProvider instances connect to the same DocumentRoom and verify that
+ * Two DocumentSyncProvider instances connect to the same TeamDocumentRoom and verify that
  * encrypted Yjs updates flow through the DO and Y.Doc states converge.
  */
 

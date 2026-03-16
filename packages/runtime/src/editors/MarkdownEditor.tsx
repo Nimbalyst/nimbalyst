@@ -90,7 +90,7 @@ export interface MarkdownEditorProps {
    * When set, the editor operates in collaborative mode:
    * - Content comes from Y.Doc instead of host.loadContent()
    * - CollaborationPlugin replaces HistoryPlugin
-   * - Save/file-change subscriptions are skipped
+   * - Save/file-change subscriptions are skipped (unless personalSync is true)
    */
   collaborationConfig?: {
     providerFactory: (id: string, yjsDocMap: Map<string, import('yjs').Doc>) => import('@lexical/yjs').Provider;
@@ -99,6 +99,13 @@ export interface MarkdownEditorProps {
     cursorColor?: string;
     /** Markdown content to seed the Y.Doc with when shouldBootstrap is true */
     initialContent?: string;
+    /**
+     * When true, this is personal multi-device sync (not team collaboration).
+     * Disk operations (save, file-change) remain active alongside Yjs sync.
+     * Content is seeded from disk into Y.Doc via shouldBootstrap + initialContent,
+     * then Yjs keeps it in sync while autosave continues writing to disk.
+     */
+    personalSync?: boolean;
   };
 }
 
@@ -120,10 +127,15 @@ export function MarkdownEditor({
   collaborationConfig,
 }: MarkdownEditorProps): React.ReactElement {
   const isCollabMode = !!collaborationConfig;
+  // Personal sync: collab is active but disk operations continue
+  const isPersonalSync = collaborationConfig?.personalSync === true;
+  // Skip disk operations only in pure team collab mode (not personal sync)
+  const skipDiskOps = isCollabMode && !isPersonalSync;
 
   // Loading state - we load content via host.loadContent()
-  // In collab mode, content comes from Y.Doc, so we skip loading
-  const [isLoading, setIsLoading] = useState(!isCollabMode);
+  // In pure collab mode, content comes from Y.Doc, so we skip loading
+  // In personal sync mode, we load from disk to seed the Y.Doc
+  const [isLoading, setIsLoading] = useState(!skipDiskOps);
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [initialContent, setInitialContent] = useState<string>('');
 
@@ -133,9 +145,9 @@ export function MarkdownEditor({
   // Function to get current content from editor
   const getContentFnRef = useRef<(() => string) | null>(null);
 
-  // Load initial content on mount (skip in collaboration mode)
+  // Load initial content on mount (skip in pure collab mode, keep for personal sync)
   useEffect(() => {
-    if (isCollabMode) return; // CollaborationPlugin hydrates from Y.Doc
+    if (skipDiskOps) return; // CollaborationPlugin hydrates from Y.Doc
 
     let mounted = true;
 
@@ -163,9 +175,10 @@ export function MarkdownEditor({
   }, [host]);
 
   // Subscribe to save requests from host (autosave timer, manual Cmd+S)
-  // In collaboration mode, saves go through the sync layer, not EditorHost
+  // In pure collab mode, saves go through the sync layer, not EditorHost
+  // In personal sync mode, autosave continues writing to disk
   useEffect(() => {
-    if (isCollabMode) return; // No disk saves in collaboration mode
+    if (skipDiskOps) return; // No disk saves in pure collaboration mode
 
     const handleSaveRequest = async () => {
       if (!getContentFnRef.current) {
@@ -183,12 +196,13 @@ export function MarkdownEditor({
 
     const unsubscribe = host.onSaveRequested(handleSaveRequest);
     return unsubscribe;
-  }, [host, isCollabMode]);
+  }, [host, skipDiskOps]);
 
   // Subscribe to file changes (external edits)
-  // In collaboration mode, changes come through Y.Doc, not file watcher
+  // In pure collab mode, changes come through Y.Doc, not file watcher
+  // In personal sync mode, file changes still need handling (e.g., git pull)
   useEffect(() => {
-    if (isCollabMode) return; // No file watcher in collaboration mode
+    if (skipDiskOps) return; // No file watcher in pure collaboration mode
 
     const handleFileChanged = (newContent: string) => {
       // If we have an editor, update it with new content
@@ -202,7 +216,7 @@ export function MarkdownEditor({
 
     const unsubscribe = host.onFileChanged(handleFileChanged);
     return unsubscribe;
-  }, [host, isCollabMode]);
+  }, [host, skipDiskOps]);
 
   // NOTE: We intentionally do NOT subscribe to diff requests here.
   // Markdown diff handling is fully implemented in TabEditor.tsx using Lexical's
@@ -267,7 +281,8 @@ export function MarkdownEditor({
       workspaceId: host.workspaceId,
 
       // Content callbacks - using new pattern
-      initialContent: isCollabMode ? undefined : initialContent,
+      // In pure collab mode, content comes from Y.Doc. In personal sync, load from disk.
+      initialContent: skipDiskOps ? undefined : initialContent,
       onDirtyChange: handleDirtyChange,
       onGetContent: handleGetContent,
       onEditorReady: handleEditorReady,
@@ -315,6 +330,7 @@ export function MarkdownEditor({
       host.filePath,
       host.workspaceId,
       isCollabMode,
+      skipDiskOps,
       initialContent,
       handleDirtyChange,
       handleGetContent,

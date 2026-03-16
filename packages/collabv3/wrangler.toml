@@ -9,21 +9,27 @@ compatibility_flags = ["nodejs_compat"]
 port = 8790
 
 # Durable Objects
+# Personal (user-scoped) rooms
 [[durable_objects.bindings]]
 name = "SESSION_ROOM"
-class_name = "SessionRoom"
+class_name = "PersonalSessionRoom"
 
 [[durable_objects.bindings]]
 name = "INDEX_ROOM"
-class_name = "IndexRoom"
+class_name = "PersonalIndexRoom"
 
 [[durable_objects.bindings]]
+name = "PROJECT_SYNC_ROOM"
+class_name = "PersonalProjectSyncRoom"
+
+# Team (org-scoped) rooms
+[[durable_objects.bindings]]
 name = "DOCUMENT_ROOM"
-class_name = "DocumentRoom"
+class_name = "TeamDocumentRoom"
 
 [[durable_objects.bindings]]
 name = "TRACKER_ROOM"
-class_name = "TrackerRoom"
+class_name = "TeamTrackerRoom"
 
 [[durable_objects.bindings]]
 name = "TEAM_ROOM"
@@ -45,6 +51,17 @@ new_sqlite_classes = ["TrackerRoom"]
 [[migrations]]
 tag = "v4"
 new_sqlite_classes = ["TeamRoom"]
+
+# v5: ProjectSyncRoom is new (never deployed under old name), so use new name directly
+[[migrations]]
+tag = "v5"
+new_sqlite_classes = ["PersonalProjectSyncRoom"]
+renamed_classes = [
+  { from = "SessionRoom", to = "PersonalSessionRoom" },
+  { from = "IndexRoom", to = "PersonalIndexRoom" },
+  { from = "DocumentRoom", to = "TeamDocumentRoom" },
+  { from = "TrackerRoom", to = "TeamTrackerRoom" },
+]
 
 # D1 Database (for global user index only)
 [[d1_databases]]
@@ -92,21 +109,27 @@ routes = [
 ]
 
 # Production Durable Objects
+# Personal (user-scoped) rooms
 [[env.production.durable_objects.bindings]]
 name = "SESSION_ROOM"
-class_name = "SessionRoom"
+class_name = "PersonalSessionRoom"
 
 [[env.production.durable_objects.bindings]]
 name = "INDEX_ROOM"
-class_name = "IndexRoom"
+class_name = "PersonalIndexRoom"
 
 [[env.production.durable_objects.bindings]]
+name = "PROJECT_SYNC_ROOM"
+class_name = "PersonalProjectSyncRoom"
+
+# Team (org-scoped) rooms
+[[env.production.durable_objects.bindings]]
 name = "DOCUMENT_ROOM"
-class_name = "DocumentRoom"
+class_name = "TeamDocumentRoom"
 
 [[env.production.durable_objects.bindings]]
 name = "TRACKER_ROOM"
-class_name = "TrackerRoom"
+class_name = "TeamTrackerRoom"
 
 [[env.production.durable_objects.bindings]]
 name = "TEAM_ROOM"
@@ -143,6 +166,17 @@ new_sqlite_classes = ["TrackerRoom"]
 [[env.production.migrations]]
 tag = "v4"
 new_sqlite_classes = ["TeamRoom"]
+
+# v5: ProjectSyncRoom is new (never deployed under old name), so use new name directly
+[[env.production.migrations]]
+tag = "v5"
+new_sqlite_classes = ["PersonalProjectSyncRoom"]
+renamed_classes = [
+  { from = "SessionRoom", to = "PersonalSessionRoom" },
+  { from = "IndexRoom", to = "PersonalIndexRoom" },
+  { from = "DocumentRoom", to = "TeamDocumentRoom" },
+  { from = "TrackerRoom", to = "TeamTrackerRoom" },
+]
 
 [env.production.define]
 COLLABV3_VERSION = '"0.0.0-dev"'
