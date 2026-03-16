@@ -77,7 +77,7 @@ class ClaudeUsageServiceImpl {
     } catch {
       this.claudeCodeVersion = 'unknown';
     }
-    return this.claudeCodeVersion;
+    return this.claudeCodeVersion!;
   }
 
   /**

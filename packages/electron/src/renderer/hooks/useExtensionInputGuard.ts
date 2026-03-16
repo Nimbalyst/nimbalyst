@@ -81,7 +81,7 @@ window.addEventListener = function (
     wrapperMap.set(listener, wrapped);
     return originalAdd(type, wrapped, options);
   }
-  return originalAdd(type, listener, options);
+  return originalAdd(type, listener!, options);
 } as typeof window.addEventListener;
 
 window.removeEventListener = function (
@@ -96,5 +96,5 @@ window.removeEventListener = function (
       return originalRemove(type, wrapped, options);
     }
   }
-  return originalRemove(type, listener, options);
+  return originalRemove(type, listener!, options);
 } as typeof window.removeEventListener;
