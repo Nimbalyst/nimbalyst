@@ -1,5 +1,5 @@
 ---
-description: Create a new Nimbalyst extension project from a template
+description: Create a new Nimbalyst extension project from a starter scaffold
 allowed_tools:
   - Read
   - Write
@@ -10,7 +10,7 @@ allowed_tools:
 
 # /new-extension Command
 
-Scaffolds a new Nimbalyst extension project and creates a development plan for user review before implementation begins.
+Scaffolds a new Nimbalyst extension project from a neutral starter scaffold and creates a development plan for user review before implementation begins.
 
 ## Workflow
 
@@ -26,22 +26,27 @@ This command follows a **plan-first approach**:
 ## Usage
 
 ```
-/new-extension <template> <path> <name> [file-patterns]
+/new-extension <path> <name> [file-patterns]
 ```
 
 ### Arguments
 
-- `<template>` - One of `minimal`, `custom-editor`, or `ai-tool`
 - `<path>` - Directory path where the extension should be created
 - `<name>` - Human-readable name for the extension (e.g., "3D Model Viewer")
 - `[file-patterns]` - (Optional) Comma-separated file patterns (e.g., `*.obj,*.stl`)
 
+Legacy form still works:
+
+```
+/new-extension <template> <path> <name> [file-patterns]
+```
+
 ### Examples
 
 ```
-/new-extension custom-editor ~/extensions/obj-viewer "OBJ Viewer" *.obj
-/new-extension custom-editor ~/my-todo-extension "Todo List Editor" *.todo
-/new-extension ai-tool ~/code-metrics "Code Metrics"
+/new-extension ~/extensions/obj-viewer "OBJ Viewer" *.obj
+/new-extension ~/my-todo-extension "Todo List Editor" *.todo
+/new-extension ~/code-metrics "Code Metrics"
 ```
 
 ## Step 1: Create Project Scaffold

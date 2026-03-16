@@ -39,9 +39,10 @@ The intended workflow is to create and iterate on extensions from inside Nimbaly
 
 1. Enable Extension Dev Tools in Settings > Advanced
 2. Use `File > New Extension Project` or `Developer > New Extension Project`
-3. Or, in Claude, run `/new-extension <template> <path> <name> [file-patterns]`
-4. Ask Claude to build and install the extension with `extension_build` and `extension_install`
-5. Use `extension_reload` for rebuild + reinstall during iteration
+3. Or, in Claude, run `/new-extension <path> <name> [file-patterns]`
+4. Describe the extension you want Claude to build from the starter scaffold
+5. Ask Claude to build and install the extension with `extension_build` and `extension_install`
+6. Use `extension_reload` for rebuild + reinstall during iteration
 
 ## Development Workflow
 

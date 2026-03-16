@@ -22,8 +22,15 @@ const SDK_VERSION = '^0.1.0';
  */
 function generateClaudeMd(options: TemplateOptions & { template: string }): string {
   const { name, extensionId, filePatterns, template } = options;
-  const hasEditor = template !== 'ai-tool';
-  const hasAiTools = template !== 'minimal';
+  const hasEditor = template === 'minimal' || template === 'custom-editor';
+  const hasAiTools = template === 'custom-editor' || template === 'ai-tool';
+  const entryPointExports = ['components'];
+
+  if (hasAiTools) {
+    entryPointExports.push('aiTools');
+  }
+
+  entryPointExports.push('activate()', 'deactivate()');
 
   const sections: string[] = [];
 
@@ -102,7 +109,7 @@ package.json       # NPM package with build script
 vite.config.ts     # Vite build config (uses @nimbalyst/extension-sdk/vite helper)
 tsconfig.json      # TypeScript config
 src/
-  index.ts         # Entry point -- exports components, aiTools, activate(), deactivate()${hasEditor ? `
+  index.ts         # Entry point -- exports ${entryPointExports.join(', ')}${hasEditor ? `
   *Editor.tsx      # Custom editor React component` : ''}${hasAiTools ? `
   aiTools.ts       # AI tool definitions` : ''}
 dist/              # Build output (do not edit)
@@ -1085,8 +1092,111 @@ export function deactivate() {
   };
 }
 
+/**
+ * Starter template
+ * Neutral scaffold that Claude can shape into the extension the user describes.
+ */
+export function starterTemplate(options: TemplateOptions): TemplateFiles {
+  const { name, extensionId, filePatterns } = options;
+
+  return {
+    'CLAUDE.md': generateClaudeMd({ ...options, template: 'starter' }),
+    'AGENTS.md': generateAgentsMd({ ...options, template: 'starter' }),
+
+    'README.md': `# ${name}
+
+This is a neutral Nimbalyst extension starter scaffold.
+
+## What To Do Next
+
+1. Describe the extension you want to Claude in plain language.
+2. Ask Claude to update \`manifest.json\`, add the right contributions and permissions, and create any editor, panel, or AI tool code you need.
+3. Run \`npm install\` once dependencies are finalized.
+4. Ask Claude to build and install the extension in Nimbalyst.
+
+## Current Defaults
+
+- Extension ID: \`${extensionId}\`
+- File patterns placeholder: ${filePatterns.map((pattern) => `\`${pattern}\``).join(', ')}
+- No custom editors, AI tools, panels, or permissions are declared yet
+`,
+
+    'manifest.json': JSON.stringify(
+      {
+        id: extensionId,
+        name,
+        version: '1.0.0',
+        description: `Starter scaffold for ${name}`,
+        main: 'dist/index.js',
+        apiVersion: '1.0.0',
+        contributions: {},
+      },
+      null,
+      2
+    ),
+
+    'package.json': JSON.stringify(
+      {
+        name: extensionId.replace(/\./g, '-'),
+        version: '1.0.0',
+        private: true,
+        type: 'module',
+        scripts: {
+          build: 'vite build',
+        },
+        devDependencies: {
+          '@nimbalyst/extension-sdk': SDK_VERSION,
+          typescript: '^5.0.0',
+          vite: '^7.1.12',
+        },
+      },
+      null,
+      2
+    ),
+
+    'tsconfig.json': JSON.stringify(
+      {
+        compilerOptions: {
+          target: 'ES2020',
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          strict: true,
+          esModuleInterop: true,
+          skipLibCheck: true,
+          declaration: true,
+          outDir: 'dist',
+          rootDir: 'src',
+        },
+        include: ['src/**/*'],
+      },
+      null,
+      2
+    ),
+
+    'vite.config.ts': `import { defineConfig } from 'vite';
+import { createExtensionConfig } from '@nimbalyst/extension-sdk/vite';
+
+export default defineConfig(createExtensionConfig({
+  entry: './src/index.ts',
+}));
+`,
+
+    'src/index.ts': `export const components = {};
+
+export function activate() {
+  console.log('${name} extension activated');
+}
+
+export function deactivate() {
+  console.log('${name} extension deactivated');
+}
+`,
+  };
+}
+
 // Export all templates
 export const templates = {
+  starter: starterTemplate,
   minimal: minimalTemplate,
   'custom-editor': customEditorTemplate,
   'ai-tool': aiToolTemplate,

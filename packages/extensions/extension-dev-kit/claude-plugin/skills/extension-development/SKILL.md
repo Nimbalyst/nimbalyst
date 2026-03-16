@@ -72,7 +72,7 @@ Restarts the entire Nimbalyst application. **Only use when explicitly requested 
 ## Development Workflow
 
 ### Initial Setup
-1. Create extension project with `/new-extension <template> <path> <name> [file-patterns]`
+1. Create extension project with `/new-extension <path> <name> [file-patterns]`
 2. Implement the extension code
 3. Build with `extension_build`
 4. Install with `extension_install`

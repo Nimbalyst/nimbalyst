@@ -6,25 +6,11 @@ import { createWindow, findWindowByWorkspace } from '../window/WindowManager';
 import {
   addToRecentItems,
   getWorkspaceWindowState,
-  isExtensionDevToolsEnabled,
   isExtensionProjectIntroShown,
   setExtensionProjectIntroShown,
 } from '../utils/store';
 
-type ExtensionTemplateId = 'minimal' | 'custom-editor' | 'ai-tool';
-
-function getTemplateChoice(response: number): ExtensionTemplateId | null {
-  switch (response) {
-    case 0:
-      return 'minimal';
-    case 1:
-      return 'custom-editor';
-    case 2:
-      return 'ai-tool';
-    default:
-      return null;
-  }
-}
+const DEFAULT_EXTENSION_TEMPLATE = 'starter';
 
 function deriveProjectName(projectPath: string): string {
   const raw = basename(projectPath)
@@ -88,7 +74,7 @@ async function showExtensionProjectIntroFallbackDialog(
     type: 'info' as const,
     title: 'Build With Extensions',
     message: 'Extensions can add custom editors, AI tools, panels, commands, and other workspace features.',
-    detail: 'Nimbalyst can load your extension project while you build it, so you can test changes inside the app without leaving your development flow.\n\nYou can start from a template now, then ask Claude to build, install, and reload the extension as you iterate.',
+    detail: 'Nimbalyst can load your extension project while you build it, so you can test changes inside the app without leaving your development flow.\n\nDescribe what you want to the agent, and watch it build, install, and test the extension right before your eyes.',
     buttons: ['Cancel', "Don't Show Again", 'Continue'],
     defaultId: 2,
     cancelId: 0,
@@ -158,33 +144,6 @@ export async function showNewExtensionProjectDialog(sourceWindow?: BrowserWindow
     return;
   }
 
-  const templateResult = sourceWindow
-    ? await dialog.showMessageBox(sourceWindow, {
-      type: 'question',
-      title: 'New Extension Project',
-      message: 'Choose a template for your new Nimbalyst extension project.',
-      detail: 'You can refine the scaffold after creation and use Claude to build, install, and reload the extension inside Nimbalyst.',
-      buttons: ['Minimal', 'Custom Editor', 'AI Tool', 'Cancel'],
-      defaultId: 0,
-      cancelId: 3,
-      noLink: true,
-    })
-    : await dialog.showMessageBox({
-      type: 'question',
-      title: 'New Extension Project',
-      message: 'Choose a template for your new Nimbalyst extension project.',
-      detail: 'You can refine the scaffold after creation and use Claude to build, install, and reload the extension inside Nimbalyst.',
-      buttons: ['Minimal', 'Custom Editor', 'AI Tool', 'Cancel'],
-      defaultId: 0,
-      cancelId: 3,
-      noLink: true,
-    });
-
-  const templateId = getTemplateChoice(templateResult.response);
-  if (!templateId) {
-    return;
-  }
-
   const defaultPath = join(app.getPath('documents'), 'my-nimbalyst-extension');
   const projectResult = sourceWindow
     ? await dialog.showSaveDialog(sourceWindow, {
@@ -227,7 +186,7 @@ export async function showNewExtensionProjectDialog(sourceWindow?: BrowserWindow
     return;
   }
 
-  const templateFn = templates[templateId];
+  const templateFn = templates[DEFAULT_EXTENSION_TEMPLATE];
   const files = templateFn({
     name: deriveProjectName(projectPath),
     extensionId: deriveExtensionId(projectPath),
@@ -236,26 +195,4 @@ export async function showNewExtensionProjectDialog(sourceWindow?: BrowserWindow
 
   writeTemplateFiles(projectPath, files);
   openWorkspace(projectPath);
-
-  const nextStep = isExtensionDevToolsEnabled()
-    ? 'Next: ask Claude to build and install the extension.'
-    : 'Next: enable Extension Dev Tools in Settings > Advanced, then ask Claude to build and install the extension.';
-
-  if (sourceWindow) {
-    await dialog.showMessageBox(sourceWindow, {
-      type: 'info',
-      title: 'Extension Project Created',
-      message: 'Your new Nimbalyst extension project has been created and opened.',
-      detail: `${nextStep}\n\nProject path:\n${projectPath}`,
-      buttons: ['OK'],
-    });
-  } else {
-    await dialog.showMessageBox({
-      type: 'info',
-      title: 'Extension Project Created',
-      message: 'Your new Nimbalyst extension project has been created and opened.',
-      detail: `${nextStep}\n\nProject path:\n${projectPath}`,
-      buttons: ['OK'],
-    });
-  }
 }

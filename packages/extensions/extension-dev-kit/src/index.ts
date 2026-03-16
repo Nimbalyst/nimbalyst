@@ -6,19 +6,22 @@
 
 import { templates } from './templates';
 
+const LEGACY_TEMPLATES = new Set(['starter', 'minimal', 'custom-editor', 'ai-tool']);
+const DEFAULT_TEMPLATE = 'starter';
+
 // No UI components
 export const components = {};
 
 /**
  * /new-extension slash command handler
  *
- * Creates a new extension project from a template.
- * Arguments: <template> <path> <name> [filePatterns]
+ * Creates a new extension project from a starter scaffold.
+ * Arguments: <path> <name> [filePatterns]
  *
  * Examples:
- *   /new-extension minimal ~/projects/my-ext "My Extension"
- *   /new-extension custom-editor ~/projects/csv-editor "CSV Editor" *.csv,*.tsv
- *   /new-extension ai-tool ~/projects/text-stats "Text Stats"
+ *   /new-extension ~/projects/my-ext "My Extension"
+ *   /new-extension ~/projects/csv-editor "CSV Editor" *.csv,*.tsv
+ *   /new-extension ~/projects/text-stats "Text Stats"
  */
 export async function newExtensionCommand(args: string): Promise<string> {
   const parsed = parseArgs(args);
@@ -28,31 +31,33 @@ export async function newExtensionCommand(args: string): Promise<string> {
 
 **Usage:**
 \`\`\`
+/new-extension <path> <name> [filePatterns]
+\`\`\`
+
+This creates a neutral starter scaffold. After that, describe the extension you want and Claude can shape the scaffold into a custom editor, AI tool extension, panel, or something more specific.
+
+**Arguments:**
+- \`path\` - Directory path where the project will be created
+- \`name\` - Display name for the extension (in quotes if it has spaces)
+- \`filePatterns\` - Optional comma-separated file patterns like \`*.csv,*.tsv\`
+
+**Legacy usage still works:**
+\`\`\`
 /new-extension <template> <path> <name> [filePatterns]
 \`\`\`
 
-**Templates:**
-- \`minimal\` - Bare-bones extension with a simple custom editor
-- \`custom-editor\` - Full custom editor with toolbar and AI tools
-- \`ai-tool\` - Extension that only provides AI tools (no UI)
-
-**Arguments:**
-- \`template\` - One of: minimal, custom-editor, ai-tool
-- \`path\` - Directory path where the project will be created
-- \`name\` - Display name for the extension (in quotes if it has spaces)
-- \`filePatterns\` - (For custom-editor) Comma-separated file patterns like \`*.csv,*.tsv\`
-
 **Examples:**
 \`\`\`
-/new-extension minimal ~/projects/hello-ext "Hello Extension"
-/new-extension custom-editor ~/projects/csv-editor "CSV Editor" *.csv,*.tsv
-/new-extension ai-tool ~/projects/word-stats "Word Stats"
+/new-extension ~/projects/hello-ext "Hello Extension"
+/new-extension ~/projects/csv-editor "CSV Editor" *.csv,*.tsv
+/new-extension starter ~/projects/word-stats "Word Stats"
 \`\`\`
 
 **After creating the project:**
 1. Open the project folder in Nimbalyst
-2. Ask Claude to build and install: "Build and install this extension"
-3. Claude will use the \`extension_build\` and \`extension_install\` tools
+2. Describe the extension you want Claude to build
+3. Ask Claude to implement it, then build and install it
+4. Claude will use the \`extension_build\` and \`extension_install\` tools
 
 **Note:** Make sure "Extension Dev Tools" is enabled in Settings > Advanced.`;
   }
@@ -60,8 +65,8 @@ export async function newExtensionCommand(args: string): Promise<string> {
   const { template, projectPath, name, filePatterns } = parsed;
 
   // Validate template
-  if (!['minimal', 'custom-editor', 'ai-tool'].includes(template)) {
-    return `Error: Unknown template "${template}". Use one of: minimal, custom-editor, ai-tool`;
+  if (!(template in templates)) {
+    return `Error: Unknown template "${template}". Use one of: ${Object.keys(templates).join(', ')}`;
   }
 
   // Generate extension ID from name
@@ -112,20 +117,32 @@ function parseArgs(
     return null;
   }
 
-  // Match: template path "name" [patterns]
-  // or: template path name [patterns]
-  const match = args.match(
+  const legacyMatch = args.match(
     /^(\S+)\s+(\S+)\s+(?:"([^"]+)"|(\S+))(?:\s+(\S+))?$/
   );
 
-  if (!match) {
+  if (legacyMatch && LEGACY_TEMPLATES.has(legacyMatch[1])) {
+    const [, template, projectPath, quotedName, unquotedName, filePatterns] = legacyMatch;
+    return {
+      template,
+      projectPath,
+      name: quotedName || unquotedName,
+      filePatterns,
+    };
+  }
+
+  const defaultMatch = args.match(
+    /^(\S+)\s+(?:"([^"]+)"|(\S+))(?:\s+(\S+))?$/
+  );
+
+  if (!defaultMatch) {
     return null;
   }
 
-  const [, template, projectPath, quotedName, unquotedName, filePatterns] = match;
+  const [, projectPath, quotedName, unquotedName, filePatterns] = defaultMatch;
 
   return {
-    template,
+    template: DEFAULT_TEMPLATE,
     projectPath,
     name: quotedName || unquotedName,
     filePatterns,

@@ -9,7 +9,7 @@ export interface ExtensionProjectIntroModalProps {
 
 const capabilityCards = [
   {
-    icon: 'edit_square',
+    imageSrc: new URL('/onboarding/extension-custom-editors-torus-knot.png', import.meta.url).href,
     title: 'Custom editors',
     description: 'Build file-specific editors, views, and interactions that feel native inside Nimbalyst.',
   },
@@ -62,9 +62,17 @@ export const ExtensionProjectIntroModal: React.FC<ExtensionProjectIntroModalProp
                 key={card.title}
                 className="rounded-2xl border border-nim bg-nim-secondary px-4 py-4"
               >
-                <span className="material-symbols-outlined mb-3 text-[22px] text-[var(--nim-primary)]">
-                  {card.icon}
-                </span>
+                {'imageSrc' in card ? (
+                  <img
+                    src={card.imageSrc}
+                    alt="Custom editor preview"
+                    className="mb-3 h-24 w-full rounded-xl border border-nim object-cover object-center"
+                  />
+                ) : (
+                  <span className="material-symbols-outlined mb-3 text-[22px] text-[var(--nim-primary)]">
+                    {card.icon}
+                  </span>
+                )}
                 <div className="mb-1 text-sm font-semibold text-nim">{card.title}</div>
                 <div className="text-[13px] leading-6 text-nim-muted">{card.description}</div>
               </div>
@@ -74,7 +82,7 @@ export const ExtensionProjectIntroModal: React.FC<ExtensionProjectIntroModalProp
           <div className="mt-5 rounded-2xl border border-nim bg-[color:color-mix(in_srgb,var(--nim-primary)_8%,var(--nim-bg-secondary))] px-4 py-4">
             <div className="mb-1 text-sm font-semibold text-nim">What happens next</div>
             <div className="text-[13px] leading-6 text-nim-muted">
-              Start from a template now, then ask Claude to build, install, and reload the extension as you iterate.
+              Describe what you want to the agent, and watch it build, install, and test the extension right before your eyes.
             </div>
           </div>
         </div>

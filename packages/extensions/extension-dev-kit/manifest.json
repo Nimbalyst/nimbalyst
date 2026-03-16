@@ -13,12 +13,12 @@
     "claudePlugin": {
       "path": "claude-plugin",
       "displayName": "Extension Developer Kit",
-      "description": "Provides /new-extension command for scaffolding extension projects",
+      "description": "Provides /new-extension command for creating starter extension scaffolds",
       "enabledByDefault": true,
       "commands": [
         {
           "name": "new-extension",
-          "description": "Create a new Nimbalyst extension project from a template"
+          "description": "Create a new Nimbalyst extension project from a starter scaffold"
         }
       ]
     }
