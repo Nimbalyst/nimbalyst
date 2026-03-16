@@ -677,7 +677,8 @@ function parseCommandLineArgs() {
 const appLaunchTime = Date.now();
 function activationLog(msg: string) {
     const elapsed = Date.now() - appLaunchTime;
-    console.log(`[ACTIVATION +${elapsed}ms] ${msg}`);
+    // Use logger directly since overrideConsole() hasn't run yet at startup
+    logger.main.info(`[ACTIVATION +${elapsed}ms] ${msg}`);
 }
 
 app.on('browser-window-focus', (_event, win) => {
@@ -1304,8 +1305,7 @@ app.whenReady().then(async () => {
     // Skip session restoration if opening a specific workspace from CLI
     markStart('session-restore');
     const shouldSkipSessionRestore = !!pendingWorkspacePath;
-    const lastRestoredWindow = shouldSkipSessionRestore ? null : await restoreSessionState();
-    const sessionRestored = !!lastRestoredWindow;
+    const sessionRestored = shouldSkipSessionRestore ? false : await restoreSessionState();
     markEnd('session-restore');
 
     // Initialize useStandaloneBinary and customClaudeCodePath from persisted store
@@ -1318,14 +1318,9 @@ app.whenReady().then(async () => {
     ClaudeCodeProvider.setCustomClaudeCodePath(customClaudeCodePath);
     logger.main.info('[ClaudeCodeProvider] Initialized settings', { useStandaloneBinary, customClaudeCodePath: customClaudeCodePath ? '(set)' : '(empty)' });
 
-    // Close splash screen now that initialization is done and a real window is about to show
+    // Close splash screen now that initialization is done and a real window is about to show.
+    // The last restored window activates the app via its own ready-to-show handler.
     closeSplashScreen();
-
-    // Activate the last restored window once, instead of each window stealing focus individually.
-    // All restored windows used showInactive() to avoid repeated app activation during launch.
-    if (lastRestoredWindow && !lastRestoredWindow.isDestroyed()) {
-        lastRestoredWindow.show();
-    }
 
     if (pendingWorkspacePath) {
         // Handle workspace path from CLI
