@@ -324,7 +324,8 @@ public final class SyncManager: ObservableObject {
             name: name,
             sessionCount: entry.sessionCount ?? 0,
             lastUpdatedAt: entry.lastActivityAt,
-            commandsJson: commandsJson
+            commandsJson: commandsJson,
+            gitRemoteHash: entry.gitRemoteHash
         )
 
         do {
@@ -477,7 +478,8 @@ public final class SyncManager: ObservableObject {
             name: name,
             sessionCount: entry.sessionCount ?? 0,
             lastUpdatedAt: entry.lastActivityAt,
-            commandsJson: commandsJson
+            commandsJson: commandsJson,
+            gitRemoteHash: entry.gitRemoteHash
         )
 
         do {

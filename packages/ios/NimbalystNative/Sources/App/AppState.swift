@@ -41,6 +41,7 @@ public final class AppState: ObservableObject {
 
     private var cryptoManager: CryptoManager?
     public private(set) var syncManager: SyncManager?
+    public private(set) var documentSyncManager: DocumentSyncManager?
     private var cancellables = Set<AnyCancellable>()
     private var jwtRefreshTimer: Timer?
 
@@ -126,6 +127,7 @@ public final class AppState: ObservableObject {
         voiceAgent?.deactivate()
         voiceAgent = nil
         #endif
+        documentSyncManager?.disconnectAll()
         syncManager?.disconnect()
         // Erase all rows while the database connection is still open.
         // Deleting the file after nilling refs is unreliable because ARC may
@@ -136,6 +138,7 @@ public final class AppState: ObservableObject {
         cryptoManager = nil
         databaseManager = nil
         syncManager = nil
+        documentSyncManager = nil
         // Also attempt file deletion for a clean slate on re-pair.
         DatabaseManager.deleteDatabase()
         isPaired = false
@@ -259,6 +262,10 @@ public final class AppState: ObservableObject {
 
         logger.info("Connecting to sync server")
         sync.connect(authToken: jwt, authUserId: effectiveAuthUserId, orgId: orgId)
+
+        // Pass auth credentials to DocumentSyncManager for project room connections
+        documentSyncManager?.setAuth(authToken: jwt, authUserId: effectiveAuthUserId, orgId: orgId)
+
         startJWTRefreshTimer()
     }
 
@@ -363,6 +370,10 @@ public final class AppState: ObservableObject {
 
         let sync = SyncManager(crypto: crypto, database: database, serverUrl: serverUrl, userId: userId)
         syncManager = sync
+
+        // Initialize DocumentSyncManager for project file sync
+        let docSync = DocumentSyncManager(crypto: crypto, database: database, serverUrl: serverUrl, userId: userId)
+        documentSyncManager = docSync
 
         // Observe sync connection state
         sync.$isConnected

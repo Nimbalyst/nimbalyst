@@ -46,6 +46,7 @@ public final class DatabaseManager: @unchecked Sendable {
             // Order matters: children before parents due to foreign key constraints
             try db.execute(sql: "DELETE FROM queuedPrompts")
             try db.execute(sql: "DELETE FROM messages")
+            try db.execute(sql: "DELETE FROM syncedDocuments")
             try db.execute(sql: "DELETE FROM syncState")
             try db.execute(sql: "DELETE FROM sessions")
             try db.execute(sql: "DELETE FROM projects")
@@ -217,6 +218,51 @@ public final class DatabaseManager: @unchecked Sendable {
         migrator.registerMigration("v9_draft_updated_at") { db in
             try db.alter(table: "sessions") { t in
                 t.add(column: "draftUpdatedAt", .integer)
+            }
+        }
+
+        migrator.registerMigration("v10_synced_documents") { db in
+            try db.create(table: "syncedDocuments") { t in
+                t.primaryKey("id", .text)              // syncId UUID
+                t.column("projectId", .text)
+                    .notNull()
+                    .references("projects", onDelete: .cascade)
+                t.column("relativePath", .text).notNull()
+                t.column("title", .text).notNull()
+                t.column("contentHash", .text)
+                t.column("lastModifiedAt", .integer)
+                t.column("syncedAt", .integer)
+                t.column("contentDecrypted", .text)
+                t.column("hasYjs", .boolean).defaults(to: false)
+                t.column("yjsSeq", .integer).defaults(to: 0)
+                t.column("yjsStateEncrypted", .text)
+                t.column("yjsStateIv", .text)
+                t.column("createdAt", .integer).notNull()
+                t.column("updatedAt", .integer).notNull()
+            }
+            try db.create(
+                index: "idx_synced_documents_project",
+                on: "syncedDocuments",
+                columns: ["projectId"]
+            )
+            try db.create(
+                index: "idx_synced_documents_path",
+                on: "syncedDocuments",
+                columns: ["projectId", "relativePath"],
+                unique: true
+            )
+        }
+
+        migrator.registerMigration("v11_project_git_remote_hash") { db in
+            try db.alter(table: "projects") { t in
+                t.add(column: "gitRemoteHash", .text)
+            }
+        }
+
+        migrator.registerMigration("v12_document_encrypted_content") { db in
+            try db.alter(table: "syncedDocuments") { t in
+                t.add(column: "encryptedContent", .text)
+                t.add(column: "contentIv", .text)
             }
         }
 
@@ -448,6 +494,60 @@ public final class DatabaseManager: @unchecked Sendable {
                 sql: "UPDATE sessions SET draftInput = ?, draftUpdatedAt = ? WHERE id = ?",
                 arguments: [draftInput, draftUpdatedAt, sessionId]
             )
+        }
+    }
+
+    // MARK: - Synced Document Queries
+
+    public func documents(forProject projectId: String) throws -> [SyncedDocument] {
+        try writer.read { db in
+            try SyncedDocument
+                .filter(SyncedDocument.Columns.projectId == projectId)
+                .order(SyncedDocument.Columns.relativePath)
+                .fetchAll(db)
+        }
+    }
+
+    public func document(byId syncId: String) throws -> SyncedDocument? {
+        try writer.read { db in
+            try SyncedDocument.fetchOne(db, id: syncId)
+        }
+    }
+
+    public func upsertDocument(_ document: SyncedDocument) throws {
+        try writer.write { db in
+            try document.save(db)
+        }
+    }
+
+    public func upsertDocuments(_ documents: [SyncedDocument]) throws {
+        try writer.write { db in
+            for document in documents {
+                try document.save(db)
+            }
+        }
+    }
+
+    public func deleteDocument(_ syncId: String) throws {
+        try writer.write { db in
+            _ = try SyncedDocument.deleteOne(db, id: syncId)
+        }
+    }
+
+    public func deleteDocuments(syncIds: [String]) throws {
+        try writer.write { db in
+            try SyncedDocument
+                .filter(syncIds.contains(SyncedDocument.Columns.id))
+                .deleteAll(db)
+        }
+    }
+
+    /// Count of synced documents for a project.
+    public func documentCount(forProject projectId: String) throws -> Int {
+        try writer.read { db in
+            try SyncedDocument
+                .filter(SyncedDocument.Columns.projectId == projectId)
+                .fetchCount(db)
         }
     }
 }

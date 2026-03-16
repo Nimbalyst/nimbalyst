@@ -713,6 +713,15 @@ export function registerSettingsHandlers() {
         // The provider doesn't expose a direct "isConnected" status, but we can infer from syncActive
         const connected = syncActive && provider !== null;
 
+        // Get doc sync stats from ProjectFileSyncService
+        let docSyncStats = { projectCount: 0, fileCount: 0, connected: false };
+        try {
+            const { getProjectFileSyncService } = await import('../services/ProjectFileSyncService');
+            docSyncStats = getProjectFileSyncService().getStats();
+        } catch {
+            // Non-fatal
+        }
+
         return {
             appConfigured: true,
             projectEnabled: isProjectEnabled,
@@ -723,6 +732,7 @@ export function registerSettingsHandlers() {
                 sessionCount,
                 lastSyncedAt,
             },
+            docSyncStats,
             userEmail: StytchAuth.getUserEmail(),
         };
     });

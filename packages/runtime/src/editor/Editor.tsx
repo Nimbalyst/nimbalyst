@@ -119,6 +119,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
     editable = true,
     onSaveRequest,
     showToolbar = false,
+    forceFloatingToolbar = false,
   } = config;
 
 
@@ -387,7 +388,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
                 />
               </>
             )}
-            {floatingAnchorElem && !isSmallWidthViewport && (
+            {floatingAnchorElem && (forceFloatingToolbar || !isSmallWidthViewport) && (
               <>
                 <DraggableBlockPlugin anchorElem={floatingAnchorElem} />
                 <CodeActionMenuPlugin anchorElem={floatingAnchorElem} />

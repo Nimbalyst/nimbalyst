@@ -139,6 +139,13 @@ enum PhaseFilter: String, CaseIterable {
     }
 }
 
+// MARK: - Project Tab
+
+enum ProjectTab: String, CaseIterable {
+    case sessions = "Sessions"
+    case files = "Files"
+}
+
 /// Displays sessions for a given project with status badges, pull-to-refresh,
 /// search, hierarchical workstream grouping, and reactive GRDB observation.
 public struct SessionListView: View {
@@ -148,6 +155,7 @@ public struct SessionListView: View {
     @State private var sessions: [Session] = []
     @State private var cancellable: AnyDatabaseCancellable?
     @State private var expandedWorkstreams: Set<String> = []
+    @State private var selectedTab: ProjectTab = .sessions
 
     public init(project: Project) {
         self.project = project
@@ -302,6 +310,82 @@ public struct SessionListView: View {
     }
 
     public var body: some View {
+        VStack(spacing: 0) {
+            // Sessions | Files segmented control
+            Picker("Tab", selection: $selectedTab) {
+                ForEach(ProjectTab.allCases, id: \.self) { tab in
+                    Text(tab.rawValue).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+
+            // Tab content
+            switch selectedTab {
+            case .sessions:
+                sessionListContent
+            case .files:
+                DocumentListView(project: project)
+                    .environmentObject(appState)
+            }
+        }
+        .navigationTitle(project.name)
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .navigationDestination(for: Session.self) { session in
+            SessionDetailView(session: session)
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                HStack(spacing: 12) {
+                    #if os(iOS)
+                    if let voice = appState.voiceAgent, voice.state != .disconnected {
+                        VoiceStatusPill(state: voice.state)
+                    }
+                    #endif
+                    if selectedTab == .sessions && hasArchivedSessions {
+                        Button {
+                            withAnimation { showArchived.toggle() }
+                        } label: {
+                            Image(systemName: showArchived ? "archivebox.fill" : "archivebox")
+                                .font(.system(size: 14))
+                                .foregroundStyle(showArchived ? NimbalystColors.primary : .secondary)
+                        }
+                    }
+                    connectionIndicator
+                    if selectedTab == .sessions {
+                        creationMenu
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showModelPicker) {
+            ModelPickerView(
+                models: appState.availableModels,
+                selectedModelId: $selectedModelId,
+                onDismiss: { showModelPicker = false }
+            )
+            .presentationDetents([.medium, .large])
+        }
+        .onAppear {
+            startObserving()
+            loadExpandedState()
+            appState.configureVoiceAgent(forProject: project.id)
+            resolveDefaultModel()
+        }
+        .onChange(of: appState.availableModels) { _ in
+            resolveDefaultModel()
+        }
+        .onDisappear {
+            cancellable?.cancel()
+        }
+    }
+
+    // MARK: - Session List Content
+
+    private var sessionListContent: some View {
         List {
             // Phase filter - only show when sessions have phase data
             if hasPhaseData {
@@ -325,47 +409,10 @@ public struct SessionListView: View {
             }
         }
         .listStyle(.plain)
-        .navigationTitle(project.name)
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
         .searchable(text: $searchText, prompt: "Search sessions")
         .refreshable {
             appState.requestSync()
             try? await Task.sleep(nanoseconds: 500_000_000)
-        }
-        .navigationDestination(for: Session.self) { session in
-            SessionDetailView(session: session)
-        }
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                HStack(spacing: 12) {
-                    #if os(iOS)
-                    if let voice = appState.voiceAgent, voice.state != .disconnected {
-                        VoiceStatusPill(state: voice.state)
-                    }
-                    #endif
-                    if hasArchivedSessions {
-                        Button {
-                            withAnimation { showArchived.toggle() }
-                        } label: {
-                            Image(systemName: showArchived ? "archivebox.fill" : "archivebox")
-                                .font(.system(size: 14))
-                                .foregroundStyle(showArchived ? NimbalystColors.primary : .secondary)
-                        }
-                    }
-                    connectionIndicator
-                    creationMenu
-                }
-            }
-        }
-        .sheet(isPresented: $showModelPicker) {
-            ModelPickerView(
-                models: appState.availableModels,
-                selectedModelId: $selectedModelId,
-                onDismiss: { showModelPicker = false }
-            )
-            .presentationDetents([.medium, .large])
         }
         .overlay {
             if sessions.isEmpty {
@@ -382,18 +429,6 @@ public struct SessionListView: View {
                 }
                 .padding()
             }
-        }
-        .onAppear {
-            startObserving()
-            loadExpandedState()
-            appState.configureVoiceAgent(forProject: project.id)
-            resolveDefaultModel()
-        }
-        .onChange(of: appState.availableModels) { _ in
-            resolveDefaultModel()
-        }
-        .onDisappear {
-            cancellable?.cancel()
         }
     }
 

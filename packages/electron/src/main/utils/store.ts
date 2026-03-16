@@ -1228,6 +1228,7 @@ export interface SessionSyncConfig {
   enabled: boolean;
   serverUrl: string;
   enabledProjects?: string[];
+  docSyncEnabledProjects?: string[]; // workspace paths enabled for document sync (alpha only)
   // Dev-only: override environment (defaults to 'production' even in dev builds)
   environment?: 'development' | 'production';
   // Minutes before user is considered idle (for mobile push suppression). Default: 5

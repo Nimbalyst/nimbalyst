@@ -700,7 +700,8 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
 export interface SyncConfig {
   enabled: boolean;
   serverUrl: string;
-  enabledProjects?: string[]; // workspace paths that are enabled for sync
+  enabledProjects?: string[]; // workspace paths that are enabled for session sync
+  docSyncEnabledProjects?: string[]; // workspace paths that are enabled for document sync (alpha only)
   environment?: 'development' | 'production'; // dev only: override environment
   idleTimeoutMinutes?: number; // minutes before user is considered idle (default: 5)
   personalOrgId?: string; // persisted sync identity -- which org to use for sync room IDs
@@ -715,6 +716,7 @@ const defaultSyncConfig: SyncConfig = {
   enabled: false,
   serverUrl: '',
   enabledProjects: [],
+  docSyncEnabledProjects: [],
   environment: undefined, // Intentionally undefined (only set in dev)
   idleTimeoutMinutes: 5,
 };
@@ -803,6 +805,7 @@ export async function initSyncConfig(): Promise<SyncConfig> {
         enabled: config.enabled ?? defaultSyncConfig.enabled,
         serverUrl: config.serverUrl ?? defaultSyncConfig.serverUrl,
         enabledProjects: config.enabledProjects ?? defaultSyncConfig.enabledProjects,
+        docSyncEnabledProjects: config.docSyncEnabledProjects ?? defaultSyncConfig.docSyncEnabledProjects,
         environment: config.environment ?? defaultSyncConfig.environment,
         idleTimeoutMinutes: config.idleTimeoutMinutes ?? defaultSyncConfig.idleTimeoutMinutes,
         personalOrgId: config.personalOrgId,

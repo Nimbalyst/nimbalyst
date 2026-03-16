@@ -16,12 +16,17 @@
 import type { SessionStore } from '@nimbalyst/runtime';
 import type { DeviceInfo } from '@nimbalyst/runtime/sync';
 import * as syncModule from '@nimbalyst/runtime/sync';
-import { getSessionSyncConfig, type SessionSyncConfig } from '../utils/store';
+import { getSessionSyncConfig, getReleaseChannel, type SessionSyncConfig } from '../utils/store';
 import { logger } from '../utils/logger';
 import { getCredentials } from './CredentialService';
 import { getStytchUserId, isAuthenticated, getPersonalOrgId, getPersonalUserId, resolvePersonalUserId, getPersonalSessionJwt, refreshPersonalSession } from './StytchAuthService';
 import { app } from 'electron';
 import * as os from 'os';
+import { getProjectFileSyncService } from './ProjectFileSyncService';
+import { startProjectFileSync } from '../file/WorkspaceWatcher';
+import { windowStates } from '../window/WindowManager';
+import { getNormalizedGitRemote } from '../utils/gitUtils';
+import { createHash } from 'crypto';
 
 function loadSyncModule() {
   return syncModule;
@@ -712,6 +717,29 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
       });
     }
 
+    // Initialize ProjectFileSyncService for mobile .md sync (alpha channel only)
+    if (getReleaseChannel() === 'alpha') {
+      try {
+        const projectFileSync = getProjectFileSyncService();
+        await projectFileSync.initialize();
+        logger.main.info('[SyncManager] ProjectFileSyncService initialized (alpha channel)');
+
+        // Kick off project file sync for all already-open workspaces.
+        // The workspace watcher's startProjectFileSync call at window-open time
+        // likely ran before sync was ready (isSyncEnabled() was false), so we
+        // need to retry now that sync is fully initialized.
+        for (const ws of windowStates.values()) {
+          if (ws.workspacePath) {
+            startProjectFileSync(ws.workspacePath).catch(err => {
+              logger.main.warn('[SyncManager] Failed to start project file sync for workspace:', err);
+            });
+          }
+        }
+      } catch (err) {
+        logger.main.warn('[SyncManager] ProjectFileSyncService failed to initialize (non-fatal):', err);
+      }
+    }
+
     // Mark as connected
     updateSyncStatus({ connected: true, syncing: false, error: null });
 
@@ -754,6 +782,36 @@ export function isSyncProviderReady(): boolean {
 }
 
 /**
+ * Get the personal document sync config for the renderer.
+ * Used by TabEditor to connect .md files to PersonalDocumentRooms.
+ *
+ * Returns null if sync is not enabled or not ready.
+ */
+export function getPersonalDocSyncConfig(): {
+  serverUrl: string;
+  orgId: string;
+  userId: string;
+  encryptionKeyRaw: CryptoKey;
+} | null {
+  if (!isSyncEnabled() || !state.encryptionKey || !state.config) return null;
+
+  const personalOrgId = state.config.personalOrgId || getPersonalOrgId();
+  const personalUserId = state.config.personalUserId || getPersonalUserId() || getStytchUserId();
+  if (!personalOrgId || !personalUserId) return null;
+
+  const isDev = process.env.NODE_ENV !== 'production';
+  const env = isDev ? state.config.environment : undefined;
+  const serverUrl = env === 'development' ? 'ws://localhost:8790' : 'wss://sync.nimbalyst.com';
+
+  return {
+    serverUrl,
+    orgId: personalOrgId,
+    userId: personalUserId,
+    encryptionKeyRaw: state.encryptionKey,
+  };
+}
+
+/**
  * Shutdown sync and disconnect all sessions.
  */
 export function shutdownSync(): void {
@@ -761,6 +819,13 @@ export function shutdownSync(): void {
     clearInterval(state.sessionKeepAliveInterval);
     state.sessionKeepAliveInterval = null;
   }
+  // Shutdown ProjectFileSyncService
+  try {
+    getProjectFileSyncService().shutdown();
+  } catch {
+    // Non-fatal
+  }
+
   if (state.provider) {
     logger.main.info('[SyncManager] Shutting down session sync...');
     state.provider.disconnectAll();
@@ -1082,6 +1147,13 @@ export async function syncProjectCommandsToMobile(
   }
 
   try {
+    // Compute gitRemoteHash from the workspace's git remote URL
+    let gitRemoteHash: string | undefined;
+    const gitRemote = await getNormalizedGitRemote(workspacePath);
+    if (gitRemote) {
+      gitRemoteHash = createHash('sha256').update(gitRemote).digest('hex');
+    }
+
     await provider.syncProjectConfig(workspacePath, {
       commands: commands.map(cmd => ({
         name: cmd.name,
@@ -1089,6 +1161,7 @@ export async function syncProjectCommandsToMobile(
         source: cmd.source as 'builtin' | 'project' | 'user' | 'plugin',
       })),
       lastCommandsUpdate: Date.now(),
+      gitRemoteHash,
     });
   } catch (error) {
     logger.main.error('[SyncManager] Failed to sync project commands:', error);

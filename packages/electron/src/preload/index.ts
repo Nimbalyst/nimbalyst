@@ -841,6 +841,36 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('document-sync:ws-event', handler);
       return () => ipcRenderer.removeListener('document-sync:ws-event', handler);
     },
+    // Personal document sync (mobile markdown sync)
+    isPersonalSyncAvailable: () =>
+      ipcRenderer.invoke('document-sync:is-personal-sync-available') as Promise<{ available: boolean }>,
+    ensureSyncId: (filePath: string) =>
+      ipcRenderer.invoke('document-sync:ensure-sync-id', { filePath }) as Promise<{
+        success: boolean;
+        syncId?: string;
+        error?: string;
+      }>,
+    getSyncId: (filePath: string) =>
+      ipcRenderer.invoke('document-sync:get-sync-id', { filePath }) as Promise<{ syncId: string | null }>,
+    resolvePersonalConfig: (filePath: string) =>
+      ipcRenderer.invoke('document-sync:resolve-personal-config', { filePath }) as Promise<{
+        success: boolean;
+        config?: {
+          serverUrl: string;
+          orgId: string;
+          userId: string;
+          encryptionKeyBase64: string;
+          syncId: string;
+          userName: string;
+        };
+        error?: string;
+      }>,
+    getPersonalJwt: () =>
+      ipcRenderer.invoke('document-sync:get-personal-jwt') as Promise<{
+        success: boolean;
+        jwt?: string;
+        error?: string;
+      }>,
   },
 
   // Worktree operations

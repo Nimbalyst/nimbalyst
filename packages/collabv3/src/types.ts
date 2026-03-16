@@ -9,17 +9,19 @@
 // ============================================================================
 
 /** Room ID format: org:{orgId}:user:{userId}:{suffix} */
-export type SessionRoomId = `org:${string}:user:${string}:session:${string}`;
-export type IndexRoomId = `org:${string}:user:${string}:index`;
+export type PersonalSessionRoomId = `org:${string}:user:${string}:session:${string}`;
+export type PersonalIndexRoomId = `org:${string}:user:${string}:index`;
 export type ProjectsRoomId = `org:${string}:user:${string}:projects`;
 /** Document room ID format: org:{orgId}:doc:{documentId} (org-scoped, not user-scoped) */
-export type DocumentRoomId = `org:${string}:doc:${string}`;
+export type TeamDocumentRoomId = `org:${string}:doc:${string}`;
 /** Tracker room ID format: org:{orgId}:tracker:{projectId} (org-scoped, not user-scoped) */
-export type TrackerRoomId = `org:${string}:tracker:${string}`;
+export type TeamTrackerRoomId = `org:${string}:tracker:${string}`;
 /** Team room ID format: org:{orgId}:team (org-scoped, consolidated team state) */
 export type TeamRoomId = `org:${string}:team`;
+/** ProjectSync room ID format: org:{orgId}:user:{userId}:project:{projectId} (user-scoped, one per user+project) */
+export type PersonalProjectSyncRoomId = `org:${string}:user:${string}:project:${string}`;
 
-export type RoomId = SessionRoomId | IndexRoomId | ProjectsRoomId | DocumentRoomId | TrackerRoomId | TeamRoomId;
+export type RoomId = PersonalSessionRoomId | PersonalIndexRoomId | ProjectsRoomId | TeamDocumentRoomId | TeamTrackerRoomId | TeamRoomId | PersonalProjectSyncRoomId;
 
 // ============================================================================
 // Client → Server Messages
@@ -34,6 +36,8 @@ export type ClientMessage =
   | IndexUpdateMessage
   | IndexBatchUpdateMessage
   | IndexDeleteMessage
+  | FileIndexUpdateMessage
+  | FileIndexDeleteMessage
   | DeviceAnnounceMessage
   | CreateSessionRequestMessage
   | CreateSessionResponseMessage
@@ -97,6 +101,18 @@ export interface IndexBatchUpdateMessage {
 export interface IndexDeleteMessage {
   type: 'indexDelete';
   sessionId: string;
+}
+
+/** Update or insert a file in the file index */
+export interface FileIndexUpdateMessage {
+  type: 'fileIndexUpdate';
+  file: FileIndexEntry;
+}
+
+/** Delete a file from the file index */
+export interface FileIndexDeleteMessage {
+  type: 'fileIndexDelete';
+  docId: string;
 }
 
 /** Announce device presence and info */
@@ -215,10 +231,12 @@ export interface ProjectConfigUpdateMessage {
   /** Encrypted project ID (must match existing project_index entry) */
   encryptedProjectId: string;
   projectIdIv: string;
-  /** Encrypted project config blob (base64 AES-GCM) */
-  encryptedConfig: string;
+  /** Encrypted project config blob (base64 AES-GCM). Optional when only updating gitRemoteHash. */
+  encryptedConfig?: string;
   /** IV for config decryption (base64) */
-  configIv: string;
+  configIv?: string;
+  /** SHA-256 hash of the git remote URL (plaintext, used for ProjectSyncRoom routing) */
+  gitRemoteHash?: string;
 }
 
 /** Sync encrypted settings to other devices */
@@ -253,6 +271,8 @@ export type ServerMessage =
   | IndexBroadcastMessage
   | IndexDeleteBroadcastMessage
   | ProjectBroadcastMessage
+  | FileIndexBroadcastMessage
+  | FileIndexDeleteBroadcastMessage
   | DevicesListMessage
   | DeviceJoinedMessage
   | DeviceLeftMessage
@@ -292,6 +312,7 @@ export interface IndexSyncResponseMessage {
   type: 'indexSyncResponse';
   sessions: SessionIndexEntry[];
   projects: ProjectIndexEntry[];
+  files?: FileIndexEntry[];
   /** Total session count from COUNT(*) - used to detect if toArray() truncated results */
   totalSessionCount?: number;
 }
@@ -314,6 +335,20 @@ export interface IndexDeleteBroadcastMessage {
 export interface ProjectBroadcastMessage {
   type: 'projectBroadcast';
   project: ProjectIndexEntry;
+  fromConnectionId?: string;
+}
+
+/** Broadcast file index update to other devices */
+export interface FileIndexBroadcastMessage {
+  type: 'fileIndexBroadcast';
+  file: FileIndexEntry;
+  fromConnectionId?: string;
+}
+
+/** Broadcast file index deletion to other devices */
+export interface FileIndexDeleteBroadcastMessage {
+  type: 'fileIndexDeleteBroadcast';
+  docId: string;
   fromConnectionId?: string;
 }
 
@@ -390,7 +425,7 @@ export interface ErrorMessage {
 
 /**
  * Information about a connected device.
- * Used for device awareness/presence in the IndexRoom.
+ * Used for device awareness/presence in the PersonalIndexRoom.
  */
 export interface DeviceInfo {
   /** Unique device ID (stable across sessions, generated per device) */
@@ -440,7 +475,7 @@ export interface EncryptedMessage {
   metadata: Record<string, never>;
 }
 
-/** Session metadata (stored alongside messages in SessionRoom) */
+/** Session metadata (stored alongside messages in PersonalSessionRoom) */
 export interface SessionMetadata {
   title: string;
   provider: string;
@@ -456,7 +491,7 @@ export interface SessionMetadata {
   isExecuting?: boolean;
 }
 
-/** Session entry in the IndexRoom */
+/** Session entry in the PersonalIndexRoom */
 export interface SessionIndexEntry {
   sessionId: string;
   /** Encrypted project ID (base64) - required for wire protocol */
@@ -500,7 +535,7 @@ export interface SessionIndexEntry {
   lastReadAt?: number;
 }
 
-/** Project entry in the IndexRoom */
+/** Project entry in the PersonalIndexRoom */
 export interface ProjectIndexEntry {
   /** Encrypted project ID (base64) - required for wire protocol */
   encryptedProjectId: string;
@@ -521,10 +556,34 @@ export interface ProjectIndexEntry {
   encryptedConfig?: string;
   /** IV for config decryption (base64) */
   configIv?: string;
+  /** SHA-256 hash of the git remote URL (plaintext, used for ProjectSyncRoom routing) */
+  gitRemoteHash?: string;
+}
+
+/** File index entry for mobile markdown sync */
+export interface FileIndexEntry {
+  /** Document sync ID from frontmatter (plaintext, used as document room key) */
+  docId: string;
+  /** Encrypted project ID (base64) */
+  encryptedProjectId: string;
+  /** IV for project_id decryption (base64) */
+  projectIdIv: string;
+  /** Encrypted relative path (base64) e.g. "notes/meeting.md" */
+  encryptedRelativePath: string;
+  /** IV for relative_path decryption (base64) */
+  relativePathIv: string;
+  /** Encrypted title/filename (base64) */
+  encryptedTitle: string;
+  /** IV for title decryption (base64) */
+  titleIv: string;
+  /** Last modified timestamp (ms) */
+  lastModifiedAt: number;
+  /** Last time desktop pushed Yjs state (ms) */
+  syncedAt: number;
 }
 
 // ============================================================================
-// DocumentRoom Client → Server Messages
+// TeamDocumentRoom Client → Server Messages
 // ============================================================================
 
 export type DocClientMessage =
@@ -579,7 +638,7 @@ export interface RequestKeyEnvelopeMessage {
 }
 
 // ============================================================================
-// DocumentRoom Server → Client Messages
+// TeamDocumentRoom Server → Client Messages
 // ============================================================================
 
 export type DocServerMessage =
@@ -633,7 +692,7 @@ export interface KeyEnvelopeMessage {
   senderUserId: string;
 }
 
-/** DocumentRoom error response */
+/** TeamDocumentRoom error response */
 export interface DocErrorMessage {
   type: 'error';
   code: string;
@@ -641,7 +700,7 @@ export interface DocErrorMessage {
 }
 
 // ============================================================================
-// DocumentRoom Data Types
+// TeamDocumentRoom Data Types
 // ============================================================================
 
 /** Encrypted Yjs update as stored/transmitted */
@@ -662,7 +721,7 @@ export interface EncryptedDocSnapshot {
 }
 
 // ============================================================================
-// TrackerRoom Client → Server Messages
+// TeamTrackerRoom Client → Server Messages
 // ============================================================================
 
 export type TrackerClientMessage =
@@ -698,7 +757,7 @@ export interface TrackerBatchUpsertMessage {
 }
 
 // ============================================================================
-// TrackerRoom Server → Client Messages
+// TeamTrackerRoom Server → Client Messages
 // ============================================================================
 
 export type TrackerServerMessage =
@@ -729,7 +788,7 @@ export interface TrackerDeleteBroadcastMessage {
   sequence: number;
 }
 
-/** TrackerRoom error response */
+/** TeamTrackerRoom error response */
 export interface TrackerErrorMessage {
   type: 'error';
   code: string;
@@ -737,7 +796,7 @@ export interface TrackerErrorMessage {
 }
 
 // ============================================================================
-// TrackerRoom Data Types
+// TeamTrackerRoom Data Types
 // ============================================================================
 
 /** Encrypted tracker item as stored/transmitted */
@@ -958,6 +1017,175 @@ export interface MemberInfo {
 }
 
 // ============================================================================
+// PersonalProjectSyncRoom Client → Server Messages
+// ============================================================================
+
+export type ProjectSyncClientMessage =
+  | ProjectSyncRequestMessage
+  | FileContentPushMessage
+  | FileContentBatchPushMessage
+  | FileDeleteMessage
+  | FileYjsInitMessage
+  | FileYjsUpdateMessage
+  | FileYjsCompactMessage;
+
+/** Initial sync: client sends manifest of what it has */
+export interface ProjectSyncRequestMessage {
+  type: 'projectSyncRequest';
+  files: ProjectSyncManifestEntry[];
+}
+
+/** Entry in the client's sync manifest */
+export interface ProjectSyncManifestEntry {
+  syncId: string;
+  contentHash: string;
+  lastModifiedAt: number;
+  hasYjs: boolean;
+  yjsSeq: number;
+}
+
+/** Push file content (markdown phase) */
+export interface FileContentPushMessage {
+  type: 'fileContentPush';
+  syncId: string;
+  encryptedContent: string;
+  contentIv: string;
+  contentHash: string;
+  encryptedPath: string;
+  pathIv: string;
+  encryptedTitle: string;
+  titleIv: string;
+  lastModifiedAt: number;
+}
+
+/** Batch push (for startup sync sweep) */
+export interface FileContentBatchPushMessage {
+  type: 'fileContentBatchPush';
+  files: Omit<FileContentPushMessage, 'type'>[];
+}
+
+/** Delete a file */
+export interface FileDeleteMessage {
+  type: 'fileDelete';
+  syncId: string;
+}
+
+/** Upgrade file from markdown to Yjs phase */
+export interface FileYjsInitMessage {
+  type: 'fileYjsInit';
+  syncId: string;
+  encryptedSnapshot: string;
+  iv: string;
+}
+
+/** Send a Yjs update for a file in Yjs phase */
+export interface FileYjsUpdateMessage {
+  type: 'fileYjsUpdate';
+  syncId: string;
+  encryptedUpdate: string;
+  iv: string;
+}
+
+/** Compact Yjs state for a file */
+export interface FileYjsCompactMessage {
+  type: 'fileYjsCompact';
+  syncId: string;
+  encryptedSnapshot: string;
+  iv: string;
+  replacesUpTo: number;
+}
+
+// ============================================================================
+// PersonalProjectSyncRoom Server → Client Messages
+// ============================================================================
+
+export type ProjectSyncServerMessage =
+  | ProjectSyncResponseMessage
+  | FileContentBroadcastMessage
+  | FileDeleteBroadcastMessage
+  | FileYjsUpdateBroadcastMessage
+  | FileYjsInitBroadcastMessage
+  | ProjectSyncErrorMessage;
+
+/** Response to projectSyncRequest */
+export interface ProjectSyncResponseMessage {
+  type: 'projectSyncResponse';
+  updatedFiles: ProjectSyncFileEntry[];
+  yjsUpdates: ProjectSyncYjsUpdate[];
+  newFiles: ProjectSyncFileEntry[];
+  needFromClient: string[];
+  deletedSyncIds: string[];
+}
+
+/** File entry in sync response */
+export interface ProjectSyncFileEntry {
+  syncId: string;
+  encryptedContent: string;
+  contentIv: string;
+  contentHash: string;
+  encryptedPath: string;
+  pathIv: string;
+  encryptedTitle: string;
+  titleIv: string;
+  lastModifiedAt: number;
+  hasYjs: boolean;
+}
+
+/** Yjs update entry in sync response */
+export interface ProjectSyncYjsUpdate {
+  syncId: string;
+  encryptedUpdate: string;
+  iv: string;
+  sequence: number;
+}
+
+/** Broadcast when another device pushes content */
+export interface FileContentBroadcastMessage {
+  type: 'fileContentBroadcast';
+  syncId: string;
+  encryptedContent: string;
+  contentIv: string;
+  contentHash: string;
+  encryptedPath: string;
+  pathIv: string;
+  encryptedTitle: string;
+  titleIv: string;
+  lastModifiedAt: number;
+  fromConnectionId: string;
+}
+
+/** Broadcast Yjs update from another device */
+export interface FileYjsUpdateBroadcastMessage {
+  type: 'fileYjsUpdateBroadcast';
+  syncId: string;
+  encryptedUpdate: string;
+  iv: string;
+  sequence: number;
+  fromConnectionId: string;
+}
+
+/** Broadcast file deletion */
+export interface FileDeleteBroadcastMessage {
+  type: 'fileDeleteBroadcast';
+  syncId: string;
+  fromConnectionId: string;
+}
+
+/** Broadcast Yjs init (file upgraded to Yjs phase) */
+export interface FileYjsInitBroadcastMessage {
+  type: 'fileYjsInitBroadcast';
+  syncId: string;
+  fromConnectionId: string;
+}
+
+/** PersonalProjectSyncRoom error response */
+export interface ProjectSyncErrorMessage {
+  type: 'error';
+  code: string;
+  message: string;
+}
+
+// ============================================================================
 // Auth Types
 // ============================================================================
 
@@ -978,6 +1206,7 @@ export interface Env {
   DOCUMENT_ROOM: DurableObjectNamespace;
   TRACKER_ROOM: DurableObjectNamespace;
   TEAM_ROOM: DurableObjectNamespace;
+  PROJECT_SYNC_ROOM: DurableObjectNamespace;
   DB: D1Database;
   SESSION_SHARES: R2Bucket;
   DOCUMENT_ASSETS: R2Bucket;

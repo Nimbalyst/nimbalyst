@@ -35,6 +35,7 @@ import type {
   SyncedSettings,
   SessionControlMessage,
   EncryptedAttachment,
+  FileIndexData,
 } from './types';
 
 // ============================================================================
@@ -247,7 +248,22 @@ type ClientMessage =
   | { type: 'createWorktreeResponse'; response: EncryptedCreateWorktreeResponse }
   | { type: 'sessionControl'; message: { sessionId: string; messageType: string; payload?: Record<string, unknown>; timestamp: number; sentBy: 'desktop' | 'mobile' } }
   | { type: 'requestMobilePush'; sessionId: string; title: string; body: string; requestingDeviceId?: string }
-  | { type: 'settingsSync'; settings: EncryptedSettingsPayload };
+  | { type: 'settingsSync'; settings: EncryptedSettingsPayload }
+  | { type: 'fileIndexUpdate'; file: EncryptedFileIndexEntry }
+  | { type: 'fileIndexDelete'; docId: string };
+
+/** Encrypted file index entry for wire protocol */
+interface EncryptedFileIndexEntry {
+  docId: string;
+  encryptedProjectId: string;
+  projectIdIv: string;
+  encryptedRelativePath: string;
+  relativePathIv: string;
+  encryptedTitle: string;
+  titleIv: string;
+  lastModifiedAt: number;
+  syncedAt: number;
+}
 
 /** Encrypted project index entry from server */
 interface ServerProjectEntry {
@@ -260,6 +276,7 @@ interface ServerProjectEntry {
   sessionCount: number;
   lastActivityAt: number;
   syncEnabled: boolean;
+  gitRemoteHash?: string;
 }
 
 type ServerMessage =
@@ -1565,6 +1582,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
                     sessionCount: proj.sessionCount,
                     lastActivityAt: proj.lastActivityAt,
                     syncEnabled: proj.syncEnabled,
+                    gitRemoteHash: proj.gitRemoteHash,
                   };
                 })
               );
@@ -2692,23 +2710,27 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       // Encrypt project ID (deterministic)
       const { encryptedProjectId, projectIdIv } = await encryptProjectId(projectId, config.encryptionKey);
 
-      // Encrypt the config blob
-      const configJson = JSON.stringify(projectConfig);
-      const { encrypted: encryptedConfig, iv: configIv } = await encrypt(configJson, config.encryptionKey);
-
-      const message = {
+      // Build message -- only include encrypted config if there are commands
+      // (skip when just sending gitRemoteHash on startup to avoid overwriting existing config)
+      const message: Record<string, unknown> = {
         type: 'projectConfigUpdate',
         encryptedProjectId,
         projectIdIv,
-        encryptedConfig,
-        configIv,
+        gitRemoteHash: projectConfig.gitRemoteHash,
       };
+
+      if (projectConfig.commands.length > 0) {
+        const configJson = JSON.stringify(projectConfig);
+        const { encrypted: encryptedConfig, iv: configIv } = await encrypt(configJson, config.encryptionKey);
+        message.encryptedConfig = encryptedConfig;
+        message.configIv = configIv;
+      }
 
       indexWs.send(JSON.stringify(message));
       // console.log('[CollabV3] Sent projectConfigUpdate with', projectConfig.commands.length, 'commands');
     },
 
-    async fetchIndex(): Promise<{ sessions: DecryptedSessionIndexEntry[]; projects: Array<{ projectId: string; name: string; sessionCount: number; lastActivityAt: number; syncEnabled: boolean }> }> {
+    async fetchIndex(): Promise<{ sessions: DecryptedSessionIndexEntry[]; projects: Array<{ projectId: string; name: string; sessionCount: number; lastActivityAt: number; syncEnabled: boolean; gitRemoteHash?: string }> }> {
       // Wait for connection if not ready
       if (!indexWs || !indexConnected) {
         // console.log('[CollabV3] Waiting for index connection before fetching...');
@@ -3084,6 +3106,43 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       } catch (error) {
         console.error('[CollabV3] Failed to send mobile push message:', error);
       }
+    },
+
+    syncFileToIndex(file: FileIndexData): void {
+      if (!indexWs || !indexConnected || !config.encryptionKey) return;
+
+      (async () => {
+        try {
+          const key = config.encryptionKey!;
+          const { encryptedProjectId, projectIdIv } = await encryptProjectId(file.projectId, key);
+          const { encrypted: encryptedRelativePath, iv: relativePathIv } = await encrypt(file.relativePath, key);
+          const { encrypted: encryptedTitle, iv: titleIv } = await encrypt(file.title, key);
+
+          const msg: ClientMessage = {
+            type: 'fileIndexUpdate',
+            file: {
+              docId: file.docId,
+              encryptedProjectId,
+              projectIdIv,
+              encryptedRelativePath,
+              relativePathIv,
+              encryptedTitle,
+              titleIv,
+              lastModifiedAt: file.lastModifiedAt,
+              syncedAt: Date.now(),
+            },
+          };
+          indexWs!.send(JSON.stringify(msg));
+        } catch (err) {
+          console.error('[CollabV3] Failed to sync file to index:', err);
+        }
+      })();
+    },
+
+    deleteFileFromIndex(docId: string): void {
+      if (!indexWs || !indexConnected) return;
+      const msg: ClientMessage = { type: 'fileIndexDelete', docId };
+      indexWs.send(JSON.stringify(msg));
     },
 
     /** Attempt to reconnect the index connection when network becomes available */

@@ -122,6 +122,8 @@ struct ServerProjectEntry: Codable {
     let encryptedConfig: String?
     /// IV for config decryption
     let configIv: String?
+    /// SHA-256 hash of the git remote URL, used for ProjectSyncRoom routing
+    let gitRemoteHash: String?
 }
 
 /// Decrypted project config containing commands and future project-level settings.
@@ -391,6 +393,167 @@ struct MetadataBroadcast: Codable {
     let metadata: SessionRoomMetadata
     let fromConnectionId: String?
 }
+
+// MARK: - ProjectSync Room Messages (Client -> Server)
+
+/// Initial sync: client sends manifest of what it has.
+struct ProjectSyncRequestMessage: Codable {
+    let type = "projectSyncRequest"
+    let files: [ProjectSyncManifestEntry]
+}
+
+/// A file entry in the client's sync manifest.
+struct ProjectSyncManifestEntry: Codable {
+    let syncId: String
+    let contentHash: String
+    let lastModifiedAt: Int
+    let hasYjs: Bool
+    let yjsSeq: Int
+}
+
+/// Push file content (markdown phase).
+struct FileContentPushMessage: Codable {
+    let type = "fileContentPush"
+    let syncId: String
+    let encryptedContent: String
+    let contentIv: String
+    let contentHash: String
+    let encryptedPath: String
+    let pathIv: String
+    let encryptedTitle: String
+    let titleIv: String
+    let lastModifiedAt: Int
+}
+
+/// Batch push for startup sync sweep.
+struct FileContentBatchPushMessage: Codable {
+    let type = "fileContentBatchPush"
+    let files: [FileContentPushEntry]
+}
+
+/// Individual file entry in a batch push (same shape as FileContentPushMessage minus type).
+struct FileContentPushEntry: Codable {
+    let syncId: String
+    let encryptedContent: String
+    let contentIv: String
+    let contentHash: String
+    let encryptedPath: String
+    let pathIv: String
+    let encryptedTitle: String
+    let titleIv: String
+    let lastModifiedAt: Int
+}
+
+/// Delete a file.
+struct FileDeleteMessage: Codable {
+    let type = "fileDelete"
+    let syncId: String
+}
+
+/// Yjs update (phase 2 - file being actively edited).
+struct FileYjsUpdateMessage: Codable {
+    let type = "fileYjsUpdate"
+    let syncId: String
+    let encryptedUpdate: String
+    let iv: String
+}
+
+/// Upgrade file from markdown to Yjs phase.
+struct FileYjsInitMessage: Codable {
+    let type = "fileYjsInit"
+    let syncId: String
+    let encryptedSnapshot: String
+    let iv: String
+}
+
+/// Yjs snapshot compaction.
+struct FileYjsCompactMessage: Codable {
+    let type = "fileYjsCompact"
+    let syncId: String
+    let encryptedSnapshot: String
+    let iv: String
+    let replacesUpTo: Int
+}
+
+// MARK: - ProjectSync Room Messages (Server -> Client)
+
+/// Response to projectSyncRequest.
+struct ProjectSyncResponse: Codable {
+    let type: String
+    /// Files the client is missing or has stale content for.
+    let updatedFiles: [ProjectSyncFileEntry]
+    /// Yjs updates the client hasn't seen.
+    let yjsUpdates: [ProjectSyncYjsUpdate]
+    /// Files on server that client doesn't have.
+    let newFiles: [ProjectSyncFileEntry]
+    /// syncIds of files client has that server needs.
+    let needFromClient: [String]
+    /// syncIds of files deleted on another device.
+    let deletedSyncIds: [String]
+}
+
+/// A file entry in the sync response.
+struct ProjectSyncFileEntry: Codable {
+    let syncId: String
+    let encryptedContent: String
+    let contentIv: String
+    let contentHash: String
+    let encryptedPath: String
+    let pathIv: String
+    let encryptedTitle: String
+    let titleIv: String
+    let lastModifiedAt: Int
+    let hasYjs: Bool
+}
+
+/// A Yjs update in the sync response.
+struct ProjectSyncYjsUpdate: Codable {
+    let syncId: String
+    let encryptedUpdate: String
+    let iv: String
+    let sequence: Int
+}
+
+/// Broadcast when another device pushes content.
+struct FileContentBroadcast: Codable {
+    let type: String
+    let syncId: String
+    let encryptedContent: String
+    let contentIv: String
+    let contentHash: String
+    let encryptedPath: String
+    let pathIv: String
+    let encryptedTitle: String
+    let titleIv: String
+    let lastModifiedAt: Int
+    let fromConnectionId: String
+}
+
+/// Broadcast Yjs update from another device.
+struct FileYjsUpdateBroadcast: Codable {
+    let type: String
+    let syncId: String
+    let encryptedUpdate: String
+    let iv: String
+    let sequence: Int
+    let fromConnectionId: String
+}
+
+/// Broadcast file deletion.
+struct FileDeleteBroadcast: Codable {
+    let type: String
+    let syncId: String
+    let fromConnectionId: String
+}
+
+/// Broadcast Yjs init (file upgraded to Yjs phase).
+struct FileYjsInitBroadcast: Codable {
+    let type: String
+    let syncId: String
+    let fromConnectionId: String
+}
+
+// MARK: - Utility Types
 
 /// Type-erased Codable wrapper for arbitrary JSON values.
 struct AnyCodable: Codable {

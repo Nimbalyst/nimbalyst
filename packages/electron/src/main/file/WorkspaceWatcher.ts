@@ -8,6 +8,10 @@ import * as workspaceEventBus from './WorkspaceEventBus';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { readdirSync } from 'fs';
 import path from "path";
+import { createHash } from 'crypto';
+import { getProjectFileSyncService } from '../services/ProjectFileSyncService';
+import { isSyncEnabled } from '../services/SyncManager';
+import { getReleaseChannel, getSessionSyncConfig } from '../utils/store';
 
 // Helper function to calculate folder depth relative to workspace
 function calculateFolderDepth(folderPath: string, workspacePath: string): number {
@@ -91,10 +95,31 @@ export function startWorkspaceWatcher(window: BrowserWindow, workspacePath: stri
     gitRefWatcher.start(workspacePath).catch((error) => {
         logger.workspaceWatcher.error('Failed to start GitRefWatcher:', error);
     });
+
+    // Start project file sync for .md files (non-blocking, non-fatal)
+    startProjectFileSync(workspacePath).catch((error) => {
+        logger.workspaceWatcher.error('Failed to start ProjectFileSync:', error);
+    });
 }
 
 // Stop watching a workspace
 export function stopWorkspaceWatcher(windowId: number) {
+    // Stop project file sync for this workspace if it was the last window using it
+    const state = windowStates.get(windowId);
+    if (state?.workspacePath) {
+        // Check if any other windows use this workspace
+        let otherWindowUsesWorkspace = false;
+        for (const [otherId, otherState] of windowStates) {
+            if (otherId !== windowId && otherState.workspacePath === state.workspacePath) {
+                otherWindowUsesWorkspace = true;
+                break;
+            }
+        }
+        if (!otherWindowUsesWorkspace) {
+            stopProjectFileSync(state.workspacePath);
+        }
+    }
+
     optimizedWorkspaceWatcher.stop(windowId);
     // Note: gitRefWatcher is keyed by workspacePath, not windowId.
     // It will be stopped when stopAllWorkspaceWatchers is called.
@@ -125,6 +150,12 @@ export function restartWorkspaceWatcher(window: BrowserWindow, workspacePath: st
 export async function stopAllWorkspaceWatchers() {
     console.log('[WorkspaceWatcher] stopAllWorkspaceWatchers called');
     logger.workspaceWatcher.info('Stopping all workspace watchers');
+
+    // Stop all project file sync subscriptions
+    for (const workspacePath of projectSyncSubscriptions.keys()) {
+        stopProjectFileSync(workspacePath);
+    }
+
     try {
         await Promise.all([
             optimizedWorkspaceWatcher.stopAll(),
@@ -136,4 +167,91 @@ export async function stopAllWorkspaceWatchers() {
         console.error('[WorkspaceWatcher] Error in stopAll:', error);
         throw error;
     }
+}
+
+// ============================================================================
+// Project File Sync Integration
+// ============================================================================
+
+// Track active project sync subscriptions (workspacePath -> subscriberId)
+const projectSyncSubscriptions = new Map<string, string>();
+
+/**
+ * Derive a deterministic project ID from a workspace path.
+ * Uses SHA-256 so the server never sees the actual path.
+ */
+function hashProjectId(input: string): string {
+  return createHash('sha256').update(input).digest('hex');
+}
+
+/**
+ * Start project file sync for a workspace.
+ * Subscribes to WorkspaceEventBus for .md file changes and starts initial sync sweep.
+ *
+ * Called from startWorkspaceWatcher() when sync is enabled.
+ */
+export async function startProjectFileSync(workspacePath: string): Promise<void> {
+  if (!isSyncEnabled()) return;
+  if (getReleaseChannel() !== 'alpha') return;
+
+  // Check per-project doc sync opt-in
+  const syncConfig = getSessionSyncConfig();
+  if (!syncConfig?.docSyncEnabledProjects?.includes(workspacePath)) return;
+
+  // Skip if already subscribed for this workspace
+  if (projectSyncSubscriptions.has(workspacePath)) return;
+
+  const projectId = hashProjectId(workspacePath);
+
+  const subscriberId = `project-file-sync-${projectId}`;
+  projectSyncSubscriptions.set(workspacePath, subscriberId);
+
+  const service = getProjectFileSyncService();
+
+  // Subscribe to file change events for .md files
+  await workspaceEventBus.subscribe(workspacePath, subscriberId, {
+    onChange: (filePath) => {
+      if (!filePath.endsWith('.md')) return;
+      // Skip files that were just written by the sync service (echo suppression)
+      if (service.isRecentlyWrittenFromRemote(filePath)) return;
+      service.handleFileSaved(filePath, workspacePath, projectId).catch(err => {
+        logger.main.error('[ProjectFileSync] handleFileSaved failed:', err);
+      });
+    },
+    onAdd: (filePath) => {
+      if (!filePath.endsWith('.md')) return;
+      if (service.isRecentlyWrittenFromRemote(filePath)) return;
+      service.handleFileSaved(filePath, workspacePath, projectId).catch(err => {
+        logger.main.error('[ProjectFileSync] handleFileSaved (add) failed:', err);
+      });
+    },
+    onUnlink: (filePath) => {
+      if (!filePath.endsWith('.md')) return;
+      // Need to look up syncId for this file -- but file is already deleted
+      // getSyncId reads from disk, so for deleted files we can't get it.
+      // The sync service tracks syncId -> filePath in its state map.
+      // For now, deletions are handled by the next sync sweep.
+      // TODO: Track filePath -> syncId mapping in ProjectFileSyncService for deletion
+    },
+  });
+
+  // Start initial sync sweep (non-blocking)
+  service.syncProject(workspacePath, projectId).catch(err => {
+    logger.main.error('[ProjectFileSync] syncProject failed:', err);
+  });
+
+  // logger.main.info(`[ProjectFileSync] Started sync for ${path.basename(workspacePath)} (projectId: ${projectId.slice(0, 8)}...)`);
+}
+
+/**
+ * Stop project file sync for a workspace.
+ */
+function stopProjectFileSync(workspacePath: string): void {
+  const subscriberId = projectSyncSubscriptions.get(workspacePath);
+  if (!subscriberId) return;
+
+  workspaceEventBus.unsubscribe(workspacePath, subscriberId);
+  projectSyncSubscriptions.delete(workspacePath);
+
+  getProjectFileSyncService().disconnectProject(hashProjectId(workspacePath));
 }

@@ -83,6 +83,9 @@ export interface EditorConfig {
   /** Show the toolbar at the top of the editor */
   showToolbar?: boolean;
 
+  /** Show the floating text format toolbar even on small viewports (e.g. mobile) */
+  forceFloatingToolbar?: boolean;
+
   // Is this only for testing?
   disableBeforeInput?: boolean;
 

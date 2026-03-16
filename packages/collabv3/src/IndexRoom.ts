@@ -1,5 +1,5 @@
 /**
- * IndexRoom Durable Object
+ * PersonalIndexRoom Durable Object
  *
  * Manages the session index for a user - provides fast session list
  * on mobile startup and broadcasts index updates across devices.
@@ -11,6 +11,7 @@ import type {
   ServerMessage,
   SessionIndexEntry,
   ProjectIndexEntry,
+  FileIndexEntry,
   IndexSyncResponseMessage,
   AuthContext,
   DeviceInfo,
@@ -31,7 +32,7 @@ import type {
 } from './types';
 import { createLogger } from './logger';
 
-const log = createLogger('IndexRoom');
+const log = createLogger('PersonalIndexRoom');
 
 /** Session TTL: 30 days in milliseconds */
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -39,7 +40,7 @@ const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 /** Device TTL: 90 days - remove stored devices not seen in this period */
 const DEVICE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 
-/** How often IndexRoom scans for expired entries: every 24 hours */
+/** How often PersonalIndexRoom scans for expired entries: every 24 hours */
 const INDEX_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 interface ConnectionState {
@@ -53,7 +54,7 @@ const TAG_USER = 'user:';
 const TAG_ORG = 'org:';
 const TAG_DEVICE = 'device:';
 
-export class IndexRoom implements DurableObject {
+export class PersonalIndexRoom implements DurableObject {
   private state: DurableObjectState;
   private env: Env;
   // Note: This map is rebuilt after hibernation using getWebSockets() and tags
@@ -253,6 +254,27 @@ export class IndexRoom implements DurableObject {
     } catch {
       // Column already exists
     }
+    // Migration: Add git remote hash for ProjectSyncRoom routing
+    try {
+      sql.exec(`ALTER TABLE project_index ADD COLUMN git_remote_hash TEXT`);
+    } catch {
+      // Column already exists
+    }
+
+    // File index table (for mobile markdown sync)
+    sql.exec(`
+      CREATE TABLE IF NOT EXISTS file_index (
+        doc_id TEXT PRIMARY KEY,
+        encrypted_project_id TEXT NOT NULL,
+        project_id_iv TEXT NOT NULL,
+        encrypted_relative_path TEXT NOT NULL,
+        relative_path_iv TEXT NOT NULL,
+        encrypted_title TEXT NOT NULL,
+        title_iv TEXT NOT NULL,
+        last_modified_at INTEGER NOT NULL,
+        synced_at INTEGER NOT NULL
+      );
+    `);
 
     // Migration: Delete old unencrypted sessions and projects
     // Old data has NULL project_id_iv (encrypted data always has an IV)
@@ -393,6 +415,14 @@ export class IndexRoom implements DurableObject {
           await this.handleIndexDelete(ws, connState, message.sessionId);
           break;
 
+        case 'fileIndexUpdate':
+          await this.handleFileIndexUpdate(ws, connState, message.file);
+          break;
+
+        case 'fileIndexDelete':
+          await this.handleFileIndexDelete(ws, connState, message.docId);
+          break;
+
         case 'deviceAnnounce':
           await this.handleDeviceAnnounce(ws, connState, message.device);
           break;
@@ -490,10 +520,17 @@ export class IndexRoom implements DurableObject {
       projects.push(rowToProjectEntry(row));
     }
 
+    // Get files using cursor iteration
+    const files: FileIndexEntry[] = [];
+    for (const row of sql.exec<FileIndexRow>(`SELECT * FROM file_index ORDER BY last_modified_at DESC`)) {
+      files.push(rowToFileEntry(row));
+    }
+
     const response: IndexSyncResponseMessage = {
       type: 'indexSyncResponse',
       sessions,
       projects,
+      files: files.length > 0 ? files : undefined,
       totalSessionCount: totalCount,
     };
 
@@ -725,6 +762,74 @@ export class IndexRoom implements DurableObject {
   }
 
   /**
+   * Handle file index update from desktop
+   */
+  private async handleFileIndexUpdate(
+    ws: WebSocket,
+    connState: ConnectionState,
+    file: FileIndexEntry
+  ): Promise<void> {
+    const sql = this.state.storage.sql;
+
+    sql.exec(
+      `INSERT INTO file_index
+       (doc_id, encrypted_project_id, project_id_iv, encrypted_relative_path, relative_path_iv, encrypted_title, title_iv, last_modified_at, synced_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(doc_id) DO UPDATE SET
+         encrypted_project_id = excluded.encrypted_project_id,
+         project_id_iv = excluded.project_id_iv,
+         encrypted_relative_path = excluded.encrypted_relative_path,
+         relative_path_iv = excluded.relative_path_iv,
+         encrypted_title = excluded.encrypted_title,
+         title_iv = excluded.title_iv,
+         last_modified_at = excluded.last_modified_at,
+         synced_at = excluded.synced_at`,
+      file.docId,
+      file.encryptedProjectId,
+      file.projectIdIv,
+      file.encryptedRelativePath,
+      file.relativePathIv,
+      file.encryptedTitle,
+      file.titleIv,
+      file.lastModifiedAt,
+      file.syncedAt,
+    );
+
+    // Broadcast to other connections
+    this.broadcast(
+      {
+        type: 'fileIndexBroadcast',
+        file,
+        fromConnectionId: this.getConnectionId(ws),
+      },
+      ws
+    );
+  }
+
+  /**
+   * Handle file index delete from desktop
+   */
+  private async handleFileIndexDelete(
+    ws: WebSocket,
+    connState: ConnectionState,
+    docId: string
+  ): Promise<void> {
+    const sql = this.state.storage.sql;
+
+    sql.exec(`DELETE FROM file_index WHERE doc_id = ?`, docId);
+
+    // Broadcast to other connections
+    this.broadcast(
+      {
+        type: 'fileIndexDeleteBroadcast',
+        docId,
+        fromConnectionId: this.getConnectionId(ws),
+      },
+      ws
+    );
+  }
+
+  /**
    * Handle device announce - register device and broadcast to others
    */
   private async handleDeviceAnnounce(
@@ -839,24 +944,36 @@ export class IndexRoom implements DurableObject {
     ).toArray()[0];
 
     if (existing) {
-      sql.exec(
-        `UPDATE project_index SET encrypted_config = ?, config_iv = ? WHERE project_id = ?`,
-        message.encryptedConfig,
-        message.configIv,
-        message.encryptedProjectId
-      );
+      // Only update config blob if actually provided (avoid overwriting with empty config
+      // when we're just sending gitRemoteHash on startup)
+      if (message.encryptedConfig) {
+        sql.exec(
+          `UPDATE project_index SET encrypted_config = ?, config_iv = ?, git_remote_hash = COALESCE(?, git_remote_hash) WHERE project_id = ?`,
+          message.encryptedConfig,
+          message.configIv,
+          message.gitRemoteHash ?? null,
+          message.encryptedProjectId
+        );
+      } else if (message.gitRemoteHash) {
+        sql.exec(
+          `UPDATE project_index SET git_remote_hash = ? WHERE project_id = ?`,
+          message.gitRemoteHash,
+          message.encryptedProjectId
+        );
+      }
     } else {
       // Project doesn't exist yet - create a minimal entry
       sql.exec(
-        `INSERT INTO project_index (project_id, project_id_iv, name, name_iv, session_count, last_activity_at, sync_enabled, encrypted_config, config_iv)
-         VALUES (?, ?, ?, ?, 0, ?, 1, ?, ?)`,
+        `INSERT INTO project_index (project_id, project_id_iv, name, name_iv, session_count, last_activity_at, sync_enabled, encrypted_config, config_iv, git_remote_hash)
+         VALUES (?, ?, ?, ?, 0, ?, 1, ?, ?, ?)`,
         message.encryptedProjectId,
         message.projectIdIv,
         message.encryptedProjectId, // placeholder name
         message.projectIdIv,
         Date.now(),
         message.encryptedConfig,
-        message.configIv
+        message.configIv,
+        message.gitRemoteHash ?? null
       );
     }
 
@@ -1692,9 +1809,37 @@ type ProjectIndexRow = {
   sync_enabled: number;
   encrypted_config: string | null;
   config_iv: string | null;
+  git_remote_hash: string | null;
+};
+
+type FileIndexRow = {
+  [key: string]: SqlStorageValue;
+  doc_id: string;
+  encrypted_project_id: string;
+  project_id_iv: string;
+  encrypted_relative_path: string;
+  relative_path_iv: string;
+  encrypted_title: string;
+  title_iv: string;
+  last_modified_at: number;
+  synced_at: number;
 };
 
 // Map SQL rows (snake_case) to wire format (camelCase)
+function rowToFileEntry(row: FileIndexRow): FileIndexEntry {
+  return {
+    docId: row.doc_id,
+    encryptedProjectId: row.encrypted_project_id,
+    projectIdIv: row.project_id_iv,
+    encryptedRelativePath: row.encrypted_relative_path,
+    relativePathIv: row.relative_path_iv,
+    encryptedTitle: row.encrypted_title,
+    titleIv: row.title_iv,
+    lastModifiedAt: row.last_modified_at,
+    syncedAt: row.synced_at,
+  };
+}
+
 function rowToSessionEntry(row: SessionIndexRow): SessionIndexEntry {
   return {
     sessionId: row.session_id,
@@ -1737,5 +1882,6 @@ function rowToProjectEntry(row: ProjectIndexRow): ProjectIndexEntry {
     syncEnabled: row.sync_enabled === 1,
     encryptedConfig: row.encrypted_config ?? undefined,
     configIv: row.config_iv ?? undefined,
+    gitRemoteHash: row.git_remote_hash ?? undefined,
   };
 }

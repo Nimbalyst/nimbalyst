@@ -13,11 +13,12 @@
 declare const COLLABV3_VERSION: string;
 
 import type { Env } from './types';
-import { SessionRoom } from './SessionRoom';
-import { IndexRoom } from './IndexRoom';
-import { DocumentRoom } from './DocumentRoom';
-import { TrackerRoom } from './TrackerRoom';
+import { PersonalSessionRoom } from './SessionRoom';
+import { PersonalIndexRoom } from './IndexRoom';
+import { TeamDocumentRoom } from './DocumentRoom';
+import { TeamTrackerRoom } from './TrackerRoom';
 import { TeamRoom } from './TeamRoom';
+import { PersonalProjectSyncRoom } from './ProjectSyncRoom';
 import { parseAuth as parseAuthJWT, type AuthConfig, type AuthResult } from './auth';
 import { handleShareUpload, handleShareView, handleShareContent, handleShareList, handleShareDelete } from './share';
 import { handleAccountDeletion } from './accountDeletion';
@@ -51,8 +52,19 @@ import { setLogEnvironment, createLogger } from './logger';
 
 const log = createLogger('sync');
 
-// Re-export Durable Object classes
-export { SessionRoom, IndexRoom, DocumentRoom, TrackerRoom, TeamRoom };
+// Re-export Durable Object classes (new names)
+export { PersonalSessionRoom, PersonalIndexRoom, TeamDocumentRoom, TeamTrackerRoom, TeamRoom, PersonalProjectSyncRoom };
+
+// Backward-compatible aliases (old names -> new names)
+// Cloudflare wrangler uses renamed_classes migration to handle DO identity;
+// these aliases ensure any external TypeScript imports still resolve.
+export {
+  PersonalSessionRoom as SessionRoom,
+  PersonalIndexRoom as IndexRoom,
+  TeamDocumentRoom as DocumentRoom,
+  TeamTrackerRoom as TrackerRoom,
+  PersonalProjectSyncRoom as ProjectSyncRoom,
+};
 
 // ============================================================================
 // CORS Configuration
@@ -177,7 +189,7 @@ function getCorsHeaders(request: Request, env: Env): Record<string, string> {
 
 // Room ID parsing: org:{orgId}:user:{userId}:{suffix} or org:{orgId}:doc:{documentId} or org:{orgId}:tracker:{projectId} or org:{orgId}:team
 interface ParsedRoomId {
-  type: 'session' | 'index' | 'projects' | 'document' | 'tracker' | 'team';
+  type: 'session' | 'index' | 'projects' | 'document' | 'tracker' | 'team' | 'projectSync';
   userId: string;
   orgId: string;
   sessionId?: string;
@@ -217,6 +229,12 @@ function parseRoomId(roomId: string): ParsedRoomId | null {
   const teamMatch = roomId.match(/^org:([^:]+):team$/);
   if (teamMatch) {
     return { type: 'team', orgId: teamMatch[1], userId: '' };
+  }
+
+  // ProjectSync rooms are user-scoped - one per (user + project) for personal file sync
+  const projectSyncMatch = roomId.match(/^org:([^:]+):user:([^:]+):project:([^:]+)$/);
+  if (projectSyncMatch) {
+    return { type: 'projectSync', orgId: projectSyncMatch[1], userId: projectSyncMatch[2], projectId: projectSyncMatch[3] };
   }
 
   return null;
@@ -326,6 +344,10 @@ export default {
         // Use full room ID as DO ID (one DO per org)
         const id = env.TEAM_ROOM.idFromName(roomId);
         stub = env.TEAM_ROOM.get(id);
+      } else if (parsed.type === 'projectSync' && parsed.projectId) {
+        // Use full room ID as DO ID (one DO per user+project)
+        const id = env.PROJECT_SYNC_ROOM.idFromName(roomId);
+        stub = env.PROJECT_SYNC_ROOM.get(id);
       } else {
         return new Response('Invalid room type', { status: 400 });
       }

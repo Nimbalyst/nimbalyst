@@ -119,3 +119,14 @@ export type {
   KeyEnvelopeData,
   DocIndexEntry as TeamDocIndexEntry,
 } from './teamSyncTypes';
+
+export {
+  ProjectSyncProvider,
+} from './ProjectSyncProvider';
+
+export type {
+  ProjectSyncConfig,
+  ProjectSyncFileUpdate,
+  ProjectSyncManifestFile,
+  ProjectSyncResponse,
+} from './ProjectSyncProvider';

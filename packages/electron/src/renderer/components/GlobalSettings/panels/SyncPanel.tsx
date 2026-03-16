@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { usePostHog } from 'posthog-js/react';
-import { useAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { QRPairingModal } from './QRPairingModal';
 import {
   syncConfigAtom,
   setSyncConfigAtom,
+  releaseChannelAtom,
   type SyncConfig,
 } from '../../../store/atoms/appSettings';
 
@@ -68,9 +69,6 @@ interface StytchAuthState {
   } | null;
 }
 
-/** Maximum number of projects to show inline before collapsing */
-const INLINE_PROJECT_LIMIT = 5;
-
 function SharingCallout() {
   const [expanded, setExpanded] = useState(false);
 
@@ -119,6 +117,8 @@ export function SyncPanel() {
   // Sync config from Jotai atom
   const [config, setConfig] = useAtom(syncConfigAtom);
   const [, updateConfig] = useAtom(setSyncConfigAtom);
+  const releaseChannel = useAtomValue(releaseChannelAtom);
+  const isAlpha = releaseChannel === 'alpha';
 
   // Compute effective server URL early so it can be used throughout
   // Only honor config.environment in dev builds - production always uses production sync
@@ -132,7 +132,7 @@ export function SyncPanel() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [showQRModal, setShowQRModal] = useState(false);
   const [pairError, setPairError] = useState<string | null>(null);
-  const [showAllProjects, setShowAllProjects] = useState(false);
+  const [showAddProject, setShowAddProject] = useState(false);
   const [connectedDevices, setConnectedDevices] = useState<DeviceInfo[]>([]);
   const [devicesLoading, setDevicesLoading] = useState(false);
   const [devicesError, setDevicesError] = useState<string | null>(null);
@@ -293,26 +293,58 @@ export function SyncPanel() {
     }
   }, [config.enabled, effectiveServerUrl]);
 
-  const handleProjectToggle = async (projectPath: string, enabled: boolean) => {
-    // Compute updated project list from current enabledProjects (default to empty, not all)
+  const handleAddProject = async (projectPath: string) => {
     const currentEnabled = config.enabledProjects ?? [];
-    const updated = enabled
-      ? [...currentEnabled, projectPath]
-      : currentEnabled.filter(p => p !== projectPath);
+    if (currentEnabled.includes(projectPath)) return;
 
-    // Auto-enable/disable sync based on whether any projects are selected
-    const shouldEnable = updated.length > 0;
-    setConfig({ ...config, enabledProjects: updated, enabled: shouldEnable });
+    const updated = [...currentEnabled, projectPath];
+    setConfig({ ...config, enabledProjects: updated, enabled: true });
 
-    if (shouldEnable !== config.enabled) {
-      posthog?.capture(shouldEnable ? 'sync_enabled' : 'sync_disabled', { projectCount: updated.length });
+    if (!config.enabled) {
+      posthog?.capture('sync_enabled', { projectCount: updated.length });
     }
 
-    // Call sync:toggle-project to persist config and trigger immediate incremental sync
     try {
-      await window.electronAPI.invoke('sync:toggle-project', projectPath, enabled);
+      await window.electronAPI.invoke('sync:toggle-project', projectPath, true);
     } catch (error) {
-      console.error('[SyncPanel] Failed to toggle project sync:', error);
+      console.error('[SyncPanel] Failed to add project sync:', error);
+    }
+
+    setShowAddProject(false);
+  };
+
+  const handleRemoveProject = async (projectPath: string) => {
+    const currentEnabled = config.enabledProjects ?? [];
+    const updated = currentEnabled.filter(p => p !== projectPath);
+    const docSyncUpdated = (config.docSyncEnabledProjects ?? []).filter(p => p !== projectPath);
+
+    const shouldEnable = updated.length > 0;
+    setConfig({ ...config, enabledProjects: updated, docSyncEnabledProjects: docSyncUpdated, enabled: shouldEnable });
+
+    if (!shouldEnable && config.enabled) {
+      posthog?.capture('sync_disabled', { projectCount: 0 });
+    }
+
+    try {
+      await window.electronAPI.invoke('sync:toggle-project', projectPath, false);
+    } catch (error) {
+      console.error('[SyncPanel] Failed to remove project sync:', error);
+    }
+  };
+
+  const handleDocSyncToggle = async (projectPath: string, enabled: boolean) => {
+    const current = config.docSyncEnabledProjects ?? [];
+    const updated = enabled
+      ? [...current, projectPath]
+      : current.filter(p => p !== projectPath);
+
+    const newConfig = { ...config, docSyncEnabledProjects: updated };
+    setConfig(newConfig);
+
+    try {
+      await window.electronAPI.invoke('sync:set-config', newConfig);
+    } catch (error) {
+      console.error('[SyncPanel] Failed to toggle doc sync:', error);
     }
   };
 
@@ -455,9 +487,10 @@ export function SyncPanel() {
     }
   };
 
-  // Determine which projects to show inline
-  const visibleProjects = showAllProjects ? projects : projects.slice(0, INLINE_PROJECT_LIMIT);
-  const hasMoreProjects = projects.length > INLINE_PROJECT_LIMIT;
+  // Only show projects that are enabled for sync
+  const syncedProjects = projects.filter(p => enabledProjects.includes(p.path));
+  // Projects available to add (not yet synced)
+  const availableProjects = projects.filter(p => !enabledProjects.includes(p.path));
 
   return (
     <div className="provider-panel flex flex-col">
@@ -709,58 +742,90 @@ export function SyncPanel() {
         <SharingCallout />
       )}
 
-      {/* Projects to Sync */}
+      {/* Synced Projects */}
       <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
-        <h4 className="provider-panel-section-title text-[15px] font-semibold mb-2 text-[var(--nim-text)]">Projects to Sync</h4>
-        <p className="text-[13px] leading-relaxed text-[var(--nim-text-muted)] mb-3">
-          Select which projects sync their AI sessions to your mobile device. No projects sync by default.
-        </p>
-
-        <div className="bg-nim-secondary rounded-lg overflow-hidden">
-          {projects.length === 0 ? (
-            <p className="text-nim-faint text-[13px] text-center py-5 m-0">
-              No projects found. Open a workspace to see projects here.
-            </p>
-          ) : (
-            <>
-              {visibleProjects.map((project) => (
-                <label
-                  key={project.path}
-                  className="flex items-center gap-2.5 px-3 py-2 cursor-pointer border-b border-[var(--nim-border)] last:border-b-0 hover:bg-nim-hover"
-                >
-                  <input
-                    type="checkbox"
-                    checked={enabledProjects.includes(project.path)}
-                    onChange={(e) => handleProjectToggle(project.path, e.target.checked)}
-                    className="w-4 h-4 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
-                  />
-                  <span className="text-[13px] font-medium text-nim flex-1">
-                    {project.name}
-                  </span>
-                  <span className="text-[11px] text-nim-faint max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap">
-                    {project.path.replace(/^\/Users\/[^/]+/, '~')}
-                  </span>
-                </label>
-              ))}
-              {hasMoreProjects && !showAllProjects && (
-                <button
-                  onClick={() => setShowAllProjects(true)}
-                  className="w-full py-2 text-[12px] text-nim-primary bg-transparent border-none border-t border-[var(--nim-border)] cursor-pointer hover:bg-nim-hover"
-                >
-                  Show all {projects.length} projects...
-                </button>
-              )}
-            </>
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="provider-panel-section-title text-[15px] font-semibold text-[var(--nim-text)] m-0">Synced Projects</h4>
+          {availableProjects.length > 0 && !showAddProject && (
+            <button
+              onClick={() => setShowAddProject(true)}
+              className="flex items-center gap-1 px-2 py-0.5 text-[11px] bg-transparent border border-nim rounded text-nim-muted cursor-pointer hover:bg-nim-hover hover:text-nim"
+            >
+              <MaterialSymbol icon="add" size={14} />
+              Add
+            </button>
           )}
         </div>
 
-        {/* Idle timeout - compact row below projects */}
-        <div className="flex items-center justify-between mt-3">
-          <span className="text-[12px] text-nim-faint">Push notification delay after idle</span>
+        {syncedProjects.length === 0 && !showAddProject ? (
+          <button
+            onClick={() => setShowAddProject(true)}
+            disabled={availableProjects.length === 0}
+            className={`flex items-center gap-2 px-3 py-2 text-[12px] bg-transparent border border-dashed border-nim rounded-lg w-full ${
+              availableProjects.length === 0
+                ? 'text-nim-disabled cursor-not-allowed'
+                : 'text-nim-muted cursor-pointer hover:bg-nim-hover hover:text-nim'
+            }`}
+          >
+            <MaterialSymbol icon="add" size={16} />
+            Add a project to sync
+          </button>
+        ) : (
+          <div className="bg-nim-secondary rounded-lg overflow-hidden">
+            {syncedProjects.map((project) => {
+              const docSyncEnabled = (config.docSyncEnabledProjects ?? []).includes(project.path);
+              return (
+                <div key={project.path} className="flex items-center gap-2 px-2.5 py-1.5 border-b border-[var(--nim-border)] last:border-b-0 group">
+                  <span className="text-[13px] text-nim truncate flex-1">{project.name}</span>
+                  {isAlpha && (
+                    <label className="flex items-center gap-1 cursor-pointer shrink-0" title="Sync .md files to mobile">
+                      <input
+                        type="checkbox"
+                        checked={docSyncEnabled}
+                        onChange={(e) => handleDocSyncToggle(project.path, e.target.checked)}
+                        className="w-3 h-3 cursor-pointer accent-[var(--nim-primary)]"
+                      />
+                      <span className="text-[10px] text-nim-faint">Docs</span>
+                    </label>
+                  )}
+                  <button
+                    onClick={() => handleRemoveProject(project.path)}
+                    className="opacity-0 group-hover:opacity-100 p-0.5 bg-transparent border-none text-nim-faint cursor-pointer hover:text-nim-muted shrink-0"
+                    title="Remove from sync"
+                  >
+                    <MaterialSymbol icon="close" size={14} />
+                  </button>
+                </div>
+              );
+            })}
+            {showAddProject && availableProjects.map((project) => (
+              <button
+                key={project.path}
+                onClick={() => handleAddProject(project.path)}
+                className="flex items-center gap-2 px-2.5 py-1.5 w-full bg-transparent border-none border-b border-[var(--nim-border)] last:border-b-0 cursor-pointer hover:bg-nim-hover text-left"
+              >
+                <MaterialSymbol icon="add" size={14} className="text-[var(--nim-primary)] shrink-0" />
+                <span className="text-[13px] text-nim-muted truncate">{project.name}</span>
+              </button>
+            ))}
+            {showAddProject && (
+              <button
+                onClick={() => setShowAddProject(false)}
+                className="w-full py-1 text-[11px] text-nim-faint bg-transparent border-none border-t border-[var(--nim-border)] cursor-pointer hover:bg-nim-hover"
+              >
+                Done
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Idle timeout */}
+        <div className="flex items-center justify-between mt-2">
+          <span className="text-[11px] text-nim-faint">Push notification delay</span>
           <select
             value={config.idleTimeoutMinutes ?? 5}
             onChange={(e) => handleFieldChange('idleTimeoutMinutes', Number(e.target.value))}
-            className="px-2 py-1 text-[12px] bg-nim-secondary border border-nim rounded text-nim-muted cursor-pointer"
+            className="px-1.5 py-0.5 text-[11px] bg-nim-secondary border border-nim rounded text-nim-muted cursor-pointer"
           >
             <option value={1}>1 min</option>
             <option value={2}>2 min</option>

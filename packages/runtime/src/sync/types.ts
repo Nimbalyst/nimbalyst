@@ -157,6 +157,7 @@ export interface SyncProvider {
       sessionCount: number;
       lastActivityAt: number;
       syncEnabled: boolean;
+      gitRemoteHash?: string;
     }>;
   }>;
 
@@ -281,6 +282,26 @@ export interface SyncProvider {
    * Safe to call even if already connected (will no-op).
    */
   reconnectIndex?(): Promise<void>;
+
+  /** Push a file index entry to the IndexRoom (for mobile markdown sync) */
+  syncFileToIndex?(file: FileIndexData): void;
+
+  /** Remove a file from the IndexRoom file index */
+  deleteFileFromIndex?(docId: string): void;
+}
+
+/** File data for file index sync (unencrypted - will be encrypted before sending) */
+export interface FileIndexData {
+  /** Document sync ID from frontmatter */
+  docId: string;
+  /** Workspace project ID */
+  projectId: string;
+  /** Relative path within the project e.g. "notes/meeting.md" */
+  relativePath: string;
+  /** Display title (filename without extension) */
+  title: string;
+  /** Last modified timestamp (ms) */
+  lastModifiedAt: number;
 }
 
 /** Session data for bulk index sync */
@@ -473,6 +494,8 @@ export interface ProjectConfig {
   commands: SyncedSlashCommand[];
   /** Timestamp of last commands update */
   lastCommandsUpdate: number;
+  /** SHA-256 hash of the normalized git remote URL (for server-side project identity lookup) */
+  gitRemoteHash?: string;
 }
 
 /**

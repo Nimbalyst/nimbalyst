@@ -638,6 +638,23 @@ interface ElectronAPI {
       reason?: string;
       error?: string;
     }) => void) => () => void;
+    // Personal document sync (mobile markdown sync)
+    isPersonalSyncAvailable: () => Promise<{ available: boolean }>;
+    ensureSyncId: (filePath: string) => Promise<{ success: boolean; syncId?: string; error?: string }>;
+    getSyncId: (filePath: string) => Promise<{ syncId: string | null }>;
+    resolvePersonalConfig: (filePath: string) => Promise<{
+      success: boolean;
+      config?: {
+        serverUrl: string;
+        orgId: string;
+        userId: string;
+        encryptionKeyBase64: string;
+        syncId: string;
+        userName: string;
+      };
+      error?: string;
+    }>;
+    getPersonalJwt: () => Promise<{ success: boolean; jwt?: string; error?: string }>;
   };
 
   // Worktree operations

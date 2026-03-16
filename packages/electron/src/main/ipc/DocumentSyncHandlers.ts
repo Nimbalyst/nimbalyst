@@ -8,10 +8,12 @@
 
 import { safeHandle } from '../utils/ipcRegistry';
 import { logger } from '../utils/logger';
-import { isAuthenticated, getStytchUserId, getUserEmail, getAuthState } from '../services/StytchAuthService';
+import { isAuthenticated, getStytchUserId, getUserEmail, getAuthState, getPersonalSessionJwt, refreshPersonalSession } from '../services/StytchAuthService';
 import { findTeamForWorkspace, getOrgScopedJwt } from '../services/TeamService';
 import { getOrgKey, getOrCreateIdentityKeyPair, uploadIdentityKeyToOrg, fetchAndUnwrapOrgKey } from '../services/OrgKeyService';
 import { getSessionSyncConfig, getWorkspaceState, updateWorkspaceState } from '../utils/store';
+import { getPersonalDocSyncConfig, isSyncEnabled } from '../services/SyncManager';
+import { ensureSyncId, getSyncId } from '../services/DocSyncService';
 import WebSocket from 'ws';
 
 // WebSocket proxy: browser WebSocket to sync.nimbalyst.com fails due to
@@ -301,5 +303,116 @@ export function registerDocumentSyncHandlers(): void {
         userEmail: getUserEmail() || undefined,
       },
     };
+  });
+
+  // --------------------------------------------------------------------------
+  // Personal Document Sync (mobile markdown sync)
+  //
+  // Uses the same encryption key and personal org as session sync.
+  // Documents are identified by syncId stored in frontmatter.
+  // --------------------------------------------------------------------------
+
+  /**
+   * Check if personal document sync is available for the current user.
+   * Returns true if session sync is enabled (which means QR pairing has been done).
+   */
+  safeHandle('document-sync:is-personal-sync-available', async () => {
+    return { available: isSyncEnabled() };
+  });
+
+  /**
+   * Get or create a syncId for a markdown file.
+   * If the file doesn't have a syncId in its frontmatter, one is generated and written.
+   *
+   * Payload: { filePath: string }
+   * Returns: { success: true, syncId: string } | { success: false, error: string }
+   */
+  safeHandle('document-sync:ensure-sync-id', async (_event, payload: { filePath: string }) => {
+    try {
+      const syncId = await ensureSyncId(payload.filePath);
+      return { success: true, syncId };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
+  /**
+   * Read the syncId from a file's frontmatter without modifying the file.
+   *
+   * Payload: { filePath: string }
+   * Returns: { syncId: string | null }
+   */
+  safeHandle('document-sync:get-sync-id', async (_event, payload: { filePath: string }) => {
+    const syncId = await getSyncId(payload.filePath);
+    return { syncId };
+  });
+
+  /**
+   * Resolve personal document sync config for the renderer.
+   * The renderer uses this to create a DocumentSyncProvider for a .md file.
+   *
+   * Payload: { filePath: string }
+   * Returns: { success: true, config: PersonalDocSyncResolvedConfig }
+   *        | { success: false, error: string }
+   */
+  safeHandle('document-sync:resolve-personal-config', async (_event, payload: {
+    filePath: string;
+  }) => {
+    const syncConfig = getPersonalDocSyncConfig();
+    if (!syncConfig) {
+      return { success: false, error: 'Personal sync not available. Enable mobile sync first.' };
+    }
+
+    try {
+      // Ensure the file has a syncId
+      const syncId = await ensureSyncId(payload.filePath);
+
+      // Export the encryption key as raw base64 for the renderer
+      const rawBytes = await crypto.subtle.exportKey('raw', syncConfig.encryptionKeyRaw);
+      const encryptionKeyBase64 = Buffer.from(rawBytes).toString('base64');
+
+      // Get pending update if any
+      const pendingKey = `org:${syncConfig.orgId}:doc:${syncId}`;
+      // Find workspace for this file to get workspace state
+      // We scan all workspace states for the one containing this file
+      let pendingUpdateBase64: string | undefined;
+      // Note: pending updates for personal docs use the same workspace state mechanism
+
+      return {
+        success: true,
+        config: {
+          serverUrl: syncConfig.serverUrl,
+          orgId: syncConfig.orgId,
+          userId: syncConfig.userId,
+          encryptionKeyBase64,
+          syncId,
+          userName: getUserDisplayName(syncConfig.userId),
+        },
+      };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
+  /**
+   * Get a fresh personal JWT for document sync WebSocket reconnects.
+   * Personal docs use the personal JWT (not team JWT).
+   */
+  safeHandle('document-sync:get-personal-jwt', async () => {
+    try {
+      const isDev = process.env.NODE_ENV !== 'production';
+      const config = getSessionSyncConfig();
+      const env = isDev ? config?.environment : undefined;
+      const serverUrl = env === 'development' ? DEVELOPMENT_SYNC_URL : PRODUCTION_SYNC_URL;
+
+      await refreshPersonalSession(serverUrl);
+      const jwt = getPersonalSessionJwt();
+      if (!jwt) {
+        return { success: false, error: 'No personal JWT available' };
+      }
+      return { success: true, jwt };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
   });
 }
