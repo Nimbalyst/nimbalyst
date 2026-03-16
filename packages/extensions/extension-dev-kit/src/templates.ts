@@ -36,6 +36,27 @@ This is a **Nimbalyst extension** project. Nimbalyst is an extensible, AI-native
 - **Template**: \`${template}\`
 - **File patterns**: ${filePatterns.map(p => `\`${p}\``).join(', ')}`);
 
+  sections.push(`## Documentation
+
+Use these docs in this order:
+
+1. **Bundled SDK docs in packaged Nimbalyst**
+   - Cross-platform runtime path: \`path.join(process.resourcesPath, 'extension-sdk-docs')\`
+   - macOS example: \`/Applications/Nimbalyst.app/Contents/Resources/extension-sdk-docs\`
+   - Windows example: \`<Nimbalyst install dir>\\\\resources\\\\extension-sdk-docs\`
+2. **Monorepo source docs** (when developing inside the Nimbalyst repo)
+   - \`packages/extension-sdk-docs/README.md\`
+   - \`packages/extension-sdk-docs/getting-started.md\`
+   - \`packages/extension-sdk-docs/custom-editors.md\`
+   - \`packages/extension-sdk-docs/ai-tools.md\`
+   - \`packages/extension-sdk-docs/manifest-reference.md\`
+   - \`packages/extension-sdk-docs/api-reference.md\`
+   - \`packages/extension-sdk-docs/examples/\`
+3. **Hosted docs**
+   - \`https://docs.nimbalyst.com/extensions\`
+
+When examples are more helpful than prose, prefer the example projects in \`packages/extension-sdk-docs/examples/\` and the built-in extensions in \`packages/extensions/\`.`);
+
   // Build workflow
   sections.push(`## Build and Development Workflow
 
@@ -298,12 +319,64 @@ import { useEditorLifecycle } from '@nimbalyst/runtime';
 }
 
 /**
- * Generate .agents.md that points at CLAUDE.md
+ * Generate AGENTS.md for a new extension project.
  */
-function generateAgentsMd(): string {
-  return `# Agents
+function generateAgentsMd(options: TemplateOptions & { template: string }): string {
+  const { extensionId, template } = options;
 
-See [CLAUDE.md](./CLAUDE.md) for full development instructions, build workflow, and extension architecture.
+  return `# AGENTS.md
+
+This is a Nimbalyst extension project. Read [CLAUDE.md](./CLAUDE.md) before making changes.
+
+## What This Project Is
+
+- Extension ID: \`${extensionId}\`
+- Template: \`${template}\`
+- Build output is declared by \`manifest.json\`
+- Source lives in \`src/\`
+- \`dist/\` is generated output and should not be edited by hand
+
+## Documentation
+
+Use these docs in this order:
+
+1. Bundled SDK docs in packaged Nimbalyst:
+   - Runtime path: \`path.join(process.resourcesPath, 'extension-sdk-docs')\`
+   - macOS example: \`/Applications/Nimbalyst.app/Contents/Resources/extension-sdk-docs\`
+   - Windows example: \`<Nimbalyst install dir>\\\\resources\\\\extension-sdk-docs\`
+2. Monorepo source docs when available:
+   - \`packages/extension-sdk-docs/README.md\`
+   - \`packages/extension-sdk-docs/getting-started.md\`
+   - \`packages/extension-sdk-docs/custom-editors.md\`
+   - \`packages/extension-sdk-docs/ai-tools.md\`
+   - \`packages/extension-sdk-docs/manifest-reference.md\`
+   - \`packages/extension-sdk-docs/api-reference.md\`
+   - \`packages/extension-sdk-docs/examples/\`
+3. Hosted docs:
+   - \`https://docs.nimbalyst.com/extensions\`
+
+## Required Workflow
+
+- Run \`npm install\` once before the first build
+- Build with \`mcp__nimbalyst-extension-dev__extension_build\`
+- Install with \`mcp__nimbalyst-extension-dev__extension_install\`
+- Iterate with \`mcp__nimbalyst-extension-dev__extension_reload\`
+- Check status with \`mcp__nimbalyst-extension-dev__extension_get_status\`
+- Use main and renderer log MCP tools for debugging
+- Do not restart Nimbalyst unless the user explicitly asks
+
+## Validation Checklist
+
+- \`manifest.json > main\` matches the file Vite emits in \`dist/\`
+- Every \`customEditors[].component\` entry matches a key in the exported \`components\` object
+- Every tool name listed in \`contributions.aiTools\` has a matching exported handler
+- Custom editors use \`host.loadContent()\`, \`host.onSaveRequested()\`, \`host.onFileChanged()\`, and \`host.setDirty()\`
+- Styling uses Nimbalyst CSS variables such as \`--nim-bg\`, \`--nim-text\`, and \`--nim-border\`
+
+## When Unsure
+
+- Follow [CLAUDE.md](./CLAUDE.md) as the authoritative project guide
+- Prefer SDK docs and local examples over inventing patterns
 `;
 }
 
@@ -317,7 +390,7 @@ export function minimalTemplate(options: TemplateOptions): TemplateFiles {
 
   return {
     'CLAUDE.md': generateClaudeMd({ ...options, template: 'minimal' }),
-    '.agents.md': generateAgentsMd(),
+    'AGENTS.md': generateAgentsMd({ ...options, template: 'minimal' }),
 
     'manifest.json': JSON.stringify(
       {
@@ -492,7 +565,7 @@ export function customEditorTemplate(options: TemplateOptions): TemplateFiles {
 
   return {
     'CLAUDE.md': generateClaudeMd({ ...options, template: 'custom-editor' }),
-    '.agents.md': generateAgentsMd(),
+    'AGENTS.md': generateAgentsMd({ ...options, template: 'custom-editor' }),
 
     'manifest.json': JSON.stringify(
       {
@@ -808,7 +881,7 @@ export function aiToolTemplate(options: TemplateOptions): TemplateFiles {
 
   return {
     'CLAUDE.md': generateClaudeMd({ ...options, template: 'ai-tool' }),
-    '.agents.md': generateAgentsMd(),
+    'AGENTS.md': generateAgentsMd({ ...options, template: 'ai-tool' }),
 
     'manifest.json': JSON.stringify(
       {
