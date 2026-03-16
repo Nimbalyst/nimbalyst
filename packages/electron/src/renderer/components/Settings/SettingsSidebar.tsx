@@ -59,7 +59,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
 }) => {
   // Get release channel and alpha/beta feature flags from Jotai atoms
   const releaseChannel = useAtomValue(releaseChannelAtom);
-  const alphaFeatures = useAlphaFeatures(['voice-mode', 'claude-plugins', 'collaboration']);
+  const alphaFeatures = useAlphaFeatures(['voice-mode', 'claude-plugins', 'collaboration', 'marketplace']);
   const getStatusDot = (providerId: string): 'success' | 'warning' | 'error' | undefined => {
     const status = providerStatus[providerId];
     if (!status) return undefined;
@@ -189,6 +189,12 @@ Best for quick edits and tasks that do not require multi-file operations.`,
     {
       title: 'Extensions',
       items: [
+        {
+          id: 'marketplace',
+          name: 'Marketplace',
+          icon: <MaterialSymbol icon="storefront" size={16} />,
+          hidden: !alphaFeatures['marketplace'],
+        },
         {
           id: 'installed-extensions',
           name: 'Installed',

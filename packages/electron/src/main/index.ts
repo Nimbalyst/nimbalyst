@@ -88,6 +88,7 @@ import { claudeUsageService } from './services/ClaudeUsageService';
 import { registerCodexUsageHandlers } from './ipc/CodexUsageHandlers';
 import { codexUsageService } from './services/CodexUsageService';
 import { registerExtensionHandlers, getClaudePluginPaths, initializeExtensionFileTypes } from './ipc/ExtensionHandlers';
+import { registerExtensionMarketplaceHandlers } from './ipc/ExtensionMarketplaceHandlers';
 import { getRegisteredExtensions } from './extensions/RegisteredFileTypes';
 import { ClaudeCodeProvider, OpenAICodexProvider } from '@nimbalyst/runtime/ai/server';
 import { isMCPServerEnabledForProvider, MCP_PROVIDER_IDS } from '@nimbalyst/runtime/types/MCPServerConfig';
@@ -539,6 +540,22 @@ async function handleDeepLink(url: string): Promise<void> {
                 }
             } else {
                 logger.main.error('[DeepLink] Auth callback missing session_token');
+            }
+        } else if (parsed.host === 'install' || parsed.pathname?.startsWith('/install/')) {
+            // Handle extension install: nimbalyst://install/com.nimbalyst.excalidraw
+            const extensionId = parsed.host === 'install'
+                ? parsed.pathname?.replace(/^\//, '')
+                : parsed.pathname?.replace('/install/', '');
+
+            if (extensionId) {
+                logger.main.info(`[DeepLink] Extension install request: ${extensionId}`);
+                // Send to renderer to show install confirmation in marketplace panel
+                const windows = BrowserWindow.getAllWindows();
+                if (windows.length > 0) {
+                    windows[0].webContents.send('extension-marketplace:install-request', { extensionId });
+                }
+            } else {
+                logger.main.warn('[DeepLink] Extension install missing extension ID');
             }
         } else {
             logger.main.warn(`[DeepLink] Unknown deep link: ${url}`);
@@ -1143,6 +1160,7 @@ app.whenReady().then(async () => {
     registerMockupHandlers();
     registerDataModelHandlers();
     registerExtensionHandlers();
+    registerExtensionMarketplaceHandlers();
     registerOffscreenEditorHandlers();
 
     // Initialize extension file types (must happen before file operations)

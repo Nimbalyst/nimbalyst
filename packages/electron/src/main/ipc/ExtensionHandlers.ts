@@ -136,7 +136,7 @@ export async function initializeExtensionFileTypes(): Promise<void> {
  * Creates it if it doesn't exist.
  * In Playwright tests, uses a temp directory to avoid touching production extensions.
  */
-async function getUserExtensionsDirectory(): Promise<string> {
+export async function getUserExtensionsDirectory(): Promise<string> {
   // Use test-specific path for Playwright tests to avoid conflicts
   const userDataPath = process.env.PLAYWRIGHT === '1'
     ? path.join(app.getPath('temp'), 'nimbalyst-test-extensions')

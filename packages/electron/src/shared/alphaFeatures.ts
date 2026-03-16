@@ -67,6 +67,12 @@ export const ALPHA_FEATURES: readonly AlphaFeatureDefinition[] = [
     description: 'Enable kanban board view in tracker mode.',
     icon: 'view_kanban',
   },
+  {
+    tag: 'marketplace',
+    name: 'Extension Marketplace',
+    description: 'Browse, install, and manage extensions from the marketplace.',
+    icon: 'storefront',
+  },
 ] as const;
 
 /**
