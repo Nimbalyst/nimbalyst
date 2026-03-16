@@ -76,6 +76,8 @@ interface AppStoreSchema {
   featureWalkthroughCompleted?: boolean;
   // Worktree onboarding modal shown
   worktreeOnboardingShown?: boolean;
+  // Extension project capability intro shown
+  extensionProjectIntroShown?: boolean;
   // Extension settings (enabled/disabled state and configuration)
   extensionSettings?: Record<string, ExtensionSettings>;
   // Claude Code settings
@@ -1288,6 +1290,15 @@ export function isWorktreeOnboardingShown(): boolean {
 
 export function setWorktreeOnboardingShown(shown: boolean): void {
   getAppStore().set('worktreeOnboardingShown', shown);
+}
+
+// Extension Project Intro Settings
+export function isExtensionProjectIntroShown(): boolean {
+  return getAppStore().get('extensionProjectIntroShown', false);
+}
+
+export function setExtensionProjectIntroShown(shown: boolean): void {
+  getAppStore().set('extensionProjectIntroShown', shown);
 }
 
 // Extension Settings Management

@@ -27,7 +27,7 @@ import { WorkspaceWelcome } from './components/WorkspaceWelcome.tsx';
 // Dialog system - new centralized dialog management
 import { DialogProvider, dialogRef } from './contexts/DialogContext';
 import { initializeDialogs, DIALOG_IDS } from './dialogs';
-import type { ProjectSelectionData, ErrorDialogData } from './dialogs';
+import type { ProjectSelectionData, ErrorDialogData, ExtensionProjectIntroData } from './dialogs';
 import { NavigationDialogKeyboardHandler } from './components/NavigationDialogKeyboardHandler';
 import { ConfirmDialog } from './components/ConfirmDialog/ConfirmDialog';
 // NOTE: DiscordInvitation, KeyboardShortcutsDialog, ApiKeyDialog now managed by DialogProvider
@@ -1068,6 +1068,38 @@ export default function App() {
       window.electronAPI.off?.('show-session-import-dialog', handleShowSessionImportDialog);
     };
   }, [workspacePath]);
+
+  // Listen for show-extension-project-intro-dialog IPC event
+  useEffect(() => {
+    if (!window.electronAPI?.on || !window.electronAPI?.send) return;
+
+    const handleShowExtensionProjectIntroDialog = (data: { requestId: string }) => {
+      const channel = `extension-project-intro-dialog-response:${data.requestId}`;
+
+      if (!dialogRef.current) {
+        window.electronAPI.send(channel, { action: 'cancel' });
+        return;
+      }
+
+      dialogRef.current.open<ExtensionProjectIntroData>(DIALOG_IDS.EXTENSION_PROJECT_INTRO, {
+        onContinue: () => {
+          window.electronAPI.send(channel, { action: 'continue' });
+        },
+        onDontShowAgain: () => {
+          window.electronAPI.send(channel, { action: 'dont-show-again' });
+        },
+        onCancel: () => {
+          window.electronAPI.send(channel, { action: 'cancel' });
+        },
+      });
+    };
+
+    window.electronAPI.on('show-extension-project-intro-dialog', handleShowExtensionProjectIntroDialog);
+
+    return () => {
+      window.electronAPI.off?.('show-extension-project-intro-dialog', handleShowExtensionProjectIntroDialog);
+    };
+  }, []);
 
   // NOTE: Commands toast check removed - commands now via extension-based plugins
 

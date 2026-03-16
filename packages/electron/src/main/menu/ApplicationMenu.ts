@@ -43,7 +43,10 @@ import { autoUpdaterService } from '../services/autoUpdater';
 import { KeyboardShortcuts } from './KeyboardShortcuts';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { FeatureTrackingService } from '../services/analytics/FeatureTrackingService';
-import { showNewExtensionProjectDialog } from '../services/ExtensionProjectScaffolder';
+import {
+    showExtensionProjectIntroDialog,
+    showNewExtensionProjectDialog,
+} from '../services/ExtensionProjectScaffolder';
 
 // Import shared SDK docs path function
 import { getExtensionSDKDocsPath } from '../utils/workspaceDetection';
@@ -1280,6 +1283,15 @@ export async function createApplicationMenu() {
                                 if (focused) {
                                     focused.webContents.send('show-discord-invitation');
                                 }
+                            }
+                        },
+                        {
+                            label: 'Show Extension Project Intro',
+                            click: async () => {
+                                await showExtensionProjectIntroDialog(getFocusedWindow(), {
+                                    forceShow: true,
+                                    markShown: false,
+                                });
                             }
                         },
                         {

@@ -40,6 +40,7 @@ export const DIALOG_IDS = {
   FEATURE_WALKTHROUGH: 'feature-walkthrough',
   WINDOWS_CLAUDE_CODE_WARNING: 'windows-claude-code-warning',
   ROSETTA_WARNING: 'rosetta-warning',
+  EXTENSION_PROJECT_INTRO: 'extension-project-intro',
 
   // Developer group
   SESSION_IMPORT: 'session-import',

@@ -11,6 +11,7 @@ import type { DialogConfig } from '../contexts/DialogContext.types';
 import { WindowsClaudeCodeWarning } from '../components/WindowsClaudeCodeWarning/WindowsClaudeCodeWarning';
 import { RosettaWarning } from '../components/RosettaWarning/RosettaWarning';
 import { UnifiedOnboarding, type OnboardingData } from '../components/UnifiedOnboarding/UnifiedOnboarding';
+import { ExtensionProjectIntroModal } from '../components/ExtensionProjectIntroModal/ExtensionProjectIntroModal';
 import { DIALOG_IDS } from './registry';
 
 // Type definitions for dialog data
@@ -31,6 +32,12 @@ export interface UnifiedOnboardingData {
   onComplete: (data: OnboardingData) => void;
   onSkip: () => void;
   forcedMode?: 'new' | 'existing' | null;
+}
+
+export interface ExtensionProjectIntroData {
+  onContinue: () => void;
+  onDontShowAgain: () => void;
+  onCancel: () => void;
 }
 
 // Re-export OnboardingData for convenience
@@ -119,6 +126,47 @@ function RosettaWarningWrapper({
   );
 }
 
+function ExtensionProjectIntroWrapper({
+  isOpen,
+  onClose,
+  data,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  data: ExtensionProjectIntroData;
+}) {
+  const handledRef = React.useRef(false);
+
+  React.useEffect(() => {
+    return () => {
+      if (!handledRef.current) {
+        data.onCancel();
+      }
+    };
+  }, [data]);
+
+  return (
+    <ExtensionProjectIntroModal
+      isOpen={isOpen}
+      onContinue={() => {
+        handledRef.current = true;
+        data.onContinue();
+        onClose();
+      }}
+      onDontShowAgain={() => {
+        handledRef.current = true;
+        data.onDontShowAgain();
+        onClose();
+      }}
+      onCancel={() => {
+        handledRef.current = true;
+        data.onCancel();
+        onClose();
+      }}
+    />
+  );
+}
+
 // Register all onboarding dialogs
 export function registerOnboardingDialogs() {
   registerDialog<WindowsClaudeCodeWarningData>({
@@ -143,5 +191,13 @@ export function registerOnboardingDialogs() {
     component:
       RosettaWarningWrapper as DialogConfig<RosettaWarningData>['component'],
     priority: 190,
+  });
+
+  registerDialog<ExtensionProjectIntroData>({
+    id: DIALOG_IDS.EXTENSION_PROJECT_INTRO,
+    group: 'onboarding',
+    component:
+      ExtensionProjectIntroWrapper as DialogConfig<ExtensionProjectIntroData>['component'],
+    priority: 205,
   });
 }

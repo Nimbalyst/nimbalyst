@@ -1,9 +1,15 @@
-import { app, BrowserWindow, dialog } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import { basename, dirname, join } from 'path';
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'fs';
 import { templates } from '../../../../extensions/extension-dev-kit/src/templates.ts';
 import { createWindow, findWindowByWorkspace } from '../window/WindowManager';
-import { addToRecentItems, getWorkspaceWindowState, isExtensionDevToolsEnabled } from '../utils/store';
+import {
+  addToRecentItems,
+  getWorkspaceWindowState,
+  isExtensionDevToolsEnabled,
+  isExtensionProjectIntroShown,
+  setExtensionProjectIntroShown,
+} from '../utils/store';
 
 type ExtensionTemplateId = 'minimal' | 'custom-editor' | 'ai-tool';
 
@@ -68,7 +74,90 @@ function openWorkspace(projectPath: string): void {
   createWindow(false, true, projectPath, savedState?.bounds);
 }
 
+interface ExtensionProjectIntroDialogOptions {
+  forceShow?: boolean;
+  markShown?: boolean;
+}
+
+type ExtensionProjectIntroDialogResult = 'continue' | 'dont-show-again' | 'cancel';
+
+async function showExtensionProjectIntroFallbackDialog(
+  sourceWindow?: BrowserWindow | null,
+): Promise<ExtensionProjectIntroDialogResult> {
+  const dialogOptions = {
+    type: 'info' as const,
+    title: 'Build With Extensions',
+    message: 'Extensions can add custom editors, AI tools, panels, commands, and other workspace features.',
+    detail: 'Nimbalyst can load your extension project while you build it, so you can test changes inside the app without leaving your development flow.\n\nYou can start from a template now, then ask Claude to build, install, and reload the extension as you iterate.',
+    buttons: ['Cancel', "Don't Show Again", 'Continue'],
+    defaultId: 2,
+    cancelId: 0,
+    noLink: true,
+  };
+
+  const result = sourceWindow
+    ? await dialog.showMessageBox(sourceWindow, dialogOptions)
+    : await dialog.showMessageBox(dialogOptions);
+
+  switch (result.response) {
+    case 1:
+      return 'dont-show-again';
+    case 2:
+      return 'continue';
+    default:
+      return 'cancel';
+  }
+}
+
+export async function showExtensionProjectIntroDialog(
+  sourceWindow?: BrowserWindow | null,
+  options: ExtensionProjectIntroDialogOptions = {},
+): Promise<boolean> {
+  const { forceShow = false, markShown = true } = options;
+
+  if (!forceShow && isExtensionProjectIntroShown()) {
+    return true;
+  }
+
+  let result: ExtensionProjectIntroDialogResult;
+
+  if (sourceWindow && !sourceWindow.isDestroyed()) {
+    result = await new Promise<ExtensionProjectIntroDialogResult>((resolve) => {
+      const requestId = `extension-project-intro-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const channel = `extension-project-intro-dialog-response:${requestId}`;
+      const timeout = setTimeout(async () => {
+        ipcMain.removeAllListeners(channel);
+        resolve(await showExtensionProjectIntroFallbackDialog(sourceWindow));
+      }, 15000);
+
+      ipcMain.once(channel, (_event, data: { action?: ExtensionProjectIntroDialogResult } | undefined) => {
+        clearTimeout(timeout);
+        resolve(data?.action ?? 'cancel');
+      });
+
+      sourceWindow.webContents.send('show-extension-project-intro-dialog', { requestId });
+    });
+  } else {
+    result = await showExtensionProjectIntroFallbackDialog(sourceWindow);
+  }
+
+  if (result === 'cancel') {
+    return false;
+  }
+
+  if (markShown) {
+    setExtensionProjectIntroShown(true);
+  }
+
+  return true;
+}
+
 export async function showNewExtensionProjectDialog(sourceWindow?: BrowserWindow | null): Promise<void> {
+  const shouldContinue = await showExtensionProjectIntroDialog(sourceWindow);
+  if (!shouldContinue) {
+    return;
+  }
+
   const templateResult = sourceWindow
     ? await dialog.showMessageBox(sourceWindow, {
       type: 'question',

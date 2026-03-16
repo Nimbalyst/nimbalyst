@@ -39,6 +39,7 @@ export {
   type WindowsClaudeCodeWarningData,
   type RosettaWarningData,
   type UnifiedOnboardingData,
+  type ExtensionProjectIntroData,
   type OnboardingData,
 } from './onboardingDialogs';
 export {
