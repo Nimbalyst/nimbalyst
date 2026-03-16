@@ -20,10 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
-## [0.55.32] - 2026-03-16
+## [0.56.0] - 2026-03-16
 
 
 ### Added
+- Session recovery system: survive app restart with pending questions
+- Extension marketplace with security warning and alpha gate
+- Keep Awake option to prevent Mac sleep while syncing
 - E2E encrypted document sync between desktop and iOS
 - Native Android client with mobile sync parity
 - Extension project intro modal with simplified creation flow (neutral starter scaffold)
@@ -42,6 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Android/iOS parity improvements and PostHog analytics
 
 ### Changed
+- Sync identity uses path-based SHA-256 instead of YAML frontmatter syncId
 - DataModelLM auto-layout replaced with ELK layout engine
 - OpenAI model defaults refreshed to current GPT-5.x and GPT-4.1 IDs
 - ClaudeCodeProvider static DI and SDK options extracted into focused modules
@@ -49,7 +53,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - httpServer.ts (4,258 lines) split into focused modules
 
 ### Fixed
-- App no longer steals focus repeatedly during launch
+- SSE keepalive pings prevent MCP connection death during long tool waits
+- Orphaned UUID-keyed files purged on server during sync handshake
+- Single app activation on launch instead of per-window focus steal
+- Skip writing remote sync files when local content already matches
 - New projects no longer open with terminal panel visible
 - Extensions can no longer hijack keyboard input in text fields
 - AskUserQuestion no longer hangs when routed through MCP server path
