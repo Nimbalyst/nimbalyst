@@ -295,6 +295,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   reportUserActivity: () => ipcRenderer.send('user-activity'),
   /** Set the idle threshold for sync presence (in milliseconds). For testing, use 10000 (10 seconds). */
   setSyncIdleThreshold: (ms: number) => ipcRenderer.invoke('sync:set-idle-threshold', ms),
+  /** Toggle prevent-sleep when syncing (uses powerSaveBlocker). */
+  setSyncPreventSleep: (enabled: boolean) => ipcRenderer.invoke('sync:set-prevent-sleep', enabled),
 
   // Get initial window state
   getInitialState: () => ipcRenderer.invoke('get-initial-state'),
@@ -730,6 +732,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       itemId: string;
       archive: boolean;
     }) => ipcRenderer.invoke('document-service:tracker-item-archive', payload) as Promise<{ success: boolean; item?: any; error?: string }>,
+    deleteTrackerItem: (payload: {
+      itemId: string;
+    }) => ipcRenderer.invoke('document-service:tracker-item-delete', payload) as Promise<{ success: boolean; error?: string }>,
     importTrackerItemFromFile: (payload: {
       relativePath: string;
       skipDuplicates?: boolean;

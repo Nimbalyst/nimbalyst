@@ -742,6 +742,40 @@ export function SyncPanel() {
         <SharingCallout />
       )}
 
+      {/* Keep Awake toggle + warning */}
+      {config.enabled && (
+        <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+          <div className="flex items-center justify-between">
+            <div className="flex-1 mr-3">
+              <h4 className="text-[13px] font-medium text-nim m-0">Keep Mac awake while syncing</h4>
+              <p className="text-[11px] text-nim-muted mt-0.5 mb-0">
+                Prevents your Mac from sleeping so your mobile device stays connected. Display can still turn off.
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+              <input
+                type="checkbox"
+                checked={config.preventSleepWhenSyncing ?? false}
+                onChange={(e) => {
+                  updateConfig({ preventSleepWhenSyncing: e.target.checked });
+                  window.electronAPI.invoke('sync:set-prevent-sleep', e.target.checked);
+                }}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-nim-tertiary rounded-full peer peer-checked:bg-nim-primary transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full" />
+            </label>
+          </div>
+          {!config.preventSleepWhenSyncing && enabledProjectCount > 0 && (
+            <div className="flex items-center gap-2 mt-2 p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg text-[11px] text-amber-500">
+              <svg className="shrink-0" width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 1a7 7 0 100 14A7 7 0 008 1zM7 5a1 1 0 112 0v3a1 1 0 11-2 0V5zm1 7a1 1 0 100-2 1 1 0 000 2z" />
+              </svg>
+              <span>Your Mac may sleep and disconnect from your mobile device. Enable this to keep the connection alive.</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Synced Projects */}
       <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
         <div className="flex items-center justify-between mb-2">
@@ -1037,6 +1071,11 @@ export function SyncPanel() {
         isOpen={showQRModal}
         onClose={() => setShowQRModal(false)}
         serverUrl={effectiveServerUrl}
+        preventSleepEnabled={config.preventSleepWhenSyncing ?? false}
+        onPreventSleepChange={(enabled) => {
+          updateConfig({ preventSleepWhenSyncing: enabled });
+          window.electronAPI.invoke('sync:set-prevent-sleep', enabled);
+        }}
       />
     </div>
   );

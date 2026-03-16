@@ -27,6 +27,7 @@ import { startProjectFileSync } from '../file/WorkspaceWatcher';
 import { windowStates } from '../window/WindowManager';
 import { getNormalizedGitRemote } from '../utils/gitUtils';
 import { createHash } from 'crypto';
+import { startPreventingSleep, stopPreventingSleep } from './PowerSaveService';
 
 function loadSyncModule() {
   return syncModule;
@@ -128,6 +129,16 @@ function updateSyncStatus(update: Partial<{ connected: boolean; syncing: boolean
   if (changed) {
     const status = { connected: state.connected, syncing: state.syncing, error: state.error };
     statusListeners.forEach(listener => listener(status));
+
+    // Manage sleep prevention based on connection state and user preference
+    if (update.connected !== undefined) {
+      const config = getSessionSyncConfig();
+      if (update.connected && config?.preventSleepWhenSyncing) {
+        startPreventingSleep();
+      } else if (!update.connected) {
+        stopPreventingSleep();
+      }
+    }
   }
 }
 
@@ -768,6 +779,19 @@ export function getMessageSyncHandler(): ReturnType<typeof import('@nimbalyst/ru
 }
 
 /**
+ * Update sleep prevention state based on current config.
+ * Call this when the preventSleepWhenSyncing setting changes at runtime.
+ */
+export function updateSleepPrevention(): void {
+  const config = getSessionSyncConfig();
+  if (state.connected && config?.preventSleepWhenSyncing) {
+    startPreventingSleep();
+  } else {
+    stopPreventingSleep();
+  }
+}
+
+/**
  * Check if sync is currently active.
  */
 export function isSyncEnabled(): boolean {
@@ -815,6 +839,8 @@ export function getPersonalDocSyncConfig(): {
  * Shutdown sync and disconnect all sessions.
  */
 export function shutdownSync(): void {
+  stopPreventingSleep();
+
   if (state.sessionKeepAliveInterval) {
     clearInterval(state.sessionKeepAliveInterval);
     state.sessionKeepAliveInterval = null;

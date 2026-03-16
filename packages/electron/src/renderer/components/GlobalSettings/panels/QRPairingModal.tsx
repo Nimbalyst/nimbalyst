@@ -6,6 +6,10 @@ interface QRPairingModalProps {
   isOpen: boolean;
   onClose: () => void;
   serverUrl: string;
+  /** Current value of preventSleepWhenSyncing from sync config */
+  preventSleepEnabled?: boolean;
+  /** Called when the user toggles the prevent-sleep setting */
+  onPreventSleepChange?: (enabled: boolean) => void;
 }
 
 /**
@@ -41,7 +45,7 @@ function replaceLocalhostWithIP(url: string, ip: string): string {
  * Mobile devices authenticate independently via Stytch OAuth - the QR code only shares
  * the encryption key needed for E2E encrypted sync.
  */
-export function QRPairingModal({ isOpen, onClose, serverUrl }: QRPairingModalProps) {
+export function QRPairingModal({ isOpen, onClose, serverUrl, preventSleepEnabled, onPreventSleepChange }: QRPairingModalProps) {
   const [qrDataUrl, setQRDataUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [qrPayload, setQRPayload] = useState<object | null>(null);
@@ -237,6 +241,26 @@ export function QRPairingModal({ isOpen, onClose, serverUrl }: QRPairingModalPro
                   This QR code securely transfers your encryption key. Your keys never touch our servers - only your devices can decrypt your data.
                 </p>
               </div>
+
+              {/* Keep Awake suggestion */}
+              {onPreventSleepChange && (
+                <div className="mt-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={preventSleepEnabled ?? false}
+                      onChange={(e) => onPreventSleepChange(e.target.checked)}
+                      className="mt-0.5 shrink-0"
+                    />
+                    <div>
+                      <span className="text-[13px] font-medium text-nim">Keep Mac awake while syncing</span>
+                      <p className="text-[11px] text-nim-muted mt-1 mb-0">
+                        Prevents your Mac from sleeping so your mobile device stays connected. Your display can still turn off normally.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              )}
 
               <div className="qr-warning flex items-center gap-2 mt-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs text-amber-600">
                 <svg className="qr-warning-icon shrink-0" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">

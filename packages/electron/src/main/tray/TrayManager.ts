@@ -14,8 +14,10 @@ import { getSessionStateManager } from '@nimbalyst/runtime/ai/server/SessionStat
 import type { SessionStateEvent } from '@nimbalyst/runtime/ai/server/types/SessionState';
 import { findWindowByWorkspace } from '../window/WindowManager';
 import { getPackageRoot } from '../utils/appPaths';
-import { isShowTrayIcon, setShowTrayIcon } from '../utils/store';
+import { isShowTrayIcon, setShowTrayIcon, getSessionSyncConfig, setSessionSyncConfig } from '../utils/store';
 import { logger } from '../utils/logger';
+import { isPreventingSleep } from '../services/PowerSaveService';
+import { updateSleepPrevention } from '../services/SyncManager';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -457,6 +459,29 @@ export class TrayManager {
         }
       },
     });
+    // Keep Awake toggle (only show when sync is configured)
+    const syncConfig = getSessionSyncConfig();
+    if (syncConfig?.enabled) {
+      const keepAwakeActive = isPreventingSleep();
+      menuItems.push({
+        label: 'Keep Awake',
+        type: 'checkbox',
+        checked: keepAwakeActive,
+        click: () => {
+          const currentConfig = getSessionSyncConfig();
+          if (currentConfig) {
+            const newValue = !currentConfig.preventSleepWhenSyncing;
+            setSessionSyncConfig({ ...currentConfig, preventSleepWhenSyncing: newValue });
+            updateSleepPrevention();
+            this.scheduleMenuRebuild();
+            // Notify all renderer windows so Jotai atoms stay in sync
+            for (const win of BrowserWindow.getAllWindows()) {
+              win.webContents.send('sync:config-updated', { ...currentConfig, preventSleepWhenSyncing: newValue });
+            }
+          }
+        },
+      });
+    }
     menuItems.push({
       label: 'Hide Menu Bar Icon',
       click: () => this.setVisible(false),

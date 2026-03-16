@@ -11,7 +11,7 @@ import { SoundNotificationService } from '../services/SoundNotificationService';
 import { autoUpdaterService } from '../services/autoUpdater';
 import type { OnboardingState } from '../utils/store';
 import { getCredentials, resetCredentials, generateQRPairingPayload, isUsingSecureStorage } from '../services/CredentialService';
-import { onSyncStatusChange } from '../services/SyncManager';
+import { onSyncStatusChange, updateSleepPrevention } from '../services/SyncManager';
 import * as StytchAuth from '../services/StytchAuthService';
 import { getRestartSignalPath } from '../utils/appPaths';
 import { TrayManager } from '../tray/TrayManager';
@@ -554,6 +554,16 @@ export function registerSettingsHandlers() {
             return { success: false, error: 'Failed to reinitialize sync' };
         }
 
+        return { success: true };
+    });
+
+    safeHandle('sync:set-prevent-sleep', (_event, enabled: boolean) => {
+        const currentConfig = getSessionSyncConfig();
+        if (currentConfig) {
+            setSessionSyncConfig({ ...currentConfig, preventSleepWhenSyncing: enabled });
+        }
+        // Update the blocker state without full sync reinit
+        updateSleepPrevention();
         return { success: true };
     });
 

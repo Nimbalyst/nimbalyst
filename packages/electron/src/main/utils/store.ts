@@ -147,6 +147,23 @@ interface AppStoreSchema {
   historyMaxSnapshots?: number; // Max snapshots per file (default: 250)
   // Last known app version (for migrations)
   lastKnownVersion?: string;
+  // Extension marketplace install tracking
+  marketplaceInstalls?: Record<string, MarketplaceInstallRecord>;
+}
+
+/**
+ * Tracks marketplace-installed extensions (not built-in ones).
+ * Keyed by extension ID in the store.
+ */
+export interface MarketplaceInstallRecord {
+  extensionId: string;
+  version: string;
+  installedAt: string;
+  updatedAt: string;
+  downloadUrl: string;
+  checksum: string;
+  source: 'marketplace' | 'github-url';
+  githubUrl?: string;
 }
 
 /**
@@ -1240,6 +1257,9 @@ export interface SessionSyncConfig {
   // login order doesn't affect which index room sessions sync to.
   personalOrgId?: string;
   personalUserId?: string;
+  // Prevent system sleep while sync is active (uses Electron powerSaveBlocker).
+  // Off by default. Suggested to user during mobile pairing.
+  preventSleepWhenSyncing?: boolean;
 }
 
 // Stytch Auth Configuration (stored separately from session sync)
@@ -1887,6 +1907,36 @@ function versionLessThanOrEqual(versionA: string, versionB: string): boolean {
  * Run app migrations based on version changes.
  * Should be called once during app startup.
  */
+// Extension Marketplace Install Tracking
+
+export function getMarketplaceInstalls(): Record<string, MarketplaceInstallRecord> {
+  return getAppStore().get('marketplaceInstalls', {});
+}
+
+export function getMarketplaceInstall(extensionId: string): MarketplaceInstallRecord | undefined {
+  return getMarketplaceInstalls()[extensionId];
+}
+
+export function addMarketplaceInstall(record: MarketplaceInstallRecord): void {
+  const installs = getMarketplaceInstalls();
+  installs[record.extensionId] = record;
+  getAppStore().set('marketplaceInstalls', installs);
+}
+
+export function removeMarketplaceInstall(extensionId: string): void {
+  const installs = getMarketplaceInstalls();
+  delete installs[extensionId];
+  getAppStore().set('marketplaceInstalls', installs);
+}
+
+export function updateMarketplaceInstall(extensionId: string, updates: Partial<MarketplaceInstallRecord>): void {
+  const installs = getMarketplaceInstalls();
+  if (installs[extensionId]) {
+    installs[extensionId] = { ...installs[extensionId], ...updates };
+    getAppStore().set('marketplaceInstalls', installs);
+  }
+}
+
 export function runMigrations(currentVersion: string): void {
   const lastKnownVersion = getAppStore().get('lastKnownVersion');
 

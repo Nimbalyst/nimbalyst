@@ -16,6 +16,7 @@ import {
 } from '../atoms/sessions';
 import { workstreamStateAtom, setWorkstreamActiveChildAtom, setWorktreeActiveSessionAtom } from '../atoms/workstreamState';
 import { setWindowModeAtom } from '../atoms/windowMode';
+import { syncConfigAtom, type SyncConfig } from '../atoms/appSettings';
 
 /**
  * Atom that signals a new session should be created.
@@ -112,6 +113,16 @@ export function initTrayListeners(): () => void {
 
   cleanups.push(
     window.electronAPI.on('tray:new-session', handleNewSession)
+  );
+
+  // Handle sync:config-updated from main process (e.g. tray Keep Awake toggle)
+  // Updates the Jotai atom so the SyncPanel UI stays in sync
+  const handleSyncConfigUpdated = (config: SyncConfig) => {
+    store.set(syncConfigAtom, config);
+  };
+
+  cleanups.push(
+    window.electronAPI.on('sync:config-updated', handleSyncConfigUpdated)
   );
 
   return () => {
