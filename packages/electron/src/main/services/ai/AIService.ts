@@ -4409,6 +4409,31 @@ export class AIService {
         return { success: true };
       }
 
+      // No live handler exists -- the SDK subprocess is dead (e.g., app restarted
+      // while session was waiting for input). Auto-resume the session by sending
+      // a new message that includes the user's answer. The Claude Code SDK will
+      // resume using the stored providerSessionId, picking up conversation history.
+      if (resolvedSessionId && this.sendMessageHandler && session) {
+        const answerText = Object.entries(answers)
+          .map(([question, answer]) => `${question}: ${answer}`)
+          .join('\n');
+        const resumeMessage = `[Resuming after answering a question]\n\n${answerText}`;
+
+        logger.main.info(`[AIService] No live handler for AskUserQuestion, auto-resuming session: ${resolvedSessionId}`);
+
+        // Fire-and-forget: resume the session in the background
+        const workspacePath = session.workspacePath;
+        setImmediate(async () => {
+          try {
+            await this.sendMessageHandler!(event, resumeMessage, undefined, resolvedSessionId, workspacePath);
+          } catch (err) {
+            logger.main.error(`[AIService] Failed to auto-resume session after AskUserQuestion: ${err}`);
+          }
+        });
+
+        return { success: true };
+      }
+
       logger.main.warn(`[AIService] Question not found for provider/session: ${resolvedSessionId}`);
       return { success: false, error: 'Question not found' };
     });

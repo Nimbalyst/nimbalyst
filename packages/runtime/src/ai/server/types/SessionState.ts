@@ -10,9 +10,8 @@
 export type SessionStatus =
   | 'idle'                  // Session exists but not currently active
   | 'running'               // Session is actively processing
-  | 'waiting_for_input'     // Session is waiting for user input
-  | 'error'                 // Session encountered an error
-  | 'interrupted';          // Session was stopped unexpectedly (crash, force stop)
+  | 'waiting_for_input'     // Session is waiting for user input (survives restart)
+  | 'error';                // Session ended with an error
 
 /**
  * In-memory state for a running session

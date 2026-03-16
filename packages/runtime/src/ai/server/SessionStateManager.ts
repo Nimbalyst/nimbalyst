@@ -200,10 +200,10 @@ export class SessionStateManager extends EventEmitter {
       this.activeSessions.delete(sessionId);
     }
 
-    // Update database
-    await this.updateDatabase(sessionId, 'interrupted');
+    // Update database -- interrupted is just idle (SDK process died)
+    await this.updateDatabase(sessionId, 'idle');
 
-    // Emit event
+    // Emit event (event type stays 'interrupted' for tray/UI to react to)
     this.emitEvent({
       type: 'session:interrupted',
       sessionId,
@@ -303,15 +303,14 @@ export class SessionStateManager extends EventEmitter {
     if (!this.database) return;
 
     try {
-      // Query for sessions that were marked as running
-      const result = await this.database.query(
+      // Recover sessions that were 'running' -- the SDK subprocess is dead after restart,
+      // so these are just idle now.
+      const runningResult = await this.database.query(
         `SELECT id, last_activity FROM ai_sessions WHERE status = 'running'`,
         []
       );
 
-      const now = Date.now();
-
-      for (const row of result.rows) {
+      for (const row of runningResult.rows) {
         const sessionId = row.id;
 
         // Skip sessions that are actively tracked in memory (currently running this app session)
@@ -319,18 +318,21 @@ export class SessionStateManager extends EventEmitter {
           continue;
         }
 
-        const lastActivity = row.last_activity ? new Date(row.last_activity).getTime() : 0;
-        const elapsed = now - lastActivity;
+        await this.updateDatabase(sessionId, 'idle');
+        console.log(`[SessionStateManager] Marked running session as idle after restart: ${sessionId}`);
+      }
 
-        if (elapsed > STALE_THRESHOLD_MS) {
-          await this.updateDatabase(sessionId, 'idle');
-          console.log(`[SessionStateManager] Marked stale session as idle: ${sessionId} (inactive for ${Math.round(elapsed / 1000)}s)`);
-        } else {
-          // Recent activity - could still be active, but we'll mark as idle to be safe
-          // since the app just started and we don't know the real state
-          await this.updateDatabase(sessionId, 'idle');
-          console.log(`[SessionStateManager] Marked recently active session as idle: ${sessionId}`);
-        }
+      // Sessions with status 'waiting_for_input' are intentionally LEFT ALONE.
+      // The user may still need to answer the question (even days/weeks later).
+      // The durable prompt widgets will be restored from ai_agent_messages on load,
+      // and answering will auto-resume the session via the answer handler.
+      const waitingResult = await this.database.query(
+        `SELECT id FROM ai_sessions WHERE status = 'waiting_for_input'`,
+        []
+      );
+      if (waitingResult.rows.length > 0) {
+        const ids = waitingResult.rows.map((r: any) => r.id);
+        console.log(`[SessionStateManager] Preserved ${ids.length} session(s) waiting for input: ${ids.join(', ')}`);
       }
     } catch (error) {
       console.error('[SessionStateManager] Failed to recover stale sessions:', error);

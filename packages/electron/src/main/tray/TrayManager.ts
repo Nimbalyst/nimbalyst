@@ -27,7 +27,7 @@ interface TraySessionInfo {
   sessionId: string;
   title: string;
   workspacePath: string;
-  status: 'running' | 'idle' | 'error' | 'interrupted' | 'completed';
+  status: 'running' | 'idle' | 'error' | 'completed';
   isStreaming: boolean;
   hasPendingPrompt: boolean;
   hasUnread: boolean;

@@ -481,7 +481,7 @@ class PGLiteWorker {
           SELECT 1 FROM information_schema.columns
           WHERE table_name = 'ai_sessions' AND column_name = 'status'
         ) THEN
-          ALTER TABLE ai_sessions ADD COLUMN status TEXT DEFAULT 'idle' CHECK (status IN ('idle', 'running', 'waiting_for_input', 'error', 'interrupted'));
+          ALTER TABLE ai_sessions ADD COLUMN status TEXT DEFAULT 'idle' CHECK (status IN ('idle', 'running', 'waiting_for_input', 'error'));
         END IF;
 
         IF NOT EXISTS (
@@ -521,6 +521,30 @@ class PGLiteWorker {
           WHERE table_name = 'ai_sessions' AND column_name = 'last_document_state'
         ) THEN
           ALTER TABLE ai_sessions ADD COLUMN last_document_state JSONB;
+        END IF;
+      END $$;
+    `);
+
+    // Migration: Simplify session status states -- drop 'interrupted' (it's just 'idle')
+    // Update any existing 'interrupted' rows to 'idle', then replace the CHECK constraint.
+    await this.db.exec(`
+      UPDATE ai_sessions SET status = 'idle' WHERE status = 'interrupted';
+    `);
+    await this.db.exec(`
+      DO $$
+      DECLARE
+        constraint_name TEXT;
+      BEGIN
+        SELECT con.conname INTO constraint_name
+        FROM pg_constraint con
+        JOIN pg_attribute att ON att.attnum = ANY(con.conkey) AND att.attrelid = con.conrelid
+        WHERE con.conrelid = 'ai_sessions'::regclass
+          AND att.attname = 'status'
+          AND con.contype = 'c';
+        IF constraint_name IS NOT NULL THEN
+          EXECUTE 'ALTER TABLE ai_sessions DROP CONSTRAINT ' || constraint_name;
+          ALTER TABLE ai_sessions ADD CONSTRAINT ai_sessions_status_check
+            CHECK (status IN ('idle', 'running', 'waiting_for_input', 'error'));
         END IF;
       END $$;
     `);
