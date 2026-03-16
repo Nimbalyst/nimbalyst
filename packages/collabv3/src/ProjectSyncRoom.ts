@@ -411,6 +411,23 @@ export class PersonalProjectSyncRoom implements DurableObject {
       }
     }
 
+    // Purge orphaned server files whose syncIds the client doesn't recognize.
+    // This handles migration from UUID-based syncIds to path-based SHA-256 syncIds:
+    // old entries remain on the server under stale keys and must be cleaned up.
+    const orphanedSyncIds: string[] = [];
+    for (const row of serverRows) {
+      if (!clientMap.has(row.sync_id)) {
+        orphanedSyncIds.push(row.sync_id);
+      }
+    }
+    if (orphanedSyncIds.length > 0) {
+      for (const syncId of orphanedSyncIds) {
+        sql.exec(`DELETE FROM files WHERE sync_id = ?`, syncId);
+        sql.exec(`DELETE FROM yjs_updates WHERE sync_id = ?`, syncId);
+      }
+      log.info(`Purged ${orphanedSyncIds.length} orphaned files (syncId migration cleanup)`);
+    }
+
     // Check for deleted files (files in server's deleted_files tracking)
     const deletedRows = sql.exec<{ value: string }>(
       `SELECT value FROM metadata WHERE key = 'deleted_sync_ids'`
@@ -429,11 +446,15 @@ export class PersonalProjectSyncRoom implements DurableObject {
       }
     }
 
+    // Filter out any orphaned files from the response (already purged above)
+    const orphanedSet = new Set(orphanedSyncIds);
+    const cleanNewFiles = newFiles.filter(f => !orphanedSet.has(f.syncId));
+
     const response: ProjectSyncServerMessage = {
       type: 'projectSyncResponse',
       updatedFiles,
       yjsUpdates,
-      newFiles,
+      newFiles: cleanNewFiles,
       needFromClient,
       deletedSyncIds,
     };

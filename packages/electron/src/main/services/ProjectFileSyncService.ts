@@ -320,7 +320,7 @@ export class ProjectFileSyncService {
           return;
         }
       } catch {
-        // File doesn't exist locally -- proceed with write
+        // File doesn't exist locally -- proceed with write (genuinely new from remote)
       }
 
       // Ensure parent directory exists
