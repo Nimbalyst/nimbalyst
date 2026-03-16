@@ -493,6 +493,23 @@ async function tryCreateServer(port: number): Promise<any> {
           const transport = new SSEServerTransport("/mcp", res);
           activeTransports.set(transport.sessionId, transport);
 
+          // SSE keepalive: send periodic comment pings to prevent the
+          // TCP connection from going idle during long-running MCP tool
+          // waits (e.g., AskUserQuestion waiting for user input).
+          // Without this, the connection can silently die and the SDK
+          // subprocess never receives the tool result.
+          const keepaliveInterval = setInterval(() => {
+            try {
+              if (!res.writableEnded) {
+                res.write(": keepalive\n\n");
+              } else {
+                clearInterval(keepaliveInterval);
+              }
+            } catch {
+              clearInterval(keepaliveInterval);
+            }
+          }, 30_000);
+
           if (sessionId) {
             serverByNimbalystSession.set(sessionId, server);
           }
@@ -507,6 +524,7 @@ async function tryCreateServer(port: number): Promise<any> {
             .connect(transport)
             .then(() => {
               transport.onclose = () => {
+                clearInterval(keepaliveInterval);
                 activeTransports.delete(transport.sessionId);
                 if (sessionId) {
                   serverByNimbalystSession.delete(sessionId);
@@ -518,6 +536,7 @@ async function tryCreateServer(port: number): Promise<any> {
             })
             .catch((error) => {
               console.error("[MCP Server] Connection error:", error);
+              clearInterval(keepaliveInterval);
               activeTransports.delete(transport.sessionId);
               if (sessionId) {
                 serverByNimbalystSession.delete(sessionId);
