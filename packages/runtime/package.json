@@ -144,13 +144,13 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.69",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.76",
     "@anthropic-ai/sdk": "^0.71.2",
     "@nimbalyst/extension-sdk": "*",
     "@lexical/dragon": "^0.34.0",
     "@lexical/history": "^0.34.0",
     "@monaco-editor/react": "^4.7.0",
-    "@openai/codex-sdk": "^0.110.0",
+    "@openai/codex-sdk": "^0.114.0",
     "@types/js-yaml": "^4.0.9",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/shell-quote": "^1.7.5",
