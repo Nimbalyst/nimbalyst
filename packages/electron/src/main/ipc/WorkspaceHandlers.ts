@@ -752,12 +752,15 @@ export function registerWorkspaceHandlers() {
             const stats = await stat(filePath);
             const isDirectory = stats.isDirectory();
 
-            // Read syncId before trashing so we can remove from file index
+            // Compute syncId before trashing so we can remove from file index
             let deletedSyncId: string | null = null;
             if (!isDirectory && filePath.endsWith('.md')) {
-              try {
-                deletedSyncId = await getSyncId(filePath);
-              } catch { /* ignore */ }
+              const window = BrowserWindow.fromWebContents(event.sender);
+              const wId = window ? getWindowId(window) : null;
+              const wState = wId !== null ? windowStates.get(wId) : null;
+              if (wState?.workspacePath) {
+                deletedSyncId = getSyncId(filePath, wState.workspacePath);
+              }
             }
 
             // Move to system trash (Recycle Bin on Windows, Trash on macOS/Linux)

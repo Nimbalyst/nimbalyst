@@ -13,7 +13,7 @@ import { findTeamForWorkspace, getOrgScopedJwt } from '../services/TeamService';
 import { getOrgKey, getOrCreateIdentityKeyPair, uploadIdentityKeyToOrg, fetchAndUnwrapOrgKey } from '../services/OrgKeyService';
 import { getSessionSyncConfig, getWorkspaceState, updateWorkspaceState } from '../utils/store';
 import { getPersonalDocSyncConfig, isSyncEnabled } from '../services/SyncManager';
-import { ensureSyncId, getSyncId } from '../services/DocSyncService';
+import { getSyncId } from '../services/DocSyncService';
 import WebSocket from 'ws';
 
 // WebSocket proxy: browser WebSocket to sync.nimbalyst.com fails due to
@@ -321,30 +321,18 @@ export function registerDocumentSyncHandlers(): void {
   });
 
   /**
-   * Get or create a syncId for a markdown file.
-   * If the file doesn't have a syncId in its frontmatter, one is generated and written.
+   * Get the deterministic syncId for a markdown file based on its relative path.
    *
-   * Payload: { filePath: string }
+   * Payload: { filePath: string, workspacePath: string }
    * Returns: { success: true, syncId: string } | { success: false, error: string }
    */
-  safeHandle('document-sync:ensure-sync-id', async (_event, payload: { filePath: string }) => {
+  safeHandle('document-sync:get-sync-id', async (_event, payload: { filePath: string; workspacePath: string }) => {
     try {
-      const syncId = await ensureSyncId(payload.filePath);
+      const syncId = getSyncId(payload.filePath, payload.workspacePath);
       return { success: true, syncId };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };
     }
-  });
-
-  /**
-   * Read the syncId from a file's frontmatter without modifying the file.
-   *
-   * Payload: { filePath: string }
-   * Returns: { syncId: string | null }
-   */
-  safeHandle('document-sync:get-sync-id', async (_event, payload: { filePath: string }) => {
-    const syncId = await getSyncId(payload.filePath);
-    return { syncId };
   });
 
   /**
@@ -357,6 +345,7 @@ export function registerDocumentSyncHandlers(): void {
    */
   safeHandle('document-sync:resolve-personal-config', async (_event, payload: {
     filePath: string;
+    workspacePath: string;
   }) => {
     const syncConfig = getPersonalDocSyncConfig();
     if (!syncConfig) {
@@ -364,19 +353,11 @@ export function registerDocumentSyncHandlers(): void {
     }
 
     try {
-      // Ensure the file has a syncId
-      const syncId = await ensureSyncId(payload.filePath);
+      const syncId = getSyncId(payload.filePath, payload.workspacePath);
 
       // Export the encryption key as raw base64 for the renderer
       const rawBytes = await crypto.subtle.exportKey('raw', syncConfig.encryptionKeyRaw);
       const encryptionKeyBase64 = Buffer.from(rawBytes).toString('base64');
-
-      // Get pending update if any
-      const pendingKey = `org:${syncConfig.orgId}:doc:${syncId}`;
-      // Find workspace for this file to get workspace state
-      // We scan all workspace states for the one containing this file
-      let pendingUpdateBase64: string | undefined;
-      // Note: pending updates for personal docs use the same workspace state mechanism
 
       return {
         success: true,

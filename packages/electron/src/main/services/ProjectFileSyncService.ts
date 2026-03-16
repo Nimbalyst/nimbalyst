@@ -16,7 +16,6 @@ import * as path from 'path';
 import { createHash } from 'crypto';
 import { logger } from '../utils/logger';
 import { ProjectSyncProvider, type ProjectSyncManifestFile, type ProjectSyncResponse, type ProjectSyncFileUpdate } from '@nimbalyst/runtime/sync';
-import { ensureSyncId, getSyncId } from './DocSyncService';
 import { getPersonalDocSyncConfig } from './SyncManager';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -99,7 +98,8 @@ export class ProjectFileSyncService {
 
       for (const filePath of mdFiles) {
         try {
-          const syncId = await ensureSyncId(filePath);
+          const relativePath = path.relative(workspacePath, filePath);
+          const syncId = this.syncIdFromPath(relativePath);
           const content = await fs.readFile(filePath, 'utf-8');
           const stat = await fs.stat(filePath);
           const contentHash = this.sha256(content);
@@ -154,12 +154,10 @@ export class ProjectFileSyncService {
     if (!filePath.endsWith('.md')) return;
 
     try {
-      const syncId = await getSyncId(filePath);
-      if (!syncId) return; // No syncId = not participating in sync
-
+      const relativePath = path.relative(workspacePath, filePath);
+      const syncId = this.syncIdFromPath(relativePath);
       const content = await fs.readFile(filePath, 'utf-8');
       const stat = await fs.stat(filePath);
-      const relativePath = path.relative(workspacePath, filePath);
       const title = path.basename(filePath, '.md');
 
       await this.provider.pushFileContent(
@@ -430,6 +428,11 @@ export class ProjectFileSyncService {
   }
 
   // MARK: - Utilities
+
+  /** Deterministic sync ID from relative path -- no file modification needed. */
+  private syncIdFromPath(relativePath: string): string {
+    return createHash('sha256').update(relativePath).digest('hex');
+  }
 
   private sha256(content: string): string {
     return createHash('sha256').update(content).digest('hex');

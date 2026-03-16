@@ -849,16 +849,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Personal document sync (mobile markdown sync)
     isPersonalSyncAvailable: () =>
       ipcRenderer.invoke('document-sync:is-personal-sync-available') as Promise<{ available: boolean }>,
-    ensureSyncId: (filePath: string) =>
-      ipcRenderer.invoke('document-sync:ensure-sync-id', { filePath }) as Promise<{
+    getSyncId: (filePath: string, workspacePath: string) =>
+      ipcRenderer.invoke('document-sync:get-sync-id', { filePath, workspacePath }) as Promise<{
         success: boolean;
         syncId?: string;
         error?: string;
       }>,
-    getSyncId: (filePath: string) =>
-      ipcRenderer.invoke('document-sync:get-sync-id', { filePath }) as Promise<{ syncId: string | null }>,
-    resolvePersonalConfig: (filePath: string) =>
-      ipcRenderer.invoke('document-sync:resolve-personal-config', { filePath }) as Promise<{
+    resolvePersonalConfig: (filePath: string, workspacePath: string) =>
+      ipcRenderer.invoke('document-sync:resolve-personal-config', { filePath, workspacePath }) as Promise<{
         success: boolean;
         config?: {
           serverUrl: string;

@@ -358,6 +358,9 @@ interface ElectronAPI {
       itemId: string;
       archive: boolean;
     }) => Promise<{ success: boolean; item?: any; error?: string }>;
+    deleteTrackerItem: (payload: {
+      itemId: string;
+    }) => Promise<{ success: boolean; error?: string }>;
     importTrackerItemFromFile: (payload: {
       relativePath: string;
       skipDuplicates?: boolean;
@@ -640,9 +643,8 @@ interface ElectronAPI {
     }) => void) => () => void;
     // Personal document sync (mobile markdown sync)
     isPersonalSyncAvailable: () => Promise<{ available: boolean }>;
-    ensureSyncId: (filePath: string) => Promise<{ success: boolean; syncId?: string; error?: string }>;
-    getSyncId: (filePath: string) => Promise<{ syncId: string | null }>;
-    resolvePersonalConfig: (filePath: string) => Promise<{
+    getSyncId: (filePath: string, workspacePath: string) => Promise<{ success: boolean; syncId?: string; error?: string }>;
+    resolvePersonalConfig: (filePath: string, workspacePath: string) => Promise<{
       success: boolean;
       config?: {
         serverUrl: string;

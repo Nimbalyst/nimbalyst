@@ -4,7 +4,7 @@ import GRDB
 /// A synced markdown document cached locally for offline viewing and editing.
 /// Populated by DocumentSyncManager from ProjectSyncRoom responses.
 public struct SyncedDocument: Codable, Identifiable, Hashable, Sendable {
-    /// syncId UUID from YAML frontmatter (matches server-side files.sync_id)
+    /// Deterministic syncId: SHA-256(relativePath) -- matches server-side files.sync_id
     public var id: String
     /// Project workspace path (foreign key to projects.id)
     public var projectId: String
