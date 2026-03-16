@@ -599,6 +599,25 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
                 };
               }
             }
+          } else if (parsed.type === 'result' && parsed.result && typeof parsed.result === 'string' && parsed.result.trim().length > 0) {
+            // SDK result chunk with text content (e.g. "Unknown skill: prepare", slash command output)
+            // Display as an assistant message so the user can see what happened
+            const lastMsg = uiMessages[uiMessages.length - 1];
+            if (lastMsg && lastMsg.role === 'assistant' && !(lastMsg as any).isComplete) {
+              lastMsg.content += parsed.result;
+            } else {
+              uiMessages.push({
+                role: 'assistant',
+                content: parsed.result,
+                timestamp,
+                isSystem: true,
+              });
+            }
+            // Also mark as complete since result is the final chunk
+            const msg = uiMessages[uiMessages.length - 1];
+            if (msg && msg.role === 'assistant') {
+              (msg as any).isComplete = true;
+            }
           } else if (parsed.usage) {
             // This is metadata (usage stats), mark last message as complete
             const lastMsg = uiMessages[uiMessages.length - 1];
