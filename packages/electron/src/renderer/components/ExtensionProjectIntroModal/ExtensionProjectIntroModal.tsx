@@ -14,6 +14,11 @@ const capabilityCards = [
     description: 'Build file-specific editors, views, and interactions that feel native inside Nimbalyst.',
   },
   {
+    imageSrc: new URL('/onboarding/extension-panel-docker.png', import.meta.url).href,
+    title: 'Panels',
+    description: 'Add side panels and workspace views for dashboards, control surfaces, and live status.',
+  },
+  {
     icon: 'psychology',
     title: 'AI tools',
     description: 'Expose extension features to agents so Claude can use them while working in your project.',
@@ -56,7 +61,7 @@ export const ExtensionProjectIntroModal: React.FC<ExtensionProjectIntroModalProp
         </div>
 
         <div className="px-7 py-6">
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             {capabilityCards.map((card) => (
               <div
                 key={card.title}
@@ -65,7 +70,7 @@ export const ExtensionProjectIntroModal: React.FC<ExtensionProjectIntroModalProp
                 {'imageSrc' in card ? (
                   <img
                     src={card.imageSrc}
-                    alt="Custom editor preview"
+                    alt={`${card.title} preview`}
                     className="mb-3 h-24 w-full rounded-xl border border-nim object-cover object-center"
                   />
                 ) : (
