@@ -313,6 +313,16 @@ export class ProjectFileSyncService {
     const filePath = path.join(workspacePath, file.relativePath);
 
     try {
+      // Skip write if local content already matches (avoids unnecessary disk IO and file watcher noise)
+      try {
+        const localContent = await fs.readFile(filePath, 'utf-8');
+        if (this.sha256(localContent) === file.contentHash) {
+          return;
+        }
+      } catch {
+        // File doesn't exist locally -- proceed with write
+      }
+
       // Ensure parent directory exists
       await fs.mkdir(path.dirname(filePath), { recursive: true });
 
