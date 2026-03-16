@@ -20,6 +20,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.55.32] - 2026-03-16
+
+
+### Added
+- E2E encrypted document sync between desktop and iOS
+- Native Android client with mobile sync parity
+- Extension project intro modal with simplified creation flow (neutral starter scaffold)
+- Extension examples in intro modal
+- Richer documentation scaffolding for new extension projects
+- CLAUDE.md and .agents.md generation in new extension projects
+- useEditorLifecycle hook with migration of all extensions
+- Extension API for direct AI chat completions with responseFormat support
+- Extension contribution points for commands, keybindings, and panel tooltips
+- Context menu to hide/show navigation gutter buttons
+- Collaborative cursors that scroll with content and fade on inactivity
+- Per-table database query stats with blocked time tracking
+- Git extension improvements: hover card positioning, branch submenus, pull rebase, auto-refresh
+- Created/updated timestamps in tracker document header
+- Cmd+Shift+V to force-paste text without attachment conversion
+- Android/iOS parity improvements and PostHog analytics
+
+### Changed
+- DataModelLM auto-layout replaced with ELK layout engine
+- OpenAI model defaults refreshed to current GPT-5.x and GPT-4.1 IDs
+- ClaudeCodeProvider static DI and SDK options extracted into focused modules
+- MCP tool schemas colocated with handler implementations
+- httpServer.ts (4,258 lines) split into focused modules
+
+### Fixed
+- App no longer steals focus repeatedly during launch
+- New projects no longer open with terminal panel visible
+- Extensions can no longer hijack keyboard input in text fields
+- AskUserQuestion no longer hangs when routed through MCP server path
+- Sessions no longer stuck as 'running' after git commit proposal with dead subprocess
+- SDK result messages now render correctly in agent transcript
+- Theme type consistency across extension APIs (string type)
+- PDF-viewer extension fileIcons format causing manifest validation failure
+- Mobile AskUserQuestion answers not reaching MCP server
+- Extension chat completion API: skip DB logging, simplify ResponseFormat, reduce noise
+- Virtual refs in floating-ui cast for TypeScript strict checks
+- Windows publisherName set to prevent auto-update rejection on cert change
+- Claude-code user-agent set on usage API requests
+- E2E session-management tests passing with proper data-testid selectors
+- TypeScript strict null errors blocking git push
+
 ## [0.55.31] - 2026-03-12
 
 
