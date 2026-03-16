@@ -77,7 +77,7 @@ export function getMCPToolDefinitions(): MCPToolDefinition[] {
     const customEditors = extension.manifest.contributions?.customEditors || [];
 
     // Get file patterns from custom editors for this extension
-    const extensionFilePatterns = customEditors.flatMap(e => e.filePatterns);
+    const extensionFilePatterns = customEditors.flatMap((e: { filePatterns: string[] }) => e.filePatterns);
 
     for (const tool of extensionTools) {
       // Namespace the tool name

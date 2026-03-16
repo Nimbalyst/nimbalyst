@@ -257,7 +257,7 @@ export class ThemeLoader {
           continue;
         }
 
-        if (!this.isValidColorValue(value)) {
+        if (!this.isValidColorValue(value as string)) {
           errors.push(`Invalid color value for '${key}': '${value}'. Use hex codes (e.g., #ff0000) or CSS color names.`);
         }
       }

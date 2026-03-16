@@ -339,7 +339,7 @@ export function useEditorLifecycle<T = string>(
   // ---- External file changes ----
 
   useEffect(() => {
-    return host.onFileChanged((newRawContent) => {
+    return host.onFileChanged((newRawContent: string) => {
       // Echo detection: ignore if this is our own save echoing back
       if (newRawContent === lastSavedContentRef.current) {
         // console.log('[useEditorLifecycle] File change ignored - matches our last save');
@@ -364,7 +364,7 @@ export function useEditorLifecycle<T = string>(
   // ---- Theme changes ----
 
   useEffect(() => {
-    return host.onThemeChanged((newTheme) => {
+    return host.onThemeChanged((newTheme: string) => {
       setTheme(newTheme);
     });
   }, [host]);
@@ -457,7 +457,7 @@ export function useEditorLifecycle<T = string>(
       setDiffState(null);
       // Reload content since the file may have changed
       if (!opts.binary) {
-        host.loadContent().then((raw) => {
+        host.loadContent().then((raw: string) => {
           const parsed = parseContent(raw);
           lastSavedContentRef.current = raw;
           optionsRef.current.applyContent(parsed);
@@ -472,7 +472,7 @@ export function useEditorLifecycle<T = string>(
   useEffect(() => {
     if (!host.onSourceModeChanged) return;
 
-    return host.onSourceModeChanged((isActive) => {
+    return host.onSourceModeChanged((isActive: boolean) => {
       setIsSourceMode(isActive);
     });
   }, [host]);

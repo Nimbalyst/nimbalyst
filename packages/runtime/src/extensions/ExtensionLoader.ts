@@ -642,7 +642,7 @@ function createExtensionContext(
           },
         };
       },
-      registerContextProvider: (provider): Disposable => {
+      registerContextProvider: (provider: { id: string }): Disposable => {
         console.log(
           `[${manifest.name}] Registered context provider: ${provider.id}`
         );
@@ -774,7 +774,7 @@ function createExtensionContext(
         const result: Record<string, unknown> = {};
         const props = manifest.contributions?.configuration?.properties ?? {};
         for (const [key, prop] of Object.entries(props)) {
-          result[key] = configCache[key] ?? prop.default;
+          result[key] = configCache[key] ?? (prop as { default?: unknown }).default;
         }
         return result;
       },

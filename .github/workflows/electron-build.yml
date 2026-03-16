@@ -83,14 +83,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build runtime package (for theme assets)
-        working-directory: packages/runtime
+      - name: Build extension-sdk
+        working-directory: packages/extension-sdk
         env:
           NODE_ENV: production
         run: npm run build
 
-      - name: Build extension-sdk
-        working-directory: packages/extension-sdk
+      - name: Build runtime package (for theme assets)
+        working-directory: packages/runtime
         env:
           NODE_ENV: production
         run: npm run build
