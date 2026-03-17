@@ -116,6 +116,7 @@ export interface Message {
   };
   attachments?: ChatAttachment[];
   metadata?: Record<string, unknown>;  // Provider-specific metadata (e.g., Codex raw events)
+  isComplete?: boolean; // Internal flag used during transcript assembly to mark finalized messages
 }
 
 export type AIProviderType = 'claude' | 'claude-code' | 'openai' | 'openai-codex' | 'lmstudio';

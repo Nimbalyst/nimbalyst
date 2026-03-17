@@ -2,7 +2,7 @@
  * Centralized tool hooks service for agent providers
  *
  * Manages the full lifecycle of tool execution hooks:
- * - Pre-tool hooks: ExitPlanMode confirmation, file operation tracking, planning mode validation
+ * - Pre-tool hooks: ExitPlanMode confirmation, file operation tracking
  * - Post-tool hooks: File system flush delays for watcher detection
  * - File tagging: Pre-edit tagging via HistoryManager for local history and diffs
  * - Turn snapshots: End-of-turn snapshot creation for all edited files
@@ -67,11 +67,6 @@ export interface AgentToolHooksOptions {
    * Function to save an approved pattern to persisted settings
    */
   patternSaver?: (workspacePath: string, pattern: string) => Promise<void>;
-
-  /**
-   * Function to get extension-registered file types (for planning mode)
-   */
-  extensionFileTypesLoader?: () => Set<string>;
 
   /**
    * Current mode ('planning' | 'agent')
@@ -161,7 +156,6 @@ export class AgentToolHooks {
   private readonly trustChecker?: TrustChecker;
   private readonly patternChecker?: (workspacePath: string, pattern: string) => Promise<boolean>;
   private readonly patternSaver?: (workspacePath: string, pattern: string) => Promise<void>;
-  private readonly extensionFileTypesLoader?: () => Set<string>;
   private readonly getCurrentMode?: () => 'planning' | 'agent' | undefined;
   private readonly setCurrentMode?: (mode: 'planning' | 'agent' | undefined) => void;
   private readonly getPendingExitPlanModeConfirmations?: () => Map<string, {
@@ -203,7 +197,6 @@ export class AgentToolHooks {
     this.trustChecker = options.trustChecker;
     this.patternChecker = options.patternChecker;
     this.patternSaver = options.patternSaver;
-    this.extensionFileTypesLoader = options.extensionFileTypesLoader;
     this.getCurrentMode = options.getCurrentMode;
     this.setCurrentMode = options.setCurrentMode;
     this.getPendingExitPlanModeConfirmations = options.getPendingExitPlanModeConfirmations;
@@ -581,53 +574,6 @@ export class AgentToolHooks {
           permissionDecisionReason: `ExitPlanMode was cancelled or interrupted.`
         }
       };
-    }
-  }
-
-  /**
-   * @deprecated No longer called. Bash file tracking moved to post-tool hook;
-   * pre-tagging removed to avoid racing with watcher-based attribution.
-   */
-  private async handleBashFileOperations(
-    toolInput: any,
-    toolUseID: string | undefined
-  ): Promise<void> {
-    const command = (toolInput?.command as string) || '';
-    const cwd = this.workspacePath || process.cwd();
-
-    // Parse command to detect file operations
-    const affectedFiles = parseBashForFileOps(command, cwd);
-
-    if (affectedFiles.length > 0) {
-      console.log('[BASH-FILE-OPS] Detected file operations:', JSON.stringify({
-        command: command.slice(0, 100),
-        files: affectedFiles.map(f => path.basename(f)),
-        fullPaths: affectedFiles
-      }, null, 2));
-
-      // Tag each file and track for end-of-turn snapshot
-      for (const filePath of affectedFiles) {
-        // Track this file as edited during this turn
-        this.editedFilesThisTurn.add(filePath);
-        console.log('[BASH-FILE-OPS] Added to editedFilesThisTurn:', filePath);
-        console.log('[BASH-FILE-OPS] Current editedFilesThisTurn size:', this.editedFilesThisTurn.size);
-
-        // Create unique tag ID for this edit
-        const actualToolUseId = toolUseID || `tool-${Date.now()}`;
-
-        try {
-          // Check if file exists
-          fs.readFileSync(filePath, 'utf-8');
-          // File exists - tag with current content
-          console.log('[BASH-FILE-OPS] File exists, tagging:', path.basename(filePath));
-          await this.tagFileBeforeEdit(filePath, actualToolUseId);
-        } catch (error) {
-          // File doesn't exist yet (Bash creating new file)
-          // Create a pre-edit tag with empty content so diff mode shows the full new file
-          console.log('[BASH-FILE-OPS] File is new, tagging as new:', path.basename(filePath));
-          await this.tagFileBeforeEdit(filePath, actualToolUseId, true);
-        }
-      }
     }
   }
 

@@ -353,7 +353,7 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
             if (!isTeammateOutput) {
               // Claude Code text chunk: { type: 'text', content: '...' }
               const lastMsg = uiMessages[uiMessages.length - 1];
-              if (lastMsg && lastMsg.role === 'assistant' && !(lastMsg as any).isComplete) {
+              if (lastMsg && lastMsg.role === 'assistant' && !lastMsg.isComplete) {
                 lastMsg.content += parsed.content;
               } else {
                 uiMessages.push({
@@ -371,7 +371,7 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
                   // Skip teammate/background agent text - stays inside parent Task card
                   if (!isTeammateOutput) {
                     const lastMsg = uiMessages[uiMessages.length - 1];
-                    if (lastMsg && lastMsg.role === 'assistant' && !(lastMsg as any).isComplete) {
+                    if (lastMsg && lastMsg.role === 'assistant' && !lastMsg.isComplete) {
                       lastMsg.content += block.text || '';
                     } else {
                       uiMessages.push({
@@ -608,7 +608,7 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
             const hasAccumulatedContent = lastMsg && lastMsg.role === 'assistant' && lastMsg.content.trim().length > 0;
             if (!hasAccumulatedContent) {
               // No text accumulated yet - this is a standalone result (e.g. slash command error)
-              if (lastMsg && lastMsg.role === 'assistant' && !(lastMsg as any).isComplete) {
+              if (lastMsg && lastMsg.role === 'assistant' && !lastMsg.isComplete) {
                 lastMsg.content = parsed.result;
               } else {
                 uiMessages.push({
@@ -622,13 +622,13 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
             // Always mark as complete since result is the final chunk
             const msg = uiMessages[uiMessages.length - 1];
             if (msg && msg.role === 'assistant') {
-              (msg as any).isComplete = true;
+              msg.isComplete = true;
             }
           } else if (parsed.usage) {
             // This is metadata (usage stats), mark last message as complete
             const lastMsg = uiMessages[uiMessages.length - 1];
             if (lastMsg && lastMsg.role === 'assistant') {
-              (lastMsg as any).isComplete = true;
+              lastMsg.isComplete = true;
             }
           }
         } catch (parseError) {
@@ -637,10 +637,10 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
           const content = agentMsg.content;
           if (content && content.trim()) {
             const lastMsg = uiMessages[uiMessages.length - 1];
-            if (lastMsg && lastMsg.role === 'assistant' && !(lastMsg as any).isComplete) {
+            if (lastMsg && lastMsg.role === 'assistant' && !lastMsg.isComplete) {
               // Shouldn't happen with Claude SDK (logs complete messages), but handle it
               lastMsg.content += content;
-              (lastMsg as any).isComplete = true;
+              lastMsg.isComplete = true;
             } else {
               // Create new complete assistant message
               uiMessages.push({
@@ -648,7 +648,7 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
                 content: content,
                 timestamp
               });
-              (uiMessages[uiMessages.length - 1] as any).isComplete = true;
+              uiMessages[uiMessages.length - 1].isComplete = true;
             }
           }
         }
@@ -660,7 +660,7 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
 
   // Mark the last message as complete if it's an assistant message and not already marked
   if (uiMessages.length > 0 && uiMessages[uiMessages.length - 1].role === 'assistant') {
-    (uiMessages[uiMessages.length - 1] as any).isComplete = true;
+    uiMessages[uiMessages.length - 1].isComplete = true;
   }
 
   // PASS 3: Build parent-child hierarchy (safety fallback)

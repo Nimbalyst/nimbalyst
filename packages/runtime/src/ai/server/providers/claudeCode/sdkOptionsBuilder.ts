@@ -121,6 +121,9 @@ export async function buildSdkOptions(
     cwd: workspacePath,
     abortController,
     model: resolveModelVariant(),
+    // IMPORTANT: Do NOT add manual tool restrictions or prompt injections for plan mode here.
+    // The SDK's `permissionMode: 'plan'` natively enforces planning restrictions (scopes
+    // Write to the plan file only). Manual filtering was removed in favour of this approach.
     permissionMode: currentMode === 'planning' ? 'plan' : 'default',
     canUseTool: createCanUseToolHandler(sessionId, workspacePath, permissionsPath),
     hooks: {
@@ -128,6 +131,10 @@ export async function buildSdkOptions(
       'PostToolUse': [{ hooks: [toolHooksService.createPostToolUseHook()] }],
     },
   };
+
+  if (currentMode === 'planning') {
+    console.log('[CLAUDE-CODE] Plan mode active: delegating tool restrictions to SDK permissionMode=plan');
+  }
 
   // Capture lead config for teammate spawning
   teammateManager.lastUsedCwd = workspacePath;
