@@ -10,8 +10,7 @@ import { useEffect, useRef, useCallback, useState, forwardRef } from 'react';
 import { Excalidraw } from '@excalidraw/excalidraw';
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/types/element/types';
 import type { ExcalidrawImperativeAPI, AppState, BinaryFiles } from '@excalidraw/excalidraw/types/types';
-import type { EditorHostProps } from '@nimbalyst/runtime';
-import { useEditorLifecycle } from '@nimbalyst/runtime';
+import { useEditorLifecycle, type EditorHostProps } from '@nimbalyst/extension-sdk';
 import type { ExcalidrawFile } from '../types';
 import { registerEditor, unregisterEditor } from '../editorRegistry';
 

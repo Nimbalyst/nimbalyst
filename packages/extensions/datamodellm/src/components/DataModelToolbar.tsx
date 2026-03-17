@@ -9,7 +9,7 @@ import { MaterialSymbol } from '@nimbalyst/runtime';
 import type { DataModelStoreApi } from '../store';
 import type { EntityViewMode } from '../types';
 import { exportSchema, getAvailableFormats, type ExportFormat } from '../export-service';
-import type { EditorHost } from '@nimbalyst/runtime';
+import type { EditorHost } from '@nimbalyst/extension-sdk';
 
 interface DataModelToolbarProps {
   store: DataModelStoreApi;

@@ -9,8 +9,7 @@
  */
 
 import { useEffect, useRef, useCallback, useState, forwardRef } from 'react';
-import type { EditorHostProps } from '@nimbalyst/runtime';
-import { useEditorLifecycle } from '@nimbalyst/runtime';
+import { useEditorLifecycle, type EditorHostProps } from '@nimbalyst/extension-sdk';
 import type {
   ImageProject,
   ImageProjectV2,

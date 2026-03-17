@@ -15,7 +15,7 @@ import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { RevoGrid, type RevoGridCustomEvent, type ColumnRegular } from '@revolist/react-datagrid';
 import type { RevoGridElement } from '../revogrid-types';
 import type { EditorHostProps, NormalizedSelectionRange, ColumnFormat, DiffState, CellDiff } from '../types';
-import { useEditorLifecycle, type DiffConfig } from '@nimbalyst/runtime';
+import { useEditorLifecycle, type DiffConfig } from '@nimbalyst/extension-sdk';
 import { useSpreadsheetMetadata } from '../hooks/useSpreadsheetMetadata';
 import { createGridOperations, type GridOperations } from '../utils/gridOperations';
 import { UndoRedoPlugin } from '../plugins/UndoRedoPlugin';

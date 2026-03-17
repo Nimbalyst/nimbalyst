@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { EditorHostProps } from '@nimbalyst/extension-sdk';
-import { useEditorLifecycle } from '@nimbalyst/runtime';
+import { useEditorLifecycle } from '@nimbalyst/extension-sdk';
 import type { Database } from 'sql.js';
 import { SQLiteBrowserCore, getSqlJs, getFileName, type DatabaseInfo } from './SQLiteBrowserCore';
 

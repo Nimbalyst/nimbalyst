@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useReducer } from 'react';
-import { useEditorLifecycle } from '@nimbalyst/runtime';
+import { useEditorLifecycle } from '@nimbalyst/extension-sdk';
 import type { EditorHostProps } from '@nimbalyst/extension-sdk';
 
 interface JsonNodeProps {

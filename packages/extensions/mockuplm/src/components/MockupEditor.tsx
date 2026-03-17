@@ -10,8 +10,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback, forwardRef } from 'react';
-import type { EditorHostProps } from '@nimbalyst/runtime';
-import { useEditorLifecycle } from '@nimbalyst/runtime';
+import { useEditorLifecycle, type EditorHostProps } from '@nimbalyst/extension-sdk';
 import { captureMockupComposite } from '../utils/screenshotUtils';
 import { renderMockupHtml } from '../utils/mockupDomUtils';
 import { MockupDiffViewer } from './MockupDiffViewer';

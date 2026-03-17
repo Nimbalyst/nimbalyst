@@ -75,10 +75,10 @@ final class AnalyticsTests: XCTestCase {
     // MARK: - QRPairingData Equality with analyticsId
 
     func testQRPairingDataEqualityWithAnalyticsId() {
-        let a = QRPairingData(seed: "s", serverUrl: "u", userId: "i", analyticsId: "a1")
-        let b = QRPairingData(seed: "s", serverUrl: "u", userId: "i", analyticsId: "a1")
-        let c = QRPairingData(seed: "s", serverUrl: "u", userId: "i", analyticsId: "a2")
-        let d = QRPairingData(seed: "s", serverUrl: "u", userId: "i", analyticsId: nil)
+        let a = QRPairingData(seed: "s", serverUrl: "u", userId: "i", analyticsId: "a1", personalOrgId: nil, personalUserId: nil)
+        let b = QRPairingData(seed: "s", serverUrl: "u", userId: "i", analyticsId: "a1", personalOrgId: nil, personalUserId: nil)
+        let c = QRPairingData(seed: "s", serverUrl: "u", userId: "i", analyticsId: "a2", personalOrgId: nil, personalUserId: nil)
+        let d = QRPairingData(seed: "s", serverUrl: "u", userId: "i", analyticsId: nil, personalOrgId: nil, personalUserId: nil)
 
         XCTAssertEqual(a, b)
         XCTAssertNotEqual(a, c)

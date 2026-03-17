@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { EditorHostProps } from '@nimbalyst/extension-sdk';
-import { useEditorLifecycle } from '@nimbalyst/runtime';
+import { useEditorLifecycle } from '@nimbalyst/extension-sdk';
 import { usePDFDocument } from './hooks/usePDFDocument';
 import { PDFScrollView } from './components/PDFScrollView';
 import { Toolbar } from './components/Toolbar';

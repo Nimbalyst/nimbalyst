@@ -15,8 +15,7 @@ import { createEmptyDataModel, type DataModelFile } from '../types';
 import { parsePrismaSchema, serializeToPrismaSchema } from '../prismaParser';
 import { registerEditorStore, unregisterEditorStore } from '../aiTools';
 import { captureDataModelCanvas, copyScreenshotToClipboard } from '../utils/screenshotUtils';
-import type { EditorHostProps } from '@nimbalyst/runtime';
-import { useEditorLifecycle } from '@nimbalyst/runtime';
+import { useEditorLifecycle, type EditorHostProps } from '@nimbalyst/extension-sdk';
 
 export function DatamodelLMEditor({ host }: EditorHostProps) {
   const { filePath } = host;

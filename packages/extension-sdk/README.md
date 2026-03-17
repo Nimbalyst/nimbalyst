@@ -36,12 +36,11 @@ export default createExtensionConfig({
 
 ## Custom Editor Example
 
-Use the `useEditorLifecycle` hook from `@nimbalyst/runtime` to handle all editor lifecycle concerns (loading, saving, echo detection, file watching, diff mode, theme):
+Use the `useEditorLifecycle` hook to handle all editor lifecycle concerns (loading, saving, echo detection, file watching, diff mode, theme):
 
 ```tsx
 import { useRef } from 'react';
-import { useEditorLifecycle } from '@nimbalyst/runtime';
-import type { EditorHostProps } from '@nimbalyst/extension-sdk';
+import { useEditorLifecycle, type EditorHostProps } from '@nimbalyst/extension-sdk';
 
 export function ExampleEditor({ host }: EditorHostProps) {
   const dataRef = useRef<MyData>(defaultData);

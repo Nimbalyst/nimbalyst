@@ -44,6 +44,7 @@ aiSummary: This is an AI generated summary
 # More content`);
 
       service = new ElectronDocumentService(tempDir);
+      await service.refreshWorkspaceData();
 
       const metadata = await service.listDocumentMetadata();
 
@@ -65,6 +66,7 @@ aiSummary: This is an AI generated summary
       await createTestFile('no-frontmatter.md', '# Just content\n\nNo frontmatter here');
 
       service = new ElectronDocumentService(tempDir);
+      await service.refreshWorkspaceData();
 
       const metadata = await service.listDocumentMetadata();
 
@@ -85,20 +87,20 @@ version: 1
 # Content`);
 
       service = new ElectronDocumentService(tempDir);
-
-      // Wait for initial scan
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await service.refreshWorkspaceData();
 
       const metadata1 = await service.listDocumentMetadata();
       const hash1 = metadata1[0].hash;
 
       // Update content but not frontmatter
+      // Bump mtime by 1s so the cache detects a file change
       await fs.writeFile(filePath, `---
 title: Original Title
 version: 1
 ---
 
 # Updated content but same frontmatter`);
+      await fs.utimes(filePath, new Date(), new Date(Date.now() + 1000));
 
       // Trigger refresh
       await service.refreshWorkspaceData();
@@ -115,6 +117,7 @@ version: 2
 ---
 
 # Content`);
+      await fs.utimes(filePath, new Date(), new Date(Date.now() + 2000));
 
       // Trigger refresh
       await service.refreshWorkspaceData();
@@ -178,6 +181,7 @@ status: draft
 Content`);
 
       service = new ElectronDocumentService(tempDir);
+      await service.refreshWorkspaceData();
 
       // Prime metadata cache before programmatic updates
       const seededMetadata = await service.listDocumentMetadata();
@@ -253,9 +257,7 @@ planStatus:
 # Plan content`);
 
       service = new ElectronDocumentService(tempDir);
-
-      // Wait for initial scan
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await service.refreshWorkspaceData();
 
       const metadata = await service.listDocumentMetadata();
       const planMeta = metadata[0];

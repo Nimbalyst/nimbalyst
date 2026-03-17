@@ -328,11 +328,11 @@ When updating the manifest during implementation, use these schemas:
 
 ## Reference: useEditorLifecycle Hook
 
-Use the `useEditorLifecycle` hook from `@nimbalyst/runtime` to handle all editor lifecycle concerns. It replaces manual `useEffect` subscriptions for loading, saving, file watching, echo detection, dirty state, diff mode, and theme tracking.
+Use the `useEditorLifecycle` hook from `@nimbalyst/extension-sdk` to handle all editor lifecycle concerns. It replaces manual `useEffect` subscriptions for loading, saving, file watching, echo detection, dirty state, diff mode, and theme tracking.
 
 ```tsx
 import { useRef } from 'react';
-import { useEditorLifecycle } from '@nimbalyst/runtime';
+import { useEditorLifecycle } from '@nimbalyst/extension-sdk';
 import type { EditorHostProps } from '@nimbalyst/extension-sdk';
 
 export function MyEditor({ host }: EditorHostProps) {

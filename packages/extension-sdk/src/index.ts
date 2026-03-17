@@ -34,6 +34,14 @@ export {
 // Re-export types
 export * from './types/index.js';
 
+// Re-export hooks
+export {
+  useEditorLifecycle,
+  type UseEditorLifecycleOptions,
+  type UseEditorLifecycleResult,
+  type DiffState,
+} from './useEditorLifecycle.js';
+
 // Re-export validation
 export {
   validateExtensionBundle,

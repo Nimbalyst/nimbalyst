@@ -148,7 +148,7 @@ export interface NormalizedSelectionRange {
  * Props for custom editor components (from Nimbalyst extension system)
  * Re-exported from runtime for convenience
  */
-export type { EditorHost, EditorHostProps } from '@nimbalyst/runtime';
+export type { EditorHost, EditorHostProps } from '@nimbalyst/extension-sdk';
 
 /**
  * Cell reference (for formulas)

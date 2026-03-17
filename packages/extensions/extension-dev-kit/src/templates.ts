@@ -134,11 +134,11 @@ The manifest declares what the extension contributes to Nimbalyst. Key fields:
   if (hasEditor) {
     sections.push(`## useEditorLifecycle Hook
 
-Use the \`useEditorLifecycle\` hook from \`@nimbalyst/runtime\` to handle all editor lifecycle concerns. It replaces manual \`useEffect\` subscriptions for loading, saving, file watching, echo detection, dirty state, diff mode, and theme tracking.
+Use the \`useEditorLifecycle\` hook from \`@nimbalyst/extension-sdk\` to handle all editor lifecycle concerns. It replaces manual \`useEffect\` subscriptions for loading, saving, file watching, echo detection, dirty state, diff mode, and theme tracking.
 
 \`\`\`typescript
 import { useRef } from 'react';
-import { useEditorLifecycle } from '@nimbalyst/runtime';
+import { useEditorLifecycle } from '@nimbalyst/extension-sdk';
 import type { EditorHostProps } from '@nimbalyst/extension-sdk';
 
 function MyEditor({ host }: EditorHostProps) {
@@ -308,7 +308,7 @@ Always use these variables instead of hardcoded colors so the extension works wi
   sections.push(`## SDK Reference
 
 The \`@nimbalyst/extension-sdk\` package provides types and the Vite build helper.
-The \`@nimbalyst/runtime\` package provides the \`useEditorLifecycle\` hook (provided by the host at runtime -- do not add it to package.json).
+The \`@nimbalyst/extension-sdk\` package also re-exports the \`useEditorLifecycle\` hook (provided by the host at runtime -- do not add \`@nimbalyst/runtime\` to package.json).
 
 Key imports:
 \`\`\`typescript
@@ -325,8 +325,8 @@ import type {
 
 import { createExtensionConfig } from '@nimbalyst/extension-sdk/vite';
 
-// Hook from runtime (provided by host -- do NOT add to dependencies)
-import { useEditorLifecycle } from '@nimbalyst/runtime';
+// Hook (provided by host at runtime -- do NOT add @nimbalyst/runtime to dependencies)
+import { useEditorLifecycle } from '@nimbalyst/extension-sdk';
 \`\`\``);
 
   return sections.join('\n\n');
@@ -497,7 +497,7 @@ export function deactivate() {
 `,
 
     [`src/${componentName}.tsx`]: `import React, { useRef, useReducer } from 'react';
-import { useEditorLifecycle } from '@nimbalyst/runtime';
+import { useEditorLifecycle } from '@nimbalyst/extension-sdk';
 import type { EditorHostProps } from '@nimbalyst/extension-sdk';
 
 export function ${componentName}({ host }: EditorHostProps) {
@@ -682,7 +682,7 @@ export function deactivate() {
 `,
 
     [`src/${componentName}.tsx`]: `import React, { useRef, useReducer } from 'react';
-import { useEditorLifecycle } from '@nimbalyst/runtime';
+import { useEditorLifecycle } from '@nimbalyst/extension-sdk';
 import type { EditorHostProps } from '@nimbalyst/extension-sdk';
 
 export function ${componentName}({ host }: EditorHostProps) {
