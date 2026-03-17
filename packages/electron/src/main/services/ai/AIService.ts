@@ -811,6 +811,31 @@ export class AIService {
   private lastSyncProvider: import('@nimbalyst/runtime/sync').SyncProvider | null = null;
   private syncStatusUnsubscribe: (() => void) | null = null;
 
+  private async continueQueuedPromptChain(
+    sessionId: string,
+    workspacePath: string,
+    targetWindow: Electron.BrowserWindow | null,
+    source: string
+  ): Promise<void> {
+    if (!targetWindow || targetWindow.isDestroyed()) {
+      logger.main.info(`[AIService] ${source}: no live window available to continue queued prompts for session ${sessionId}`);
+      return;
+    }
+
+    const { getQueuedPromptsStore } = await import('../RepositoryManager');
+    const queueStore = getQueuedPromptsStore();
+    const pendingPrompts = await queueStore.listPending(sessionId);
+
+    if (pendingPrompts.length === 0) {
+      return;
+    }
+
+    logger.main.info(
+      `[AIService] ${source}: ${pendingPrompts.length} pending prompts remain for session ${sessionId}, triggering next`
+    );
+    await this.processQueuedPrompt(sessionId, workspacePath, targetWindow);
+  }
+
   /**
    * Process the next queued prompt for a session.
    * Called from mobile sync handler to ensure prompts are processed even when session isn't open.
@@ -883,16 +908,8 @@ export class AIService {
       } finally {
         this.sessionsProcessingQueue.delete(sessionId);
 
-        // Check for more pending prompts after clearing the processing guard.
-        // The completion handler inside sendMessageHandler skips queue chaining
-        // when sessionsProcessingQueue is set (which it is during mobile-initiated
-        // processing). We must check here to avoid leaving prompts stuck as 'pending'.
         try {
-          const pendingPrompts = await queueStore.listPending(sessionId);
-          if (pendingPrompts.length > 0 && targetWindow && !targetWindow.isDestroyed()) {
-            logger.main.info(`[AIService] processQueuedPrompt finally: ${pendingPrompts.length} pending prompts remain, triggering next`);
-            this.processQueuedPrompt(sessionId, workspacePath, targetWindow);
-          }
+          await this.continueQueuedPromptChain(sessionId, workspacePath, targetWindow, 'processQueuedPrompt finally');
         } catch (chainErr) {
           logger.main.error('[AIService] processQueuedPrompt finally: error checking for pending prompts:', chainErr);
         }
@@ -3713,6 +3730,16 @@ export class AIService {
                     await queueStore.fail(claimed.id, queueError instanceof Error ? queueError.message : 'Unknown error');
                   } finally {
                     this.sessionsProcessingQueue.delete(session.id);
+                    try {
+                      await this.continueQueuedPromptChain(
+                        session.id,
+                        workspacePath,
+                        BrowserWindow.fromWebContents(event.sender),
+                        'completion-handler queue finally'
+                      );
+                    } catch (chainErr) {
+                      logger.main.error('[AIService] completion-handler queue finally: error checking for pending prompts:', chainErr);
+                    }
                   }
                 });
               }
@@ -3873,6 +3900,16 @@ export class AIService {
                     await queueStore.fail(claimed.id, queueError instanceof Error ? queueError.message : 'Unknown error');
                   } finally {
                     this.sessionsProcessingQueue.delete(session.id);
+                    try {
+                      await this.continueQueuedPromptChain(
+                        session.id,
+                        workspacePath,
+                        BrowserWindow.fromWebContents(event.sender),
+                        'error-handler queue finally'
+                      );
+                    } catch (chainErr) {
+                      logger.main.error('[AIService] error-handler queue finally: error checking for pending prompts:', chainErr);
+                    }
                   }
                 });
               }
@@ -4217,6 +4254,16 @@ export class AIService {
           await queueStore.fail(claimed.id, queueError instanceof Error ? queueError.message : 'Unknown error');
         } finally {
           this.sessionsProcessingQueue.delete(sessionId);
+          try {
+            await this.continueQueuedPromptChain(
+              sessionId,
+              workspacePath,
+              BrowserWindow.fromWebContents(event.sender),
+              'triggerQueueProcessing finally'
+            );
+          } catch (chainErr) {
+            logger.main.error('[AIService] triggerQueueProcessing finally: error checking for pending prompts:', chainErr);
+          }
         }
       });
 
