@@ -158,4 +158,4 @@ The base class provides default implementations for `getCapabilities()`, `setPro
 
 ## Switching Between Modes
 
-You cannot switch between Agent and Chat providers mid-session. Start a new session to change provider types. This ensures consistent behavior and prevents context confusion.
+You cannot switch between Agent and Chat providers mid-session. Once a started session is using an agent provider, you also cannot switch it to a different agent provider such as Claude Agent to OpenAI Codex, or the reverse. Start a new session to change providers. This ensures consistent behavior and prevents context confusion.

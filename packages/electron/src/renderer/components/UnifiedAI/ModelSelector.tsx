@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol, getProviderIcon } from '@nimbalyst/runtime';
+import { isAgentProvider, shouldBlockStartedSessionProviderSwitch } from '@nimbalyst/runtime/ai/server/types';
 import { getClaudeCodeModelLabel } from '../../utils/modelUtils';
 import { providersAtom } from '../../store/atoms/appSettings';
 import { setWindowModeAtom } from '../../store/atoms/windowMode';
@@ -20,14 +21,14 @@ interface ModelSelectorProps {
   currentModel: string;  // Full provider:model ID
   onModelChange: (modelId: string) => void;
   sessionHasMessages?: boolean;  // Whether current session has any messages
-  currentProviderType?: ProviderType | null;  // Type of current session's provider
+  currentProvider?: string | null;  // Current session provider
 }
 
 export function ModelSelector({
   currentModel,
   onModelChange,
   sessionHasMessages = false,
-  currentProviderType = null
+  currentProvider = null
 }: ModelSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [models, setModels] = useState<Record<string, Model[]>>({});
@@ -167,21 +168,17 @@ export function ModelSelector({
     }
   };
 
-  // Helper to determine if a provider is an agent type
   const getProviderType = (provider: string): ProviderType => {
-    return (provider === 'claude-code' || provider === 'openai-codex') ? 'agent' : 'model';
+    return isAgentProvider(provider) ? 'agent' : 'model';
   };
 
-  // Check if switching to a provider type is disabled (session has messages and would switch types)
-  const isTypeSwitchDisabled = (targetProvider: string): boolean => {
-    if (!sessionHasMessages || !currentProviderType) return false;
-    const targetType = getProviderType(targetProvider);
-    return targetType !== currentProviderType;
+  const isProviderSwitchDisabled = (targetProvider: string): boolean => {
+    return shouldBlockStartedSessionProviderSwitch(currentProvider, targetProvider, sessionHasMessages);
   };
 
-  // Check if an entire section (agent or model) is disabled
   const isSectionDisabled = (sectionType: 'agent' | 'model'): boolean => {
-    if (!sessionHasMessages || !currentProviderType) return false;
+    if (!sessionHasMessages || !currentProvider) return false;
+    const currentProviderType = getProviderType(currentProvider);
     return sectionType !== currentProviderType;
   };
 
@@ -232,8 +229,8 @@ export function ModelSelector({
                       </div>
                       {providerModels.map(model => {
                         const isCurrent = model.id === currentModel;
-                        const isDisabled = isTypeSwitchDisabled(provider);
-                        const disabledTooltip = 'Start a new session to switch between Agent and Chat modes';
+                        const isDisabled = isProviderSwitchDisabled(provider);
+                        const disabledTooltip = 'Start a new session to switch providers after the session has started';
                         return (
                           <button
                             key={model.id}
@@ -276,8 +273,8 @@ export function ModelSelector({
                       </div>
                       {providerModels.map(model => {
                         const isCurrent = model.id === currentModel;
-                        const isDisabled = isTypeSwitchDisabled(provider);
-                        const disabledTooltip = 'Start a new session to switch between Agent and Chat modes';
+                        const isDisabled = isProviderSwitchDisabled(provider);
+                        const disabledTooltip = 'Start a new session to switch providers after the session has started';
                         return (
                           <button
                             key={model.id}

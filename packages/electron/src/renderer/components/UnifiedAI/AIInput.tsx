@@ -66,7 +66,7 @@ interface AIInputProps {
   currentModel?: string;
   onModelChange?: (modelId: string) => void;
   sessionHasMessages?: boolean;  // Whether current session has any messages
-  currentProviderType?: 'agent' | 'model' | null;  // Type of current session's provider
+  currentProvider?: string | null;  // Current session provider
 
   // Effort level support (Opus 4.6 adaptive reasoning)
   effortLevel?: EffortLevel;
@@ -136,7 +136,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     currentModel,
     onModelChange,
     sessionHasMessages,
-    currentProviderType,
+    currentProvider,
     effortLevel,
     onEffortLevelChange,
     showEffortLevel,
@@ -1212,7 +1212,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
                     currentModel={currentModel || ''}
                     onModelChange={onModelChange}
                     sessionHasMessages={sessionHasMessages}
-                    currentProviderType={currentProviderType}
+                    currentProvider={currentProvider}
                   />
                 </span>
               </HelpTooltip>

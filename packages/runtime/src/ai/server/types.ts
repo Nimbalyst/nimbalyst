@@ -127,6 +127,26 @@ export type AIProviderType = 'claude' | 'claude-code' | 'openai' | 'openai-codex
  */
 export const AI_PROVIDER_TYPES: readonly AIProviderType[] = ['claude', 'claude-code', 'openai', 'openai-codex', 'lmstudio'] as const;
 
+export function isAgentProvider(provider: string | null | undefined): provider is 'claude-code' | 'openai-codex' {
+  return provider === 'claude-code' || provider === 'openai-codex';
+}
+
+/**
+ * Started sessions cannot switch away from their original provider when an agent
+ * provider is involved. This keeps agent SDK session state coherent.
+ */
+export function shouldBlockStartedSessionProviderSwitch(
+  currentProvider: string | null | undefined,
+  targetProvider: string | null | undefined,
+  hasMessages: boolean
+): boolean {
+  if (!hasMessages || !currentProvider || !targetProvider || currentProvider === targetProvider) {
+    return false;
+  }
+
+  return isAgentProvider(currentProvider) || isAgentProvider(targetProvider);
+}
+
 /**
  * Claude Code uses simplified variant names (opus, sonnet, haiku) instead of full model IDs.
  * These are ONLY valid for the claude-code provider.

@@ -1,6 +1,10 @@
 import { SessionManager, ProviderFactory } from '@nimbalyst/runtime/ai/server';
 import { AISessionsRepository } from '@nimbalyst/runtime';
-import { ModelIdentifier, type AIProviderType } from '@nimbalyst/runtime/ai/server/types';
+import {
+    ModelIdentifier,
+    shouldBlockStartedSessionProviderSwitch,
+    type AIProviderType,
+} from '@nimbalyst/runtime/ai/server/types';
 import type { UpdateSessionMetadataPayload } from '@nimbalyst/runtime/ai/adapters/sessionStore';
 import path from "path";
 import { existsSync } from "fs";
@@ -383,6 +387,11 @@ export async function registerSessionHandlers() {
     // Update session metadata (including mode, isArchived, etc.)
     safeHandle('sessions:update-metadata', async (event, sessionId: string, updates: UpdateSessionMetadataPayload) => {
         try {
+            const currentSession = await AISessionsRepository.get(sessionId);
+            if (!currentSession) {
+                throw new Error('Session not found');
+            }
+
             // When model is updated, extract and sync the provider from the model ID
             // Model IDs follow the format "provider:model-name" (e.g., "claude-code:opus", "openai:gpt-4o")
             let providerType: AIProviderType | undefined;
@@ -392,7 +401,22 @@ export async function registerSessionHandlers() {
                     updates.provider = modelId.provider;
                     providerType = modelId.provider;
                 }
+            }
 
+            if (
+                updates.provider &&
+                shouldBlockStartedSessionProviderSwitch(
+                    currentSession.provider,
+                    updates.provider,
+                    currentSession.messages.length > 0
+                )
+            ) {
+                throw new Error(
+                    `Cannot switch started session from ${currentSession.provider} to ${updates.provider}. Start a new session instead.`
+                );
+            }
+
+            if (updates.model) {
                 // Invalidate the cached provider so it gets re-created with the new model
                 // on the next message. This ensures model changes take effect immediately.
                 if (providerType) {
@@ -404,6 +428,7 @@ export async function registerSessionHandlers() {
                     ProviderFactory.destroyProvider(sessionId);
                 }
             }
+
             await AISessionsRepository.updateMetadata(sessionId, updates);
 
             // Notify renderer windows so session list state stays in sync without waiting for full refresh.

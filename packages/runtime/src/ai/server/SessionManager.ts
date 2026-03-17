@@ -13,7 +13,15 @@ import {
   type SessionMeta,
   type UpdateSessionMetadataPayload,
 } from '../adapters/sessionStore';
-import { SessionData, Message, DocumentContext, AIProviderType, SessionType } from './types';
+import {
+  SessionData,
+  Message,
+  DocumentContext,
+  AIProviderType,
+  SessionType,
+  ModelIdentifier,
+  shouldBlockStartedSessionProviderSwitch,
+} from './types';
 import type { SessionData as ChatSession } from './types';
 import { parseContextUsageMessage } from './utils/contextUsage';
 
@@ -1117,6 +1125,24 @@ export class SessionManager {
     }
   }
 
+  private async assertProviderSwitchAllowed(sessionId: string, targetProvider: string): Promise<void> {
+    const persistedSession = await AISessionsRepository.get(sessionId);
+    const session = this.currentSession?.id === sessionId ? this.currentSession : persistedSession;
+    if (!session) {
+      throw new Error('Session not found');
+    }
+
+    if (shouldBlockStartedSessionProviderSwitch(
+      session.provider,
+      targetProvider,
+      session.messages.length > 0 || (persistedSession?.messages.length ?? 0) > 0
+    )) {
+      throw new Error(
+        `Cannot switch started session from ${session.provider} to ${targetProvider}. Start a new session instead.`
+      );
+    }
+  }
+
   async updateSessionTitle(sessionId: string, title: string, options?: UpdateSessionTitleOptions): Promise<void> {
     if (options?.force) {
       const metadata: UpdateSessionMetadataPayload = { title };
@@ -1143,6 +1169,10 @@ export class SessionManager {
 
   async updateSessionModel(sessionId: string, model: string): Promise<void> {
     console.log(`[SessionManager] updateSessionModel called: sessionId=${sessionId}, model=${model}`);
+    const parsedModel = ModelIdentifier.tryParse(model);
+    if (parsedModel) {
+      await this.assertProviderSwitchAllowed(sessionId, parsedModel.provider);
+    }
     await AISessionsRepository.updateMetadata(sessionId, { model });
     console.log(`[SessionManager] Database updated with new model`);
     if (this.currentSession?.id === sessionId) {
@@ -1153,6 +1183,7 @@ export class SessionManager {
 
   async updateSessionProviderAndModel(sessionId: string, provider: string, model: string): Promise<void> {
     console.log(`[SessionManager] updateSessionProviderAndModel called: sessionId=${sessionId}, provider=${provider}, model=${model}`);
+    await this.assertProviderSwitchAllowed(sessionId, provider);
     await AISessionsRepository.updateMetadata(sessionId, {
       provider,
       model

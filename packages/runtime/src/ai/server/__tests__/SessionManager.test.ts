@@ -6,7 +6,7 @@ import type {
   SessionMeta,
   UpdateSessionMetadataPayload,
 } from '../../adapters/sessionStore';
-import type { Message, SessionData } from '../types';
+import { shouldBlockStartedSessionProviderSwitch, type Message, type SessionData } from '../types';
 
 class InMemorySessionStore implements SessionStore {
   private sessions = new Map<string, SessionData>();
@@ -198,6 +198,41 @@ describe('SessionManager (runtime server)', () => {
         reminderKind: 'session_naming',
       },
     });
+  });
+
+  it('blocks switching a started Claude Agent session to OpenAI Codex', async () => {
+    const session = await manager.createSession('claude-code', { content: 'text' }, 'ws');
+    await manager.addMessage({ role: 'user', content: 'hello', timestamp: Date.now() }, session.id);
+
+    await expect(
+      manager.updateSessionProviderAndModel(session.id, 'openai-codex', 'openai-codex:openai-codex-cli')
+    ).rejects.toThrow('Start a new session instead');
+  });
+
+  it('blocks switching a started Claude Agent session via model-only update', async () => {
+    const session = await manager.createSession('claude-code', { content: 'text' }, 'ws');
+    await manager.addMessage({ role: 'user', content: 'hello', timestamp: Date.now() }, session.id);
+
+    await expect(
+      manager.updateSessionModel(session.id, 'openai-codex:openai-codex-cli')
+    ).rejects.toThrow('Start a new session instead');
+  });
+
+  it('allows switching models within the same provider after a session has started', async () => {
+    const session = await manager.createSession('claude-code', { content: 'text' }, 'ws');
+    await manager.addMessage({ role: 'user', content: 'hello', timestamp: Date.now() }, session.id);
+
+    await expect(
+      manager.updateSessionProviderAndModel(session.id, 'claude-code', 'claude-code:opus')
+    ).resolves.toBeUndefined();
+  });
+
+  it('only blocks started provider switches when an agent provider is involved', () => {
+    expect(shouldBlockStartedSessionProviderSwitch('claude-code', 'openai-codex', true)).toBe(true);
+    expect(shouldBlockStartedSessionProviderSwitch('openai-codex', 'claude-code', true)).toBe(true);
+    expect(shouldBlockStartedSessionProviderSwitch('claude-code', 'claude', true)).toBe(true);
+    expect(shouldBlockStartedSessionProviderSwitch('claude', 'openai', true)).toBe(false);
+    expect(shouldBlockStartedSessionProviderSwitch('claude-code', 'openai-codex', false)).toBe(false);
   });
 
 });
