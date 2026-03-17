@@ -600,23 +600,26 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
               }
             }
           } else if (parsed.type === 'result' && parsed.result && typeof parsed.result === 'string' && parsed.result.trim().length > 0) {
-            // SDK result chunk with text content (e.g. "Unknown skill: prepare", slash command output)
-            // Display as an assistant message so the user can see what happened
+            // SDK result chunk -- contains the final text of the turn.
+            // When text was already streamed (normal case), this is a duplicate
+            // of the content in text chunks. Only create a new message when NO
+            // assistant content exists for this turn (e.g., "Unknown skill: prepare"
+            // where the result is the only output).
             const lastMsg = uiMessages[uiMessages.length - 1];
-            if (lastMsg && lastMsg.role === 'assistant' && !(lastMsg as any).isComplete) {
-              lastMsg.content += parsed.result;
+            if (lastMsg && lastMsg.role === 'assistant') {
+              // Assistant message already exists from text chunks -- just mark complete.
+              // Do NOT append result.content because it duplicates the streamed text.
+              (lastMsg as any).isComplete = true;
             } else {
+              // No assistant message for this turn -- result is the only output
               uiMessages.push({
                 role: 'assistant',
                 content: parsed.result,
                 timestamp,
                 isSystem: true,
               });
-            }
-            // Also mark as complete since result is the final chunk
-            const msg = uiMessages[uiMessages.length - 1];
-            if (msg && msg.role === 'assistant') {
-              (msg as any).isComplete = true;
+              const msg = uiMessages[uiMessages.length - 1];
+              if (msg) (msg as any).isComplete = true;
             }
           } else if (parsed.usage) {
             // This is metadata (usage stats), mark last message as complete
