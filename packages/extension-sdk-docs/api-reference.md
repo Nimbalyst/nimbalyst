@@ -176,12 +176,12 @@ interface ChatCompletionStreamHandle {
 
 ## Custom Editors
 
-Custom editors receive a single `host` prop. Use the `useEditorLifecycle` hook (from `@nimbalyst/runtime`) to handle all lifecycle concerns.
+Custom editors receive a single `host` prop. Use the `useEditorLifecycle` hook (from `@nimbalyst/extension-sdk`) to handle all lifecycle concerns.
 
 ### useEditorLifecycle Hook
 
 ```ts
-import { useEditorLifecycle } from '@nimbalyst/runtime';
+import { useEditorLifecycle } from '@nimbalyst/extension-sdk';
 
 function useEditorLifecycle<T = string>(
   host: EditorHost,

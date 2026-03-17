@@ -13,7 +13,7 @@ Your component receives a single `host` prop from Nimbalyst. The host handles lo
 The recommended way to build custom editors is with the `useEditorLifecycle` hook. It replaces all manual `EditorHost` subscription boilerplate (loading, saving, echo detection, file watching, diff mode, theme) with a single hook call.
 
 ```tsx
-import { useEditorLifecycle } from '@nimbalyst/runtime';
+import { useEditorLifecycle } from '@nimbalyst/extension-sdk';
 import type { EditorHostProps } from '@nimbalyst/extension-sdk';
 
 export function MyEditor({ host }: EditorHostProps) {
@@ -373,7 +373,7 @@ A complete example using `useEditorLifecycle`:
 
 ```tsx
 import React, { useRef } from 'react';
-import { useEditorLifecycle } from '@nimbalyst/runtime';
+import { useEditorLifecycle } from '@nimbalyst/extension-sdk';
 import type { EditorHostProps } from '@nimbalyst/extension-sdk';
 
 export function TableEditor({ host }: EditorHostProps) {
