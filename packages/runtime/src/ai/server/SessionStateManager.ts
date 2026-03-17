@@ -163,9 +163,18 @@ export class SessionStateManager extends EventEmitter {
     const state = this.activeSessions.get(sessionId);
     if (!state) {
       // Session not in memory (e.g., app restarted while session was running).
-      // Still update the database to ensure it's not left as 'running'.
+      // Still update the database to ensure it's not left as 'running',
+      // and emit session:completed so the renderer updates sessionProcessingAtom.
+      // Without the event, the renderer thinks the session is still running and
+      // queued prompts will never be triggered.
       console.warn(`[SessionStateManager] endSession called for session not in activeSessions: ${sessionId}, updating DB directly`);
       await this.updateDatabase(sessionId, 'idle');
+      this.emitEvent({
+        type: 'session:completed',
+        sessionId,
+        workspacePath: undefined,
+        timestamp: new Date(),
+      });
       return;
     }
 
