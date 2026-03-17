@@ -5,13 +5,20 @@ import type { TrackerItemType } from '@nimbalyst/runtime';
 import { trackerItemCountByTypeAtom } from '@nimbalyst/runtime/plugins/TrackerPlugin';
 import type { TrackerDataModel } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
 import type { TrackerFilterChip } from '../../store/atoms/trackers';
+import { useAlphaFeature } from '../../hooks/useAlphaFeature';
+import type { ViewMode } from './TrackerMainView';
+import { WorkspaceSummaryHeader } from '../WorkspaceSummaryHeader';
 
 interface TrackerSidebarProps {
+  workspacePath?: string;
+  workspaceName?: string;
   trackerTypes: TrackerDataModel[];
   selectedType: string | 'all';
   activeFilters: TrackerFilterChip[];
+  viewMode: ViewMode;
   onSelectType: (type: string | 'all') => void;
   onToggleFilter: (filter: TrackerFilterChip) => void;
+  onViewModeChange: (mode: ViewMode) => void;
 }
 
 const FILTER_CHIPS: { id: TrackerFilterChip; label: string; icon: string }[] = [
@@ -28,19 +35,58 @@ function SidebarTypeCount({ type }: { type: TrackerItemType }) {
 }
 
 export const TrackerSidebar: React.FC<TrackerSidebarProps> = ({
+  workspacePath,
+  workspaceName,
   trackerTypes,
   selectedType,
   activeFilters,
+  viewMode,
   onSelectType,
   onToggleFilter,
+  onViewModeChange,
 }) => {
+  const isKanbanEnabled = useAlphaFeature('tracker-kanban');
+
   return (
     <div className="tracker-sidebar w-[220px] min-w-[180px] flex flex-col bg-nim-secondary border-r border-nim overflow-hidden" data-testid="tracker-sidebar">
-      {/* Header */}
-      <div className="px-3 py-2 border-b border-nim">
-        <h2 className="text-xs font-semibold text-nim-muted uppercase tracking-wider m-0">
-          Trackers
-        </h2>
+      {workspacePath && (
+        <WorkspaceSummaryHeader
+          workspacePath={workspacePath}
+          workspaceName={workspaceName}
+          actions={
+            <>
+              {isKanbanEnabled && (
+                <div className="flex items-center rounded border border-nim overflow-hidden">
+                  <button
+                    className={`flex items-center justify-center w-7 h-6 transition-colors ${
+                      viewMode === 'table'
+                        ? 'bg-nim-active text-nim'
+                        : 'bg-nim-secondary text-nim-muted hover:text-nim'
+                    }`}
+                    onClick={() => onViewModeChange('table')}
+                    title="Table view"
+                  >
+                    <MaterialSymbol icon="table_rows" size={16} />
+                  </button>
+                  <button
+                    className={`flex items-center justify-center w-7 h-6 border-l border-nim transition-colors ${
+                      viewMode === 'kanban'
+                        ? 'bg-nim-active text-nim'
+                        : 'bg-nim-secondary text-nim-muted hover:text-nim'
+                    }`}
+                    onClick={() => onViewModeChange('kanban')}
+                    title="Kanban view"
+                  >
+                    <MaterialSymbol icon="view_kanban" size={16} />
+                  </button>
+                </div>
+              )}
+            </>
+          }
+        />
+      )}
+      <div className="px-3 py-1.5 border-b border-nim text-[11px] font-semibold text-nim-muted uppercase tracking-wider">
+        Trackers
       </div>
 
       <div className="flex-1 overflow-y-auto">

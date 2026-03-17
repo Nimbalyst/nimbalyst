@@ -600,34 +600,6 @@ export function TrackerTable({
   sortedItemsRef.current = sortedItems;
 
   /** Handle checkbox click with shift-range and cmd/ctrl-toggle support */
-  const handleCheckboxClick = (itemId: string, index: number, event: React.MouseEvent) => {
-    event.stopPropagation();
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-
-      if (event.shiftKey && lastClickedIndexRef.current >= 0) {
-        // Range select
-        const start = Math.min(lastClickedIndexRef.current, index);
-        const end = Math.max(lastClickedIndexRef.current, index);
-        for (let i = start; i <= end; i++) {
-          if (sortedItems[i]?.id) next.add(sortedItems[i].id);
-        }
-      } else if (event.metaKey || event.ctrlKey) {
-        // Toggle individual
-        if (next.has(itemId)) next.delete(itemId);
-        else next.add(itemId);
-      } else {
-        // Replace selection
-        next.clear();
-        next.add(itemId);
-      }
-
-      lastClickedIndexRef.current = index;
-      return next;
-    });
-    setFocusedIndex(index);
-  };
-
   /** Toggle select all / deselect all */
   const handleSelectAll = useCallback(() => {
     setSelectedIds(prev => {
@@ -785,7 +757,37 @@ export function TrackerTable({
     if (row) row.scrollIntoView({ block: 'nearest' });
   }, [focusedIndex]);
 
-  const handleRowClick = (item: TrackerItem) => {
+  const handleRowClick = (item: TrackerItem, index: number, e: React.MouseEvent) => {
+    // Multi-select: Cmd/Ctrl+click toggles, Shift+click extends range
+    if (e.metaKey || e.ctrlKey) {
+      e.preventDefault();
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        if (next.has(item.id)) next.delete(item.id);
+        else next.add(item.id);
+        return next;
+      });
+      lastClickedIndexRef.current = index;
+      return;
+    }
+    if (e.shiftKey && lastClickedIndexRef.current >= 0) {
+      e.preventDefault();
+      const from = Math.min(lastClickedIndexRef.current, index);
+      const to = Math.max(lastClickedIndexRef.current, index);
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        for (let i = from; i <= to; i++) {
+          if (sortedItemsRef.current[i]?.id) next.add(sortedItemsRef.current[i].id);
+        }
+        return next;
+      });
+      return;
+    }
+
+    // Plain click: clear selection
+    setSelectedIds(new Set());
+    lastClickedIndexRef.current = index;
+
     // Track analytics
     if (posthog) {
       posthog.capture('tracker_item_clicked', {
@@ -813,26 +815,27 @@ export function TrackerTable({
       onSwitchToFilesMode();
     }
 
-    // Open the document and scroll to the tracker item
+    openItemInEditor(item);
+  };
+
+  const openItemInEditor = (item: TrackerItem) => {
+    if (onSwitchToFilesMode) {
+      onSwitchToFilesMode();
+    }
+
     const documentService = (window as any).documentService;
     if (documentService && documentService.openDocument) {
       documentService.getDocumentByPath(item.module).then((doc: any) => {
         if (doc) {
-          // Construct the full absolute path for the editor registry
-          // item.workspace is the full workspace path, doc.path is relative
           const fullPath = item.workspace && doc.path
             ? `${item.workspace}/${doc.path}`.replace(/\/+/g, '/')
             : doc.path;
 
           documentService.openDocument(doc.id).then(() => {
-            // Wait for editor to be ready and then scroll to the tracker item
-            // Only scroll for inline items (full-document items don't need scrolling)
             if (item.lineNumber !== undefined && item.lineNumber !== 0) {
               const editorRegistry = (window as any).__editorRegistry;
               if (editorRegistry && item.id) {
-                // Give the editor time to render and register
                 setTimeout(() => {
-                  // Use the full absolute path
                   editorRegistry.scrollToTrackerItem(fullPath, item.id);
                 }, 500);
               }
@@ -1002,19 +1005,6 @@ export function TrackerTable({
         <table ref={tableRef} tabIndex={0} className="tracker-table w-full border-collapse text-[13px] outline-none">
           <thead>
             <tr>
-              {/* Select-all checkbox */}
-              <th className="tracker-table-header sticky top-0 bg-[var(--nim-bg-secondary)] py-1 px-1 border-b border-[var(--nim-border)] z-10 w-[32px]">
-                <input
-                  type="checkbox"
-                  className="w-3.5 h-3.5 cursor-pointer accent-[var(--nim-primary)]"
-                  checked={selectedIds.size > 0 && selectedIds.size === sortedItems.length}
-                  ref={(el) => {
-                    if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < sortedItems.length;
-                  }}
-                  onChange={handleSelectAll}
-                  onClick={(e) => e.stopPropagation()}
-                />
-              </th>
               <th
                 className="tracker-table-header type sticky top-0 bg-[var(--nim-bg-secondary)] py-1 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 select-none"
               >
@@ -1124,7 +1114,6 @@ export function TrackerTable({
             {/* Only show filter row when there are items to filter */}
             {items.length > 0 && (
               <tr className="filter-row">
-                <th className="tracker-table-header filter-cell py-1 px-1 bg-[var(--nim-bg)]"></th>
                 <th className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]"></th>
                 <th className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]">
                   <input
@@ -1184,7 +1173,7 @@ export function TrackerTable({
           <tbody>
           {sortedItems.length === 0 ? (
             <tr>
-              <td colSpan={8 + extraColumns.length} className="tracker-table-empty-cell !p-0 !border-none">
+              <td colSpan={7 + extraColumns.length} className="tracker-table-empty-cell !p-0 !border-none">
                 {loading ? (
                   // Still loading - show loading indicator instead of empty state
                   <div className="tracker-table-loading flex items-center justify-center gap-3 py-6 px-6 text-[var(--nim-text-muted)]">
@@ -1255,7 +1244,7 @@ export function TrackerTable({
             sortedItems.map((item, index) => (
               <tr
                 key={item.id || index}
-                className={`tracker-table-row border-b border-[var(--nim-border)] cursor-pointer transition-colors duration-100 hover:bg-[var(--nim-bg-secondary)] ${
+                className={`tracker-table-row border-b border-[var(--nim-border)] cursor-pointer transition-colors duration-100 hover:bg-[var(--nim-bg-secondary)] select-none ${
                   selectedIds.has(item.id) ? 'bg-[var(--nim-bg-secondary)]' : ''
                 } ${
                   selectedItemId && item.id === selectedItemId ? 'bg-[var(--nim-bg-secondary)]' : ''
@@ -1265,19 +1254,14 @@ export function TrackerTable({
                 data-testid="tracker-table-row"
                 data-item-id={item.id}
                 data-item-title={item.title}
-                onClick={() => handleRowClick(item)}
+                onClick={(e) => handleRowClick(item, index, e)}
+                onDoubleClick={() => {
+                  if (item.source === 'inline' || item.source === 'frontmatter' || item.source === 'import') {
+                    openItemInEditor(item);
+                  }
+                }}
                 onContextMenu={(e) => handleContextMenu(e, item, index)}
               >
-                {/* Checkbox */}
-                <td className="tracker-table-cell pl-1 pr-0 py-1 align-middle w-[32px]">
-                  <input
-                    type="checkbox"
-                    className="w-3.5 h-3.5 cursor-pointer accent-[var(--nim-primary)]"
-                    checked={selectedIds.has(item.id)}
-                    onClick={(e) => handleCheckboxClick(item.id, index, e)}
-                    onChange={() => {}} // controlled
-                  />
-                </td>
                 <td className="tracker-table-cell type pl-2 pr-1 py-1 text-[var(--nim-text)] align-middle w-[28px]">
                   <span className={`type-icon type-${item.type} flex items-center justify-center w-5 h-5 rounded ${
                     item.type === 'bug' ? 'text-[#dc2626]' :

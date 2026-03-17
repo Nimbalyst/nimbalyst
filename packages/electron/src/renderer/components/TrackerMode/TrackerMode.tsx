@@ -15,12 +15,14 @@ loadBuiltinTrackers();
 
 interface TrackerModeProps {
   workspacePath: string | null;
+  workspaceName?: string;
   isActive: boolean;
   onSwitchToFilesMode?: () => void;
 }
 
 export const TrackerMode: React.FC<TrackerModeProps> = ({
   workspacePath,
+  workspaceName,
   isActive,
   onSwitchToFilesMode,
 }) => {
@@ -63,11 +65,15 @@ export const TrackerMode: React.FC<TrackerModeProps> = ({
   return (
     <div className="tracker-mode flex-1 flex flex-row overflow-hidden min-h-0">
       <TrackerSidebar
+        workspacePath={workspacePath || undefined}
+        workspaceName={workspaceName}
         trackerTypes={trackerTypes}
         selectedType={selectedType}
         activeFilters={activeFilters}
+        viewMode={viewMode}
         onSelectType={handleSelectType}
         onToggleFilter={handleToggleFilter}
+        onViewModeChange={handleViewModeChange}
       />
       <TrackerMainView
         filterType={filterType}

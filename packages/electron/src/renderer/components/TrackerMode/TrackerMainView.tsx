@@ -259,10 +259,10 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
       {/* Toolbar */}
       <div className="tracker-toolbar flex items-center gap-2 px-3 py-2 border-b border-nim bg-nim shrink-0">
         {/* Title */}
-        <span className="text-sm font-semibold text-nim mr-2">{title}</span>
+        <span className="text-sm font-semibold text-nim shrink-0">{title}</span>
 
         {/* Search */}
-        <div className="relative flex-1 max-w-[300px]">
+        <div className="relative flex-1 max-w-[360px] min-w-0">
           <MaterialSymbol
             icon="search"
             size={16}
@@ -287,35 +287,6 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
 
         <div className="flex-1" />
 
-        {/* View mode toggle (kanban is alpha-only) */}
-        {isKanbanEnabled && (
-          <div className="flex items-center rounded border border-nim overflow-hidden">
-            <button
-              className={`flex items-center justify-center w-7 h-6 transition-colors ${
-                viewMode === 'table'
-                  ? 'bg-nim-active text-nim'
-                  : 'bg-nim-secondary text-nim-muted hover:text-nim'
-              }`}
-              onClick={() => onViewModeChange('table')}
-              title="Table view"
-            >
-              <MaterialSymbol icon="table_rows" size={16} />
-            </button>
-            <button
-              className={`flex items-center justify-center w-7 h-6 border-l border-nim transition-colors ${
-                viewMode === 'kanban'
-                  ? 'bg-nim-active text-nim'
-                  : 'bg-nim-secondary text-nim-muted hover:text-nim'
-              }`}
-              onClick={() => onViewModeChange('kanban')}
-              title="Kanban view"
-            >
-              <MaterialSymbol icon="view_kanban" size={16} />
-            </button>
-          </div>
-        )}
-
-        {/* Import button */}
         <div className="relative" ref={importMenuRef}>
           <button
             className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-nim-muted border border-nim rounded hover:bg-nim-tertiary hover:text-nim transition-colors"
@@ -359,7 +330,6 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
           </span>
         )}
 
-        {/* New item button */}
         <button
           className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-white bg-[var(--nim-primary)] rounded hover:opacity-90 transition-opacity"
           onClick={() => handleNewItem(filterType !== 'all' ? filterType : 'task')}
