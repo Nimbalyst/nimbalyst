@@ -40,6 +40,9 @@ interface GenericTypeaheadProps {
   maxHeight?: number;
   minWidth?: number;
   maxWidth?: number;
+
+  // Optional explicit section ordering (sections not listed sort after listed ones, alphabetically)
+  sectionOrder?: string[];
 }
 
 export function GenericTypeahead({
@@ -54,7 +57,8 @@ export function GenericTypeahead({
   className = '',
   maxHeight = 300,
   minWidth = 250,
-  maxWidth = 600
+  maxWidth = 600,
+  sectionOrder
 }: GenericTypeaheadProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
@@ -216,7 +220,17 @@ export function GenericTypeahead({
     });
 
     const sorted = Object.entries(groups)
-      .sort(([a], [b]) => a.localeCompare(b))
+      .sort(([a], [b]) => {
+        if (sectionOrder) {
+          const aIdx = sectionOrder.indexOf(a);
+          const bIdx = sectionOrder.indexOf(b);
+          // Listed sections come before unlisted ones
+          if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
+          if (aIdx !== -1) return -1;
+          if (bIdx !== -1) return 1;
+        }
+        return a.localeCompare(b);
+      })
       .map(([section, opts]) => ({ section: section as string | null, options: opts }));
 
     // Create flat array in visual order for navigation
@@ -226,7 +240,7 @@ export function GenericTypeahead({
       groupedOptions: sorted,
       flatOrderedOptions: flatOrdered
     };
-  }, [options]);
+  }, [options, sectionOrder]);
 
   // Notify parent of the currently selected option (in visual order)
   useEffect(() => {
