@@ -14,6 +14,8 @@ struct IndexSyncResponse: Codable, @unchecked Sendable {
     let projects: [ServerProjectEntry]
     /// Total session count from server COUNT(*) - used to detect truncation
     let totalSessionCount: Int?
+    /// Echo of the `since` value from the request. Present only for incremental responses.
+    let since: Int?
 }
 
 /// A session entry as received from the server (encrypted fields).
@@ -238,6 +240,8 @@ public struct SyncedAvailableModel: Codable, Identifiable, Equatable {
 struct IndexSyncRequest: Codable {
     let type = "indexSyncRequest"
     let projectId: String?
+    /// When set, server returns only entries updated after this timestamp (Unix ms).
+    let since: Int?
 }
 
 struct DeviceAnnounceMessage: Codable {

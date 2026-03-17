@@ -400,7 +400,7 @@ export class PersonalIndexRoom implements DurableObject {
 
       switch (message.type) {
         case 'indexSyncRequest':
-          await this.handleIndexSyncRequest(ws, connState, message.projectId);
+          await this.handleIndexSyncRequest(ws, connState, message.projectId, message.since);
           break;
 
         case 'indexUpdate':
@@ -484,12 +484,14 @@ export class PersonalIndexRoom implements DurableObject {
   }
 
   /**
-   * Handle index sync request - return session and project lists
+   * Handle index sync request - return session and project lists.
+   * If `since` is provided, only returns entries updated after that timestamp (incremental sync).
    */
   private async handleIndexSyncRequest(
     ws: WebSocket,
     connState: ConnectionState,
-    projectId?: string
+    projectId?: string,
+    since?: number
   ): Promise<void> {
     const sql = this.state.storage.sql;
 
@@ -500,29 +502,45 @@ export class PersonalIndexRoom implements DurableObject {
 
     // Get sessions using cursor iteration instead of toArray() to avoid
     // potential undocumented row limits in the CF DO runtime.
+    // When `since` is provided, only return sessions updated after that timestamp.
     const sessions: SessionIndexEntry[] = [];
-    const cursor = projectId
-      ? sql.exec<SessionIndexRow>(`SELECT * FROM session_index WHERE project_id = ? ORDER BY updated_at DESC`, projectId)
-      : sql.exec<SessionIndexRow>(`SELECT * FROM session_index ORDER BY updated_at DESC`);
+    let cursor;
+    if (since && !projectId) {
+      cursor = sql.exec<SessionIndexRow>(`SELECT * FROM session_index WHERE updated_at > ? ORDER BY updated_at DESC`, since);
+    } else if (since && projectId) {
+      cursor = sql.exec<SessionIndexRow>(`SELECT * FROM session_index WHERE project_id = ? AND updated_at > ? ORDER BY updated_at DESC`, projectId, since);
+    } else if (projectId) {
+      cursor = sql.exec<SessionIndexRow>(`SELECT * FROM session_index WHERE project_id = ? ORDER BY updated_at DESC`, projectId);
+    } else {
+      cursor = sql.exec<SessionIndexRow>(`SELECT * FROM session_index ORDER BY updated_at DESC`);
+    }
     for (const row of cursor) {
       sessions.push(rowToSessionEntry(row));
     }
 
     // Log diagnostic info about session counts
-    if (totalCount !== sessions.length) {
+    if (!since && totalCount !== sessions.length) {
       log.warn('Session count mismatch! COUNT(*):', totalCount, 'cursor iteration length:', sessions.length);
     }
-    log.info('Index sync request: COUNT(*)=', totalCount, 'returned=', sessions.length);
+    log.info('Index sync request:', since ? `incremental since=${since},` : 'full,', 'COUNT(*)=', totalCount, 'returned=', sessions.length);
 
     // Get projects using cursor iteration
+    // For incremental sync, only return projects with recent activity
     const projects: ProjectIndexEntry[] = [];
-    for (const row of sql.exec<ProjectIndexRow>(`SELECT * FROM project_index ORDER BY last_activity_at DESC`)) {
+    const projectCursor = since
+      ? sql.exec<ProjectIndexRow>(`SELECT * FROM project_index WHERE last_activity_at > ? ORDER BY last_activity_at DESC`, since)
+      : sql.exec<ProjectIndexRow>(`SELECT * FROM project_index ORDER BY last_activity_at DESC`);
+    for (const row of projectCursor) {
       projects.push(rowToProjectEntry(row));
     }
 
     // Get files using cursor iteration
+    // For incremental sync, only return files modified since the cursor
     const files: FileIndexEntry[] = [];
-    for (const row of sql.exec<FileIndexRow>(`SELECT * FROM file_index ORDER BY last_modified_at DESC`)) {
+    const fileCursor = since
+      ? sql.exec<FileIndexRow>(`SELECT * FROM file_index WHERE last_modified_at > ? ORDER BY last_modified_at DESC`, since)
+      : sql.exec<FileIndexRow>(`SELECT * FROM file_index ORDER BY last_modified_at DESC`);
+    for (const row of fileCursor) {
       files.push(rowToFileEntry(row));
     }
 
@@ -532,6 +550,7 @@ export class PersonalIndexRoom implements DurableObject {
       projects,
       files: files.length > 0 ? files : undefined,
       totalSessionCount: totalCount,
+      since,
     };
 
     ws.send(JSON.stringify(response));

@@ -79,10 +79,12 @@ export interface DeleteSessionMessage {
   type: 'deleteSession';
 }
 
-/** Request full index sync */
+/** Request index sync. If `since` is provided, only returns entries updated after that timestamp. */
 export interface IndexSyncRequestMessage {
   type: 'indexSyncRequest';
   projectId?: string;
+  /** Unix ms timestamp. When set, server returns only sessions/projects updated after this time. */
+  since?: number;
 }
 
 /** Update session in index (from desktop after local change) */
@@ -315,6 +317,8 @@ export interface IndexSyncResponseMessage {
   files?: FileIndexEntry[];
   /** Total session count from COUNT(*) - used to detect if toArray() truncated results */
   totalSessionCount?: number;
+  /** Echo of the `since` value from the request. Present only for incremental responses. */
+  since?: number;
 }
 
 /** Broadcast index update to other devices */

@@ -177,14 +177,18 @@ public final class SyncManager: ObservableObject {
         }
     }
 
-    /// Request a full index sync. Called by AppState on pull-to-refresh.
+    /// Request a full index sync (ignoring watermark). Called by AppState on pull-to-refresh.
     public func requestFullSync() {
-        requestIndexSync()
+        requestIndexSync(fullSync: true)
     }
 
-    /// Request the full index (projects + sessions) from the server.
-    private func requestIndexSync(attempt: Int = 0) {
-        let request = IndexSyncRequest(projectId: nil)
+    /// Request the index from the server.
+    /// By default, sends the last sync watermark for incremental sync.
+    /// Pass `fullSync: true` to request everything (e.g., pull-to-refresh).
+    private func requestIndexSync(fullSync: Bool = false, attempt: Int = 0) {
+        let since: Int? = fullSync ? nil : (try? database.syncState(forRoom: "index"))?.lastSyncedAt
+
+        let request = IndexSyncRequest(projectId: nil, since: since)
         guard let data = try? JSONEncoder().encode(request),
               let json = String(data: data, encoding: .utf8) else { return }
 
@@ -246,10 +250,11 @@ public final class SyncManager: ObservableObject {
             return
         }
 
-        if let total = response.totalSessionCount, total != response.sessions.count {
+        let isIncremental = response.since != nil
+        if !isIncremental, let total = response.totalSessionCount, total != response.sessions.count {
             logger.warning("INDEX TRUNCATION DETECTED! Server COUNT(*)=\(total) but received \(response.sessions.count) sessions")
         }
-        logger.info("Index sync received: \(response.sessions.count) sessions, \(response.projects.count) projects (server total: \(response.totalSessionCount.map(String.init) ?? "unknown"))")
+        logger.info("Index sync received: \(response.sessions.count) sessions, \(response.projects.count) projects\(isIncremental ? " (incremental)" : "") (server total: \(response.totalSessionCount.map(String.init) ?? "unknown"))")
 
         // Heavy crypto + DB work runs off the main thread to avoid UI freezes
         let crypto = self.crypto
@@ -260,19 +265,21 @@ public final class SyncManager: ObservableObject {
                 Self.processServerProjectBackground(serverProject, crypto: crypto, database: database)
             }
 
-            // Process sessions - track success/failure counts
+            // Process sessions - track success/failure/skip counts
             var processedCount = 0
+            var skippedCount = 0
             var failedDecryptCount = 0
             for serverSession in response.sessions {
-                if Self.processServerSessionBackground(serverSession, crypto: crypto, database: database) {
-                    processedCount += 1
-                } else {
-                    failedDecryptCount += 1
+                let result = Self.processServerSessionBackground(serverSession, crypto: crypto, database: database)
+                switch result {
+                case .updated: processedCount += 1
+                case .skipped: skippedCount += 1
+                case .failed: failedDecryptCount += 1
                 }
             }
-            if failedDecryptCount > 0 {
+            if failedDecryptCount > 0 || skippedCount > 0 {
                 let logger = Logger(subsystem: "com.nimbalyst.app", category: "SyncManager")
-                logger.warning("Session processing: \(processedCount) succeeded, \(failedDecryptCount) failed to decrypt")
+                logger.info("Session processing: \(processedCount) updated, \(skippedCount) unchanged, \(failedDecryptCount) failed")
             }
 
             // Recalculate project stats from session data (more reliable than server-side stats)
@@ -283,14 +290,21 @@ public final class SyncManager: ObservableObject {
                 logger.error("Failed to refresh project stats: \(error.localizedDescription)")
             }
 
-            // Update sync state watermark
-            let now = Int(Date().timeIntervalSince1970 * 1000)
-            let syncState = SyncState(roomId: "index", lastCursor: nil, lastSequence: 0, lastSyncedAt: now)
-            try? database.updateSyncState(syncState)
+            // Update sync state watermark using the max updatedAt from received sessions.
+            // This ensures the `since` parameter on the next request matches server timestamps exactly.
+            let maxUpdatedAt = response.sessions.map(\.updatedAt).max()
+            if let watermark = maxUpdatedAt {
+                let syncState = SyncState(roomId: "index", lastCursor: nil, lastSequence: 0, lastSyncedAt: watermark)
+                try? database.updateSyncState(syncState)
+            }
         }
     }
 
     // MARK: - Background Processing Helpers
+
+    private enum SyncResult {
+        case updated, skipped, failed
+    }
 
     /// Process a server project entry on a background thread.
     private nonisolated static func processServerProjectBackground(_ entry: ServerProjectEntry, crypto: CryptoManager, database: DatabaseManager) {
@@ -335,17 +349,24 @@ public final class SyncManager: ObservableObject {
         }
     }
 
-    /// Process a server session entry on a background thread. Returns true on success.
+    /// Process a server session entry on a background thread.
     @discardableResult
-    private nonisolated static func processServerSessionBackground(_ entry: ServerSessionEntry, crypto: CryptoManager, database: DatabaseManager) -> Bool {
+    private nonisolated static func processServerSessionBackground(_ entry: ServerSessionEntry, crypto: CryptoManager, database: DatabaseManager) -> SyncResult {
         let logger = Logger(subsystem: "com.nimbalyst.app", category: "SyncManager")
+
+        let existing = try? database.session(byId: entry.sessionId)
+
+        // Skip if the session hasn't changed since we last wrote it
+        if let existing = existing, existing.updatedAt == entry.updatedAt {
+            return .skipped
+        }
 
         guard let projectId = crypto.decryptOrNil(
             encryptedBase64: entry.encryptedProjectId,
             ivBase64: entry.projectIdIv
         ) else {
             logger.warning("Failed to decrypt project ID for session \(entry.sessionId)")
-            return false
+            return .failed
         }
 
         // Ensure the project exists
@@ -359,8 +380,6 @@ public final class SyncManager: ObservableObject {
             encryptedBase64: entry.encryptedTitle,
             ivBase64: entry.titleIv
         )
-
-        let existing = try? database.session(byId: entry.sessionId)
 
         var clientMeta: ClientMetadata?
         if let encryptedMeta = entry.encryptedClientMetadata,
@@ -436,10 +455,10 @@ public final class SyncManager: ObservableObject {
                 try? database.deleteRemoteQueuedPrompts(forSession: entry.sessionId)
             }
 
-            return true
+            return .updated
         } catch {
             logger.error("Failed to upsert session: \(error.localizedDescription)")
-            return false
+            return .failed
         }
     }
 

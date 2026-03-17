@@ -82,6 +82,7 @@ struct NimbalystAppMain: App {
             switch newPhase {
             case .active:
                 appState.syncManager?.setAppInForeground(true)
+                appState.documentSyncManager?.reconnectIfNeeded()
             case .inactive, .background:
                 appState.syncManager?.setAppInForeground(false)
             @unknown default:
