@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { useFloating, offset, flip, shift, FloatingPortal } from '@floating-ui/react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import type { TrackerItem, TrackerItemStatus } from '@nimbalyst/runtime';
 import type { TrackerItemType } from '@nimbalyst/runtime/plugins/TrackerPlugin';
@@ -240,8 +241,19 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
   // Multi-select state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [contextAnchor, setContextAnchor] = useState<DOMRect | null>(null);
   const allItemsRef = useRef<TrackerItem[]>([]);
+
+  // Floating context menu
+  const { refs: contextRefs, floatingStyles: contextFloatingStyles } = useFloating({
+    placement: 'right-start',
+    middleware: [offset(2), flip({ padding: 8 }), shift({ padding: 8 })],
+  });
+  useEffect(() => {
+    if (contextAnchor) {
+      contextRefs.setReference({ getBoundingClientRect: () => contextAnchor });
+    }
+  }, [contextAnchor, contextRefs]);
 
   // Keep ref in sync
   useEffect(() => { allItemsRef.current = allItems; }, [allItems]);
@@ -272,22 +284,22 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     if (!selectedIds.has(item.id)) {
       setSelectedIds(new Set([item.id]));
     }
-    setContextMenu({ x: e.clientX, y: e.clientY });
+    setContextAnchor(DOMRect.fromRect({ x: e.clientX, y: e.clientY, width: 0, height: 0 }));
   }, [selectedIds]);
 
-  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+  const closeContextMenu = useCallback(() => setContextAnchor(null), []);
 
   // Close context menu on outside click
   useEffect(() => {
-    if (!contextMenu) return;
-    const handler = () => setContextMenu(null);
+    if (!contextAnchor) return;
+    const handler = () => setContextAnchor(null);
     document.addEventListener('click', handler);
     document.addEventListener('contextmenu', handler);
     return () => {
       document.removeEventListener('click', handler);
       document.removeEventListener('contextmenu', handler);
     };
-  }, [contextMenu]);
+  }, [contextAnchor]);
 
   // Clear selection on Escape
   useEffect(() => {
@@ -369,8 +381,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   }
 
   return (
-    <div className="tracker-kanban-board flex-1 flex flex-col overflow-hidden relative">
-    <div className="flex-1 flex gap-3 p-3 overflow-x-auto overflow-y-hidden">
+    <div className="tracker-kanban-board h-full flex flex-col overflow-hidden relative">
+    <div className="flex-1 flex gap-3 p-3 overflow-x-auto overflow-y-hidden min-h-0">
       {columns.map((col) => {
         const colItems = itemsByStatus[col.value] || [];
         const color = STATUS_COLORS[col.value] || '#6b7280';
@@ -378,7 +390,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         return (
           <div
             key={col.value}
-            className={`tracker-kanban-column flex flex-col min-w-[260px] max-w-[320px] flex-1 rounded-lg transition-colors bg-nim-secondary ${
+            className={`tracker-kanban-column flex flex-col min-w-[260px] max-w-[320px] flex-1 min-h-0 rounded-lg transition-colors bg-nim-secondary ${
               dragOverColumn === col.value ? 'ring-1 ring-[var(--nim-primary)]' : ''
             }`}
             onDragOver={(e) => handleDragOver(e, col.value)}
@@ -461,10 +473,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       })}
     </div>
       {/* Context menu */}
-      {contextMenu && selectedIds.size > 0 && (
+      {contextAnchor && selectedIds.size > 0 && (
+        <FloatingPortal>
         <div
-          className="fixed z-50 min-w-[180px] bg-nim-secondary border border-nim rounded-md shadow-lg py-1 text-[13px]"
-          style={{ top: contextMenu.y, left: contextMenu.x }}
+          ref={contextRefs.setFloating}
+          className="z-50 min-w-[180px] bg-nim-secondary border border-nim rounded-md shadow-lg py-1 text-[13px]"
+          style={contextFloatingStyles}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="px-3 py-1 text-[11px] text-nim-faint font-medium">
@@ -539,6 +553,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             </button>
           )}
         </div>
+        </FloatingPortal>
       )}
     </div>
   );
@@ -552,10 +567,14 @@ const KanbanContextSubmenu: React.FC<{
 }> = ({ label, icon, children }) => {
   const [open, setOpen] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { refs, floatingStyles } = useFloating({
+    placement: 'right-start',
+    middleware: [offset(2), flip({ padding: 8 }), shift({ padding: 8 })],
+  });
 
   return (
     <div
-      className="relative"
+      ref={refs.setReference as React.RefCallback<HTMLDivElement>}
       onMouseEnter={() => { if (timeoutRef.current) clearTimeout(timeoutRef.current); setOpen(true); }}
       onMouseLeave={() => { timeoutRef.current = setTimeout(() => setOpen(false), 150); }}
     >
@@ -565,9 +584,17 @@ const KanbanContextSubmenu: React.FC<{
         <MaterialSymbol icon="chevron_right" size={14} className="text-nim-faint" />
       </div>
       {open && (
-        <div className="absolute left-full top-0 ml-0.5 min-w-[140px] bg-nim-secondary border border-nim rounded-md shadow-lg py-1 z-50">
-          {children}
-        </div>
+        <FloatingPortal>
+          <div
+            ref={refs.setFloating}
+            className="min-w-[140px] bg-nim-secondary border border-nim rounded-md shadow-lg py-1 z-[60]"
+            style={floatingStyles}
+            onMouseEnter={() => { if (timeoutRef.current) clearTimeout(timeoutRef.current); setOpen(true); }}
+            onMouseLeave={() => { timeoutRef.current = setTimeout(() => setOpen(false), 150); }}
+          >
+            {children}
+          </div>
+        </FloatingPortal>
       )}
     </div>
   );

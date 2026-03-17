@@ -4,6 +4,7 @@
  */
 
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useFloating, offset, flip, shift, FloatingPortal } from '@floating-ui/react';
 import { useAtomValue } from 'jotai';
 import type {
   TrackerItem,
@@ -432,7 +433,18 @@ export function TrackerTable({
   const [focusedIndex, setFocusedIndex] = useState<number>(-1);
 
   // Context menu state
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [contextAnchor, setContextAnchor] = useState<DOMRect | null>(null);
+
+  // Floating context menu
+  const { refs: contextRefs, floatingStyles: contextFloatingStyles } = useFloating({
+    placement: 'right-start',
+    middleware: [offset(2), flip({ padding: 8 }), shift({ padding: 8 })],
+  });
+  useEffect(() => {
+    if (contextAnchor) {
+      contextRefs.setReference({ getBoundingClientRect: () => contextAnchor });
+    }
+  }, [contextAnchor, contextRefs]);
 
   // Clear selection when items change significantly
   useEffect(() => {
@@ -637,23 +649,23 @@ export function TrackerTable({
       lastClickedIndexRef.current = index;
     }
     setFocusedIndex(index);
-    setContextMenu({ x: e.clientX, y: e.clientY });
+    setContextAnchor(DOMRect.fromRect({ x: e.clientX, y: e.clientY, width: 0, height: 0 }));
   }, [selectedIds]);
 
   /** Close context menu */
-  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+  const closeContextMenu = useCallback(() => setContextAnchor(null), []);
 
   // Close context menu on outside click
   useEffect(() => {
-    if (!contextMenu) return;
-    const handler = () => setContextMenu(null);
+    if (!contextAnchor) return;
+    const handler = () => setContextAnchor(null);
     document.addEventListener('click', handler);
     document.addEventListener('contextmenu', handler);
     return () => {
       document.removeEventListener('click', handler);
       document.removeEventListener('contextmenu', handler);
     };
-  }, [contextMenu]);
+  }, [contextAnchor]);
 
   /** Bulk status update for selected items */
   const handleBulkStatusUpdate = useCallback(async (newStatus: string) => {
@@ -1426,10 +1438,12 @@ export function TrackerTable({
       </div>
 
       {/* Context menu */}
-      {contextMenu && selectedIds.size > 0 && (
+      {contextAnchor && selectedIds.size > 0 && (
+        <FloatingPortal>
         <div
-          className="fixed z-50 min-w-[180px] bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded-md shadow-lg py-1 text-[13px]"
-          style={{ top: contextMenu.y, left: contextMenu.x }}
+          ref={contextRefs.setFloating}
+          className="z-50 min-w-[180px] bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded-md shadow-lg py-1 text-[13px]"
+          style={contextFloatingStyles}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="px-3 py-1 text-[11px] text-[var(--nim-text-faint)] font-medium">
@@ -1521,6 +1535,7 @@ export function TrackerTable({
             </button>
           )}
         </div>
+        </FloatingPortal>
       )}
     </div>
   );
@@ -1534,6 +1549,10 @@ const ContextSubmenu: React.FC<{
 }> = ({ label, icon, children }) => {
   const [open, setOpen] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { refs, floatingStyles } = useFloating({
+    placement: 'right-start',
+    middleware: [offset(2), flip({ padding: 8 }), shift({ padding: 8 })],
+  });
 
   const handleEnter = () => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -1545,7 +1564,7 @@ const ContextSubmenu: React.FC<{
 
   return (
     <div
-      className="relative"
+      ref={refs.setReference as React.RefCallback<HTMLDivElement>}
       onMouseEnter={handleEnter}
       onMouseLeave={handleLeave}
     >
@@ -1555,9 +1574,17 @@ const ContextSubmenu: React.FC<{
         <span className="material-symbols-outlined text-xs text-[var(--nim-text-faint)]">chevron_right</span>
       </div>
       {open && (
-        <div className="absolute left-full top-0 ml-0.5 min-w-[140px] bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded-md shadow-lg py-1 z-50">
-          {children}
-        </div>
+        <FloatingPortal>
+          <div
+            ref={refs.setFloating}
+            className="min-w-[140px] bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded-md shadow-lg py-1 z-[60]"
+            style={floatingStyles}
+            onMouseEnter={handleEnter}
+            onMouseLeave={handleLeave}
+          >
+            {children}
+          </div>
+        </FloatingPortal>
       )}
     </div>
   );

@@ -155,6 +155,7 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/shell-quote": "^1.7.5",
     "ajv-draft-04": "^1.0.0",
+    "@floating-ui/react": "^0.27.19",
     "diff": "^8.0.2",
     "esbuild": "0.25.10",
     "front-matter": "^4.0.2",
