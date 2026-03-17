@@ -39,6 +39,7 @@ import type { SuperLoop } from '../../../shared/types/superLoop';
 import { store } from '@nimbalyst/runtime/store';
 import { HelpTooltip } from '../../help';
 import { usePostHog } from 'posthog-js/react';
+import { WorkspaceSummaryHeader, generateWorkspaceAccentColor } from '../WorkspaceSummaryHeader';
 import './SessionHistory.css';
 
 // SessionItem is the shared SessionMeta type from the store atoms.
@@ -132,20 +133,6 @@ interface SessionHistoryProps {
   onSortOrderChange?: (sortOrder: 'updated' | 'created') => void; // Callback when sort order changes
   refreshTrigger?: number; // Optional trigger to force refresh
   mode?: 'chat' | 'agent'; // Mode determines which sessions to show
-}
-
-// Generate a consistent color based on workspace path
-function generateWorkspaceColor(path: string): string {
-  let hash = 0;
-  for (let i = 0; i < path.length; i++) {
-    hash = ((hash << 5) - hash) + path.charCodeAt(i);
-    hash = hash & hash;
-  }
-
-  // Generate a hue value (0-360)
-  const hue = Math.abs(hash) % 360;
-  // Use consistent saturation and lightness for pleasant colors
-  return `hsl(${hue}, 65%, 55%)`;
 }
 
 // Component for rendering session status indicators in card view
@@ -403,7 +390,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
 
   // Extract workspace name from path
   const workspaceName = getFileName(workspacePath) || 'Workspace';
-  const workspaceColor = generateWorkspaceColor(workspacePath);
+  const workspaceColor = generateWorkspaceAccentColor(workspacePath);
 
   // Load all sessions - now just triggers atom refresh
   // The atom handles IPC calls and state updates
@@ -2233,12 +2220,12 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     return (
       <div className="session-history flex flex-col h-full bg-[var(--nim-bg)] overflow-hidden">
         <div className="workspace-color-accent h-[3px] w-full opacity-90 shrink-0" style={{ backgroundColor: workspaceColor }} />
-        <div className="session-history-header flex items-center justify-between px-3 pt-2.5 pb-2 border-b border-[var(--nim-border)] bg-[var(--nim-bg)] gap-2 min-h-14 shrink-0">
-          <div className="session-history-header-identity flex-1 min-w-0 flex flex-col gap-0.5">
-            <h3 className="session-history-header-name m-0 text-[15px] font-bold text-[var(--nim-text)] overflow-hidden text-ellipsis whitespace-nowrap tracking-tight leading-tight">{workspaceName}</h3>
-            <div className="session-history-header-path text-[11px] text-[var(--nim-text-muted)] overflow-hidden text-ellipsis whitespace-nowrap opacity-75 font-normal">{workspacePath}</div>
-          </div>
-          <div className="session-history-header-buttons flex items-center gap-1.5 shrink-0">
+        <WorkspaceSummaryHeader
+          workspacePath={workspacePath}
+          workspaceName={workspaceName}
+          showAccent={false}
+          actions={
+            <>
             {onOpenQuickSearch && (
               <HelpTooltip testId="session-quick-search-button">
                 <button
@@ -2283,8 +2270,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                 </button>
               </div>
             )}
-          </div>
-        </div>
+            </>
+          }
+        />
         <div className="session-history-section-label px-3 py-1.5 text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-wider border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] shrink-0">Agent Sessions</div>
         <div className="session-history-search px-3 py-2 border-b border-[var(--nim-border)] shrink-0 relative">
           <input
@@ -2347,12 +2335,12 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     return (
       <div className="session-history flex flex-col h-full bg-[var(--nim-bg)] overflow-hidden">
         <div className="workspace-color-accent h-[3px] w-full opacity-90 shrink-0" style={{ backgroundColor: workspaceColor }} />
-        <div className="session-history-header flex items-center justify-between px-3 pt-2.5 pb-2 border-b border-[var(--nim-border)] bg-[var(--nim-bg)] gap-2 min-h-14 shrink-0">
-          <div className="session-history-header-identity flex-1 min-w-0 flex flex-col gap-0.5">
-            <h3 className="session-history-header-name m-0 text-[15px] font-bold text-[var(--nim-text)] overflow-hidden text-ellipsis whitespace-nowrap tracking-tight leading-tight">{workspaceName}</h3>
-            <div className="session-history-header-path text-[11px] text-[var(--nim-text-muted)] overflow-hidden text-ellipsis whitespace-nowrap opacity-75 font-normal">{workspacePath}</div>
-          </div>
-          <div className="session-history-header-buttons flex items-center gap-1.5 shrink-0">
+        <WorkspaceSummaryHeader
+          workspacePath={workspacePath}
+          workspaceName={workspaceName}
+          showAccent={false}
+          actions={
+            <>
             {(onNewSession || onNewWorktreeSession || onNewTerminal) && (
               <div className="session-history-new-dropdown relative z-10">
                 <button
@@ -2369,8 +2357,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                 </button>
               </div>
             )}
-          </div>
-        </div>
+            </>
+          }
+        />
         <div className="session-history-section-label px-3 py-1.5 text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-wider border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] shrink-0">Agent Sessions</div>
         <div className="session-history-error flex flex-col items-center justify-center px-4 py-8 text-center text-[var(--nim-error)] text-[13px]">
           <span>{error}</span>
@@ -2387,57 +2376,58 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     return (
       <div className="session-history flex flex-col h-full bg-[var(--nim-bg)] overflow-hidden">
         <div className="workspace-color-accent h-[3px] w-full opacity-90 shrink-0" style={{ backgroundColor: workspaceColor }} />
-        <div className="session-history-header flex items-center justify-between px-3 pt-2.5 pb-2 border-b border-[var(--nim-border)] bg-[var(--nim-bg)] gap-2 min-h-14 shrink-0">
-          <div className="session-history-header-identity flex-1 min-w-0 flex flex-col gap-0.5">
-            <h3 className="session-history-header-name m-0 text-[15px] font-bold text-[var(--nim-text)] overflow-hidden text-ellipsis whitespace-nowrap tracking-tight leading-tight">{workspaceName}</h3>
-            <div className="session-history-header-path text-[11px] text-[var(--nim-text-muted)] overflow-hidden text-ellipsis whitespace-nowrap opacity-75 font-normal">{workspacePath}</div>
-          </div>
-          <div className="session-history-header-buttons flex items-center gap-1.5 shrink-0">
-            {onImportSessions && (
-              <button
-                className="session-history-import-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
-                data-testid="import-sessions-button"
-                onClick={onImportSessions}
-                title="Import Claude Agent sessions"
-                aria-label="Import sessions"
-              >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M13.5 8.5V12.5C13.5 13.0523 13.0523 13.5 12.5 13.5H3.5C2.94772 13.5 2.5 13.0523 2.5 12.5V8.5M8 2.5V10.5M8 10.5L5.5 8M8 10.5L10.5 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-            )}
-            {(onNewSession || onNewWorktreeSession) && (
-              <div className="session-history-new-dropdown relative z-10">
+        <WorkspaceSummaryHeader
+          workspacePath={workspacePath}
+          workspaceName={workspaceName}
+          showAccent={false}
+          actions={
+            <>
+              {onImportSessions && (
                 <button
-                  ref={newDropdownButtonRef}
-                  className="session-history-new-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
-                  data-testid="new-dropdown-button"
-                  onClick={handleNewButtonClick}
-                  title="Create new..."
-                  aria-label="Create new session or worktree"
+                  className="session-history-import-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
+                  data-testid="import-sessions-button"
+                  onClick={onImportSessions}
+                  title="Import Claude Agent sessions"
+                  aria-label="Import sessions"
                 >
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                    <path d="M13.5 8.5V12.5C13.5 13.0523 13.0523 13.5 12.5 13.5H3.5C2.94772 13.5 2.5 13.0523 2.5 12.5V8.5M8 2.5V10.5M8 10.5L5.5 8M8 10.5L10.5 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                 </button>
-              </div>
-            )}
-            {onNewTerminal && (
-              <button
-                className="session-history-new-terminal-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
-                data-testid="new-terminal-button"
-                onClick={() => onNewTerminal()}
-                title="New terminal"
-                aria-label="Create new terminal"
-              >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M3 5L7 9L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M9 13H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
-              </button>
-            )}
-          </div>
-        </div>
+              )}
+              {(onNewSession || onNewWorktreeSession) && (
+                <div className="session-history-new-dropdown relative z-10">
+                  <button
+                    ref={newDropdownButtonRef}
+                    className="session-history-new-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
+                    data-testid="new-dropdown-button"
+                    onClick={handleNewButtonClick}
+                    title="Create new..."
+                    aria-label="Create new session or worktree"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                    </svg>
+                  </button>
+                </div>
+              )}
+              {onNewTerminal && (
+                <button
+                  className="session-history-new-terminal-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
+                  data-testid="new-terminal-button"
+                  onClick={() => onNewTerminal()}
+                  title="New terminal"
+                  aria-label="Create new terminal"
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 5L7 9L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M9 13H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                </button>
+              )}
+            </>
+          }
+        />
         <div className="session-history-section-label px-3 py-1.5 text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-wider border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] shrink-0">Agent Sessions</div>
         <div className="session-history-empty flex flex-col items-center justify-center px-4 py-8 text-center text-[var(--nim-text-faint)] text-[13px]">
           <p className="my-1">No sessions yet</p>
@@ -2452,12 +2442,12 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   return (
     <div className="session-history flex flex-col h-full bg-[var(--nim-bg)] overflow-hidden">
       <div className="workspace-color-accent h-[3px] w-full opacity-90 shrink-0" style={{ backgroundColor: workspaceColor }} />
-      <div className="session-history-header flex items-center justify-between px-3 pt-2.5 pb-2 border-b border-[var(--nim-border)] bg-[var(--nim-bg)] gap-2 min-h-14 shrink-0">
-        <div className="session-history-header-identity flex-1 min-w-0 flex flex-col gap-0.5">
-          <h3 className="session-history-header-name m-0 text-[15px] font-bold text-[var(--nim-text)] overflow-hidden text-ellipsis whitespace-nowrap tracking-tight leading-tight">{workspaceName}</h3>
-          <div className="session-history-header-path text-[11px] text-[var(--nim-text-muted)] overflow-hidden text-ellipsis whitespace-nowrap opacity-75 font-normal">{workspacePath}</div>
-        </div>
-        <div className="session-history-header-buttons flex items-center gap-1.5 shrink-0">
+      <WorkspaceSummaryHeader
+        workspacePath={workspacePath}
+        workspaceName={workspaceName}
+        showAccent={false}
+        actions={
+          <>
           <HelpTooltip testId="session-kanban-button">
             <button
               className={`flex items-center gap-1 px-2 py-1.5 text-[11px] font-semibold rounded border cursor-pointer transition-all duration-150 shrink-0 ${viewMode === 'kanban' ? 'bg-[var(--nim-primary)] border-[var(--nim-primary)] text-white hover:opacity-90' : 'bg-[var(--nim-bg-secondary)] border-[var(--nim-border)] text-[var(--nim-text-muted)] hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] hover:text-[var(--nim-text)]'}`}
@@ -2524,8 +2514,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
               </button>
             </div>
           )}
-        </div>
-      </div>
+          </>
+        }
+      />
       <div className="session-history-section-label px-3 py-1.5 text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-wider border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] shrink-0">Agent Sessions</div>
       <div className="session-history-search px-3 py-2 border-b border-[var(--nim-border)] shrink-0 relative z-[101]">
         <input

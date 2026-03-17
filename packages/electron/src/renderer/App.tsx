@@ -1791,6 +1791,7 @@ export default function App() {
               {workspacePath && (
                 <TrackerMode
                   workspacePath={workspacePath}
+                  workspaceName={workspaceName || ''}
                   isActive={activeMode === 'tracker'}
                   onSwitchToFilesMode={() => setActiveMode('files')}
                 />

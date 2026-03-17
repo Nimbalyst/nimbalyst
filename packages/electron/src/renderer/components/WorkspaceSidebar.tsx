@@ -15,6 +15,7 @@ import { HelpTooltip } from '../help';
 import { store, gitStatusMapAtom, revealRequestAtom, rawFileTreeAtom, fileTreeLoadedAtom, type FileGitStatus as AtomFileGitStatus } from '../store';
 import { refreshFileTree } from '../store/listeners/fileTreeListeners';
 import { useTabsActions } from '../contexts/TabsContext';
+import { WorkspaceSummaryHeader } from './WorkspaceSummaryHeader';
 
 type FileTreeItem = RendererFileTreeItem;
 
@@ -115,20 +116,6 @@ function replaceFolderChildren(
   });
 
   return [mutated ? updatedItems : items, mutated];
-}
-
-// Generate a consistent color based on workspace path
-function generateWorkspaceColor(path: string): string {
-  let hash = 0;
-  for (let i = 0; i < path.length; i++) {
-    hash = ((hash << 5) - hash) + path.charCodeAt(i);
-    hash = hash & hash;
-  }
-
-  // Generate a hue value (0-360)
-  const hue = Math.abs(hash) % 360;
-  // Use consistent saturation and lightness for pleasant colors
-  return `hsl(${hue}, 65%, 55%)`;
 }
 
 export function WorkspaceSidebar({
@@ -1093,8 +1080,6 @@ export function WorkspaceSidebar({
     setIsDragOverRoot(false);
   };
 
-  const workspaceColor = generateWorkspaceColor(workspacePath);
-
   return (
     <div className="workspace-sidebar w-full bg-[var(--nim-bg-secondary)] border-r border-[var(--nim-border)] flex flex-col h-full overflow-hidden relative"
       onDragOver={handleRootDragOver}
@@ -1103,72 +1088,70 @@ export function WorkspaceSidebar({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="workspace-color-accent h-[3px] w-full opacity-90 shrink-0" style={{ backgroundColor: workspaceColor }} />
-      <div className="workspace-sidebar-header px-3 pt-2.5 pb-2 border-b border-[var(--nim-border)] flex items-center justify-between bg-[var(--nim-bg)] gap-2 min-h-[56px]">
-        <div className="workspace-identity flex-1 min-w-0 flex flex-col gap-0.5">
-          <h3 className="workspace-name m-0 text-[15px] font-bold text-[var(--nim-text)] overflow-hidden text-ellipsis whitespace-nowrap tracking-tight leading-tight">{workspaceName}</h3>
-          <div className="workspace-path text-[11px] text-[var(--nim-text-muted)] overflow-hidden text-ellipsis whitespace-nowrap opacity-75" title={workspacePath}>
-            {workspacePath}
-          </div>
-        </div>
-        <div className="workspace-sidebar-actions flex items-center gap-1">
-          {currentView === 'files' && (
-            <>
-              <button
-                ref={newFileButtonRef}
-                className="workspace-action-button bg-transparent border-none p-1.5 cursor-pointer rounded text-[var(--nim-text-faint)] flex items-center justify-center transition-all duration-200 relative hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
-                onClick={handleNewFileButtonClick}
-                title="New file"
-                aria-label="New file"
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
-                  edit_square
-                </span>
-              </button>
-              <button
-                className="workspace-action-button bg-transparent border-none p-1.5 cursor-pointer rounded text-[var(--nim-text-faint)] flex items-center justify-center transition-all duration-200 relative hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
-                onClick={handleNewFolder}
-                title="New folder"
-                aria-label="New folder"
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
-                  create_new_folder
-                </span>
-              </button>
-              {onOpenQuickSearch && (
-                <HelpTooltip testId="file-tree-quick-open-button">
-                  <button
-                    data-testid="file-tree-quick-open-button"
-                    className="workspace-action-button bg-transparent border-none p-1.5 cursor-pointer rounded text-[var(--nim-text-faint)] flex items-center justify-center transition-all duration-200 relative hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
-                    onClick={onOpenQuickSearch}
-                    aria-label="Search files"
-                  >
-                    <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
-                      search
-                    </span>
-                  </button>
-                </HelpTooltip>
-              )}
-              <HelpTooltip testId="file-tree-filter-button">
+      <WorkspaceSummaryHeader
+        workspacePath={workspacePath}
+        workspaceName={workspaceName}
+        actionsClassName="gap-1"
+        actions={
+          <>
+            {currentView === 'files' && (
+              <>
                 <button
-                  ref={filterButtonRef}
-                  data-testid="file-tree-filter-button"
+                  ref={newFileButtonRef}
                   className="workspace-action-button bg-transparent border-none p-1.5 cursor-pointer rounded text-[var(--nim-text-faint)] flex items-center justify-center transition-all duration-200 relative hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
-                  onClick={handleFilterButtonClick}
-                  aria-label="Filter files"
+                  onClick={handleNewFileButtonClick}
+                  title="New file"
+                  aria-label="New file"
                 >
                   <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
-                    filter_alt
+                    edit_square
                   </span>
-                  {fileTreeFilter !== 'all' && (
-                    <span className="filter-active-indicator text-[var(--nim-primary)] font-bold text-base leading-none absolute top-0.5 right-0.5" title="Filter active">•</span>
-                  )}
                 </button>
-              </HelpTooltip>
-            </>
-          )}
-        </div>
-      </div>
+                <button
+                  className="workspace-action-button bg-transparent border-none p-1.5 cursor-pointer rounded text-[var(--nim-text-faint)] flex items-center justify-center transition-all duration-200 relative hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
+                  onClick={handleNewFolder}
+                  title="New folder"
+                  aria-label="New folder"
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
+                    create_new_folder
+                  </span>
+                </button>
+                {onOpenQuickSearch && (
+                  <HelpTooltip testId="file-tree-quick-open-button">
+                    <button
+                      data-testid="file-tree-quick-open-button"
+                      className="workspace-action-button bg-transparent border-none p-1.5 cursor-pointer rounded text-[var(--nim-text-faint)] flex items-center justify-center transition-all duration-200 relative hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
+                      onClick={onOpenQuickSearch}
+                      aria-label="Search files"
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
+                        search
+                      </span>
+                    </button>
+                  </HelpTooltip>
+                )}
+                <HelpTooltip testId="file-tree-filter-button">
+                  <button
+                    ref={filterButtonRef}
+                    data-testid="file-tree-filter-button"
+                    className="workspace-action-button bg-transparent border-none p-1.5 cursor-pointer rounded text-[var(--nim-text-faint)] flex items-center justify-center transition-all duration-200 relative hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
+                    onClick={handleFilterButtonClick}
+                    aria-label="Filter files"
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
+                      filter_alt
+                    </span>
+                    {fileTreeFilter !== 'all' && (
+                      <span className="filter-active-indicator text-[var(--nim-primary)] font-bold text-base leading-none absolute top-0.5 right-0.5" title="Filter active">•</span>
+                    )}
+                  </button>
+                </HelpTooltip>
+              </>
+            )}
+          </>
+        }
+      />
 
       {currentView === 'files' ? (
         <>
