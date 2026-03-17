@@ -157,22 +157,15 @@ export const CLAUDE_CODE_VARIANTS = ['opus', 'sonnet', 'haiku'] as const;
  * Resolves a configured model string to the SDK model value.
  *
  * Key behaviors:
- * - For extended context (1M) variants, appends [1m] suffix so the SDK auto-detects
- *   the beta header. The --betas CLI option is ignored for OAuth users, so [1m] suffix
- *   is the only reliable way to enable 1M context.
+ * - For -1m variants, appends [1m] suffix so the SDK auto-detects the beta header.
  * - sonnet-1m uses the SDK's 'sonnet' variant (currently Sonnet 4.6) with [1m] suffix.
- * - sonnet-4.5-1m pins to claude-sonnet-4-5-20250929 with [1m] suffix.
+ * - opus-1m uses the SDK's 'opus' variant (currently Opus 4.6) with [1m] suffix.
  * - The SDK strips [1m] before sending the model ID to the API.
  */
 export function resolveClaudeCodeModelVariant(configuredModel: string | undefined, defaultModel: string): string {
   type ClaudeCodeVariant = typeof CLAUDE_CODE_VARIANTS[number];
   const fallback: ClaudeCodeVariant = 'sonnet';
   const configured = configuredModel || defaultModel;
-
-  // Handle special pinned model identifiers (these don't parse via ModelIdentifier)
-  if (configured === 'claude-code:sonnet-4.5-1m') {
-    return 'claude-sonnet-4-5-20250929[1m]';
-  }
 
   // Try parsing with ModelIdentifier
   const parsed = ModelIdentifier.tryParse(configured);

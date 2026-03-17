@@ -16,7 +16,7 @@ export const CLAUDE_MODELS: ModelDefinition[] = [
     displayName: 'Claude Opus 4.6',
     shortName: 'Opus 4.6',
     maxTokens: 8192,
-    contextWindow: 1000000,
+    contextWindow: 200000,
   },
   {
     id: 'claude-sonnet-4-6',

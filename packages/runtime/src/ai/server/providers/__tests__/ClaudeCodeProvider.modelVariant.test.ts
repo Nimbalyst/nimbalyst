@@ -32,11 +32,6 @@ describe('resolveClaudeCodeModelVariant', () => {
       expect(result).toBe('sonnet[1m]');
     });
 
-    it('sonnet-4.5-1m pins to Sonnet 4.5 with [1m] suffix', () => {
-      const result = resolveClaudeCodeModelVariant('claude-code:sonnet-4.5-1m', DEFAULT_MODEL);
-      expect(result).toBe('claude-sonnet-4-5-20250929[1m]');
-    });
-
     it('opus-1m resolves to opus[1m]', () => {
       const result = resolveClaudeCodeModelVariant('claude-code:opus-1m', DEFAULT_MODEL);
       expect(result).toBe('opus[1m]');
@@ -60,7 +55,7 @@ describe('resolveClaudeCodeModelVariant', () => {
     it('1M variants include [1m] suffix that SDK uses for beta auto-detection', () => {
       // The SDK checks model.includes("[1m]") to auto-add the context-1m-2025-08-07 beta.
       // This is critical because --betas is ignored for OAuth users.
-      const variants = ['sonnet-1m', 'opus-1m', 'haiku-1m', 'sonnet-4.5-1m'];
+      const variants = ['sonnet-1m', 'opus-1m', 'haiku-1m'];
       for (const variant of variants) {
         const result = resolveClaudeCodeModelVariant(`claude-code:${variant}`, DEFAULT_MODEL);
         expect(result).toContain('[1m]');

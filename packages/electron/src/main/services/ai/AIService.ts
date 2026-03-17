@@ -4724,7 +4724,6 @@ export class AIService {
       const useStandaloneBinary = this.getSettingsStore().get('useStandaloneBinary', false) as boolean;
       const customClaudeCodePath = this.getSettingsStore().get('customClaudeCodePath', '') as string;
       const autoCommitEnabled = this.getSettingsStore().get('autoCommitEnabled', false) as boolean;
-      const showExtendedContextModels = this.getSettingsStore().get('showExtendedContextModels', false) as boolean;
 
       return {
         defaultProvider: this.getSettingsStore().get('defaultProvider', 'claude-code'),
@@ -4738,7 +4737,6 @@ export class AIService {
         useStandaloneBinary,
         customClaudeCodePath,
         autoCommitEnabled,
-        showExtendedContextModels,
       };
     });
 
@@ -4843,12 +4841,6 @@ export class AIService {
 
       if (settings.autoCommitEnabled !== undefined) {
         this.getSettingsStore().set('autoCommitEnabled', settings.autoCommitEnabled);
-      }
-
-      if (settings.showExtendedContextModels !== undefined) {
-        this.getSettingsStore().set('showExtendedContextModels', settings.showExtendedContextModels);
-        // Clear model cache so the model selector picks up the change immediately
-        ModelRegistry.clearCache();
       }
 
       return { success: true };
@@ -5160,15 +5152,8 @@ export class AIService {
       // console.log('[AIService] ai:getModels - claude-code models from registry:',
       //   claudeCodeModels.map(m => ({ id: m.id, name: m.name })));
 
-      // Check if extended context (1M) models should be shown
-      const showExtendedContextModels = this.getSettingsStore().get('showExtendedContextModels', false) as boolean;
-
       // Filter to only enabled models
       const enabledModels = allModels.filter(model => {
-        // Hide 1M models unless the setting is enabled
-        if (!showExtendedContextModels && model.provider === 'claude-code' && (model.id.endsWith('-1m') || model.id.includes('-1m'))) {
-          return false;
-        }
         const provider = enabledProviders[model.provider as AIProviderType];
         // if (model.provider === 'openai-codex') {
         //   console.log('[AIService] Filtering openai-codex model:', {
@@ -5184,15 +5169,10 @@ export class AIService {
             return true;
           }
           // For Claude Code: if base model is selected, also include 1M variants
-          // e.g., if 'claude-code:sonnet' is selected, also include 'claude-code:sonnet-1m' and 'claude-code:sonnet-4.5-1m'
+          // e.g., if 'claude-code:sonnet' is selected, also include 'claude-code:sonnet-1m'
           if (model.provider === 'claude-code' && model.id.includes('-1m')) {
             const baseModelId = model.id.replace(/-1m$/, '');
             if (provider.models.includes(baseModelId)) {
-              return true;
-            }
-            // Also check if the base variant (e.g., 'claude-code:sonnet') is selected
-            // for pinned models like 'claude-code:sonnet-4.5-1m'
-            if (model.id === 'claude-code:sonnet-4.5-1m' && provider.models.includes('claude-code:sonnet')) {
               return true;
             }
           }

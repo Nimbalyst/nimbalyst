@@ -1078,14 +1078,8 @@ async function getAvailableModelsForMobile(): Promise<{ models: Array<{ id: stri
       lmstudio_url: providerSettings['lmstudio']?.baseUrl || 'http://127.0.0.1:8234'
     };
     const allModels = await ModelRegistry.getAllModels(modelsConfig, enabledSet as Set<any>);
-    const showExtendedContextModels = aiStore.get('showExtendedContextModels', false) as boolean;
-
     // Filter to enabled models (model-level filtering for specific model selection)
     const enabledModels = allModels.filter(model => {
-      // Hide 1M models unless the setting is enabled
-      if (!showExtendedContextModels && model.provider === 'claude-code' && (model.id.endsWith('-1m') || model.id.includes('-1m'))) {
-        return false;
-      }
       const ps = providerSettings[model.provider] as { enabled?: boolean; models?: string[] } | undefined;
       // If specific models are selected for this provider, filter
       if (ps?.models && ps.models.length > 0) {

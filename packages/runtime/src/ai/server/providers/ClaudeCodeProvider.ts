@@ -1046,6 +1046,13 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
                 errorMessage = buildBedrockToolErrorGuidance(errorMessage);
               }
 
+              // If rate limit on a 1M context model, hint that it may not be available on their plan
+              const isRateLimitError = /rate limit/i.test(errorMessage);
+              const is1mModel = this.config.model != null && this.config.model.includes('-1m');
+              if (isRateLimitError && is1mModel) {
+                errorMessage += '\n\nThis 1M context model may not be available on your plan.';
+              }
+
               // Log error to database (as 'output' since errors are provider responses)
               const errorType = isAuthError ? 'authentication_error' : isBedrockToolError ? 'bedrock_tool_error' : isExpiredSessionError ? 'expired_session_error' : 'api_error';
               this.logError(sessionId, 'claude-code', new Error(errorMessage), 'result_chunk', errorType, hideMessages);
@@ -1441,10 +1448,11 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
               const isWarning = info.status === 'allowed_warning';
               const marker = isWarning ? '[RATE_LIMIT_WARNING]' : '[RATE_LIMIT]';
               const utilizationStr = utilization != null ? ` usage=${utilization}` : '';
+              const modelStr = this.config.model ? ` model=${this.config.model}` : '';
               // Yield as text (not error) so it doesn't interrupt the stream or trigger error handling
               yield {
                 type: 'text',
-                content: `\n\n<!-- ${marker} limitType=${limitType} resetsAtUnix=${resetsAtUnix || 'unknown'}${utilizationStr} -->\n\n`
+                content: `\n\n<!-- ${marker} limitType=${limitType} resetsAtUnix=${resetsAtUnix || 'unknown'}${utilizationStr}${modelStr} -->\n\n`
               };
             }
           } else {
@@ -2685,7 +2693,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
 
     // Add models in desired order
     for (const variant of CLAUDE_CODE_VARIANTS) {
-      // Add base model
+      // Add base model (standard 200K context)
       models.push({
         id: ModelIdentifier.create('claude-code', variant).combined,
         name: `Claude Agent · ${CLAUDE_CODE_MODEL_LABELS[variant]} ${CLAUDE_CODE_VARIANT_VERSIONS[variant]}`,
@@ -2694,26 +2702,18 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         contextWindow: 200000
       });
 
-      // Add 1M variants right after Sonnet
-      // Access is controlled by Anthropic via account permissions
-      // If user doesn't have access, the SDK will return an error when they try to use it
-      if (variant === 'sonnet') {
+      // Add 1M context variants for Opus 4.6 and Sonnet 4.6
+      // 1M context is GA at standard pricing (March 2026)
+      if (variant === 'opus' || variant === 'sonnet') {
         models.push({
-          id: ModelIdentifier.create('claude-code', 'sonnet-1m').combined,
-          name: 'Claude Agent · Sonnet 4.6 (1M)',
-          provider: 'claude-code' as const,
-          maxTokens: 8192,
-          contextWindow: 1000000
-        });
-        // Sonnet 4.5 1M — uses a full model ID to pin to 4.5
-        models.push({
-          id: 'claude-code:sonnet-4.5-1m',
-          name: 'Claude Agent · Sonnet 4.5 (1M)',
+          id: ModelIdentifier.create('claude-code', `${variant}-1m`).combined,
+          name: `Claude Agent · ${CLAUDE_CODE_MODEL_LABELS[variant]} ${CLAUDE_CODE_VARIANT_VERSIONS[variant]} (1M)`,
           provider: 'claude-code' as const,
           maxTokens: 8192,
           contextWindow: 1000000
         });
       }
+
     }
 
     return models;

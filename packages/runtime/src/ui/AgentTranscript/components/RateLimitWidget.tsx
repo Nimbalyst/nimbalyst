@@ -34,11 +34,13 @@ function parseRateLimitInfo(content: string): {
   limitType: string;
   resetsAtMs: number | null;
   utilization: number | null;
+  model: string | null;
 } {
   const isWarning = content.includes('[RATE_LIMIT_WARNING]');
   const limitTypeMatch = content.match(/limitType=([^\s]+(?:\s+[^\s=]+)*?)(?:\s+resetsAtUnix=|\s+usage=|\s*-->)/);
   const resetsAtMatch = content.match(/resetsAtUnix=(\d+)/);
   const utilizationMatch = content.match(/usage=(\d+)/);
+  const modelMatch = content.match(/model=([^\s>]+)/);
 
   return {
     isWarning,
@@ -46,6 +48,7 @@ function parseRateLimitInfo(content: string): {
     // Convert Unix seconds to milliseconds for Date math
     resetsAtMs: resetsAtMatch ? parseInt(resetsAtMatch[1], 10) * 1000 : null,
     utilization: utilizationMatch ? parseInt(utilizationMatch[1], 10) : null,
+    model: modelMatch ? modelMatch[1] : null,
   };
 }
 
@@ -69,8 +72,9 @@ export const RateLimitWidget: React.FC<RateLimitWidgetProps> = ({ content }) => 
     injectRateLimitStyles();
   }, []);
 
-  const { isWarning, limitType, resetsAtMs, utilization } = parseRateLimitInfo(content);
+  const { isWarning, limitType, resetsAtMs, utilization, model } = parseRateLimitInfo(content);
   const accentVar = isWarning ? '--nim-warning' : '--nim-error';
+  const is1mModel = model != null && model.includes('-1m');
 
   return (
     <div className={isWarning ? 'rate-limit-widget my-4 p-4 rounded-lg flex flex-col gap-2' : 'rate-limit-widget-blocked my-4 p-4 rounded-lg flex flex-col gap-2'}>
@@ -90,6 +94,7 @@ export const RateLimitWidget: React.FC<RateLimitWidgetProps> = ({ content }) => 
           ? `You're at ${utilization != null ? `${utilization}%` : 'near'} of your ${limitType} limit.`
           : `You've hit your ${limitType} rate limit.`}
         {resetsAtMs && ` Resets in ${formatResetTime(resetsAtMs)}.`}
+        {!isWarning && is1mModel && ' This 1M context model may not be available on your plan.'}
       </div>
     </div>
   );

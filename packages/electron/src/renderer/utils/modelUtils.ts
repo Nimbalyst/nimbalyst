@@ -54,9 +54,6 @@ function formatVariantLabel(variant: ClaudeCodeVariant): string {
 }
 
 export function getClaudeCodeModelLabel(modelId?: string): string {
-  // Handle pinned Sonnet 4.5 1M (uses non-standard model ID)
-  if (modelId === 'claude-code:sonnet-4.5-1m') return 'Claude Agent (Sonnet 4.5 (1M))';
-
   const variant = extractClaudeCodeVariant(modelId);
   // If no variant detected (shouldn't happen with legacy handling), default to Sonnet
   if (!variant) return 'Claude Agent (Sonnet 4.6)';
@@ -70,9 +67,6 @@ export function getClaudeCodeModelLabel(modelId?: string): string {
 }
 
 export function getClaudeCodeModelShortLabel(modelId?: string): string {
-  // Handle pinned Sonnet 4.5 1M (uses non-standard model ID)
-  if (modelId === 'claude-code:sonnet-4.5-1m') return 'Sonnet 4.5 (1M)';
-
   const variant = extractClaudeCodeVariant(modelId);
   // If no variant detected (shouldn't happen with legacy handling), default to Sonnet
   if (!variant) return 'Sonnet 4.6';
@@ -236,7 +230,6 @@ export function getModelShortName(provider: string, modelId: string): string {
  */
 export function supportsEffortLevel(modelId?: string): boolean {
   if (!modelId) return false;
-  if (modelId === 'claude-code:sonnet-4.5-1m') return false;
   const variant = extractClaudeCodeVariant(modelId);
   if (variant === 'opus') return true;
   if (variant === 'sonnet') return true;

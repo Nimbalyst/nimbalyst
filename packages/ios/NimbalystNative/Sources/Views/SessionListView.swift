@@ -1091,11 +1091,6 @@ struct ProviderBadge: View {
             variant = model
         }
 
-        // Handle pinned Sonnet 4.5 1M
-        if variant == "sonnet-4.5-1m" {
-            return "Sonnet 4.5 (1M)"
-        }
-
         // Strip suffixes like "-1m" for extended context
         let baseVariant = variant.split(separator: "-").first.map(String.init) ?? variant
         let isExtended = variant.contains("-1m")

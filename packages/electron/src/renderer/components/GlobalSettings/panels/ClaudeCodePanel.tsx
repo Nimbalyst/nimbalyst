@@ -75,9 +75,6 @@ export function ClaudeCodePanel({
   const [useStandaloneBinary, setUseStandaloneBinaryState] = useState(false);
   const [isStandaloneBinaryAvailable, setIsStandaloneBinaryAvailable] = useState(false);
 
-  // Extended context (1M) models setting
-  const [showExtendedContextModels, setShowExtendedContextModelsState] = useState(false);
-
   // Custom Claude executable path
   const [customClaudeCodePath, setCustomClaudeCodePathState] = useState('');
 
@@ -197,7 +194,6 @@ export function ClaudeCodePanel({
       // Load current settings
       const settings = await window.electronAPI.aiGetSettings();
       setUseStandaloneBinaryState(settings?.useStandaloneBinary ?? false);
-      setShowExtendedContextModelsState(settings?.showExtendedContextModels ?? false);
       setCustomClaudeCodePathState(settings?.customClaudeCodePath ?? '');
     } catch (error) {
       console.error('[ClaudeCodePanel] Failed to load standalone binary setting:', error);
@@ -248,23 +244,6 @@ export function ClaudeCodePanel({
       }
     } catch (error) {
       console.error('[ClaudeCodePanel] Failed to open file dialog:', error);
-    }
-  };
-
-  // Save extended context models setting
-  const handleSetShowExtendedContextModels = async (enabled: boolean) => {
-    setShowExtendedContextModelsState(enabled);
-    try {
-      const currentSettings = await window.electronAPI.aiGetSettings();
-      await window.electronAPI.aiSaveSettings({
-        ...currentSettings,
-        showExtendedContextModels: enabled,
-      });
-      // Clear model cache so the model selector picks up the change
-      await window.electronAPI.aiClearModelCache?.();
-    } catch (error) {
-      console.error('[ClaudeCodePanel] Failed to save extended context models setting:', error);
-      setShowExtendedContextModelsState(!enabled);
     }
   };
 
@@ -423,30 +402,6 @@ export function ClaudeCodePanel({
           />
           <span className="provider-toggle-slider absolute cursor-pointer inset-0 rounded-full transition-all bg-[var(--nim-bg-tertiary)] before:absolute before:content-[''] before:h-5 before:w-5 before:left-0.5 before:bottom-0.5 before:rounded-full before:transition-all before:bg-white before:shadow-sm peer-checked:bg-[var(--nim-primary)] peer-checked:before:translate-x-5"></span>
         </label>
-      </div>
-
-      {/* Extended Context (1M) Models Toggle */}
-      <div className="provider-enable flex flex-col gap-2 py-4 mb-4 border-b border-[var(--nim-border)]">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <span className="provider-enable-label text-sm font-medium text-[var(--nim-text)]">Extended Context (1M) Models</span>
-            <p className="text-xs text-[var(--nim-text-muted)] mt-1">
-              Show models with 1 million token context windows in the model selector.
-            </p>
-          </div>
-          <label className="provider-toggle relative inline-block w-11 h-6 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={showExtendedContextModels}
-              onChange={(e) => handleSetShowExtendedContextModels(e.target.checked)}
-              className="hidden peer"
-            />
-            <span className="provider-toggle-slider absolute cursor-pointer inset-0 rounded-full transition-all bg-[var(--nim-bg-tertiary)] before:absolute before:content-[''] before:h-5 before:w-5 before:left-0.5 before:bottom-0.5 before:rounded-full before:transition-all before:bg-white before:shadow-sm peer-checked:bg-[var(--nim-primary)] peer-checked:before:translate-x-5"></span>
-          </label>
-        </div>
-        <p className="text-[11px] text-[var(--nim-text-faint)] leading-relaxed">
-          Extended context requires the 1M beta to be enabled on your Anthropic account. Not available on all plans.
-        </p>
       </div>
 
       { isWindowsPlatform && isCheckingClaudeWindowsStatus && (
