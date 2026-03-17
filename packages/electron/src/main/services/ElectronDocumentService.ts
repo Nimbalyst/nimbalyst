@@ -15,7 +15,7 @@ import {
 import crypto from 'crypto';
 import { extractFrontmatter, extractCommonFields } from '../utils/frontmatterReader';
 import { VIRTUAL_DOCS, isVirtualPath } from '@nimbalyst/runtime';
-import { updateTrackerInFrontmatter } from '@nimbalyst/runtime/plugins/TrackerPlugin/documentHeader/frontmatterUtils';
+import { updateTrackerInFrontmatter, updateInlineTrackerItem } from '@nimbalyst/runtime/plugins/TrackerPlugin/documentHeader/frontmatterUtils';
 import { database } from '../database/PGLiteDatabaseWorker';
 import { shouldExcludeDir } from '../utils/fileFilters';
 import { isPathInWorkspace, getRelativeWorkspacePath } from '../utils/workspaceDetection';
@@ -1039,8 +1039,8 @@ export class ElectronDocumentService implements DocumentService {
   }
 
   /**
-   * Update a frontmatter-based tracker item by writing field changes back to the file.
-   * Reads the file, updates the YAML frontmatter, writes it back, then re-indexes.
+   * Update a file-backed tracker item by writing field changes back to the file.
+   * Handles both frontmatter-based items (YAML) and inline items (#type[...]).
    */
   async updateTrackerItemInFile(itemId: string, updates: Record<string, any>): Promise<TrackerItem> {
     // Look up the item to find the source file
@@ -1052,32 +1052,56 @@ export class ElectronDocumentService implements DocumentService {
       throw new Error(`Tracker item not found: ${itemId}`);
     }
     const row = result.rows[0];
+    const source = row.source; // 'inline', 'frontmatter', 'import'
     const sourceRef = row.source_ref;
+    const documentPath = row.document_path;
     const trackerType = row.type;
 
-    if (!sourceRef) {
+    // Determine the file path -- inline items use document_path, frontmatter uses source_ref
+    const relativePath = source === 'inline' ? documentPath : sourceRef;
+    if (!relativePath) {
       throw new Error(`Item ${itemId} has no source file reference`);
     }
 
-    const fullPath = path.join(this.workspacePath, sourceRef);
+    const fullPath = path.join(this.workspacePath, relativePath);
 
-    // Read current file content
-    let fileContent: string;
+    // Read current file content -- if the source file was deleted, fall through
+    // to a DB-only update (no file to write back to)
+    let fileContent: string | null = null;
     try {
       fileContent = await fs.readFile(fullPath, 'utf-8');
-    } catch (err) {
-      throw new Error(`Failed to read source file: ${err instanceof Error ? err.message : String(err)}`);
+    } catch (err: any) {
+      if (err?.code === 'ENOENT') {
+        // Source file was deleted -- we'll just update the DB below
+        // console.log(`[DocumentService] Source file ${relativePath} no longer exists, updating DB only`);
+      } else {
+        throw new Error(`Failed to read source file: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
 
-    // Update frontmatter in the file content
-    const updatedContent = updateTrackerInFrontmatter(fileContent, trackerType, updates);
+    if (fileContent !== null) {
+      let updatedContent: string;
+      if (source === 'inline') {
+        // Inline items: rewrite #type[...] metadata in the line
+        const result = updateInlineTrackerItem(fileContent, itemId, updates);
+        if (!result) {
+          throw new Error(`Could not find inline item ${itemId} in ${relativePath}`);
+        }
+        updatedContent = result;
+      } else {
+        // Frontmatter/import items: update YAML frontmatter
+        updatedContent = updateTrackerInFrontmatter(fileContent, trackerType, updates);
+      }
 
-    // Write back
-    await fs.writeFile(fullPath, updatedContent, 'utf-8');
+      // Write back
+      await fs.writeFile(fullPath, updatedContent, 'utf-8');
+    }
 
     // Also update the database row so the UI reflects changes immediately
     // (the file watcher will re-index later, but this gives instant feedback)
-    const existingData = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
+    // Only update the data JSONB column -- top-level columns (status, title, etc.)
+    // are generated columns and cannot be SET directly.
+    const existingData = typeof row.data === 'string' ? JSON.parse(row.data) : (row.data || {});
     const mergedData = { ...existingData, ...updates };
     await database.query(
       `UPDATE tracker_items SET data = $1, updated = NOW() WHERE id = $2`,

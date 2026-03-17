@@ -210,3 +210,92 @@ export function updateTrackerInFrontmatter(
     });
   }
 }
+
+/**
+ * Update an inline tracker item in file content.
+ * Finds a line matching `... #type[id:ITEM_ID ...]` and rewrites the metadata fields.
+ * Returns the updated content, or null if the item was not found.
+ */
+export function updateInlineTrackerItem(
+  content: string,
+  itemId: string,
+  updates: Record<string, any>
+): string | null {
+  const lines = content.split('\n');
+  let found = false;
+
+  // Match lines like: Some title #bug[id:bug_abc123 status:to-do priority:high]
+  const inlineRegex = new RegExp(
+    `^(.+?)\\s+#([a-z][\\w-]*)\\[(.+?)\\](.*)$`
+  );
+
+  for (let i = 0; i < lines.length; i++) {
+    const match = lines[i].match(inlineRegex);
+    if (!match) continue;
+
+    const [, textContent, type, propsStr, trailing] = match;
+
+    // Parse existing props to check if this is the right item
+    const props = parseInlineProps(propsStr);
+    if (props.id !== itemId) continue;
+
+    // Apply updates
+    for (const [key, value] of Object.entries(updates)) {
+      if (key === 'title') {
+        // Title is the text before #type[...], handled separately below
+        continue;
+      }
+      props[key] = value;
+    }
+
+    // Update the 'updated' timestamp
+    props.updated = new Date().toISOString().split('T')[0];
+
+    // Rebuild the props string
+    const newPropsStr = serializeInlineProps(props);
+
+    // Rebuild the line (use updated title if provided)
+    const title = updates.title ?? textContent.trim();
+    lines[i] = `${title} #${type}[${newPropsStr}]${trailing}`;
+    found = true;
+    break;
+  }
+
+  return found ? lines.join('\n') : null;
+}
+
+/** Parse key:value pairs from inline tracker metadata string */
+function parseInlineProps(propsStr: string): Record<string, string> {
+  const props: Record<string, string> = {};
+  const propRegex = /(\w+):((?:"[^"]*")|(?:[^\s]+))/g;
+  let match;
+  while ((match = propRegex.exec(propsStr)) !== null) {
+    const [, key, value] = match;
+    props[key] = value.startsWith('"') ? value.slice(1, -1).replace(/\\"/g, '"') : value;
+  }
+  return props;
+}
+
+/** Serialize props back to inline format: id:X status:Y priority:Z */
+function serializeInlineProps(props: Record<string, string>): string {
+  // Maintain a consistent field order
+  const order = ['id', 'status', 'priority', 'owner', 'created', 'updated', 'tags'];
+  const parts: string[] = [];
+
+  for (const key of order) {
+    if (props[key] !== undefined) {
+      const value = props[key];
+      // Quote values that contain spaces
+      parts.push(value.includes(' ') ? `${key}:"${value}"` : `${key}:${value}`);
+    }
+  }
+
+  // Append any extra fields not in the standard order
+  for (const [key, value] of Object.entries(props)) {
+    if (!order.includes(key)) {
+      parts.push(value.includes(' ') ? `${key}:"${value}"` : `${key}:${value}`);
+    }
+  }
+
+  return parts.join(' ');
+}

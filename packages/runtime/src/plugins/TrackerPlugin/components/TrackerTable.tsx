@@ -33,6 +33,10 @@ interface TrackerTableProps {
   selectedItemId?: string | null;
   /** Override items instead of reading from atoms (used for archived view) */
   overrideItems?: TrackerItem[];
+  /** Callback for bulk/single archive action */
+  onArchiveItems?: (itemIds: string[], archive: boolean) => void;
+  /** Callback for bulk/single delete action */
+  onDeleteItems?: (itemIds: string[]) => void;
 }
 
 /**
@@ -362,6 +366,8 @@ export function TrackerTable({
   onItemSelect,
   selectedItemId,
   overrideItems,
+  onArchiveItems,
+  onDeleteItems,
 }: TrackerTableProps): JSX.Element {
   // Type filter: use prop filterType when hideTypeTabs is true, otherwise use internal state
   const [internalTypeFilter, setInternalTypeFilter] = useState<TrackerItemType | 'all'>('all');
@@ -411,6 +417,32 @@ export function TrackerTable({
   const [editingTitle, setEditingTitle] = useState('');
   const titleInputRef = useRef<HTMLInputElement>(null);
 
+  /** Whether an item's fields can be edited inline */
+  const isItemEditable = useCallback((item: TrackerItem): boolean => {
+    // Native (no module), frontmatter, import, and inline items are all editable
+    return !item.module || item.source === 'frontmatter' || item.source === 'import' || item.source === 'inline';
+  }, []);
+
+  // Multi-select state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const lastClickedIndexRef = useRef<number>(-1);
+  const tableRef = useRef<HTMLTableElement>(null);
+
+  // Keyboard focus state (which row has keyboard focus, independent of selection)
+  const [focusedIndex, setFocusedIndex] = useState<number>(-1);
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+
+  // Clear selection when items change significantly
+  useEffect(() => {
+    setSelectedIds(new Set());
+    lastClickedIndexRef.current = -1;
+  }, [activeTypeFilter]);
+
+  // Track sorted items in a ref so event handlers can access them
+  const sortedItemsRef = useRef<TrackerItem[]>([]);
+
   // Focus title input when editing starts
   useEffect(() => {
     if (editingCell?.field === 'title' && titleInputRef.current) {
@@ -420,22 +452,28 @@ export function TrackerTable({
   }, [editingCell]);
 
   const handleFieldUpdate = useCallback(async (item: TrackerItem, field: string, value: string) => {
-    // Only database-created items (no module) can be edited inline
-    if (item.module) return;
+    const electronAPI = (window as any).electronAPI;
+    if (!electronAPI?.documentService) return;
 
     try {
-      const electronAPI = (window as any).electronAPI;
-      if (!electronAPI?.documentService?.updateTrackerItem) return;
-
-      // Get sync mode from tracker type definition
-      const tracker = globalRegistry.get(item.type);
-      const syncMode = tracker?.sync?.mode || 'local';
-
-      await electronAPI.documentService.updateTrackerItem({
-        itemId: item.id,
-        updates: { [field]: value },
-        syncMode,
-      });
+      if (item.source === 'frontmatter' || item.source === 'import' || item.source === 'inline') {
+        // File-backed items: update in source file (frontmatter YAML or inline #type[...])
+        if (electronAPI.documentService.updateTrackerItemInFile) {
+          await electronAPI.documentService.updateTrackerItemInFile({
+            itemId: item.id,
+            updates: { [field]: value },
+          });
+        }
+      } else if (!item.module || item.source === 'native') {
+        // Native DB items
+        const tracker = globalRegistry.get(item.type);
+        const syncMode = tracker?.sync?.mode || 'local';
+        await electronAPI.documentService.updateTrackerItem({
+          itemId: item.id,
+          updates: { [field]: value },
+          syncMode,
+        });
+      }
     } catch (err) {
       console.error('[TrackerTable] Failed to update item:', err);
     }
@@ -547,6 +585,193 @@ export function TrackerTable({
 
   // console.log('[TrackerTable] Render - items:', items.length, 'filtered:', filteredItems.length, 'typeFilter:', typeFilter);
   const sortedItems = sortItems(filteredItems, currentSortBy, currentSortDirection);
+  sortedItemsRef.current = sortedItems;
+
+  /** Handle checkbox click with shift-range and cmd/ctrl-toggle support */
+  const handleCheckboxClick = (itemId: string, index: number, event: React.MouseEvent) => {
+    event.stopPropagation();
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+
+      if (event.shiftKey && lastClickedIndexRef.current >= 0) {
+        // Range select
+        const start = Math.min(lastClickedIndexRef.current, index);
+        const end = Math.max(lastClickedIndexRef.current, index);
+        for (let i = start; i <= end; i++) {
+          if (sortedItems[i]?.id) next.add(sortedItems[i].id);
+        }
+      } else if (event.metaKey || event.ctrlKey) {
+        // Toggle individual
+        if (next.has(itemId)) next.delete(itemId);
+        else next.add(itemId);
+      } else {
+        // Replace selection
+        next.clear();
+        next.add(itemId);
+      }
+
+      lastClickedIndexRef.current = index;
+      return next;
+    });
+    setFocusedIndex(index);
+  };
+
+  /** Toggle select all / deselect all */
+  const handleSelectAll = useCallback(() => {
+    setSelectedIds(prev => {
+      if (prev.size === sortedItemsRef.current.length && prev.size > 0) {
+        return new Set();
+      }
+      return new Set(sortedItemsRef.current.map(i => i.id).filter(Boolean));
+    });
+  }, []);
+
+  /** Context menu handler */
+  const handleContextMenu = useCallback((e: React.MouseEvent, item: TrackerItem, index: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // If right-clicking an unselected item, select just that item
+    if (!selectedIds.has(item.id)) {
+      setSelectedIds(new Set([item.id]));
+      lastClickedIndexRef.current = index;
+    }
+    setFocusedIndex(index);
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }, [selectedIds]);
+
+  /** Close context menu */
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+
+  // Close context menu on outside click
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handler = () => setContextMenu(null);
+    document.addEventListener('click', handler);
+    document.addEventListener('contextmenu', handler);
+    return () => {
+      document.removeEventListener('click', handler);
+      document.removeEventListener('contextmenu', handler);
+    };
+  }, [contextMenu]);
+
+  /** Bulk status update for selected items */
+  const handleBulkStatusUpdate = useCallback(async (newStatus: string) => {
+    closeContextMenu();
+    const itemsToUpdate = sortedItemsRef.current.filter(i => selectedIds.has(i.id));
+    for (const item of itemsToUpdate) {
+      if (isItemEditable(item)) {
+        await handleFieldUpdate(item, 'status', newStatus);
+      }
+    }
+  }, [selectedIds, closeContextMenu, isItemEditable, handleFieldUpdate]);
+
+  /** Bulk priority update for selected items */
+  const handleBulkPriorityUpdate = useCallback(async (newPriority: string) => {
+    closeContextMenu();
+    const itemsToUpdate = sortedItemsRef.current.filter(i => selectedIds.has(i.id));
+    for (const item of itemsToUpdate) {
+      if (isItemEditable(item)) {
+        await handleFieldUpdate(item, 'priority', newPriority);
+      }
+    }
+  }, [selectedIds, closeContextMenu, isItemEditable, handleFieldUpdate]);
+
+  /** Keyboard navigation */
+  useEffect(() => {
+    const table = tableRef.current;
+    if (!table) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const items = sortedItemsRef.current;
+      if (items.length === 0) return;
+
+      switch (e.key) {
+        case 'ArrowDown': {
+          e.preventDefault();
+          setFocusedIndex(prev => {
+            const next = Math.min(prev + 1, items.length - 1);
+            if (e.shiftKey) {
+              setSelectedIds(s => { const n = new Set(s); n.add(items[next].id); return n; });
+            }
+            return next;
+          });
+          break;
+        }
+        case 'ArrowUp': {
+          e.preventDefault();
+          setFocusedIndex(prev => {
+            const next = Math.max(prev - 1, 0);
+            if (e.shiftKey) {
+              setSelectedIds(s => { const n = new Set(s); n.add(items[next].id); return n; });
+            }
+            return next;
+          });
+          break;
+        }
+        case ' ': {
+          e.preventDefault();
+          if (focusedIndex >= 0 && focusedIndex < items.length) {
+            const item = items[focusedIndex];
+            setSelectedIds(prev => {
+              const next = new Set(prev);
+              if (next.has(item.id)) next.delete(item.id);
+              else next.add(item.id);
+              return next;
+            });
+          }
+          break;
+        }
+        case 'Enter': {
+          e.preventDefault();
+          if (focusedIndex >= 0 && focusedIndex < items.length) {
+            const item = items[focusedIndex];
+            if (onItemSelect && item.id) {
+              onItemSelect(item.id);
+            }
+          }
+          break;
+        }
+        case 'Delete':
+        case 'Backspace': {
+          if (e.metaKey || e.ctrlKey) {
+            e.preventDefault();
+            if (selectedIds.size > 0 && onDeleteItems) {
+              const ids = Array.from(selectedIds);
+              if (window.confirm(`Delete ${ids.length} item${ids.length > 1 ? 's' : ''}? This cannot be undone.`)) {
+                onDeleteItems(ids);
+                setSelectedIds(new Set());
+              }
+            }
+          }
+          break;
+        }
+        case 'a': {
+          if (e.metaKey || e.ctrlKey) {
+            e.preventDefault();
+            handleSelectAll();
+          }
+          break;
+        }
+        case 'Escape': {
+          setSelectedIds(new Set());
+          setFocusedIndex(-1);
+          closeContextMenu();
+          break;
+        }
+      }
+    };
+
+    table.addEventListener('keydown', handleKeyDown);
+    return () => table.removeEventListener('keydown', handleKeyDown);
+  }, [focusedIndex, selectedIds, onItemSelect, onDeleteItems, handleSelectAll, closeContextMenu]);
+
+  // Scroll focused row into view
+  useEffect(() => {
+    if (focusedIndex < 0) return;
+    const row = tableRef.current?.querySelector(`tbody tr:nth-child(${focusedIndex + 1})`);
+    if (row) row.scrollIntoView({ block: 'nearest' });
+  }, [focusedIndex]);
 
   const handleRowClick = (item: TrackerItem) => {
     // Track analytics
@@ -564,8 +789,8 @@ export function TrackerTable({
       return;
     }
 
-    // Database-created items (no module) - start editing title inline
-    if (!item.module) {
+    // Editable items (native, frontmatter, import) - start editing title inline
+    if (isItemEditable(item)) {
       setEditingTitle(item.title);
       setEditingCell({ itemId: item.id, field: 'title' });
       return;
@@ -762,9 +987,22 @@ export function TrackerTable({
       )}
 
       <div className="tracker-table-container flex-1 overflow-auto pb-1">
-        <table className="tracker-table w-full border-collapse text-[13px]">
+        <table ref={tableRef} tabIndex={0} className="tracker-table w-full border-collapse text-[13px] outline-none">
           <thead>
             <tr>
+              {/* Select-all checkbox */}
+              <th className="tracker-table-header sticky top-0 bg-[var(--nim-bg-secondary)] py-1 px-1 border-b border-[var(--nim-border)] z-10 w-[32px]">
+                <input
+                  type="checkbox"
+                  className="w-3.5 h-3.5 cursor-pointer accent-[var(--nim-primary)]"
+                  checked={selectedIds.size > 0 && selectedIds.size === sortedItems.length}
+                  ref={(el) => {
+                    if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < sortedItems.length;
+                  }}
+                  onChange={handleSelectAll}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </th>
               <th
                 className="tracker-table-header type sticky top-0 bg-[var(--nim-bg-secondary)] py-1 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 select-none"
               >
@@ -874,6 +1112,7 @@ export function TrackerTable({
             {/* Only show filter row when there are items to filter */}
             {items.length > 0 && (
               <tr className="filter-row">
+                <th className="tracker-table-header filter-cell py-1 px-1 bg-[var(--nim-bg)]"></th>
                 <th className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]"></th>
                 <th className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]">
                   <input
@@ -933,7 +1172,7 @@ export function TrackerTable({
           <tbody>
           {sortedItems.length === 0 ? (
             <tr>
-              <td colSpan={7 + extraColumns.length} className="tracker-table-empty-cell !p-0 !border-none">
+              <td colSpan={8 + extraColumns.length} className="tracker-table-empty-cell !p-0 !border-none">
                 {loading ? (
                   // Still loading - show loading indicator instead of empty state
                   <div className="tracker-table-loading flex items-center justify-center gap-3 py-6 px-6 text-[var(--nim-text-muted)]">
@@ -1003,15 +1242,30 @@ export function TrackerTable({
           ) : (
             sortedItems.map((item, index) => (
               <tr
-                key={index}
+                key={item.id || index}
                 className={`tracker-table-row border-b border-[var(--nim-border)] cursor-pointer transition-colors duration-100 hover:bg-[var(--nim-bg-secondary)] ${
+                  selectedIds.has(item.id) ? 'bg-[var(--nim-bg-secondary)]' : ''
+                } ${
                   selectedItemId && item.id === selectedItemId ? 'bg-[var(--nim-bg-secondary)]' : ''
+                } ${
+                  focusedIndex === index ? 'outline outline-1 outline-[var(--nim-primary)] -outline-offset-1' : ''
                 }`}
                 data-testid="tracker-table-row"
                 data-item-id={item.id}
                 data-item-title={item.title}
                 onClick={() => handleRowClick(item)}
+                onContextMenu={(e) => handleContextMenu(e, item, index)}
               >
+                {/* Checkbox */}
+                <td className="tracker-table-cell pl-1 pr-0 py-1 align-middle w-[32px]">
+                  <input
+                    type="checkbox"
+                    className="w-3.5 h-3.5 cursor-pointer accent-[var(--nim-primary)]"
+                    checked={selectedIds.has(item.id)}
+                    onClick={(e) => handleCheckboxClick(item.id, index, e)}
+                    onChange={() => {}} // controlled
+                  />
+                </td>
                 <td className="tracker-table-cell type pl-2 pr-1 py-1 text-[var(--nim-text)] align-middle w-[28px]">
                   <span className={`type-icon type-${item.type} flex items-center justify-center w-5 h-5 rounded ${
                     item.type === 'bug' ? 'text-[#dc2626]' :
@@ -1058,7 +1312,7 @@ export function TrackerTable({
                   </div>
                 </td>
                 <td className="tracker-table-cell status p-[5px] text-[var(--nim-text)] align-middle w-[120px]">
-                  {!item.module && editingCell !== null && editingCell.itemId === item.id && editingCell.field === 'status' ? (
+                  {isItemEditable(item) && editingCell !== null && editingCell.itemId === item.id && editingCell.field === 'status' ? (
                     <select
                       autoFocus
                       value={item.status}
@@ -1082,14 +1336,14 @@ export function TrackerTable({
                     </select>
                   ) : (
                     <span
-                      className={`status-badge inline-block py-0.5 px-2 rounded-[10px] text-[11px] font-medium border ${!item.module ? 'cursor-pointer hover:opacity-80' : ''}`}
+                      className={`status-badge inline-block py-0.5 px-2 rounded-[10px] text-[11px] font-medium border ${isItemEditable(item) ? 'cursor-pointer hover:opacity-80' : ''}`}
                       style={{
                         backgroundColor: `${getStatusColor(item.status, item.type)}20`,
                         color: getStatusColor(item.status, item.type),
                         borderColor: getStatusColor(item.status, item.type)
                       }}
                       onClick={(e) => {
-                        if (!item.module) {
+                        if (isItemEditable(item)) {
                           e.stopPropagation();
                           setEditingCell({ itemId: item.id, field: 'status' });
                         }
@@ -1100,7 +1354,7 @@ export function TrackerTable({
                   )}
                 </td>
                 <td className="tracker-table-cell priority p-[5px] text-[var(--nim-text)] align-middle w-[100px]">
-                  {!item.module && editingCell !== null && editingCell.itemId === item.id && editingCell.field === 'priority' ? (
+                  {isItemEditable(item) && editingCell !== null && editingCell.itemId === item.id && editingCell.field === 'priority' ? (
                     <select
                       autoFocus
                       value={item.priority || 'medium'}
@@ -1117,10 +1371,10 @@ export function TrackerTable({
                     </select>
                   ) : (
                     <span
-                      className={`priority-badge font-semibold text-xs ${!item.module ? 'cursor-pointer hover:opacity-80' : ''}`}
+                      className={`priority-badge font-semibold text-xs ${isItemEditable(item) ? 'cursor-pointer hover:opacity-80' : ''}`}
                       style={{ color: getPriorityColor(item.priority || 'medium') }}
                       onClick={(e) => {
-                        if (!item.module) {
+                        if (isItemEditable(item)) {
                           e.stopPropagation();
                           setEditingCell({ itemId: item.id, field: 'priority' });
                         }
@@ -1170,6 +1424,141 @@ export function TrackerTable({
           </tbody>
         </table>
       </div>
+
+      {/* Context menu */}
+      {contextMenu && selectedIds.size > 0 && (
+        <div
+          className="fixed z-50 min-w-[180px] bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded-md shadow-lg py-1 text-[13px]"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-3 py-1 text-[11px] text-[var(--nim-text-faint)] font-medium">
+            {selectedIds.size} item{selectedIds.size > 1 ? 's' : ''} selected
+          </div>
+          <div className="border-b border-[var(--nim-border)] my-1" />
+
+          {/* Status submenu */}
+          <ContextSubmenu label="Set Status" icon="swap_horiz">
+            {(() => {
+              const tracker = activeTypeFilter !== 'all' ? globalRegistry.get(activeTypeFilter) : null;
+              const statusField = tracker?.fields.find(f => f.name === 'status');
+              const rawOptions: Array<string | { value: string; label: string }> = statusField?.options || [
+                { value: 'to-do', label: 'To Do' },
+                { value: 'in-progress', label: 'In Progress' },
+                { value: 'in-review', label: 'In Review' },
+                { value: 'done', label: 'Done' },
+                { value: 'blocked', label: 'Blocked' },
+              ];
+              return rawOptions.map(opt => {
+                const val = typeof opt === 'string' ? opt : opt.value;
+                const label = typeof opt === 'string' ? opt.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : opt.label;
+                return (
+                  <button
+                    key={val}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)] cursor-pointer"
+                    onClick={() => handleBulkStatusUpdate(val)}
+                  >
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: getStatusColor(val as TrackerItemStatus, activeTypeFilter !== 'all' ? activeTypeFilter : undefined) }}
+                    />
+                    {label}
+                  </button>
+                );
+              });
+            })()}
+          </ContextSubmenu>
+
+          {/* Priority submenu */}
+          <ContextSubmenu label="Set Priority" icon="flag">
+            {['critical', 'high', 'medium', 'low'].map(p => (
+              <button
+                key={p}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)] cursor-pointer"
+                onClick={() => handleBulkPriorityUpdate(p)}
+              >
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: getPriorityColor(p as TrackerItemPriority) }}
+                />
+                {p.charAt(0).toUpperCase() + p.slice(1)}
+              </button>
+            ))}
+          </ContextSubmenu>
+
+          <div className="border-b border-[var(--nim-border)] my-1" />
+
+          {/* Archive */}
+          {onArchiveItems && (
+            <button
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)] cursor-pointer"
+              onClick={() => {
+                closeContextMenu();
+                onArchiveItems(Array.from(selectedIds), true);
+                setSelectedIds(new Set());
+              }}
+            >
+              <span className="material-symbols-outlined text-sm">archive</span>
+              Archive
+            </button>
+          )}
+
+          {/* Delete */}
+          {onDeleteItems && (
+            <button
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-[#ef4444] hover:bg-[var(--nim-bg-hover)] cursor-pointer"
+              onClick={() => {
+                closeContextMenu();
+                const ids = Array.from(selectedIds);
+                if (window.confirm(`Delete ${ids.length} item${ids.length > 1 ? 's' : ''}? This cannot be undone.`)) {
+                  onDeleteItems(ids);
+                  setSelectedIds(new Set());
+                }
+              }}
+            >
+              <span className="material-symbols-outlined text-sm">delete</span>
+              Delete
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
+
+/** Context menu submenu with hover-expand */
+const ContextSubmenu: React.FC<{
+  label: string;
+  icon: string;
+  children: React.ReactNode;
+}> = ({ label, icon, children }) => {
+  const [open, setOpen] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleEnter = () => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    setOpen(true);
+  };
+  const handleLeave = () => {
+    timeoutRef.current = setTimeout(() => setOpen(false), 150);
+  };
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={handleEnter}
+      onMouseLeave={handleLeave}
+    >
+      <div className="flex items-center gap-2 px-3 py-1.5 text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)] cursor-pointer">
+        <span className="material-symbols-outlined text-sm">{icon}</span>
+        <span className="flex-1">{label}</span>
+        <span className="material-symbols-outlined text-xs text-[var(--nim-text-faint)]">chevron_right</span>
+      </div>
+      {open && (
+        <div className="absolute left-full top-0 ml-0.5 min-w-[140px] bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded-md shadow-lg py-1 z-50">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+};

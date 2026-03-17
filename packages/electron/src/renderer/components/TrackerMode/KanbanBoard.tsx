@@ -1,9 +1,8 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import type { TrackerItem, TrackerItemStatus } from '@nimbalyst/runtime';
 import type { TrackerItemType } from '@nimbalyst/runtime/plugins/TrackerPlugin';
 import { globalRegistry } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
-import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
 
 interface KanbanBoardProps {
   filterType: TrackerItemType | 'all';
@@ -13,6 +12,12 @@ interface KanbanBoardProps {
   onItemSelect?: (itemId: string) => void;
   /** Currently selected item ID for card highlighting */
   selectedItemId?: string | null;
+  /** Override items instead of loading from documentService (used for filtered views) */
+  overrideItems?: TrackerItem[];
+  /** Callback for bulk/single archive action */
+  onArchiveItems?: (itemIds: string[], archive: boolean) => void;
+  /** Callback for bulk/single delete action */
+  onDeleteItems?: (itemIds: string[]) => void;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -65,12 +70,17 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onSwitchToFilesMode,
   onItemSelect,
   selectedItemId,
+  overrideItems,
+  onArchiveItems,
+  onDeleteItems,
 }) => {
   const [items, setItems] = useState<TrackerItem[]>([]);
   const [fullDocItems, setFullDocItems] = useState<TrackerItem[]>([]);
 
-  // Load items
+  // Load items from documentService (skipped when overrideItems is provided)
   useEffect(() => {
+    if (overrideItems) return;
+
     let mounted = true;
 
     async function loadItems() {
@@ -143,18 +153,188 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       mounted = false;
       unsubs.forEach(fn => fn());
     };
-  }, [filterType]);
+  }, [filterType, overrideItems]);
 
   const allItems = useMemo(() => {
-    const combined = [...items, ...fullDocItems];
-    if (!searchQuery) return combined;
+    // Use overrideItems when provided (filtered views from sidebar chips)
+    const source = overrideItems ?? [...items, ...fullDocItems];
+    if (!searchQuery) return source;
     const q = searchQuery.toLowerCase();
-    return combined.filter(
+    return source.filter(
       item =>
         item.title.toLowerCase().includes(q) ||
         item.module?.toLowerCase().includes(q)
     );
-  }, [items, fullDocItems, searchQuery]);
+  }, [items, fullDocItems, searchQuery, overrideItems]);
+
+  // Drag-and-drop state
+  const [dragItemId, setDragItemId] = useState<string | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+  const dragItemRef = useRef<TrackerItem | null>(null);
+
+  /** Update an item's status via the appropriate API based on its source */
+  const updateItemStatus = useCallback(async (item: TrackerItem, newStatus: string) => {
+    try {
+      if (item.source === 'frontmatter' || item.source === 'import' || item.source === 'inline') {
+        // File-backed items: update in source file
+        await window.electronAPI.documentService.updateTrackerItemInFile({
+          itemId: item.id,
+          updates: { status: newStatus },
+        });
+      } else if (!item.module || item.source === 'native') {
+        const tracker = globalRegistry.get(item.type);
+        const syncMode = tracker?.sync?.mode || 'local';
+        await window.electronAPI.documentService.updateTrackerItem({
+          itemId: item.id,
+          updates: { status: newStatus },
+          syncMode,
+        });
+      }
+    } catch (err) {
+      console.error('[KanbanBoard] Failed to update item status:', err);
+    }
+  }, []);
+
+  const handleDragStart = useCallback((e: React.DragEvent, item: TrackerItem) => {
+    setDragItemId(item.id);
+    dragItemRef.current = item;
+    e.dataTransfer.effectAllowed = 'move';
+    // Set minimal drag data
+    e.dataTransfer.setData('text/plain', item.id);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, columnValue: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverColumn(columnValue);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    // Only clear if leaving the column entirely (not entering a child)
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setDragOverColumn(null);
+    }
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, targetStatus: string) => {
+    e.preventDefault();
+    setDragOverColumn(null);
+    setDragItemId(null);
+
+    const item = dragItemRef.current;
+    dragItemRef.current = null;
+    if (!item) return;
+
+    // No-op if dropped on the same column
+    const currentStatus = (item.status || 'to-do').toLowerCase();
+    if (currentStatus === targetStatus) return;
+
+    updateItemStatus(item, targetStatus);
+  }, [updateItemStatus]);
+
+  const handleDragEnd = useCallback(() => {
+    setDragItemId(null);
+    setDragOverColumn(null);
+    dragItemRef.current = null;
+  }, []);
+
+  // Multi-select state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const allItemsRef = useRef<TrackerItem[]>([]);
+
+  // Keep ref in sync
+  useEffect(() => { allItemsRef.current = allItems; }, [allItems]);
+
+  const handleCardSelect = useCallback((e: React.MouseEvent, item: TrackerItem) => {
+    e.stopPropagation();
+    if (e.metaKey || e.ctrlKey) {
+      // Toggle individual
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        if (next.has(item.id)) next.delete(item.id);
+        else next.add(item.id);
+        return next;
+      });
+    } else {
+      // Replace selection and open detail
+      setSelectedIds(new Set([item.id]));
+      if (onItemSelect && item.id) {
+        onItemSelect(item.id);
+      }
+    }
+  }, [onItemSelect]);
+
+  const handleCardContextMenu = useCallback((e: React.MouseEvent, item: TrackerItem) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // If right-clicking an unselected item, select just that item
+    if (!selectedIds.has(item.id)) {
+      setSelectedIds(new Set([item.id]));
+    }
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }, [selectedIds]);
+
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+
+  // Close context menu on outside click
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handler = () => setContextMenu(null);
+    document.addEventListener('click', handler);
+    document.addEventListener('contextmenu', handler);
+    return () => {
+      document.removeEventListener('click', handler);
+      document.removeEventListener('contextmenu', handler);
+    };
+  }, [contextMenu]);
+
+  // Clear selection on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSelectedIds(new Set());
+        closeContextMenu();
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [closeContextMenu]);
+
+  /** Bulk status change from context menu */
+  const handleBulkStatusUpdate = useCallback(async (newStatus: string) => {
+    closeContextMenu();
+    const items = allItemsRef.current.filter(i => selectedIds.has(i.id));
+    for (const item of items) {
+      await updateItemStatus(item, newStatus);
+    }
+  }, [selectedIds, closeContextMenu, updateItemStatus]);
+
+  /** Bulk priority change from context menu */
+  const handleBulkPriorityUpdate = useCallback(async (newPriority: string) => {
+    closeContextMenu();
+    const items = allItemsRef.current.filter(i => selectedIds.has(i.id));
+    for (const item of items) {
+      try {
+        if (item.source === 'frontmatter' || item.source === 'import' || item.source === 'inline') {
+          await window.electronAPI.documentService.updateTrackerItemInFile({
+            itemId: item.id,
+            updates: { priority: newPriority },
+          });
+        } else if (!item.module || item.source === 'native') {
+          const tracker = globalRegistry.get(item.type);
+          const syncMode = tracker?.sync?.mode || 'local';
+          await window.electronAPI.documentService.updateTrackerItem({
+            itemId: item.id,
+            updates: { priority: newPriority },
+            syncMode,
+          });
+        }
+      } catch (err) {
+        console.error('[KanbanBoard] Failed to update priority:', err);
+      }
+    }
+  }, [selectedIds, closeContextMenu]);
 
   const columns = useMemo(() => getStatusColumns(filterType), [filterType]);
 
@@ -177,19 +357,6 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     return grouped;
   }, [allItems, columns]);
 
-  const handleCardClick = useCallback((item: TrackerItem) => {
-    // If onItemSelect is provided (Tracker Mode), open detail panel
-    if (onItemSelect && item.id) {
-      onItemSelect(item.id);
-      return;
-    }
-    // Fallback: open source document
-    if (item.module) {
-      editorRegistry.scrollToTrackerItem?.(item.id, item.module);
-      onSwitchToFilesMode?.();
-    }
-  }, [onSwitchToFilesMode, onItemSelect]);
-
   if (allItems.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-nim-muted">
@@ -202,7 +369,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   }
 
   return (
-    <div className="tracker-kanban-board flex-1 flex gap-3 p-3 overflow-x-auto overflow-y-hidden">
+    <div className="tracker-kanban-board flex-1 flex flex-col overflow-hidden relative">
+    <div className="flex-1 flex gap-3 p-3 overflow-x-auto overflow-y-hidden">
       {columns.map((col) => {
         const colItems = itemsByStatus[col.value] || [];
         const color = STATUS_COLORS[col.value] || '#6b7280';
@@ -210,7 +378,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         return (
           <div
             key={col.value}
-            className="tracker-kanban-column flex flex-col min-w-[260px] max-w-[320px] flex-1 rounded-lg bg-nim-secondary"
+            className={`tracker-kanban-column flex flex-col min-w-[260px] max-w-[320px] flex-1 rounded-lg transition-colors bg-nim-secondary ${
+              dragOverColumn === col.value ? 'ring-1 ring-[var(--nim-primary)]' : ''
+            }`}
+            onDragOver={(e) => handleDragOver(e, col.value)}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, col.value)}
           >
             {/* Column header */}
             <div className="flex items-center gap-2 px-3 py-2 border-b border-nim">
@@ -231,12 +404,18 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               {colItems.map((item) => (
                 <button
                   key={item.id}
-                  className={`tracker-kanban-card w-full text-left p-2.5 rounded-md bg-nim hover:bg-nim-tertiary border transition-colors cursor-pointer ${
-                    selectedItemId && item.id === selectedItemId
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, item)}
+                  onDragEnd={handleDragEnd}
+                  className={`tracker-kanban-card w-full text-left p-2.5 rounded-md bg-nim hover:bg-nim-tertiary border transition-colors cursor-grab active:cursor-grabbing ${
+                    dragItemId === item.id ? 'opacity-40' : ''
+                  } ${
+                    selectedIds.has(item.id) || (selectedItemId && item.id === selectedItemId)
                       ? 'border-[var(--nim-primary)]'
                       : 'border-nim'
                   }`}
-                  onClick={() => handleCardClick(item)}
+                  onClick={(e) => handleCardSelect(e, item)}
+                  onContextMenu={(e) => handleCardContextMenu(e, item)}
                 >
                   <div className="flex items-start gap-2">
                     {/* Priority dot */}
@@ -280,6 +459,116 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           </div>
         );
       })}
+    </div>
+      {/* Context menu */}
+      {contextMenu && selectedIds.size > 0 && (
+        <div
+          className="fixed z-50 min-w-[180px] bg-nim-secondary border border-nim rounded-md shadow-lg py-1 text-[13px]"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-3 py-1 text-[11px] text-nim-faint font-medium">
+            {selectedIds.size} item{selectedIds.size > 1 ? 's' : ''} selected
+          </div>
+          <div className="border-b border-nim my-1" />
+
+          {/* Set Status */}
+          <KanbanContextSubmenu label="Set Status" icon="swap_horiz">
+            {columns.map(col => (
+              <button
+                key={col.value}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-nim hover:bg-nim-tertiary cursor-pointer"
+                onClick={() => handleBulkStatusUpdate(col.value)}
+              >
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: STATUS_COLORS[col.value] || '#6b7280' }}
+                />
+                {col.label}
+              </button>
+            ))}
+          </KanbanContextSubmenu>
+
+          {/* Set Priority */}
+          <KanbanContextSubmenu label="Set Priority" icon="flag">
+            {(['critical', 'high', 'medium', 'low'] as const).map(p => (
+              <button
+                key={p}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-nim hover:bg-nim-tertiary cursor-pointer"
+                onClick={() => handleBulkPriorityUpdate(p)}
+              >
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: PRIORITY_COLORS[p] || '#6b7280' }}
+                />
+                {p.charAt(0).toUpperCase() + p.slice(1)}
+              </button>
+            ))}
+          </KanbanContextSubmenu>
+
+          <div className="border-b border-nim my-1" />
+
+          {onArchiveItems && (
+            <button
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-nim hover:bg-nim-tertiary cursor-pointer"
+              onClick={() => {
+                closeContextMenu();
+                onArchiveItems(Array.from(selectedIds), true);
+                setSelectedIds(new Set());
+              }}
+            >
+              <MaterialSymbol icon="archive" size={16} />
+              Archive
+            </button>
+          )}
+
+          {onDeleteItems && (
+            <button
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-[#ef4444] hover:bg-nim-tertiary cursor-pointer"
+              onClick={() => {
+                closeContextMenu();
+                const ids = Array.from(selectedIds);
+                if (window.confirm(`Delete ${ids.length} item${ids.length > 1 ? 's' : ''}? This cannot be undone.`)) {
+                  onDeleteItems(ids);
+                  setSelectedIds(new Set());
+                }
+              }}
+            >
+              <MaterialSymbol icon="delete" size={16} />
+              Delete
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/** Context submenu with hover-expand for KanbanBoard */
+const KanbanContextSubmenu: React.FC<{
+  label: string;
+  icon: string;
+  children: React.ReactNode;
+}> = ({ label, icon, children }) => {
+  const [open, setOpen] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => { if (timeoutRef.current) clearTimeout(timeoutRef.current); setOpen(true); }}
+      onMouseLeave={() => { timeoutRef.current = setTimeout(() => setOpen(false), 150); }}
+    >
+      <div className="flex items-center gap-2 px-3 py-1.5 text-nim hover:bg-nim-tertiary cursor-pointer">
+        <MaterialSymbol icon={icon} size={16} />
+        <span className="flex-1">{label}</span>
+        <MaterialSymbol icon="chevron_right" size={14} className="text-nim-faint" />
+      </div>
+      {open && (
+        <div className="absolute left-full top-0 ml-0.5 min-w-[140px] bg-nim-secondary border border-nim rounded-md shadow-lg py-1 z-50">
+          {children}
+        </div>
+      )}
     </div>
   );
 };

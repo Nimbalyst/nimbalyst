@@ -122,6 +122,31 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
     }
   }, [selectedItemId, setModeLayout]);
 
+  /** Bulk delete for multi-select context menu */
+  const handleDeleteItems = useCallback(async (itemIds: string[]) => {
+    for (const itemId of itemIds) {
+      try {
+        await window.electronAPI.documentService.deleteTrackerItem({ itemId });
+        if (selectedItemId === itemId) {
+          setModeLayout({ selectedItemId: null });
+        }
+      } catch (error) {
+        console.error('[TrackerMainView] Failed to delete item:', error);
+      }
+    }
+  }, [selectedItemId, setModeLayout]);
+
+  /** Bulk archive for multi-select context menu */
+  const handleArchiveItems = useCallback(async (itemIds: string[], archive: boolean) => {
+    for (const itemId of itemIds) {
+      try {
+        await window.electronAPI.documentService.archiveTrackerItem({ itemId, archive });
+      } catch (error) {
+        console.error('[TrackerMainView] Failed to archive item:', error);
+      }
+    }
+  }, []);
+
   const handleNewItem = useCallback((type: string) => {
     setQuickAddType(type);
   }, []);
@@ -363,6 +388,8 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
               onItemSelect={handleItemSelect}
               selectedItemId={selectedItemId}
               overrideItems={hasFilters ? filteredItems : undefined}
+              onArchiveItems={handleArchiveItems}
+              onDeleteItems={handleDeleteItems}
             />
           ) : (
             <KanbanBoard
@@ -371,6 +398,9 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
               onSwitchToFilesMode={onSwitchToFilesMode}
               onItemSelect={handleItemSelect}
               selectedItemId={selectedItemId}
+              overrideItems={hasFilters ? filteredItems : undefined}
+              onArchiveItems={handleArchiveItems}
+              onDeleteItems={handleDeleteItems}
             />
           )}
 

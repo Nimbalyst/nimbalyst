@@ -75,9 +75,9 @@ function isNativeItem(item: TrackerItem): boolean {
   return !item.module;
 }
 
-/** Whether this item's metadata fields are editable (native or frontmatter-backed) */
+/** Whether this item's metadata fields are editable */
 function isEditable(item: TrackerItem): boolean {
-  return isNativeItem(item) || item.source === 'frontmatter' || item.source === 'import';
+  return isNativeItem(item) || item.source === 'frontmatter' || item.source === 'import' || item.source === 'inline';
 }
 
 /** Source label for display */
@@ -174,11 +174,11 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
     return tracker?.sync?.mode || 'local';
   }, [item.type]);
 
-  /** Save a field update -- routes to file-based save for frontmatter items, DB for native */
+  /** Save a field update -- routes to file-based save for file-backed items, DB for native */
   const saveField = useCallback(async (updates: Record<string, any>) => {
     if (!editable) return;
     try {
-      if (item.source === 'frontmatter' || item.source === 'import') {
+      if (item.source === 'frontmatter' || item.source === 'import' || item.source === 'inline') {
         await window.electronAPI.documentService.updateTrackerItemInFile({
           itemId: item.id,
           updates,
