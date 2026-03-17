@@ -15,7 +15,7 @@ import {
 import crypto from 'crypto';
 import { extractFrontmatter, extractCommonFields } from '../utils/frontmatterReader';
 import { VIRTUAL_DOCS, isVirtualPath } from '@nimbalyst/runtime';
-import { updateTrackerInFrontmatter, updateInlineTrackerItem } from '@nimbalyst/runtime/plugins/TrackerPlugin/documentHeader/frontmatterUtils';
+import { updateTrackerInFrontmatter, updateInlineTrackerItem, removeInlineTrackerItem } from '@nimbalyst/runtime/plugins/TrackerPlugin/documentHeader/frontmatterUtils';
 import { database } from '../database/PGLiteDatabaseWorker';
 import { shouldExcludeDir } from '../utils/fileFilters';
 import { isPathInWorkspace, getRelativeWorkspacePath } from '../utils/workspaceDetection';
@@ -1024,6 +1024,30 @@ export class ElectronDocumentService implements DocumentService {
    * Permanently delete a tracker item from the database.
    */
   async deleteTrackerItem(itemId: string): Promise<void> {
+    // For inline items, remove the line from the source file before deleting from DB
+    const result = await database.query<any>(
+      `SELECT source, document_path FROM tracker_items WHERE id = $1`,
+      [itemId]
+    );
+    if (result.rows.length > 0) {
+      const { source, document_path: documentPath } = result.rows[0];
+      if (source === 'inline' && documentPath) {
+        const fullPath = path.join(this.workspacePath, documentPath);
+        try {
+          const fileContent = await fs.readFile(fullPath, 'utf-8');
+          const updated = removeInlineTrackerItem(fileContent, itemId);
+          if (updated !== null) {
+            await fs.writeFile(fullPath, updated, 'utf-8');
+          }
+        } catch (err: any) {
+          if (err?.code !== 'ENOENT') {
+            console.error(`[DocumentService] Failed to remove inline item ${itemId} from file:`, err);
+          }
+          // ENOENT: file already gone, proceed with DB delete
+        }
+      }
+    }
+
     await database.query(
       `DELETE FROM tracker_items WHERE id = $1`,
       [itemId]

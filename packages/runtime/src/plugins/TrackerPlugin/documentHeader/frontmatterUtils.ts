@@ -264,6 +264,25 @@ export function updateInlineTrackerItem(
   return found ? lines.join('\n') : null;
 }
 
+/**
+ * Remove an inline tracker item line from file content.
+ * Returns updated content with the matching line removed, or null if not found.
+ */
+export function removeInlineTrackerItem(content: string, itemId: string): string | null {
+  const lines = content.split('\n');
+  const inlineRegex = /^(.+?)\s+#([a-z][\w-]*)\[(.+?)\](.*)$/;
+
+  const nextLines = lines.filter(line => {
+    const match = line.match(inlineRegex);
+    if (!match) return true;
+    const props = parseInlineProps(match[3]);
+    return props.id !== itemId;
+  });
+
+  if (nextLines.length === lines.length) return null; // not found
+  return nextLines.join('\n');
+}
+
 /** Parse key:value pairs from inline tracker metadata string */
 function parseInlineProps(propsStr: string): Record<string, string> {
   const props: Record<string, string> = {};
