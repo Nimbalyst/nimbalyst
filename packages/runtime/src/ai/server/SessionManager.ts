@@ -601,25 +601,28 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
             }
           } else if (parsed.type === 'result' && parsed.result && typeof parsed.result === 'string' && parsed.result.trim().length > 0) {
             // SDK result chunk -- contains the final text of the turn.
-            // When text was already streamed (normal case), this is a duplicate
-            // of the content in text chunks. Only create a new message when NO
-            // assistant content exists for this turn (e.g., "Unknown skill: prepare"
-            // where the result is the only output).
+            // For normal agent responses, text was already accumulated from individual text chunks.
+            // The result chunk duplicates that same text as the final assembled response.
+            // Only render the result text if no text has been accumulated yet (slash command errors, etc.).
             const lastMsg = uiMessages[uiMessages.length - 1];
-            if (lastMsg && lastMsg.role === 'assistant') {
-              // Assistant message already exists from text chunks -- just mark complete.
-              // Do NOT append result.content because it duplicates the streamed text.
-              (lastMsg as any).isComplete = true;
-            } else {
-              // No assistant message for this turn -- result is the only output
-              uiMessages.push({
-                role: 'assistant',
-                content: parsed.result,
-                timestamp,
-                isSystem: true,
-              });
-              const msg = uiMessages[uiMessages.length - 1];
-              if (msg) (msg as any).isComplete = true;
+            const hasAccumulatedContent = lastMsg && lastMsg.role === 'assistant' && lastMsg.content.trim().length > 0;
+            if (!hasAccumulatedContent) {
+              // No text accumulated yet - this is a standalone result (e.g. slash command error)
+              if (lastMsg && lastMsg.role === 'assistant' && !(lastMsg as any).isComplete) {
+                lastMsg.content = parsed.result;
+              } else {
+                uiMessages.push({
+                  role: 'assistant',
+                  content: parsed.result,
+                  timestamp,
+                  isSystem: true,
+                });
+              }
+            }
+            // Always mark as complete since result is the final chunk
+            const msg = uiMessages[uiMessages.length - 1];
+            if (msg && msg.role === 'assistant') {
+              (msg as any).isComplete = true;
             }
           } else if (parsed.usage) {
             // This is metadata (usage stats), mark last message as complete
