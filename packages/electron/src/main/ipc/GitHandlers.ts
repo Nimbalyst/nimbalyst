@@ -183,9 +183,22 @@ export function registerGitHandlers(): void {
     try {
       const git: SimpleGit = simpleGit(workspacePath);
       const summary = await git.branch();
+      let current = summary.current;
+      let branches = summary.all;
+
+      // In a freshly initialized repo with no commits, `git branch` reports no
+      // branches even though `git status` knows the unborn branch name.
+      if (!current) {
+        const status = await git.status();
+        current = status.current || '';
+      }
+      if (current && branches.length === 0) {
+        branches = [current];
+      }
+
       return {
-        branches: summary.all,
-        current: summary.current,
+        branches,
+        current,
       };
     } catch (error) {
       log.error('[git:branches] Failed:', error);

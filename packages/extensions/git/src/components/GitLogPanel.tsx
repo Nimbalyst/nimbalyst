@@ -165,25 +165,25 @@ export function GitLogPanel({ host }: PanelHostProps) {
     try {
       const result = await ipc.invoke('git:branches', workspacePath) as GitBranchResult;
       setBranches(result.branches);
-      if (!selectedBranch) {
-        setSelectedBranch(result.current);
+      if (result.current) {
+        setSelectedBranch(current => current || result.current);
       }
     } catch {
       // Non-fatal: branch selector stays empty
     }
-  }, [workspacePath, selectedBranch]);
+  }, [workspacePath]);
 
   const loadStatus = useCallback(async () => {
     try {
       const result = await ipc.invoke('git:status', workspacePath) as GitStatusResult;
       setStatus(result);
-      if (!selectedBranch && result.branch) {
-        setSelectedBranch(result.branch);
+      if (result.branch) {
+        setSelectedBranch(current => current || result.branch);
       }
     } catch {
       // Non-fatal
     }
-  }, [workspacePath, selectedBranch]);
+  }, [workspacePath]);
 
   const loadCommits = useCallback(async () => {
     setLoading(true);
