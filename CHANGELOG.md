@@ -20,6 +20,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.56.1] - 2026-03-17
+
+
+### Added
+- Tracker MVP: drag-and-drop reordering, inline editing, multi-select, delete/archive all items, multi-select filters, frontmatter editing
+
+### Changed
+- useEditorLifecycle hook moved to extension-sdk package
+- Floating-ui positioning rule extracted to dedicated rules file
+
+### Fixed
+- Context menus and kanban scroll use floating-ui for correct positioning
+- Queued messages not firing when SessionStateManager.endSession did not emit session:completed
+- Queued prompts not continuing after guarded turn completion
+- Missing build script for editor configuration
+- Duplicate last message appearing when loading session transcript
+- iOS background SQLite crash from full index sync on every reconnect
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.56.0] - 2026-03-16
 
 
