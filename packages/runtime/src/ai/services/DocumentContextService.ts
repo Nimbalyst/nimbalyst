@@ -5,12 +5,12 @@
  * - Document transition detection (opened/closed/switched/modified)
  * - Diff computation for modified documents
  * - Content vs diff decision based on provider type
- * - User message additions (plan mode instructions)
+ * - User message additions (document context prompts)
  */
 
 import { hashContent, computeDiff } from '../../utils/documentDiff';
 import type { AIProviderType } from '../server/types';
-import { buildPlanModeInstructions, PLAN_MODE_DEACTIVATION } from './planModePrompts';
+
 import type {
   IDocumentContextService,
   RawDocumentContext,
@@ -102,7 +102,6 @@ export class DocumentContextService implements IDocumentContextService {
       hasDiff: !!documentContext.documentDiff,
       diffLength: documentContext.documentDiff?.length,
       hasTextSelection: !!documentContext.textSelection,
-      hasPlanModeInstructions: !!userMessageAdditions.planModeInstructions,
     });
 
     return { documentContext, userMessageAdditions };
@@ -322,13 +321,8 @@ export class DocumentContextService implements IDocumentContextService {
   ): UserMessageAdditions {
     const additions: UserMessageAdditions = {};
 
-    if (modeTransition?.enteringPlanMode) {
-      additions.planModeInstructions = buildPlanModeInstructions(modeTransition.planFilePath);
-    }
-
-    if (modeTransition?.exitingPlanMode) {
-      additions.planModeDeactivation = PLAN_MODE_DEACTIVATION;
-    }
+    // Note: Plan mode instructions are no longer injected into user messages.
+    // The SDK handles planning behavior natively via `permissionMode: 'plan'`.
 
     // Build document context prompt (file path, cursor, selection, content/diff, transitions)
     const documentContextPrompt = this.buildDocumentContextPrompt(documentContext, providerType);

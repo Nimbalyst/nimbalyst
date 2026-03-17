@@ -237,7 +237,6 @@ export class AgentToolHooks {
    * - ExitPlanMode confirmation in planning mode
    * - Bash file operation tracking and tagging
    * - Compound Bash command security checks
-   * - Planning mode file type validation
    * - Pre-edit file tagging for Edit/Write/MultiEdit
    */
   createPreToolUseHook() {
@@ -845,31 +844,8 @@ export class AgentToolHooks {
         }
       }
 
-      // PLANNING MODE VALIDATION: Restrict file edits to markdown and extension-registered file types
-      if (this.getCurrentMode?.() === 'planning') {
-        // Get extension-registered file types (e.g., .mockup.html, .excalidraw, .datamodel)
-        const extensionFileTypes = this.extensionFileTypesLoader?.() ?? new Set<string>();
-
-        for (const filePath of filePaths) {
-          // Check if file has extension-registered file type
-          const hasExtensionEditor = Array.from(extensionFileTypes).some(ext =>
-            filePath.toLowerCase().endsWith(ext.toLowerCase())
-          );
-
-          if (!filePath.endsWith('.md') && !hasExtensionEditor) {
-            console.error(`[AGENT-HOOKS] Planning mode validation FAILED: ${toolName} on ${filePath}`);
-            return {
-              hookSpecificOutput: {
-                hookEventName: 'PreToolUse' as const,
-                permissionDecision: 'deny' as const,
-                permissionDecisionReason: `Planning mode restricts file operations to markdown and extension-registered file types. ` +
-                  `Cannot use ${toolName} on '${filePath}'. ` +
-                  `Allowed: .md files or extension types (${Array.from(extensionFileTypes).join(', ') || 'none registered'}).`
-              }
-            };
-          }
-        }
-      }
+      // Note: Planning mode file type restrictions are now handled natively by the SDK
+      // via `permissionMode: 'plan'` which scopes Write to the plan file only.
 
       // Tag each file and track for end-of-turn snapshot
       for (let filePath of filePaths) {

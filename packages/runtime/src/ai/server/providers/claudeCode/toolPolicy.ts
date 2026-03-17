@@ -3,13 +3,10 @@
  *
  * Keeping these lists centralized avoids burying policy data inside
  * large control-flow methods.
+ *
+ * Note: Planning mode tool restrictions are handled natively by the SDK
+ * via `permissionMode: 'plan'`. No manual tool filtering is needed.
  */
-export const DEFAULT_PLANNING_TOOLS: readonly string[] = [
-  'Read', 'Write', 'Edit', 'MultiEdit', 'Glob', 'Grep', 'LS',
-  'WebFetch', 'WebSearch',
-  'TodoRead', 'Task', 'Agent',
-  'ExitPlanMode', 'EnterPlanMode'
-];
 
 export const INTERNAL_MCP_TOOLS: readonly string[] = [
   'mcp__nimbalyst-session-naming__update_session_meta',

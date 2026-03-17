@@ -83,7 +83,7 @@ import { buildSdkOptions } from './claudeCode/sdkOptionsBuilder';
 /**
  * SDK-native tools that are executed by the Claude Code SDK itself (not by Nimbalyst).
  * AskUserQuestion is included because we handle it in canUseTool (user input, not local execution).
- * This list is the single source of truth — used for planning-mode filtering, tool_use logging, and tool_result logging.
+ * This list is the single source of truth — used for tool_use logging and tool_result logging.
  */
 const SDK_NATIVE_TOOLS: readonly string[] = [
   'Read', 'Write', 'Edit', 'MultiEdit',
@@ -521,7 +521,6 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
           sessions: this.sessions,
           config: this.config,
           abortController: this.abortController!,
-          sdkNativeTools: SDK_NATIVE_TOOLS,
         },
         {
           message,

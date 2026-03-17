@@ -73,7 +73,6 @@ import { scrollToTeammateAtom, scrollToMessageAtom } from '../../store/atoms/age
 import { usePostHog } from 'posthog-js/react';
 import { setAgentModeSettingsAtom, showPromptAdditionsAtom, hasExternalEditorAtom, externalEditorNameAtom, openInExternalEditorAtom, defaultAgentModelAtom, defaultEffortLevelAtom } from '../../store/atoms/appSettings';
 import { supportsEffortLevel, parseEffortLevel, type EffortLevel } from '../../utils/modelUtils';
-import { buildPlanModeInstructions, PLAN_MODE_DEACTIVATION } from '@nimbalyst/runtime/ai/services/planModePrompts';
 import { resolvePlanFilePath } from '../../utils/pathUtils';
 import { autoCommitEnabledAtom, setAutoCommitEnabledAtom } from '../../store/atoms/autoCommitAtoms';
 import { registerSessionWorkspace, loadInitialSessionFileState } from '../../store/listeners/fileStateListeners';
@@ -367,7 +366,6 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const sessionError = useAtomValue(sessionErrorAtom(sessionId));
 
   // Track mode at last message send to detect mode transitions via toggle button
-  const lastSentModeRef = useRef<AIMode | null>(null);
 
   // Track if we're currently queueing a message (prevents double-submission)
   const [isQueueing, setIsQueueing] = useState(false);
@@ -421,15 +419,6 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       console.error('[SessionTranscript] Failed to load initial session file state:', error);
     });
   }, [sessionId, workspacePath]);
-
-  // Initialize lastSentModeRef when session loads with existing messages
-  // This ensures mode transitions are detected correctly for existing sessions
-  useEffect(() => {
-    if (sessionData && messages.length > 0 && lastSentModeRef.current === null) {
-      lastSentModeRef.current = aiMode;
-    }
-  }, [sessionData, messages.length, aiMode]);
-
 
   // ============================================================
   // Auto-focus input when session data loads
@@ -657,17 +646,12 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     // Intercept /plan command - strip it and switch to planning mode
     // Match "/plan" only when followed by whitespace or end of string (not "/planning" or "/planify")
     let overrideMode = aiMode;
-    let includePlanModeInstructions = false;
-    let includePlanModeDeactivation = false;
     const planCommandMatch = message.match(/^\/plan(?:\s|$)/);
 
     if (planCommandMatch) {
       overrideMode = 'planning';
       // Remove /plan from the message, keeping the rest
       message = message.slice(planCommandMatch[0].length).trim();
-
-      // Always include plan mode instructions when switching to planning mode
-      includePlanModeInstructions = true;
 
       // Update mode in atom and session metadata - must succeed before proceeding
       setAiMode('planning');
@@ -700,21 +684,6 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         setDraftAttachments([]);
         return;
       }
-    } else {
-      // Check if we're in planning mode - always include instructions for first message or mode transition
-      if (overrideMode === 'planning') {
-        // Include plan mode instructions if:
-        // 1. First message of session (messages.length === 0)
-        // 2. Mode transition from agent to planning (lastSentModeRef was agent)
-        if (messages.length === 0 || (lastSentModeRef.current !== null && lastSentModeRef.current === 'agent')) {
-          includePlanModeInstructions = true;
-        }
-      } else if (overrideMode === 'agent') {
-        // Check for mode transition from planning to agent
-        if (lastSentModeRef.current !== null && lastSentModeRef.current === 'planning') {
-          includePlanModeDeactivation = true;
-        }
-      }
     }
 
     // Intercept /implement command - switch to agent mode if in planning mode
@@ -731,8 +700,6 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         console.error('[SessionTranscript] Failed to update session mode for implement:', error);
         // Continue anyway - the command should still work even if mode update fails
       }
-      // Signal mode transition from planning to agent
-      includePlanModeDeactivation = true;
     }
 
     // Intercept /clear command - create new session attached to current
@@ -753,18 +720,6 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       return; // Don't send the /clear message to the AI
     }
 
-    // If in planning mode, append plan mode instructions with full details
-    // Wrapped in NIMBALYST_SYSTEM_MESSAGE to hide from UI but still send to AI
-    if (includePlanModeInstructions) {
-      message = `${message}\n\n${buildPlanModeInstructions()}`;
-    }
-
-    // If switching to agent mode, append plan mode deactivation message
-    // Wrapped in NIMBALYST_SYSTEM_MESSAGE to hide from UI but still send to AI
-    if (includePlanModeDeactivation) {
-      message = `${message}\n\n<NIMBALYST_SYSTEM_MESSAGE>\n${PLAN_MODE_DEACTIVATION}\n</NIMBALYST_SYSTEM_MESSAGE>`;
-    }
-
     // Expand @@[name](shortId) -> @@[name](fullUuid) for agent consumption
     message = expandSessionMentions(message, sessionRegistry);
 
@@ -774,9 +729,6 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     resetHistory(sessionId); // Reset prompt history navigation
     // Optimistically set processing state - will be confirmed by session:started event
     setIsProcessing(true);
-
-    // Track the mode at send time for detecting future mode transitions via toggle
-    lastSentModeRef.current = overrideMode;
 
     const userMessage = {
       id: `msg-${Date.now()}`,

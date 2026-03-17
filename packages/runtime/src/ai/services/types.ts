@@ -102,12 +102,6 @@ export interface PreparedDocumentContext {
  * These are the <NIMBALYST_SYSTEM_MESSAGE> blocks.
  */
 export interface UserMessageAdditions {
-  /** Plan mode instructions (when entering planning mode) */
-  planModeInstructions?: string;
-
-  /** Plan mode deactivation notice (when exiting planning mode) */
-  planModeDeactivation?: string;
-
   /** Document context prompt (file path, cursor position, selection, content/diff, transitions) */
   documentContextPrompt?: string;
 

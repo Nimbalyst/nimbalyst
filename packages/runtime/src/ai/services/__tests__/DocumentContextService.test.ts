@@ -384,7 +384,7 @@ function test6() {
     });
 
     describe('user message additions', () => {
-      it('adds plan mode instructions when entering plan mode', () => {
+      it('does not inject plan mode instructions (SDK handles natively)', () => {
         const rawContext: RawDocumentContext = {
           filePath: '/test/file.ts',
           fileType: 'typescript',
@@ -396,37 +396,9 @@ function test6() {
           planFilePath: '/plans/test-plan.md',
         });
 
-        expect(result.userMessageAdditions.planModeInstructions).toBeDefined();
-        expect(result.userMessageAdditions.planModeInstructions).toContain('PLAN_MODE_ACTIVATED');
-        expect(result.userMessageAdditions.planModeInstructions).toContain('PLANNING MODE ONLY');
-      });
-
-      it('adds plan mode deactivation when exiting plan mode', () => {
-        const rawContext: RawDocumentContext = {
-          filePath: '/test/file.ts',
-          fileType: 'typescript',
-          content: 'const x = 1;',
-        };
-
-        const result = service.prepareContext(rawContext, 'session-1', 'claude', {
-          exitingPlanMode: true,
-        });
-
-        expect(result.userMessageAdditions.planModeDeactivation).toBeDefined();
-        expect(result.userMessageAdditions.planModeDeactivation).toContain('PLAN_MODE_DEACTIVATED');
-      });
-
-      it('returns empty additions when no mode transition', () => {
-        const rawContext: RawDocumentContext = {
-          filePath: '/test/file.ts',
-          fileType: 'typescript',
-          content: 'const x = 1;',
-        };
-
-        const result = service.prepareContext(rawContext, 'session-1', 'claude', undefined);
-
-        expect(result.userMessageAdditions.planModeInstructions).toBeUndefined();
-        expect(result.userMessageAdditions.planModeDeactivation).toBeUndefined();
+        // Plan mode instructions are no longer injected - SDK handles via permissionMode: 'plan'
+        expect((result.userMessageAdditions as any).planModeInstructions).toBeUndefined();
+        expect((result.userMessageAdditions as any).planModeDeactivation).toBeUndefined();
       });
 
       it('builds document context prompt with file path and content', () => {

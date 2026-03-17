@@ -11,13 +11,9 @@ import path from 'path';
 import { app } from 'electron';
 import { ClaudeCodeDeps } from './dependencyInjection';
 import { resolveClaudeAgentCliPath } from './cliPathResolver';
-import {
-  DEFAULT_PLANNING_TOOLS,
-} from './toolPolicy';
 import { setupClaudeCodeEnvironment, getClaudeCodeExecutableOptions, getClaudeCodeSpawnFunction, type ClaudeHelperMethod } from '../../../../electron/claudeCodeEnvironment';
 import { DEFAULT_EFFORT_LEVEL } from '../../effortLevels';
 
-// SDK_NATIVE_TOOLS must be passed in from ClaudeCodeProvider since it's defined there
 type SessionMode = 'planning' | 'agent' | undefined;
 
 type SDKUserMessage = {
@@ -41,7 +37,6 @@ export interface BuildSdkOptionsDeps {
   sessions: { getSessionId: (sessionId: string) => string | null | undefined };
   config: { model?: string; apiKey?: string; effortLevel?: string };
   abortController: AbortController;
-  sdkNativeTools: readonly string[];
 }
 
 export interface BuildSdkOptionsParams {
@@ -77,7 +72,6 @@ export async function buildSdkOptions(
     sessions,
     config,
     abortController,
-    sdkNativeTools,
   } = deps;
 
   const {
@@ -127,7 +121,7 @@ export async function buildSdkOptions(
     cwd: workspacePath,
     abortController,
     model: resolveModelVariant(),
-    permissionMode: 'default',
+    permissionMode: currentMode === 'planning' ? 'plan' : 'default',
     canUseTool: createCanUseToolHandler(sessionId, workspacePath, permissionsPath),
     hooks: {
       'PreToolUse': [{ hooks: [toolHooksService.createPreToolUseHook()] }],
@@ -162,14 +156,6 @@ export async function buildSdkOptions(
     } catch (error) {
       console.warn('[CLAUDE-CODE] Failed to load additional directories:', error);
     }
-  }
-
-  // Apply tool restrictions based on session mode
-  if (currentMode === 'planning') {
-    options.allowedTools = DEFAULT_PLANNING_TOOLS;
-    const disallowed = sdkNativeTools.filter(t => !DEFAULT_PLANNING_TOOLS.includes(t));
-    options.disallowedTools = disallowed;
-    options.blockedTools = disallowed;
   }
 
   // Set up environment variables
