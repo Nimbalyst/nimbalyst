@@ -4,20 +4,20 @@ import { MaterialSymbol } from '@nimbalyst/runtime';
 import type { TrackerItemType } from '@nimbalyst/runtime';
 import { trackerItemCountByTypeAtom } from '@nimbalyst/runtime/plugins/TrackerPlugin';
 import type { TrackerDataModel } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
-export type TrackerView = 'all' | 'high-priority' | 'recently-updated' | 'archived';
+import type { TrackerFilterChip } from '../../store/atoms/trackers';
 
 interface TrackerSidebarProps {
   trackerTypes: TrackerDataModel[];
   selectedType: string | 'all';
-  selectedView: TrackerView;
+  activeFilters: TrackerFilterChip[];
   onSelectType: (type: string | 'all') => void;
-  onSelectView: (view: TrackerView) => void;
+  onToggleFilter: (filter: TrackerFilterChip) => void;
 }
 
-const VIEWS: { id: TrackerView; label: string; icon: string }[] = [
-  { id: 'all', label: 'All Items', icon: 'list' },
+const FILTER_CHIPS: { id: TrackerFilterChip; label: string; icon: string }[] = [
+  { id: 'mine', label: 'Mine', icon: 'person' },
   { id: 'high-priority', label: 'High Priority', icon: 'priority_high' },
-  { id: 'recently-updated', label: 'Recently Updated', icon: 'schedule' },
+  { id: 'recently-updated', label: 'Recent', icon: 'schedule' },
   { id: 'archived', label: 'Archived', icon: 'archive' },
 ];
 
@@ -30,9 +30,9 @@ function SidebarTypeCount({ type }: { type: TrackerItemType }) {
 export const TrackerSidebar: React.FC<TrackerSidebarProps> = ({
   trackerTypes,
   selectedType,
-  selectedView,
+  activeFilters,
   onSelectType,
-  onSelectView,
+  onToggleFilter,
 }) => {
   return (
     <div className="tracker-sidebar w-[220px] min-w-[180px] flex flex-col bg-nim-secondary border-r border-nim overflow-hidden" data-testid="tracker-sidebar">
@@ -44,8 +44,43 @@ export const TrackerSidebar: React.FC<TrackerSidebarProps> = ({
       </div>
 
       <div className="flex-1 overflow-y-auto">
+        {/* Filter chips (multi-select) */}
+        <div className="px-2 pt-2 pb-1">
+          <div className="text-[10px] font-semibold text-nim-faint uppercase tracking-wider px-1 mb-1.5">
+            Filters
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {FILTER_CHIPS.map((chip) => {
+              const isActive = activeFilters.includes(chip.id);
+              return (
+                <button
+                  key={chip.id}
+                  data-testid={`tracker-filter-${chip.id}`}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                    isActive
+                      ? 'bg-[var(--nim-primary)] text-white'
+                      : 'bg-nim-tertiary text-nim-muted hover:bg-nim-active hover:text-nim'
+                  }`}
+                  onClick={() => onToggleFilter(chip.id)}
+                >
+                  <MaterialSymbol icon={chip.icon} size={13} />
+                  {chip.label}
+                </button>
+              );
+            })}
+          </div>
+          {activeFilters.length > 0 && (
+            <button
+              className="mt-1 px-1 text-[10px] text-nim-faint hover:text-nim-muted transition-colors"
+              onClick={() => activeFilters.forEach(f => onToggleFilter(f))}
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+
         {/* Types Section */}
-        <div className="px-1.5 py-2">
+        <div className="px-1.5 py-2 border-t border-nim mt-1">
           <div className="text-[10px] font-semibold text-nim-faint uppercase tracking-wider px-2 mb-1">
             Types
           </div>
@@ -53,14 +88,11 @@ export const TrackerSidebar: React.FC<TrackerSidebarProps> = ({
           {/* All */}
           <button
             className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors ${
-              selectedType === 'all' && selectedView === 'all'
+              selectedType === 'all'
                 ? 'bg-nim-active text-nim'
                 : 'text-nim-muted hover:bg-nim-tertiary hover:text-nim'
             }`}
-            onClick={() => {
-              onSelectType('all');
-              onSelectView('all');
-            }}
+            onClick={() => onSelectType('all')}
           >
             <MaterialSymbol icon="checklist" size={16} />
             <span className="flex-1 text-left truncate">All</span>
@@ -86,33 +118,6 @@ export const TrackerSidebar: React.FC<TrackerSidebarProps> = ({
               <span className="text-[10px] font-semibold text-nim-faint min-w-[20px] text-right">
                 <SidebarTypeCount type={tracker.type as TrackerItemType} />
               </span>
-            </button>
-          ))}
-        </div>
-
-        {/* Views Section */}
-        <div className="px-1.5 py-2 border-t border-nim">
-          <div className="text-[10px] font-semibold text-nim-faint uppercase tracking-wider px-2 mb-1">
-            Views
-          </div>
-          {VIEWS.map((view) => (
-            <button
-              key={view.id}
-              data-testid={`tracker-view-${view.id}`}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors ${
-                selectedView === view.id && selectedType === 'all'
-                  ? 'bg-nim-active text-nim'
-                  : 'text-nim-muted hover:bg-nim-tertiary hover:text-nim'
-              }`}
-              onClick={() => {
-                onSelectView(view.id);
-                if (view.id !== 'all') {
-                  onSelectType('all');
-                }
-              }}
-            >
-              <MaterialSymbol icon={view.icon} size={16} />
-              <span className="flex-1 text-left truncate">{view.label}</span>
             </button>
           ))}
         </div>

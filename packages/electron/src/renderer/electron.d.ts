@@ -361,6 +361,10 @@ interface ElectronAPI {
     deleteTrackerItem: (payload: {
       itemId: string;
     }) => Promise<{ success: boolean; error?: string }>;
+    updateTrackerItemInFile: (payload: {
+      itemId: string;
+      updates: Record<string, any>;
+    }) => Promise<{ success: boolean; item?: any; error?: string }>;
     importTrackerItemFromFile: (payload: {
       relativePath: string;
       skipDuplicates?: boolean;

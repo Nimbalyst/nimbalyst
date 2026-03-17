@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useCallback } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { globalRegistry, loadBuiltinTrackers } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
-import { TrackerSidebar, type TrackerView } from './TrackerSidebar';
+import { TrackerSidebar } from './TrackerSidebar';
 import { TrackerMainView, type ViewMode } from './TrackerMainView';
 import type { TrackerItemType } from '@nimbalyst/runtime';
 import {
   trackerModeLayoutAtom,
   setTrackerModeLayoutAtom,
+  type TrackerFilterChip,
 } from '../../store/atoms/trackers';
 
 // Ensure built-in trackers are loaded
@@ -38,18 +39,20 @@ export const TrackerMode: React.FC<TrackerModeProps> = ({
   const setModeLayout = useSetAtom(setTrackerModeLayoutAtom);
 
   const selectedType = modeLayout.selectedType;
-  const selectedView = modeLayout.selectedView;
+  const activeFilters = modeLayout.activeFilters;
   const viewMode = modeLayout.viewMode;
-
-  // Item counts are derived from atoms directly in TrackerSidebar via SidebarTypeCount
 
   const handleSelectType = useCallback((type: string | 'all') => {
     setModeLayout({ selectedType: type });
   }, [setModeLayout]);
 
-  const handleSelectView = useCallback((view: TrackerView) => {
-    setModeLayout({ selectedView: view });
-  }, [setModeLayout]);
+  const handleToggleFilter = useCallback((filter: TrackerFilterChip) => {
+    const current = modeLayout.activeFilters;
+    const next = current.includes(filter)
+      ? current.filter(f => f !== filter)
+      : [...current, filter];
+    setModeLayout({ activeFilters: next });
+  }, [modeLayout.activeFilters, setModeLayout]);
 
   const handleViewModeChange = useCallback((mode: ViewMode) => {
     setModeLayout({ viewMode: mode });
@@ -62,12 +65,13 @@ export const TrackerMode: React.FC<TrackerModeProps> = ({
       <TrackerSidebar
         trackerTypes={trackerTypes}
         selectedType={selectedType}
-        selectedView={selectedView}
+        activeFilters={activeFilters}
         onSelectType={handleSelectType}
-        onSelectView={handleSelectView}
+        onToggleFilter={handleToggleFilter}
       />
       <TrackerMainView
         filterType={filterType}
+        activeFilters={activeFilters}
         viewMode={viewMode}
         onViewModeChange={handleViewModeChange}
         onSwitchToFilesMode={onSwitchToFilesMode}

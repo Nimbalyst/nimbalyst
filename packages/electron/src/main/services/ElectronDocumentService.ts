@@ -15,6 +15,7 @@ import {
 import crypto from 'crypto';
 import { extractFrontmatter, extractCommonFields } from '../utils/frontmatterReader';
 import { VIRTUAL_DOCS, isVirtualPath } from '@nimbalyst/runtime';
+import { updateTrackerInFrontmatter } from '@nimbalyst/runtime/plugins/TrackerPlugin/documentHeader/frontmatterUtils';
 import { database } from '../database/PGLiteDatabaseWorker';
 import { shouldExcludeDir } from '../utils/fileFilters';
 import { isPathInWorkspace, getRelativeWorkspacePath } from '../utils/workspaceDetection';
@@ -1020,6 +1021,89 @@ export class ElectronDocumentService implements DocumentService {
   }
 
   /**
+   * Permanently delete a tracker item from the database.
+   */
+  async deleteTrackerItem(itemId: string): Promise<void> {
+    await database.query(
+      `DELETE FROM tracker_items WHERE id = $1`,
+      [itemId]
+    );
+
+    const changeEvent: TrackerItemChangeEvent = {
+      added: [],
+      updated: [],
+      removed: [itemId],
+      timestamp: new Date(),
+    };
+    this.trackerItemWatchers.forEach(callback => callback(changeEvent));
+  }
+
+  /**
+   * Update a frontmatter-based tracker item by writing field changes back to the file.
+   * Reads the file, updates the YAML frontmatter, writes it back, then re-indexes.
+   */
+  async updateTrackerItemInFile(itemId: string, updates: Record<string, any>): Promise<TrackerItem> {
+    // Look up the item to find the source file
+    const result = await database.query<any>(
+      `SELECT * FROM tracker_items WHERE id = $1`,
+      [itemId]
+    );
+    if (result.rows.length === 0) {
+      throw new Error(`Tracker item not found: ${itemId}`);
+    }
+    const row = result.rows[0];
+    const sourceRef = row.source_ref;
+    const trackerType = row.type;
+
+    if (!sourceRef) {
+      throw new Error(`Item ${itemId} has no source file reference`);
+    }
+
+    const fullPath = path.join(this.workspacePath, sourceRef);
+
+    // Read current file content
+    let fileContent: string;
+    try {
+      fileContent = await fs.readFile(fullPath, 'utf-8');
+    } catch (err) {
+      throw new Error(`Failed to read source file: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    // Update frontmatter in the file content
+    const updatedContent = updateTrackerInFrontmatter(fileContent, trackerType, updates);
+
+    // Write back
+    await fs.writeFile(fullPath, updatedContent, 'utf-8');
+
+    // Also update the database row so the UI reflects changes immediately
+    // (the file watcher will re-index later, but this gives instant feedback)
+    const existingData = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
+    const mergedData = { ...existingData, ...updates };
+    await database.query(
+      `UPDATE tracker_items SET data = $1, updated = NOW() WHERE id = $2`,
+      [JSON.stringify(mergedData), itemId]
+    );
+
+    // Re-read the updated item
+    const updated = await database.query<any>(
+      `SELECT * FROM tracker_items WHERE id = $1`,
+      [itemId]
+    );
+    const item = this.rowToTrackerItem(updated.rows[0]);
+
+    // Notify watchers
+    const changeEvent: TrackerItemChangeEvent = {
+      added: [],
+      updated: [item],
+      removed: [],
+      timestamp: new Date(),
+    };
+    this.trackerItemWatchers.forEach(callback => callback(changeEvent));
+
+    return item;
+  }
+
+  /**
    * Import a single markdown file as a native tracker item.
    * Reads frontmatter for metadata and the markdown body as content.
    * Returns the created item or null if the file has no tracker frontmatter.
@@ -2003,6 +2087,33 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
       return { success: true, item };
     } catch (error) {
       console.error('[DocumentService] tracker-item-archive failed:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  // Delete tracker item permanently
+  safeHandle('document-service:tracker-item-delete', async (event, payload: {
+    itemId: string;
+  }) => {
+    try {
+      await requireDocumentService(event).deleteTrackerItem(payload.itemId);
+      return { success: true };
+    } catch (error) {
+      console.error('[DocumentService] tracker-item-delete failed:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  // Update tracker item in source file (frontmatter)
+  safeHandle('document-service:tracker-item-update-in-file', async (event, payload: {
+    itemId: string;
+    updates: Record<string, any>;
+  }) => {
+    try {
+      const item = await requireDocumentService(event).updateTrackerItemInFile(payload.itemId, payload.updates);
+      return { success: true, item };
+    } catch (error) {
+      console.error('[DocumentService] tracker-item-update-in-file failed:', error);
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   });

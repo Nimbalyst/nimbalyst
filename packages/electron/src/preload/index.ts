@@ -735,6 +735,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     deleteTrackerItem: (payload: {
       itemId: string;
     }) => ipcRenderer.invoke('document-service:tracker-item-delete', payload) as Promise<{ success: boolean; error?: string }>,
+    updateTrackerItemInFile: (payload: {
+      itemId: string;
+      updates: Record<string, any>;
+    }) => ipcRenderer.invoke('document-service:tracker-item-update-in-file', payload) as Promise<{ success: boolean; item?: any; error?: string }>,
     importTrackerItemFromFile: (payload: {
       relativePath: string;
       skipDuplicates?: boolean;

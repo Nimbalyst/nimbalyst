@@ -259,7 +259,9 @@ export async function initTrackerPanelLayout(workspacePath: string): Promise<voi
     if (savedModeLayout && typeof savedModeLayout === 'object') {
       store.set(trackerModeLayoutAtom, {
         selectedType: savedModeLayout.selectedType ?? DEFAULT_MODE_LAYOUT.selectedType,
-        selectedView: savedModeLayout.selectedView ?? DEFAULT_MODE_LAYOUT.selectedView,
+        activeFilters: Array.isArray(savedModeLayout.activeFilters)
+          ? savedModeLayout.activeFilters
+          : DEFAULT_MODE_LAYOUT.activeFilters,
         viewMode: savedModeLayout.viewMode ?? DEFAULT_MODE_LAYOUT.viewMode,
         selectedItemId: savedModeLayout.selectedItemId ?? DEFAULT_MODE_LAYOUT.selectedItemId,
       });
@@ -277,11 +279,14 @@ export async function initTrackerPanelLayout(workspacePath: string): Promise<voi
  * Tracker mode layout state.
  * Persisted to workspace state so it survives app restarts.
  */
+/** Filter chips that can be toggled independently */
+export type TrackerFilterChip = 'mine' | 'high-priority' | 'recently-updated' | 'archived';
+
 export interface TrackerModeLayout {
   /** Selected type filter in sidebar ('all' or specific type) */
   selectedType: string;
-  /** Active view in sidebar */
-  selectedView: 'all' | 'high-priority' | 'recently-updated' | 'archived';
+  /** Active filter chips (empty = show all, multiple = intersection) */
+  activeFilters: TrackerFilterChip[];
   /** Table or kanban display */
   viewMode: 'table' | 'kanban';
   /** Currently selected tracker item ID (opens detail panel when non-null) */
@@ -290,7 +295,7 @@ export interface TrackerModeLayout {
 
 const DEFAULT_MODE_LAYOUT: TrackerModeLayout = {
   selectedType: 'all',
-  selectedView: 'all',
+  activeFilters: [],
   viewMode: 'table',
   selectedItemId: null,
 };
@@ -303,9 +308,9 @@ export const trackerModeSelectedTypeAtom = atom(
   (get) => get(trackerModeLayoutAtom).selectedType
 );
 
-/** Selected view in tracker mode sidebar. */
-export const trackerModeSelectedViewAtom = atom(
-  (get) => get(trackerModeLayoutAtom).selectedView
+/** Active filter chips in tracker mode sidebar. */
+export const trackerModeActiveFiltersAtom = atom(
+  (get) => get(trackerModeLayoutAtom).activeFilters
 );
 
 /** View mode (table/kanban) in tracker mode. */

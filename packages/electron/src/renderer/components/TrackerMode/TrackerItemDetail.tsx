@@ -20,6 +20,7 @@ interface TrackerItemDetailProps {
   onClose: () => void;
   onSwitchToFilesMode?: () => void;
   onArchive?: (itemId: string, archive: boolean) => void;
+  onDelete?: (itemId: string) => void;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -69,9 +70,14 @@ function formatTimestamp(value: string | Date | number | undefined): string {
   });
 }
 
-/** Whether this item is stored in PGLite (editable) vs parsed from frontmatter (read-only metadata) */
-function isDbItem(item: TrackerItem): boolean {
+/** Whether this item is a native DB item (no file backing) */
+function isNativeItem(item: TrackerItem): boolean {
   return !item.module;
+}
+
+/** Whether this item's metadata fields are editable (native or frontmatter-backed) */
+function isEditable(item: TrackerItem): boolean {
+  return isNativeItem(item) || item.source === 'frontmatter' || item.source === 'import';
 }
 
 /** Source label for display */
@@ -88,6 +94,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
   onClose,
   onSwitchToFilesMode,
   onArchive,
+  onDelete,
 }) => {
   const model = useMemo(() => globalRegistry.get(item.type), [item.type]);
   const typeColor = TYPE_COLORS[item.type] || '#6b7280';
@@ -98,7 +105,8 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
   const [localDescription, setLocalDescription] = useState(item.description || '');
   const [localCustomFields, setLocalCustomFields] = useState<Record<string, any>>(item.customFields || {});
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const editable = isDbItem(item);
+  const editable = isEditable(item);
+  const hasRichContent = isNativeItem(item); // Only native items have embedded Lexical content
 
   // Rich content editor state
   const [contentMarkdown, setContentMarkdown] = useState<string | null>(null);
@@ -116,9 +124,9 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
     setLocalCustomFields(item.customFields || {});
   }, [item.id, item.title, item.description, item.customFields]);
 
-  // Load rich content from PGLite when item changes
+  // Load rich content from PGLite when item changes (only native items have embedded content)
   useEffect(() => {
-    if (!editable) {
+    if (!hasRichContent) {
       setContentLoaded(true);
       return;
     }
@@ -150,7 +158,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
       });
 
     return () => { cancelled = true; };
-  }, [item.id, editable]);
+  }, [item.id, hasRichContent]);
 
   // Escape to close
   useEffect(() => {
@@ -166,20 +174,26 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
     return tracker?.sync?.mode || 'local';
   }, [item.type]);
 
-  /** Save a field update to PGLite via IPC */
+  /** Save a field update -- routes to file-based save for frontmatter items, DB for native */
   const saveField = useCallback(async (updates: Record<string, any>) => {
     if (!editable) return;
-    // console.log('[TrackerItemDetail] saveField called:', { itemId: item.id, syncMode, updates: Object.keys(updates) });
     try {
-      await window.electronAPI.documentService.updateTrackerItem({
-        itemId: item.id,
-        updates,
-        syncMode,
-      });
+      if (item.source === 'frontmatter' || item.source === 'import') {
+        await window.electronAPI.documentService.updateTrackerItemInFile({
+          itemId: item.id,
+          updates,
+        });
+      } else {
+        await window.electronAPI.documentService.updateTrackerItem({
+          itemId: item.id,
+          updates,
+          syncMode,
+        });
+      }
     } catch (err) {
       console.error('[TrackerItemDetail] Failed to save field:', err);
     }
-  }, [item.id, editable, syncMode]);
+  }, [item.id, item.source, editable, syncMode]);
 
   /** Debounced save for text fields */
   const debouncedSave = useCallback((updates: Record<string, any>) => {
@@ -301,9 +315,9 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
     }
   }, [handleTextFieldChange, handleImmediateFieldChange]);
 
-  /** Editor config for embedded Lexical editor */
+  /** Editor config for embedded Lexical editor (native items only) */
   const editorConfig = useMemo((): EditorConfig | null => {
-    if (!editable || !contentLoaded) return null;
+    if (!hasRichContent || !contentLoaded) return null;
     return {
       isRichText: true,
       editable: true,
@@ -322,7 +336,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
         }
       },
     };
-  }, [editable, contentLoaded, contentMarkdown, saveContent]);
+  }, [hasRichContent, contentLoaded, contentMarkdown, saveContent]);
 
   const sourceLabel = getSourceLabel(item);
 
@@ -371,13 +385,26 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          {editable && onArchive && (
+          {onArchive && (
             <button
               className="p-1 rounded hover:bg-nim-tertiary text-nim-muted"
               onClick={() => onArchive(item.id, !item.archived)}
               title={item.archived ? 'Unarchive' : 'Archive'}
             >
               <MaterialSymbol icon={item.archived ? 'unarchive' : 'archive'} size={18} />
+            </button>
+          )}
+          {onDelete && (
+            <button
+              className="p-1 rounded hover:bg-nim-tertiary text-nim-muted hover:text-[#ef4444]"
+              onClick={() => {
+                if (window.confirm(`Delete "${item.title}"? This cannot be undone.`)) {
+                  onDelete(item.id);
+                }
+              }}
+              title="Delete permanently"
+            >
+              <MaterialSymbol icon="delete" size={18} />
             </button>
           )}
           <button
@@ -441,14 +468,14 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
           <label className="text-[11px] font-medium text-nim-muted uppercase tracking-[0.5px] block mb-1">
             Content
           </label>
-          {editable && editorConfig ? (
+          {hasRichContent && editorConfig ? (
             <div
               className="tracker-content-editor border border-nim rounded bg-nim min-h-[200px] overflow-hidden"
               data-testid="tracker-detail-content-editor"
             >
               <StravuEditor key={item.id} config={editorConfig} />
             </div>
-          ) : editable && !contentLoaded ? (
+          ) : hasRichContent && !contentLoaded ? (
             <div className="text-sm text-nim-faint py-4 text-center">Loading...</div>
           ) : item.module ? (
             <div className="flex items-center gap-2 py-2">
@@ -514,7 +541,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
   );
 };
 
-/** Read-only field display for non-editable items (frontmatter-based) */
+/** Read-only field display for non-editable items (e.g. inline items) */
 const ReadOnlyField: React.FC<{ field: FieldDefinition; value: any }> = ({ field, value }) => {
   const label = field.name
     .replace(/([A-Z])/g, ' $1')

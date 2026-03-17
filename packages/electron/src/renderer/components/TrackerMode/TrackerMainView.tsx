@@ -8,13 +8,17 @@ import {
   SortDirection as TrackerSortDirection,
   type TrackerItemType,
 } from '@nimbalyst/runtime/plugins/TrackerPlugin';
-import { trackerItemsByTypeAtom, archivedTrackerItemsAtom } from '@nimbalyst/runtime/plugins/TrackerPlugin';
+import {
+  trackerItemsByTypeAtom,
+  archivedTrackerItemsAtom,
+} from '@nimbalyst/runtime/plugins/TrackerPlugin';
 import type { TrackerDataModel } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
 import { KanbanBoard } from './KanbanBoard';
 import { TrackerItemDetail } from './TrackerItemDetail';
 import {
   trackerModeLayoutAtom,
   setTrackerModeLayoutAtom,
+  type TrackerFilterChip,
 } from '../../store/atoms/trackers';
 import { useAlphaFeature } from '../../hooks/useAlphaFeature';
 
@@ -22,6 +26,7 @@ export type ViewMode = 'table' | 'kanban';
 
 interface TrackerMainViewProps {
   filterType: TrackerItemType | 'all';
+  activeFilters: TrackerFilterChip[];
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
   onSwitchToFilesMode?: () => void;
@@ -31,6 +36,7 @@ interface TrackerMainViewProps {
 
 export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
   filterType,
+  activeFilters,
   viewMode,
   onViewModeChange,
   onSwitchToFilesMode,
@@ -48,15 +54,33 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
   const setModeLayout = useSetAtom(setTrackerModeLayoutAtom);
   const selectedItemId = modeLayout.selectedItemId;
 
-  // Get items for the current filter type (active + archived)
+  // Base item sets from atoms
   const activeItems = useAtomValue(trackerItemsByTypeAtom(filterType));
   const archivedItems = useAtomValue(archivedTrackerItemsAtom(filterType));
-  const selectedView = modeLayout.selectedView;
 
-  // Use archived items when viewing the archived view, otherwise active items
-  const atomItems = selectedView === 'archived' ? archivedItems : activeItems;
+  // Apply multi-select filters as intersection
+  const filteredItems = useMemo(() => {
+    const showArchived = activeFilters.includes('archived');
+    let items = showArchived ? archivedItems : activeItems;
 
-  // Find the selected item from both active and archived (so detail panel stays open across view switches)
+    if (activeFilters.includes('mine')) {
+      items = items.filter(item => item.source === 'native' || !item.source);
+    }
+
+    if (activeFilters.includes('high-priority')) {
+      items = items.filter(item => item.priority === 'critical' || item.priority === 'high');
+    }
+
+    if (activeFilters.includes('recently-updated')) {
+      items = [...items]
+        .sort((a, b) => b.lastIndexed.getTime() - a.lastIndexed.getTime())
+        .slice(0, 50);
+    }
+
+    return items;
+  }, [activeItems, archivedItems, activeFilters]);
+
+  // Find the selected item from both active and archived (so detail panel stays open)
   const selectedItem: TrackerItem | null = useMemo(() => {
     if (!selectedItemId) return null;
     return activeItems.find((item: TrackerItem) => item.id === selectedItemId)
@@ -83,6 +107,21 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
     }
   }, []);
 
+  const handleDeleteItem = useCallback(async (itemId: string) => {
+    try {
+      const result = await window.electronAPI.documentService.deleteTrackerItem({ itemId });
+      if (result.success) {
+        if (selectedItemId === itemId) {
+          setModeLayout({ selectedItemId: null });
+        }
+      } else {
+        console.error('[TrackerMainView] Failed to delete item:', result.error);
+      }
+    } catch (error) {
+      console.error('[TrackerMainView] Failed to delete item:', error);
+    }
+  }, [selectedItemId, setModeLayout]);
+
   const handleNewItem = useCallback((type: string) => {
     setQuickAddType(type);
   }, []);
@@ -101,11 +140,8 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
       const random = Math.random().toString(36).substring(2, 8);
       const id = `${prefix}_${timestamp}${random}`;
 
-      // Get default status from tracker model
       const statusField = tracker?.fields.find(f => f.name === 'status');
       const defaultStatus = (statusField?.default as string) || 'to-do';
-
-      // Get sync mode from tracker model
       const syncMode = tracker?.sync?.mode || 'local';
 
       const result = await window.electronAPI.documentService.createTrackerItem({
@@ -171,11 +207,27 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
     setTimeout(() => setImportStatus(null), 4000);
   }, []);
 
-  // Get display name for the current filter
-  const activeTracker = filterType !== 'all'
-    ? trackerTypes.find(t => t.type === filterType)
-    : null;
-  const title = activeTracker ? activeTracker.displayNamePlural : 'All Items';
+  // Build a composite title from the active filters + type selection
+  const title = useMemo(() => {
+    const activeTracker = filterType !== 'all'
+      ? trackerTypes.find(t => t.type === filterType)
+      : null;
+    const typeName = activeTracker ? activeTracker.displayNamePlural : 'Items';
+
+    const parts: string[] = [];
+    if (activeFilters.includes('archived')) parts.push('Archived');
+    if (activeFilters.includes('mine')) parts.push('My');
+    if (activeFilters.includes('high-priority')) parts.push('High Priority');
+    if (activeFilters.includes('recently-updated')) parts.push('Recent');
+
+    if (parts.length === 0) {
+      return activeTracker ? activeTracker.displayNamePlural : 'All Items';
+    }
+    return `${parts.join(' ')} ${typeName}`;
+  }, [filterType, activeFilters, trackerTypes]);
+
+  // Whether to pass override items (any filter active means we override the default atom)
+  const hasFilters = activeFilters.length > 0;
 
   return (
     <div className="tracker-main-view flex-1 flex flex-col overflow-hidden min-h-0">
@@ -310,7 +362,7 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
               onNewItem={handleNewItem}
               onItemSelect={handleItemSelect}
               selectedItemId={selectedItemId}
-              overrideItems={selectedView === 'archived' ? archivedItems : undefined}
+              overrideItems={hasFilters ? filteredItems : undefined}
             />
           ) : (
             <KanbanBoard
@@ -341,6 +393,7 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
               onClose={handleCloseDetail}
               onSwitchToFilesMode={onSwitchToFilesMode}
               onArchive={handleArchiveItem}
+              onDelete={handleDeleteItem}
             />
           </div>
         )}
