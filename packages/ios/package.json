@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build:transcript": "vite build --config vite.config.transcript.ts",
+    "build:editor": "vite build --config vite.config.editor.ts",
     "test:transcript": "./scripts/test-transcript-integration.sh",
     "test:swift": "cd NimbalystNative && swift test --enable-code-coverage"
   },
