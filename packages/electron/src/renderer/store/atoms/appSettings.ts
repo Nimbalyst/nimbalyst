@@ -801,17 +801,8 @@ export async function initSyncConfig(): Promise<SyncConfig> {
   try {
     const config = await window.electronAPI.invoke('sync:get-config');
     if (config) {
-      // Merge with defaults to ensure all fields have values even when loading old persisted data
-      return {
-        enabled: config.enabled ?? defaultSyncConfig.enabled,
-        serverUrl: config.serverUrl ?? defaultSyncConfig.serverUrl,
-        enabledProjects: config.enabledProjects ?? defaultSyncConfig.enabledProjects,
-        docSyncEnabledProjects: config.docSyncEnabledProjects ?? defaultSyncConfig.docSyncEnabledProjects,
-        environment: config.environment ?? defaultSyncConfig.environment,
-        idleTimeoutMinutes: config.idleTimeoutMinutes ?? defaultSyncConfig.idleTimeoutMinutes,
-        personalOrgId: config.personalOrgId,
-        personalUserId: config.personalUserId,
-      };
+      // Spread persisted config over defaults so new fields are never silently dropped
+      return { ...defaultSyncConfig, ...config };
     }
   } catch (error) {
     console.error('[appSettings] Failed to load sync config:', error);
