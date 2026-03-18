@@ -190,12 +190,14 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
   const saveField = useCallback(async (updates: Record<string, any>) => {
     if (!editable || !item) return;
     try {
-      if (item.source === 'frontmatter' || item.source === 'import' || item.source === 'inline') {
+      if ((item.source === 'frontmatter' || item.source === 'import' || item.source === 'inline') && item.module) {
+        // File-backed items with a real module path: update in source file
         await window.electronAPI.documentService.updateTrackerItemInFile({
           itemId: item.id,
           updates,
         });
       } else {
+        // Native DB items, or file-backed items whose document_path is missing/empty
         await window.electronAPI.documentService.updateTrackerItem({
           itemId: item.id,
           updates,

@@ -468,8 +468,8 @@ export function TrackerTable({
     if (!electronAPI?.documentService) return;
 
     try {
-      if (item.source === 'frontmatter' || item.source === 'import' || item.source === 'inline') {
-        // File-backed items: update in source file (frontmatter YAML or inline #type[...])
+      if ((item.source === 'frontmatter' || item.source === 'import' || item.source === 'inline') && item.module) {
+        // File-backed items with a real module path: update in source file
         if (electronAPI.documentService.updateTrackerItemInFile) {
           await electronAPI.documentService.updateTrackerItemInFile({
             itemId: item.id,

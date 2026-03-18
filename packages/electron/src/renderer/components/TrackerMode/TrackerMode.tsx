@@ -45,7 +45,7 @@ export const TrackerMode: React.FC<TrackerModeProps> = ({
   const viewMode = modeLayout.viewMode;
 
   const handleSelectType = useCallback((type: string | 'all') => {
-    setModeLayout({ selectedType: type });
+    setModeLayout({ selectedType: type, selectedItemId: null });
   }, [setModeLayout]);
 
   const handleToggleFilter = useCallback((filter: TrackerFilterChip) => {
