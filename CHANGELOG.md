@@ -20,6 +20,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.56.3] - 2026-03-18
+
+
+### Added
+- Opus 4.6 and Sonnet 4.6 1M context models in model selector
+
+### Changed
+- Updated claude-agent-sdk 0.2.69 to 0.2.76, codex-sdk 0.110.0 to 0.114.0
+- Plan mode tool restrictions now delegated to SDK natively
+
+### Fixed
+- Remove extensionFileTypesLoader not in AgentToolHooksOptions interface
+- Require plan path when exiting planning mode
+- Keep started agent sessions on their original provider
+- Prevent agent response text from appearing twice in transcript
+
 ## [0.56.2] - 2026-03-18
 
 
