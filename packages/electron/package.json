@@ -1,6 +1,6 @@
 {
   "name": "@nimbalyst/electron",
-  "version": "0.56.1",
+  "version": "0.56.2",
   "private": true,
   "description": "Electron app for Nimbalyst",
   "main": "out/main/index.js",
@@ -133,7 +133,7 @@
     "electron": "^37.2.6",
     "electron-builder": "^26.0.12",
     "electron-vite": "^4.0.0",
-    "esbuild": "^0.25.10",
+    "esbuild": "^0.25.12",
     "eslint": "^9.37.0",
     "playwright": "^1.55.1",
     "playwright-electron": "^0.5.0",

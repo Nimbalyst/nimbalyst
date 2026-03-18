@@ -20,6 +20,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.56.2] - 2026-03-18
+
+
+### Added
+- Marketplace Cloudflare Worker, packaging pipeline, and CDN redirects
+- Packaged third-party notices and license audit report
+
+### Fixed
+- Tracker items with source=native are now always editable
+- Docker E2E tests no longer corrupt host platform-specific binaries
+- PromptQuickOpen now scrolls transcript to the selected prompt
+- Infinite reconnect loop on collab doc decryption failure with auto-recovery for lost org keys
+- preventSleepWhenSyncing setting no longer lost on app restart
+- Deleting inline tracker items now removes the line from the source file
+- Tracker table multi-select and double-click to open file
+- Git panel no longer loops refreshing in empty repos
+- Tracker and workspace summary header alignment
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.56.1] - 2026-03-17
 
 
