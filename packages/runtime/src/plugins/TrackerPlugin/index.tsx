@@ -42,6 +42,7 @@ import { DocumentHeaderRegistry } from './documentHeader/DocumentHeaderRegistry'
 import { TrackerDocumentHeader, shouldRenderTrackerHeader } from './documentHeader/TrackerDocumentHeader';
 import { updateTrackerInFrontmatter } from './documentHeader/frontmatterUtils';
 import { generateTrackerId } from './models/IDGenerator';
+import { formatLocalDateOnly } from './models/dateUtils';
 import { $isHeadingNode } from '@lexical/rich-text';
 import { $getRoot } from 'lexical';
 import './TrackerItem.css';
@@ -199,7 +200,7 @@ async function convertToPlan(editor: LexicalEditor, onContentChange?: (content: 
     priority: 'medium',
     progress: 0,
     created: now.toISOString().split('T')[0],
-    updated: now.toISOString(),
+    updated: formatLocalDateOnly(now),
     owner: '',
     stakeholders: [],
     tags: [],
@@ -243,7 +244,7 @@ async function convertToDecision(editor: LexicalEditor, onContentChange?: (conte
     status: 'to-do',
     priority: 'medium',
     created: now.toISOString().split('T')[0],
-    updated: now.toISOString(),
+    updated: formatLocalDateOnly(now),
     owner: '',
     stakeholders: [],
     tags: [],
@@ -500,7 +501,7 @@ function TrackerPlugin(): JSX.Element | null {
           node.setData({
             ...data,
             status: checked ? 'done' : 'to-do',
-            updated: new Date().toISOString(),
+            updated: formatLocalDateOnly(new Date()),
           });
         }
       });
@@ -565,7 +566,7 @@ function TrackerPlugin(): JSX.Element | null {
         node.setData({
           ...data,
           ...updates,
-          updated: new Date().toISOString(),
+          updated: formatLocalDateOnly(new Date()),
         });
       }
     });

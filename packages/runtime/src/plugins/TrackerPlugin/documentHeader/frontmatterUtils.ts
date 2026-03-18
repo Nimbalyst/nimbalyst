@@ -4,7 +4,7 @@
 
 import jsyaml from 'js-yaml';
 import { globalRegistry } from '../models/TrackerDataModel';
-import { parseDate } from '../models/dateUtils';
+import { parseDate, formatLocalDateOnly } from '../models/dateUtils';
 
 export interface TrackerFrontmatter {
   type: string; // Tracker type (plan, decision, bug, etc.)
@@ -180,7 +180,7 @@ export function updateTrackerInFrontmatter(
   const cleanedTrackerData: Record<string, any> = { type: existingData.type || trackerUpdates.type };
   if (trackerUpdates.type) cleanedTrackerData.type = trackerUpdates.type;
 
-  const now = new Date().toISOString();
+  const now = formatLocalDateOnly(new Date());
 
   if (frontmatterKey === 'trackerStatus') {
     // Set updated at top level; set created if not already present
@@ -202,6 +202,8 @@ export function updateTrackerInFrontmatter(
     };
     if (!existingData.created && !trackerUpdates.created) {
       mergedData.created = now;
+      // Also reset updated — it predates created and would cause an inverted display
+      mergedData.updated = now;
     }
 
     return updateFrontmatter(content, {

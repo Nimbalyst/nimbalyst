@@ -86,6 +86,13 @@ export const StatusBar: React.FC<StatusBarProps> = ({ model, data, onChange, onC
             );
           })()}
           {localData.updated && (() => {
+            // Only show updated if it's meaningfully after created (avoids showing
+            // "Updated Mar 17" when "Created Mar 18" because updated was stale in the frontmatter)
+            if (localData.created) {
+              const createdMs = new Date(localData.created).getTime();
+              const updatedMs = new Date(localData.updated).getTime();
+              if (updatedMs <= createdMs) return null;
+            }
             const { display, title } = formatDateTimeDisplay(localData.updated);
             return (
               <span className="text-[11px] text-[var(--nim-text-faint)]" title={`Updated: ${title}`}>
