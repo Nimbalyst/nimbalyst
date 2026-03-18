@@ -886,6 +886,20 @@ export class OpenAICodexProvider extends BaseAgentProvider {
             ...(event.contextFillTokens !== undefined ? { contextFillTokens: event.contextFillTokens } : {}),
             ...(event.contextWindow !== undefined ? { contextWindow: event.contextWindow } : {}),
           };
+        } else {
+          // Unknown event type - log and surface so nothing is silently dropped
+          console.warn(`[CODEX] Unhandled protocol event type: ${event.type}`, event);
+          if (sessionId) {
+            void this.logAgentMessageBestEffort(sessionId, 'output', JSON.stringify(event), {
+              metadata: { eventType: event.type, codexProvider: true, unhandled: true },
+              hidden: false,
+              searchable: false,
+            });
+          }
+          // If the event has text content, surface it to the user
+          if (event.content) {
+            yield { type: 'text', content: event.content };
+          }
         }
       }
 
