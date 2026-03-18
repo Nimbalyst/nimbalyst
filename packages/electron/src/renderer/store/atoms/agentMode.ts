@@ -191,6 +191,10 @@ export const sessionTasksAtom = atomFamily((sessionId: string) =>
  *  Set by TeammatePanel on click, consumed by RichTranscriptView.  */
 export const scrollToTeammateAtom = atom<{ sessionId: string; agentId: string } | null>(null);
 
+/** Write-only atom to request scrolling to a specific message in the transcript.
+ *  Set by PromptQuickOpen on select, consumed by SessionTranscript.  */
+export const scrollToMessageAtom = atom<{ sessionId: string; timestamp: number } | null>(null);
+
 // ============================================================
 // Debounced Persistence
 // ============================================================

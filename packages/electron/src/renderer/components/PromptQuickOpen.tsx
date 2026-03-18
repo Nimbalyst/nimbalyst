@@ -64,7 +64,7 @@ interface PromptQuickOpenProps {
   isOpen: boolean;
   onClose: () => void;
   workspacePath: string;
-  onSessionSelect: (sessionId: string) => void;
+  onSessionSelect: (sessionId: string, messageTimestamp?: number) => void;
   /** Pre-fill the search input when the modal opens (e.g. from Session Quick Open Tab switch) */
   initialSearchQuery?: string;
 }
@@ -183,7 +183,7 @@ export const PromptQuickOpen: React.FC<PromptQuickOpenProps> = ({
         case 'Enter':
           e.preventDefault();
           if (displayPrompts[selectedIndex]) {
-            handlePromptSelect(displayPrompts[selectedIndex].sessionId);
+            handlePromptSelect(displayPrompts[selectedIndex].sessionId, displayPrompts[selectedIndex].createdAt);
           }
           break;
         case 'Escape':
@@ -197,10 +197,8 @@ export const PromptQuickOpen: React.FC<PromptQuickOpenProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, selectedIndex, displayPrompts, onClose]);
 
-  const handlePromptSelect = (sessionId: string) => {
-    // Pass the session ID to the parent handler
-    // The AgentMode component will handle loading the session
-    onSessionSelect(sessionId);
+  const handlePromptSelect = (sessionId: string, createdAt: number) => {
+    onSessionSelect(sessionId, createdAt);
     onClose();
   };
 
@@ -257,7 +255,7 @@ export const PromptQuickOpen: React.FC<PromptQuickOpenProps> = ({
                   className={`prompt-quick-open-item py-3 px-4 cursor-pointer border-l-[3px] border-transparent transition-all duration-100 flex items-start gap-3 hover:bg-[var(--nim-bg-hover)] ${
                     index === selectedIndex ? 'selected bg-[rgba(0,122,255,0.1)] !border-l-[#007aff]' : ''
                   }`}
-                  onClick={() => handlePromptSelect(prompt.sessionId)}
+                  onClick={() => handlePromptSelect(prompt.sessionId, prompt.createdAt)}
                   onMouseEnter={() => {
                     if (mouseHasMoved) {
                       setSelectedIndex(index);

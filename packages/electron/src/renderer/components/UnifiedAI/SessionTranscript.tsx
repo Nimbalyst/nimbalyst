@@ -69,7 +69,7 @@ import {
 } from '../../store';
 import { streamCompletionSignalAtom } from '../../store/atoms/sessionTranscript';
 import { convertToWorkstreamAtom, sessionPromptAdditionsAtom, sessionLastSubmitAtAtom, sessionDraftLocalModifiedAtAtom } from '../../store/atoms/sessions';
-import { scrollToTeammateAtom } from '../../store/atoms/agentMode';
+import { scrollToTeammateAtom, scrollToMessageAtom } from '../../store/atoms/agentMode';
 import { usePostHog } from 'posthog-js/react';
 import { setAgentModeSettingsAtom, showPromptAdditionsAtom, hasExternalEditorAtom, externalEditorNameAtom, openInExternalEditorAtom, defaultAgentModelAtom, defaultEffortLevelAtom } from '../../store/atoms/appSettings';
 import { supportsEffortLevel, parseEffortLevel, type EffortLevel } from '../../utils/modelUtils';
@@ -1476,6 +1476,34 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     transcriptPanelRef.current?.scrollToMessage(targetIdx);
     setScrollToTeammate(null);
   }, [scrollToTeammate, setScrollToTeammate, sessionId, messages]);
+
+  // Scroll-to-message: when PromptQuickOpen selects a prompt, scroll to the
+  // matching user message by timestamp.
+  const scrollToMessage = useAtomValue(scrollToMessageAtom);
+  const setScrollToMessage = useSetAtom(scrollToMessageAtom);
+  useEffect(() => {
+    if (!scrollToMessage || scrollToMessage.sessionId !== sessionId) return;
+    const { timestamp } = scrollToMessage;
+
+    // Find the user message whose timestamp matches the prompt's createdAt.
+    const targetIdx = messages.findIndex(msg =>
+      msg.role === 'user' && Math.abs(msg.timestamp - timestamp) < 1000
+    );
+
+    if (targetIdx === -1) {
+      // Messages may not be loaded yet; keep the request pending.
+      return;
+    }
+
+    // Use double-RAF to run AFTER the auto-scroll-to-bottom effect in
+    // RichTranscriptView (which uses a single RAF on messages change).
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        transcriptPanelRef.current?.scrollToMessage(targetIdx);
+      });
+    });
+    setScrollToMessage(null);
+  }, [scrollToMessage, setScrollToMessage, sessionId, messages]);
 
   // Loading state
   if (!sessionData) {

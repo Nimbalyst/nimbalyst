@@ -39,7 +39,7 @@ export interface SessionQuickOpenData {
 
 export interface PromptQuickOpenData {
   workspacePath: string;
-  onSessionSelect: (sessionId: string) => void;
+  onSessionSelect: (sessionId: string, messageTimestamp?: number) => void;
   /** Pre-fill the search input when the modal opens */
   initialSearchQuery?: string;
 }
@@ -115,8 +115,8 @@ function PromptQuickOpenWrapper({
       isOpen={isOpen}
       onClose={onClose}
       workspacePath={data.workspacePath}
-      onSessionSelect={(sessionId) => {
-        data.onSessionSelect(sessionId);
+      onSessionSelect={(sessionId, messageTimestamp) => {
+        data.onSessionSelect(sessionId, messageTimestamp);
         onClose();
       }}
       initialSearchQuery={data.initialSearchQuery}

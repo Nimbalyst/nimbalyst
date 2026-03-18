@@ -113,7 +113,7 @@ import { setStorageBackend } from '@nimbalyst/runtime';
 import { store, editorDirtyAtom, makeEditorKey } from '@nimbalyst/runtime/store';
 import { extensionPanelAIContextAtom } from './store/atoms/extensionPanels';
 import { setDiffTreeGroupByDirectoryAtom, setAgentFileScopeModeAtom } from './store/atoms/projectState';
-import { toggleSessionHistoryCollapsedAtom } from './store/atoms/agentMode';
+import { toggleSessionHistoryCollapsedAtom, scrollToMessageAtom } from './store/atoms/agentMode';
 import { setDeveloperFeatureSettingsAtom } from './store/atoms/appSettings';
 import { isCollabUri } from './utils/collabUri';
 import {
@@ -1245,11 +1245,16 @@ export default function App() {
     }
   }, [activeMode]);
 
-  // Handle PromptQuickOpen session selection - same as SessionQuickOpen
-  const handlePromptQuickOpenSelect = useCallback(async (sessionId: string) => {
+  // Handle PromptQuickOpen session selection - opens session and scrolls to the selected prompt
+  const handlePromptQuickOpenSelect = useCallback(async (sessionId: string, messageTimestamp?: number) => {
     // Switch to agent mode
     if (activeMode !== 'agent') {
       setActiveMode('agent');
+    }
+
+    // Set scroll target before opening the session so the transcript picks it up once loaded
+    if (messageTimestamp) {
+      store.set(scrollToMessageAtom, { sessionId, timestamp: messageTimestamp });
     }
 
     // Open session in AgentMode

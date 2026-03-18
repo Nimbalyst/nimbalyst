@@ -30,7 +30,7 @@ interface NavigationDialogKeyboardHandlerProps {
   /** Callback when a session is selected in SessionQuickOpen */
   onSessionSelect: (sessionId: string) => void;
   /** Callback when a prompt is selected in PromptQuickOpen */
-  onPromptSelect: (sessionId: string) => void;
+  onPromptSelect: (sessionId: string, messageTimestamp?: number) => void;
   /** Document context for AgentCommandPalette */
   documentContext: { content?: string; filePath?: string };
 }
