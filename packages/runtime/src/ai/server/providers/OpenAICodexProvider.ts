@@ -1562,6 +1562,63 @@ export class OpenAICodexProvider extends BaseAgentProvider {
       undefined, // no provider message ID
       false // not searchable - raw events are not for search
     );
+
+    // Detect todo_list items and update session metadata so sidebar widgets display them
+    this.handleTodoListEvent(event.metadata.rawEvent, sessionId);
+  }
+
+  /**
+   * Detect Codex todo_list items and update session metadata with currentTodos.
+   * Maps Codex's {text, completed} format to the TodoItem format used by sidebar widgets.
+   */
+  private handleTodoListEvent(rawEvent: unknown, sessionId: string): void {
+    if (!rawEvent || typeof rawEvent !== 'object') return;
+
+    const record = rawEvent as Record<string, unknown>;
+    const item = record.item;
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return;
+
+    const itemRecord = item as Record<string, unknown>;
+    if (itemRecord.type !== 'todo_list' || !Array.isArray(itemRecord.items)) return;
+
+    const todos = (itemRecord.items as Array<Record<string, unknown>>)
+      .filter(t => t != null && typeof t === 'object')
+      .map((t, index) => ({
+        id: `codex-todo-${index}`,
+        content: typeof t.text === 'string' ? t.text : String(t.text ?? ''),
+        activeForm: typeof t.text === 'string' ? t.text : String(t.text ?? ''),
+        status: t.completed ? 'completed' as const : 'in_progress' as const,
+      }));
+
+    this.emitTodoUpdate(sessionId, todos).catch(err => {
+      console.error('[CODEX] Failed to emit todo update:', err);
+    });
+  }
+
+  /**
+   * Update session metadata with current todos.
+   * Mirrors ClaudeCodeProvider.emitTodoUpdate for sidebar widget compatibility.
+   */
+  private async emitTodoUpdate(sessionId: string, todos: Array<{ id: string; content: string; activeForm: string; status: string }>): Promise<void> {
+    try {
+      const { AISessionsRepository } = await import('../../../storage/repositories/AISessionsRepository');
+      const currentSession = await AISessionsRepository.get(sessionId);
+      const currentMetadata = currentSession?.metadata || {};
+
+      await AISessionsRepository.updateMetadata(sessionId, {
+        metadata: {
+          ...currentMetadata,
+          currentTodos: todos,
+        },
+      });
+
+      this.emit('message:logged', {
+        sessionId,
+        direction: 'output',
+      });
+    } catch (error) {
+      console.error('[CODEX] Failed to update session metadata with todos:', error);
+    }
   }
 
   private getRawEventType(rawEvent: unknown): string {

@@ -529,6 +529,118 @@ describe('parseCodexRawEvents', () => {
     expect((parsed.sections[0] as Extract<CodexSection, { type: 'output' }>).content).toBe('Connection timeout');
   });
 
+  it('renders todo_list items as a todo_list section', () => {
+    const events: Message[] = [
+      buildRawMessage(
+        {
+          type: 'item.started',
+          item: {
+            id: 'item_11',
+            type: 'todo_list',
+            items: [
+              { text: 'Step one', completed: true },
+              { text: 'Step two', completed: false },
+              { text: 'Step three', completed: false },
+            ],
+          },
+        },
+        1
+      ),
+    ];
+
+    const parsed = parseCodexRawEvents(events);
+
+    expect(parsed.sections).toHaveLength(1);
+    expect(parsed.sections[0].type).toBe('todo_list');
+    const todoSection = parsed.sections[0] as Extract<CodexSection, { type: 'todo_list' }>;
+    expect(todoSection.items).toEqual([
+      { text: 'Step one', completed: true },
+      { text: 'Step two', completed: false },
+      { text: 'Step three', completed: false },
+    ]);
+  });
+
+  it('merges consecutive todo_list events (updated replaces started)', () => {
+    const events: Message[] = [
+      buildRawMessage(
+        {
+          type: 'item.started',
+          item: {
+            id: 'item_11',
+            type: 'todo_list',
+            items: [
+              { text: 'Step one', completed: true },
+              { text: 'Step two', completed: false },
+            ],
+          },
+        },
+        1
+      ),
+      buildRawMessage(
+        {
+          type: 'item.completed',
+          item: {
+            id: 'item_11',
+            type: 'todo_list',
+            items: [
+              { text: 'Step one', completed: true },
+              { text: 'Step two', completed: true },
+            ],
+          },
+        },
+        2
+      ),
+    ];
+
+    const parsed = parseCodexRawEvents(events);
+
+    expect(parsed.sections).toHaveLength(1);
+    expect(parsed.sections[0].type).toBe('todo_list');
+    const todoSection = parsed.sections[0] as Extract<CodexSection, { type: 'todo_list' }>;
+    expect(todoSection.items).toEqual([
+      { text: 'Step one', completed: true },
+      { text: 'Step two', completed: true },
+    ]);
+  });
+
+  it('does not merge todo_list with non-adjacent todo_list', () => {
+    const events: Message[] = [
+      buildRawMessage(
+        {
+          type: 'item.started',
+          item: {
+            id: 'item_11',
+            type: 'todo_list',
+            items: [{ text: 'First batch', completed: false }],
+          },
+        },
+        1
+      ),
+      buildRawMessage(
+        { type: 'item.completed', item: { id: 'msg-1', type: 'agent_message', text: 'Working on it...' } },
+        2
+      ),
+      buildRawMessage(
+        {
+          type: 'item.started',
+          item: {
+            id: 'item_12',
+            type: 'todo_list',
+            items: [{ text: 'Second batch', completed: false }],
+          },
+        },
+        3
+      ),
+    ];
+
+    const parsed = parseCodexRawEvents(events);
+
+    expect(parsed.sections).toHaveLength(3);
+    expect(parsed.sections[0].type).toBe('todo_list');
+    expect(parsed.sections[1].type).toBe('output');
+    expect(parsed.sections[2].type).toBe('todo_list');
+  });
+
   it('returns empty sections for empty input', () => {
     const parsed = parseCodexRawEvents([]);
     expect(parsed.sections).toEqual([]);

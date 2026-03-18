@@ -43,6 +43,7 @@ export type CodexSection =
   | { type: 'reasoning'; blocks: string[] }
   | { type: 'output'; content: string }
   | { type: 'tool_call'; toolCall: ToolCall; timestamp: number }
+  | { type: 'todo_list'; items: Array<{ text: string; completed: boolean }> }
   | { type: 'openai_auth_error' };
 
 interface ParsedCodexOutput {
@@ -276,6 +277,28 @@ export function parseCodexRawEvents(rawEvents: Message[]): ParsedCodexOutput {
       const item = getEventItem(rawEventRecord);
       const itemType = getItemType(item);
       const shouldTreatAsTool = (item && isToolItemType(itemType)) || eventType === 'tool_call';
+
+      // Handle todo_list items - render as a checklist section
+      if (item && itemType === 'todo_list') {
+        currentOutputParts = null;
+        const todoItems = item.items;
+        if (Array.isArray(todoItems)) {
+          const parsed = todoItems
+            .filter((t): t is Record<string, unknown> => t != null && typeof t === 'object')
+            .map(t => ({
+              text: typeof t.text === 'string' ? t.text : String(t.text ?? ''),
+              completed: !!t.completed,
+            }));
+          // Always replace with the latest snapshot (item.updated / item.completed supersede item.started)
+          const last = lastSection();
+          if (last && last.type === 'todo_list') {
+            last.items = parsed;
+          } else {
+            sections.push({ type: 'todo_list', items: parsed });
+          }
+        }
+        continue;
+      }
 
       if (shouldTreatAsTool && item) {
         // Reset output tracking when switching away from output
@@ -564,6 +587,52 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
     );
   };
 
+  const renderTodoList = (items: Array<{ text: string; completed: boolean }>, sectionIndex: number) => {
+    const completedCount = items.filter(t => t.completed).length;
+    const total = items.length;
+    const allDone = completedCount === total;
+    return (
+      <div
+        key={`todo-${sectionIndex}`}
+        className="rounded-md overflow-hidden border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] my-2"
+      >
+        <div className="py-2 px-3 flex items-center gap-2 border-b border-[var(--nim-border)]">
+          <MaterialSymbol
+            icon="checklist"
+            size={16}
+            className={allDone ? 'text-[var(--nim-success)]' : 'text-[var(--nim-primary)]'}
+          />
+          <span className="text-sm font-medium text-[var(--nim-text)]">
+            Tasks
+          </span>
+          <span className="text-xs text-[var(--nim-text-faint)] ml-auto">
+            {completedCount}/{total} completed
+          </span>
+        </div>
+        <div className="px-3 py-2 space-y-1.5">
+          {items.map((item, i) => (
+            <div key={i} className="flex items-start gap-2 text-sm">
+              <span className="mt-0.5 flex-shrink-0">
+                {item.completed ? (
+                  <MaterialSymbol icon="check_circle" size={16} className="text-[var(--nim-success)]" />
+                ) : (
+                  <MaterialSymbol icon="radio_button_unchecked" size={16} className="text-[var(--nim-text-faint)]" />
+                )}
+              </span>
+              <span
+                className={item.completed
+                  ? 'text-[var(--nim-text-faint)] line-through'
+                  : 'text-[var(--nim-text)]'}
+              >
+                {item.text}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   const renderReasoningSection = (blocks: string[], sectionIndex: number) => {
     const isExpanded = !collapsedReasoningSections.has(sectionIndex);
     return (
@@ -640,6 +709,9 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
         }
         if (section.type === 'tool_call') {
           return renderToolCall(section.toolCall, sectionIndex, section.timestamp);
+        }
+        if (section.type === 'todo_list') {
+          return renderTodoList(section.items, sectionIndex);
         }
         if (section.type === 'openai_auth_error') {
           return <OpenAIAuthWidget key={`auth-error-${sectionIndex}`} />;
