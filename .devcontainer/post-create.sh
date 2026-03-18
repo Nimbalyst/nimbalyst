@@ -6,6 +6,17 @@ set -e
 
 echo "=== Nimbalyst Dev Container Setup ==="
 
+# Isolate ALL nested node_modules directories so npm ci installs Linux binaries
+# into container-local tmpfs mounts instead of writing back to the host bind mount.
+# Without this, platform-specific binaries (esbuild, electron) get overwritten
+# with Linux versions on the macOS host.
+echo "Isolating nested node_modules from host bind mount..."
+for pkg_json in $(find packages -name package.json -maxdepth 3 -not -path "*/node_modules/*"); do
+  pkg_dir=$(dirname "$pkg_json")
+  mkdir -p "$pkg_dir/node_modules"
+  mount -t tmpfs tmpfs "$pkg_dir/node_modules"
+done
+
 # Install npm dependencies
 echo "Installing npm dependencies..."
 npm ci

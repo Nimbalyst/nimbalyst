@@ -73,11 +73,20 @@ WORKTREE_NAME=$(basename "$(pwd)")
 TIMESTAMP=$(date +%s)
 CONTAINER_NAME="nimbalyst-e2e-${WORKTREE_NAME}-${TIMESTAMP}"
 
+# Build volume flags to isolate ALL node_modules dirs (root + nested workspaces)
+# This prevents npm ci inside Linux from overwriting host darwin binaries
+NODE_MODULES_VOLUMES="-v /workspaces/nimbalyst-code/node_modules"
+for pkg_json in $(find packages -name package.json -maxdepth 3 -not -path "*/node_modules/*"); do
+  pkg_dir=$(dirname "$pkg_json")
+  NODE_MODULES_VOLUMES="$NODE_MODULES_VOLUMES -v /workspaces/nimbalyst-code/$pkg_dir/node_modules"
+done
+
 echo "Starting container: ${CONTAINER_NAME}"
 docker run -d \
   --name "${CONTAINER_NAME}" \
   --shm-size=2g \
   -v "$(pwd):/workspaces/nimbalyst-code" \
+  $NODE_MODULES_VOLUMES \
   -e DISPLAY=:99 \
   -e PLAYWRIGHT=1 \
   -e ELECTRON_DISABLE_SECURITY_WARNINGS=1 \
