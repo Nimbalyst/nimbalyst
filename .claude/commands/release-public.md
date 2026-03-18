@@ -43,16 +43,23 @@ Publish the tested internal release to the public repository as a **draft releas
 3. **Create PUBLIC\_RELEASE\_NOTES.md**:
   - Write formatted notes to `PUBLIC_RELEASE_NOTES.md` in repository root
   - Show the user what will be published
-  - Ask for approval before proceeding
+
+4. **STOP and wait for user refinement**:
+  - Tell the user: "I've written the draft release notes to `PUBLIC_RELEASE_NOTES.md`. Please review and edit the file directly if you'd like to make any changes. Let me know when you're ready to proceed with committing and publishing."
+  - Use AskUserQuestion to pause and wait for the user's response
+  - Do NOT proceed to Phase 3 until the user explicitly confirms they are ready
+  - If the user requests changes, make them and ask again
 
 ## PHASE 3: COMMIT AND PUBLISH
 
-1. **Commit the release notes**:
+1. **Re-read PUBLIC\_RELEASE\_NOTES.md** to pick up any edits the user made directly.
+
+2. **Commit the release notes**:
   - Stage: `git add PUBLIC_RELEASE_NOTES.md`
   - Commit: `git commit -m "docs: public release notes for [VERSION]"`
   - Push: `git push origin main`
 
-2. **Trigger publish workflow**:
+3. **Trigger publish workflow**:
   - Use GitHub CLI to trigger the workflow:
 ```bash
     gh workflow run publish-public.yml -f version=[VERSION]
@@ -65,7 +72,7 @@ Publish the tested internal release to the public repository as a **draft releas
     - Upload all build artifacts
   - **Note**: The release is created as a draft - you must manually publish it from the GitHub releases page when ready
 
-3. **Provide confirmation**:
+4. **Provide confirmation**:
   - Show workflow trigger URL
   - Show expected public release URL: https://github.com/nimbalyst/nimbalyst/releases/tag/[VERSION]
   - Note: Workflow takes 2-3 minutes to complete
