@@ -11,6 +11,38 @@ import { parseCommandFile, parseSkillFile, SlashCommand, validateCommand } from 
 // Re-export SlashCommand type for use by handlers
 export type { SlashCommand };
 
+/**
+ * Check if a directory entry is a directory, following symlinks.
+ * `Dirent.isDirectory()` returns false for symlinks even when they point to
+ * directories, so we fall back to `fs.statSync` for symlinks.
+ */
+function isDirectoryEntry(entry: fs.Dirent, fullPath: string): boolean {
+  if (entry.isDirectory()) return true;
+  if (entry.isSymbolicLink()) {
+    try {
+      return fs.statSync(fullPath).isDirectory();
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+/**
+ * Check if a directory entry is a file, following symlinks.
+ */
+function isFileEntry(entry: fs.Dirent, fullPath: string): boolean {
+  if (entry.isFile()) return true;
+  if (entry.isSymbolicLink()) {
+    try {
+      return fs.statSync(fullPath).isFile();
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
 export class SlashCommandService {
   private workspacePath: string;
   private commandsCache: SlashCommand[] | null = null;
@@ -247,10 +279,10 @@ export class SlashCommandService {
       for (const entry of entries) {
         const fullPath = path.join(currentPath, entry.name);
 
-        if (entry.isDirectory()) {
-          // Recursively scan subdirectories
+        if (isDirectoryEntry(entry, fullPath)) {
+          // Recursively scan subdirectories (follows symlinks)
           this.scanDirectoryRecursive(fullPath, rootPath, source, commands);
-        } else if (entry.isFile() && entry.name.endsWith('.md')) {
+        } else if (isFileEntry(entry, fullPath) && entry.name.endsWith('.md')) {
           // Process markdown files
           try {
             // Compute relative path from root for namespacing
@@ -285,9 +317,9 @@ export class SlashCommandService {
       for (const entry of entries) {
         const fullPath = path.join(currentPath, entry.name);
 
-        if (entry.isDirectory()) {
+        if (isDirectoryEntry(entry, fullPath)) {
           this.scanSkillsRecursive(fullPath, rootPath, source, commands);
-        } else if (entry.isFile() && entry.name === 'SKILL.md') {
+        } else if (isFileEntry(entry, fullPath) && entry.name === 'SKILL.md') {
           try {
             const relativePath = path.relative(rootPath, fullPath);
             const command = parseSkillFile(fullPath, source, relativePath);
@@ -314,12 +346,12 @@ export class SlashCommandService {
       for (const entry of entries) {
         const fullPath = path.join(currentPath, entry.name);
 
-        if (entry.isDirectory()) {
+        if (isDirectoryEntry(entry, fullPath)) {
           this.scanPluginSkillsRecursive(fullPath, commands);
           continue;
         }
 
-        if (!entry.isFile() || entry.name !== 'SKILL.md') {
+        if (!isFileEntry(entry, fullPath) || entry.name !== 'SKILL.md') {
           continue;
         }
 

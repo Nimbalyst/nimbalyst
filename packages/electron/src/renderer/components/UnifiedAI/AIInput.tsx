@@ -433,10 +433,10 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       const filtered = allSlashCommands
         .filter(cmd => {
           if (scope === 'commands') {
-            // At position 0: show built-in commands and project/user commands, not skills
-            return cmd.kind !== 'skill';
+            // At position 0: show everything (commands + skills)
+            return true;
           }
-          // Mid-prompt skills scope: show skills AND project/user commands
+          // Mid-prompt skills scope: show skills AND project/user commands, not built-in commands
           // (the SDK treats .claude/commands/ entries as invocable skills too)
           return cmd.source !== 'builtin';
         })
