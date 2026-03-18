@@ -420,8 +420,8 @@ export function TrackerTable({
 
   /** Whether an item's fields can be edited inline */
   const isItemEditable = useCallback((item: TrackerItem): boolean => {
-    // Native (no module), frontmatter, import, and inline items are all editable
-    return !item.module || item.source === 'frontmatter' || item.source === 'import' || item.source === 'inline';
+    // Native (by source or no module), frontmatter, import, and inline items are all editable
+    return item.source === 'native' || !item.module || item.source === 'frontmatter' || item.source === 'import' || item.source === 'inline';
   }, []);
 
   // Multi-select state
@@ -1409,7 +1409,19 @@ export function TrackerTable({
                   );
                 })}
                 <td className="tracker-table-cell module p-[5px] text-[var(--nim-text)] align-middle min-w-[150px] max-w-[250px]">
-                  <span className="module-text text-[var(--nim-text-muted)] text-xs font-mono whitespace-nowrap overflow-hidden text-ellipsis block">{item.module || '\u2014'}</span>
+                  {item.module ? (
+                    <span className="module-text text-[var(--nim-text-muted)] text-xs font-mono whitespace-nowrap overflow-hidden text-ellipsis block">{item.module}</span>
+                  ) : (
+                    <span
+                      className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded"
+                      style={{ backgroundColor: '#6b728015', color: '#9ca3af' }}
+                      title="Stored in database — not backed by a file"
+                      data-testid="tracker-source-db-badge"
+                    >
+                      <span className="material-symbols-outlined text-[11px]">storage</span>
+                      Database
+                    </span>
+                  )}
                 </td>
                 <td className="tracker-table-cell updated p-[5px] text-[var(--nim-text)] align-middle w-[120px]">
                   <span className="updated-text text-[var(--nim-text-faint)] text-xs">{formatDate(item.lastIndexed)}</span>

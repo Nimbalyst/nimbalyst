@@ -8,15 +8,17 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useAtomValue } from 'jotai';
 import { StravuEditor, MaterialSymbol } from '@nimbalyst/runtime';
 import type { EditorConfig } from '@nimbalyst/runtime/editor';
 import type { TrackerItem, TrackerItemType } from '@nimbalyst/runtime';
 import { globalRegistry } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
 import type { FieldDefinition } from '@nimbalyst/runtime/plugins/TrackerPlugin/models/TrackerDataModel';
 import { TrackerFieldEditor } from '@nimbalyst/runtime/plugins/TrackerPlugin/components/TrackerFieldEditor';
+import { trackerItemByIdAtom } from '@nimbalyst/runtime/plugins/TrackerPlugin/trackerDataAtoms';
 
 interface TrackerItemDetailProps {
-  item: TrackerItem;
+  itemId: string;
   onClose: () => void;
   onSwitchToFilesMode?: () => void;
   onArchive?: (itemId: string, archive: boolean) => void;
@@ -72,7 +74,7 @@ function formatTimestamp(value: string | Date | number | undefined): string {
 
 /** Whether this item is a native DB item (no file backing) */
 function isNativeItem(item: TrackerItem): boolean {
-  return !item.module;
+  return item.source === 'native' || !item.module;
 }
 
 /** Whether this item's metadata fields are editable */
@@ -80,33 +82,37 @@ function isEditable(item: TrackerItem): boolean {
   return isNativeItem(item) || item.source === 'frontmatter' || item.source === 'import' || item.source === 'inline';
 }
 
-/** Source label for display */
+/** Source label for the metadata footer */
 function getSourceLabel(item: TrackerItem): string | null {
-  if (!item.source || item.source === 'native') return null;
-  if (item.source === 'inline') return `From inline marker${item.sourceRef ? ` in ${item.sourceRef}` : ''}`;
-  if (item.source === 'frontmatter') return `From frontmatter${item.sourceRef ? ` in ${item.sourceRef}` : ''}`;
+  if (!item.source || item.source === 'native') return 'Database (no file backing)';
+  if (item.source === 'inline') return `Inline marker${item.sourceRef ? ` in ${item.sourceRef}` : ''}`;
+  if (item.source === 'frontmatter') return `Frontmatter${item.sourceRef ? ` in ${item.sourceRef}` : ''}`;
   if (item.source === 'import') return `Imported${item.sourceRef ? ` from ${item.sourceRef}` : ''}`;
   return null;
 }
 
 export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
-  item,
+  itemId,
   onClose,
   onSwitchToFilesMode,
   onArchive,
   onDelete,
 }) => {
-  const model = useMemo(() => globalRegistry.get(item.type), [item.type]);
-  const typeColor = TYPE_COLORS[item.type] || '#6b7280';
-  const icon = model?.icon || getTypeIcon(item.type);
+  // Read directly from per-item atom -- only re-renders when THIS item changes,
+  // not when any other item in the workspace updates.
+  const item = useAtomValue(trackerItemByIdAtom(itemId));
+
+  const model = useMemo(() => globalRegistry.get(item?.type ?? ''), [item?.type]);
+  const typeColor = TYPE_COLORS[item?.type ?? ''] || '#6b7280';
+  const icon = model?.icon || getTypeIcon(item?.type ?? '');
 
   // Local state for text fields (debounced save)
-  const [localTitle, setLocalTitle] = useState(item.title);
-  const [localDescription, setLocalDescription] = useState(item.description || '');
-  const [localCustomFields, setLocalCustomFields] = useState<Record<string, any>>(item.customFields || {});
+  const [localTitle, setLocalTitle] = useState(item?.title ?? '');
+  const [localDescription, setLocalDescription] = useState(item?.description ?? '');
+  const [localCustomFields, setLocalCustomFields] = useState<Record<string, any>>(item?.customFields ?? {});
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const editable = isEditable(item);
-  const hasRichContent = isNativeItem(item); // Only native items have embedded Lexical content
+  const editable = item ? isEditable(item) : false;
+  const hasRichContent = item ? isNativeItem(item) : false; // Only native items have embedded Lexical content
 
   // Rich content editor state
   const [contentMarkdown, setContentMarkdown] = useState<string | null>(null);
@@ -114,15 +120,21 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
   const getContentFnRef = useRef<(() => string) | null>(null);
   const contentSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Sync local state from atom-driven item prop.
-  // Skip the sync while a debounced save is pending - the user is actively editing
-  // and resetting local state would clobber their in-progress text.
+  // Reset local editing state when navigating to a different item.
+  // We don't sync on item data changes (saves) to avoid clobbering in-progress text.
+  // TrackerItemDetail subscribes to trackerItemByIdAtom(itemId) directly, so it only
+  // re-renders when its own item changes -- no prop-drilling churn from parent re-renders.
   useEffect(() => {
-    if (debounceTimerRef.current) return; // user is typing, don't clobber
-    setLocalTitle(item.title);
-    setLocalDescription(item.description || '');
-    setLocalCustomFields(item.customFields || {});
-  }, [item.id, item.title, item.description, item.customFields]);
+    if (!item) return;
+    setLocalTitle(item.title ?? '');
+    setLocalDescription(item.description ?? '');
+    setLocalCustomFields(item.customFields ?? {});
+    // Clear any stale debounce timer from the previous item
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+  }, [itemId]); // itemId only -- not item fields
 
   // Load rich content from PGLite when item changes (only native items have embedded content)
   useEffect(() => {
@@ -136,7 +148,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
     setContentMarkdown(null);
     getContentFnRef.current = null;
 
-    window.electronAPI.documentService.getTrackerItemContent({ itemId: item.id })
+    window.electronAPI.documentService.getTrackerItemContent({ itemId: item!.id })
       .then((result) => {
         if (cancelled) return;
         if (result.success && result.content) {
@@ -158,7 +170,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
       });
 
     return () => { cancelled = true; };
-  }, [item.id, hasRichContent]);
+  }, [item?.id, hasRichContent]);
 
   // Escape to close
   useEffect(() => {
@@ -170,13 +182,13 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
   }, [onClose]);
 
   const syncMode = useMemo(() => {
-    const tracker = globalRegistry.get(item.type);
+    const tracker = globalRegistry.get(item?.type ?? '');
     return tracker?.sync?.mode || 'local';
-  }, [item.type]);
+  }, [item?.type]);
 
   /** Save a field update -- routes to file-based save for file-backed items, DB for native */
   const saveField = useCallback(async (updates: Record<string, any>) => {
-    if (!editable) return;
+    if (!editable || !item) return;
     try {
       if (item.source === 'frontmatter' || item.source === 'import' || item.source === 'inline') {
         await window.electronAPI.documentService.updateTrackerItemInFile({
@@ -193,12 +205,15 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
     } catch (err) {
       console.error('[TrackerItemDetail] Failed to save field:', err);
     }
-  }, [item.id, item.source, editable, syncMode]);
+  }, [item?.id, item?.source, editable, syncMode]);
 
   /** Debounced save for text fields */
   const debouncedSave = useCallback((updates: Record<string, any>) => {
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-    debounceTimerRef.current = setTimeout(() => saveField(updates), 500);
+    debounceTimerRef.current = setTimeout(() => {
+      debounceTimerRef.current = null;
+      saveField(updates);
+    }, 500);
   }, [saveField]);
 
   /** Debounced save for rich content */
@@ -207,14 +222,14 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
     contentSaveTimerRef.current = setTimeout(async () => {
       try {
         await window.electronAPI.documentService.updateTrackerItemContent({
-          itemId: item.id,
+          itemId: item!.id,
           content: markdown,
         });
       } catch (err) {
         console.error('[TrackerItemDetail] Failed to save content:', err);
       }
     }, 800);
-  }, [item.id]);
+  }, [item?.id]);
 
   // Cleanup timers
   useEffect(() => {
@@ -232,12 +247,12 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
         const markdown = getContentFnRef.current();
         // Fire-and-forget final save
         window.electronAPI.documentService.updateTrackerItemContent({
-          itemId: item.id,
+          itemId: item!.id,
           content: markdown,
         }).catch(() => {});
       }
     };
-  }, [item.id]);
+  }, [item?.id]);
 
   /** Handle immediate field change (selects, checkboxes) */
   const handleImmediateFieldChange = useCallback((fieldName: string, value: any) => {
@@ -258,7 +273,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
 
   /** Open the source document in Files mode */
   const handleOpenDocument = useCallback(() => {
-    if (!item.module) return;
+    if (!item?.module) return;
     const documentService = (window as any).documentService;
     if (!documentService?.openDocument || !documentService?.getDocumentByPath) return;
 
@@ -269,7 +284,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
         documentService.openDocument(doc.id);
       }
     });
-  }, [item.module, onSwitchToFilesMode]);
+  }, [item?.module, onSwitchToFilesMode]);
 
   // Separate fields into categories for layout
   const { primaryFields, customFields } = useMemo(() => {
@@ -292,17 +307,22 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
     return { primaryFields: primary, customFields: custom };
   }, [model]);
 
-  /** Get field value -- check top-level item properties first, then customFields */
+  /** Get field value -- use in-progress local state for text fields, atom for select/etc */
   const getFieldValue = useCallback((fieldName: string): any => {
-    // Top-level TrackerItem fields
+    if (!item) return undefined;
+    // For text-like fields being edited, localCustomFields holds the in-progress value.
+    // handleTextFieldChange stores owner (and other string fields) in localCustomFields,
+    // so we must check it first to avoid resetting input on each keystroke.
+    if (fieldName in localCustomFields) return localCustomFields[fieldName];
+    // Top-level TrackerItem fields (select, etc. -- not stored in localCustomFields)
     if (fieldName === 'status') return item.status;
     if (fieldName === 'priority') return item.priority;
     if (fieldName === 'owner') return item.owner;
     if (fieldName === 'tags') return item.tags;
     if (fieldName === 'progress') return item.progress;
     if (fieldName === 'dueDate') return item.dueDate;
-    // Custom fields (use local state for text fields)
-    return localCustomFields[fieldName] ?? item.customFields?.[fieldName];
+    // Remaining custom fields
+    return item.customFields?.[fieldName];
   }, [item, localCustomFields]);
 
   /** Determine whether a field change should be immediate or debounced */
@@ -338,6 +358,18 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
     };
   }, [hasRichContent, contentLoaded, contentMarkdown, saveContent]);
 
+  // Item deleted while panel was open (or not yet in atom — brief loading state)
+  if (!item) {
+    return (
+      <div
+        className="tracker-item-detail flex flex-col h-full bg-nim overflow-hidden items-center justify-center text-nim-faint text-sm"
+        data-testid="tracker-item-detail"
+      >
+        Item no longer exists
+      </div>
+    );
+  }
+
   const sourceLabel = getSourceLabel(item);
 
   return (
@@ -364,7 +396,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
           ) : (
             <h3 className="text-base font-semibold text-nim m-0 leading-snug">{item.title}</h3>
           )}
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
             <span
               className="text-[10px] font-medium px-1.5 py-0.5 rounded"
               style={{
@@ -374,6 +406,17 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
             >
               {model?.displayName || item.type}
             </span>
+            {isNativeItem(item) && (
+              <span
+                className="text-[10px] font-medium px-1.5 py-0.5 rounded flex items-center gap-0.5"
+                style={{ backgroundColor: '#6b728020', color: '#9ca3af' }}
+                title="Stored in database — not backed by a file"
+                data-testid="tracker-source-db-badge"
+              >
+                <MaterialSymbol icon="storage" size={11} />
+                Database
+              </span>
+            )}
             {item.id && (
               <span className="text-[10px] text-nim-faint font-mono">{item.id}</span>
             )}

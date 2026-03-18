@@ -69,6 +69,16 @@ export const archivedTrackerItemsAtom = atomFamily((type: TrackerItemType | 'all
 );
 
 /**
+ * A single tracker item by ID.
+ * Only notifies subscribers when that specific item changes, not when
+ * other items in the map change. Use this in detail/edit components
+ * so they don't re-render on unrelated item updates.
+ */
+export const trackerItemByIdAtom = atomFamily((id: string) =>
+  atom((get) => get(trackerItemsMapAtom).get(id) ?? null)
+);
+
+/**
  * Count of non-archived items per type.
  */
 export const trackerItemCountByTypeAtom = atomFamily((type: TrackerItemType) =>

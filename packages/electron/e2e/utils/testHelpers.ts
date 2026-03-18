@@ -226,6 +226,12 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   trackerTable: '[data-testid="tracker-table"]',
   trackerTableRow: '[data-testid="tracker-table-row"]',
   trackerTypeButton: '[data-testid="tracker-type-button"]',
+  trackerToolbarNewButton: '[data-testid="tracker-toolbar-new-button"]',
+  trackerQuickAddInput: '[data-testid="tracker-quick-add-input"]',
+  trackerItemDetail: '[data-testid="tracker-item-detail"]',
+  trackerDetailTitle: '[data-testid="tracker-detail-title"]',
+  trackerSourceDbBadge: '[data-testid="tracker-source-db-badge"]',
+  customSelectOption: '.custom-select-option',
 
   // Session Kanban Board
   sessionKanbanBoard: '[data-testid="session-kanban-board"]',

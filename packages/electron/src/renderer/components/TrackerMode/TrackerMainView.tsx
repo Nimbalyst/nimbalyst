@@ -80,13 +80,6 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
     return items;
   }, [activeItems, archivedItems, activeFilters]);
 
-  // Find the selected item from both active and archived (so detail panel stays open)
-  const selectedItem: TrackerItem | null = useMemo(() => {
-    if (!selectedItemId) return null;
-    return activeItems.find((item: TrackerItem) => item.id === selectedItemId)
-      || archivedItems.find((item: TrackerItem) => item.id === selectedItemId)
-      || null;
-  }, [selectedItemId, activeItems, archivedItems]);
 
   const handleItemSelect = useCallback((itemId: string) => {
     setModeLayout({ selectedItemId: itemId });
@@ -333,6 +326,7 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
         <button
           className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-white bg-[var(--nim-primary)] rounded hover:opacity-90 transition-opacity"
           onClick={() => handleNewItem(filterType !== 'all' ? filterType : 'task')}
+          data-testid="tracker-toolbar-new-button"
         >
           <MaterialSymbol icon="add" size={14} />
           New
@@ -386,10 +380,10 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
         </div>
 
         {/* Detail panel (right side, shown when item selected) */}
-        {selectedItem && (
+        {selectedItemId && (
           <div className="w-[400px] min-w-[360px] border-l border-nim shrink-0 overflow-hidden">
             <TrackerItemDetail
-              item={selectedItem}
+              itemId={selectedItemId}
               onClose={handleCloseDetail}
               onSwitchToFilesMode={onSwitchToFilesMode}
               onArchive={handleArchiveItem}
