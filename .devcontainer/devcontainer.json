@@ -43,6 +43,7 @@
     "target=/workspaces/nimbalyst-code/packages/ios/node_modules,type=volume"
   ],
   "runArgs": [
-    "--shm-size=2g"
+    "--shm-size=2g",
+    "--cap-add=SYS_ADMIN"
   ]
 }

@@ -55,30 +55,10 @@ if ! docker images | grep -q nimbalyst-devcontainer; then
 fi
 
 # 3. Create unique container
-WORKTREE_NAME=$(basename "$(pwd)")
-TIMESTAMP=$(date +%s)
-CONTAINER_NAME="nimbalyst-e2e-${WORKTREE_NAME}-${TIMESTAMP}"
-
-echo "Starting container: ${CONTAINER_NAME}"
-
-# Build volume flags to isolate ALL node_modules dirs (root + nested workspaces)
-# This prevents npm ci inside Linux from overwriting host darwin binaries (esbuild, electron, etc.)
-NODE_MODULES_VOLUMES="-v /workspaces/nimbalyst-code/node_modules"
-for pkg_json in $(find packages -name package.json -maxdepth 3 -not -path "*/node_modules/*"); do
-  pkg_dir=$(dirname "$pkg_json")
-  NODE_MODULES_VOLUMES="$NODE_MODULES_VOLUMES -v /workspaces/nimbalyst-code/$pkg_dir/node_modules"
-done
-
-docker run -d \
-  --name "${CONTAINER_NAME}" \
-  --shm-size=2g \
-  -v "$(pwd):/workspaces/nimbalyst-code" \
-  $NODE_MODULES_VOLUMES \
-  -e DISPLAY=:99 \
-  -e PLAYWRIGHT=1 \
-  -e ELECTRON_DISABLE_SECURITY_WARNINGS=1 \
-  nimbalyst-devcontainer:latest \
-  sleep infinity
+# CRITICAL: Always use create-container.sh — it isolates ALL node_modules dirs
+# with anonymous Docker volumes so npm ci doesn't corrupt host darwin binaries.
+CONTAINER_NAME="nimbalyst-e2e-$(basename "$(pwd)")-$(date +%s)"
+CONTAINER_NAME=$(bash .devcontainer/create-container.sh "${CONTAINER_NAME}")
 
 # 4. Run setup (always run on fresh container)
 echo "Running container setup..."
