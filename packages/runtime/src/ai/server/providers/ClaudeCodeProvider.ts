@@ -274,7 +274,6 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       trustChecker: BaseAgentProvider.trustChecker || undefined,
       patternChecker: ClaudeCodeDeps.claudeSettingsPatternChecker || undefined,
       patternSaver: ClaudeCodeDeps.claudeSettingsPatternSaver || undefined,
-      extensionFileTypesLoader: ClaudeCodeDeps.extensionFileTypesLoader || undefined,
       getCurrentMode: () => this.currentMode,
       setCurrentMode: (mode) => { this.currentMode = mode; },
       getPendingExitPlanModeConfirmations: () => this.pendingExitPlanModeConfirmations,
