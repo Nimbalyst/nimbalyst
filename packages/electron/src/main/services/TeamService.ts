@@ -716,30 +716,76 @@ async function ensureOrgKeyForWorkspace(workspacePath: string): Promise<{
     await getOrCreateIdentityKeyPair();
     await uploadIdentityKeyToOrg(orgJwt);
 
-    const key = await fetchAndUnwrapOrgKey(team.orgId, orgJwt);
+    let key: CryptoKey | null = null;
+    let unwrapFailed = false;
+    try {
+      key = await fetchAndUnwrapOrgKey(team.orgId, orgJwt);
+    } catch (unwrapErr) {
+      // Envelope exists but can't be unwrapped (identity key was regenerated).
+      // Recovery strategy:
+      // 1. Delete the stale envelope (wrapped for old identity key)
+      // 2. Re-upload identity key to trigger `identityKeyUploaded` broadcast
+      //    to all connected TeamRoom clients
+      // 3. Connected admins who have the org key will auto-wrap a fresh
+      //    envelope for our new identity key via `autoWrapNewMembers`
+      // 4. We poll for the new envelope below
+      logger.main.warn(
+        '[TeamService] Failed to unwrap own envelope for:',
+        team.orgId,
+        '-- identity key may have changed. Triggering key recovery from other admins.',
+        unwrapErr,
+      );
+      unwrapFailed = true;
+      const myMemberId = getMemberIdFromJwt(orgJwt);
+      if (myMemberId) {
+        try {
+          // Step 1: Delete stale envelope first (so we appear "unwrapped")
+          await deleteEnvelope(team.orgId, myMemberId, orgJwt);
+          logger.main.info('[TeamService] Deleted stale envelope for self');
+
+          // Step 2: Re-upload identity key to broadcast `identityKeyUploaded`
+          // to connected admins. They see us as "unwrapped" and auto-wrap.
+          await uploadIdentityKeyToOrg(orgJwt);
+          logger.main.info('[TeamService] Re-uploaded identity key to trigger auto-wrap from other admins');
+        } catch (recoveryErr) {
+          logger.main.warn('[TeamService] Key recovery setup failed:', recoveryErr);
+        }
+      }
+    }
+
     if (key !== null) {
       return { team, hasKey: true };
     }
 
-    // No envelope on server. If we're admin, re-bootstrap: generate org key + self-wrap.
-    // This handles the case where the team's DOs were wiped/reset.
-    if (team.role === 'admin') {
-      logger.main.info('[TeamService] No envelope found for admin, re-bootstrapping org key for:', team.orgId);
-      await generateAndStoreOrgKey(team.orgId);
-
-      const myPublicKeyJwk = await exportPublicKeyJwk();
-      const envelope = await wrapOrgKeyForMember(team.orgId, myPublicKeyJwk);
-
-      // Get our member ID from the org-scoped JWT (sub claim)
-      const myMemberId = getMemberIdFromJwt(orgJwt);
-      if (myMemberId) {
-        await uploadEnvelope(team.orgId, myMemberId, envelope, orgJwt);
-        logger.main.info('[TeamService] Admin re-bootstrapped org key for:', team.orgId);
-        return { team, hasKey: true };
+    // No usable org key yet. If we just signaled other admins, poll briefly
+    // to see if one of them wraps a fresh envelope for us in realtime.
+    if (unwrapFailed) {
+      logger.main.info('[TeamService] Polling for fresh envelope from other admins...');
+      for (let attempt = 0; attempt < 5; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        try {
+          const freshKey = await fetchAndUnwrapOrgKey(team.orgId, orgJwt);
+          if (freshKey !== null) {
+            logger.main.info('[TeamService] Recovered org key from another admin on attempt', attempt + 1);
+            return { team, hasKey: true };
+          }
+        } catch {
+          // Envelope still not available or still stale -- keep polling
+        }
       }
+      logger.main.warn(
+        '[TeamService] Org key recovery timed out for:', team.orgId,
+        '-- another admin with the org key needs to be online for recovery.',
+      );
+    } else {
+      logger.main.warn(
+        '[TeamService] No envelope found on server for:', team.orgId,
+        '-- another admin with the org key must be online to share the key.',
+      );
     }
 
     return { team, hasKey: false };
+
   } catch (err) {
     logger.main.warn('[TeamService] Failed to ensure org key for workspace:', workspacePath, err);
     return { team, hasKey: false };

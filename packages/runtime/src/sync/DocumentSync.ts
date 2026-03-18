@@ -556,6 +556,27 @@ export class DocumentSyncProvider {
       }
     } catch (err) {
       console.error('[DocumentSync] Error handling message:', err);
+
+      // OperationError from crypto.subtle.decrypt means the encryption key
+      // doesn't match the data on the server (wrong key, key rotated, data
+      // corrupted). Reconnecting will fail identically every time, so stop
+      // the reconnect loop and surface a clear error status.
+      if (
+        err instanceof DOMException &&
+        err.name === 'OperationError'
+      ) {
+        console.error(
+          '[DocumentSync] Decryption failed -- encryption key does not match server data. ' +
+          'The team admin may need to re-share the encryption key, or the document data may be corrupted.'
+        );
+        this.suppressReconnect = true;
+        if (this.ws) {
+          this.ws.close();
+          this.ws = null;
+        }
+        this.setStatus('error');
+        return;
+      }
     }
   }
 

@@ -109,6 +109,8 @@ const CollabStatusBar: React.FC<{ filePath: string; fileName: string }> = ({ fil
       ? 'bg-blue-500'
       : status === 'offline-unsynced'
         ? 'bg-orange-500'
+    : status === 'error'
+      ? 'bg-red-500'
     : status === 'connecting' || status === 'syncing'
       ? 'bg-yellow-500'
       : 'bg-gray-500';
@@ -119,6 +121,8 @@ const CollabStatusBar: React.FC<{ filePath: string; fileName: string }> = ({ fil
       ? 'Replaying local changes...'
       : status === 'offline-unsynced'
         ? 'Offline - unsynced changes'
+    : status === 'error'
+      ? 'Decryption failed - encryption key mismatch'
     : status === 'connecting'
       ? 'Connecting...'
       : status === 'syncing'

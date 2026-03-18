@@ -199,7 +199,8 @@ export class CollabLexicalProvider implements Provider {
     const lexicalStatus =
       status === 'disconnected' ||
       status === 'connecting' ||
-      status === 'syncing'
+      status === 'syncing' ||
+      status === 'error'
         ? 'disconnected'
         : 'connected';
     console.log('[CollabLexicalProvider] handleStatusChange:', status, '-> lexical:', lexicalStatus,
