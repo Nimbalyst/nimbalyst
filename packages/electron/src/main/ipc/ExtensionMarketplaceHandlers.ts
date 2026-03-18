@@ -2,8 +2,8 @@
  * IPC handlers for the extension marketplace.
  *
  * Provides handlers for:
- * - Fetching the extension registry (mock for now, later from GitHub/Cloudflare)
- * - Installing extensions from the marketplace
+ * - Fetching the extension registry from extensions.nimbalyst.com (with mock fallback)
+ * - Installing extensions from the marketplace (.nimext download + extract)
  * - Installing extensions from GitHub URLs
  * - Uninstalling marketplace extensions
  * - Checking for updates
@@ -12,9 +12,10 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as os from 'os';
 import * as crypto from 'crypto';
 import { spawn } from 'child_process';
-import { BrowserWindow } from 'electron';
+import { BrowserWindow, net } from 'electron';
 import { logger } from '../utils/logger';
 import { safeHandle } from '../utils/ipcRegistry';
 import { getUserExtensionsDirectory, initializeExtensionFileTypes } from './ExtensionHandlers';
@@ -27,16 +28,16 @@ import {
   type MarketplaceInstallRecord,
 } from '../utils/store';
 
-// Import mock registry data
+// Import mock registry data (used as fallback when live registry is unreachable)
 import mockRegistry from '../data/extensionRegistry.json';
+
+// Live registry URL -- served by the marketplace Cloudflare Worker
+const REGISTRY_URL = 'https://extensions.nimbalyst.com/registry';
 
 // Registry cache
 let registryCache: RegistryData | null = null;
 let registryCacheTimestamp = 0;
-const REGISTRY_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
-
-// TODO: Replace with real registry URL when available
-// const REGISTRY_URL = 'https://raw.githubusercontent.com/nimbalyst/extension-registry/main/registry.json';
+const REGISTRY_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes (matches Worker cache)
 
 export interface RegistryExtension {
   id: string;
@@ -78,8 +79,8 @@ interface InstallResult {
 }
 
 /**
- * Fetch registry data. Currently returns mock data.
- * Later: HTTPS GET from GitHub with caching.
+ * Fetch registry data from the live Cloudflare Worker.
+ * Falls back to mock data if the live registry is unreachable.
  */
 async function fetchRegistry(): Promise<RegistryData> {
   const now = Date.now();
@@ -87,7 +88,25 @@ async function fetchRegistry(): Promise<RegistryData> {
     return registryCache;
   }
 
-  // For now, use mock data. Later: fetch from REGISTRY_URL
+  try {
+    const response = await net.fetch(REGISTRY_URL, {
+      headers: { 'Accept': 'application/json' },
+    });
+
+    if (response.ok) {
+      const data = await response.json() as RegistryData;
+      registryCache = data;
+      registryCacheTimestamp = now;
+      logger.main.info(`[ExtMarketplace] Fetched live registry: ${data.extensions?.length ?? 0} extensions`);
+      return data;
+    }
+
+    logger.main.warn(`[ExtMarketplace] Live registry returned ${response.status}, using mock fallback`);
+  } catch (err) {
+    logger.main.warn(`[ExtMarketplace] Failed to fetch live registry, using mock fallback:`, err);
+  }
+
+  // Fallback to mock data
   registryCache = mockRegistry as RegistryData;
   registryCacheTimestamp = now;
   return registryCache;
@@ -144,34 +163,131 @@ async function copyDirectory(src: string, dest: string): Promise<void> {
 }
 
 /**
+ * Download a file using Electron's net module.
+ * Returns the path to the downloaded temp file.
+ */
+async function downloadFile(url: string): Promise<string> {
+  const response = await net.fetch(url);
+  if (!response.ok) {
+    throw new Error(`Download failed: HTTP ${response.status}`);
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  const tempFile = path.join(os.tmpdir(), `nimext-${Date.now()}-${Math.random().toString(36).slice(2)}.nimext`);
+  await fs.writeFile(tempFile, buffer);
+  return tempFile;
+}
+
+/**
+ * Verify SHA-256 checksum of a file.
+ */
+async function verifyChecksum(filePath: string, expectedChecksum: string): Promise<boolean> {
+  if (!expectedChecksum) return true; // Skip if no checksum provided
+
+  const fileBuffer = await fs.readFile(filePath);
+  const hash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+  return hash === expectedChecksum;
+}
+
+/**
+ * Extract a .nimext (zip) file to a directory using the unzip command.
+ * Falls back to extract-zip if available.
+ */
+async function extractNimext(nimextPath: string, destPath: string): Promise<void> {
+  await fs.mkdir(destPath, { recursive: true });
+
+  // Try extract-zip first (available as transitive dep)
+  try {
+    const extractZip = require('extract-zip');
+    await extractZip(nimextPath, { dir: destPath });
+    return;
+  } catch {
+    // Fall back to unzip command
+  }
+
+  // Fall back to system unzip command (macOS/Linux)
+  return new Promise((resolve, reject) => {
+    const proc = spawn('unzip', ['-o', nimextPath, '-d', destPath], { stdio: 'pipe' });
+    let stderr = '';
+    proc.stderr?.on('data', (data) => { stderr += data.toString(); });
+    proc.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`unzip failed (code ${code}): ${stderr}`));
+    });
+    proc.on('error', (err) => reject(err));
+  });
+}
+
+/**
  * Install an extension from a download URL (.nimext zip file).
  */
 async function installFromUrl(
   extensionId: string,
   downloadUrl: string,
-  checksum: string,
+  expectedChecksum: string,
   version: string,
 ): Promise<InstallResult> {
   const extensionsDir = await getUserExtensionsDirectory();
   const installPath = path.join(extensionsDir, extensionId);
+  let tempFile: string | null = null;
 
   try {
     logger.main.info(`[ExtMarketplace] Installing extension: ${extensionId} v${version}`);
 
-    // If download URL is empty (mock data), return error
     if (!downloadUrl) {
-      return { success: false, error: 'No download URL available (mock registry)' };
+      return { success: false, error: 'No download URL available' };
     }
 
-    // TODO: Implement actual download and zip extraction when we have real .nimext files
-    // For now, this is a placeholder for the full flow:
-    // 1. Download .nimext file to temp dir
-    // 2. Verify SHA256 checksum
-    // 3. Extract zip to installPath
-    // 4. Verify manifest.json exists
-    // 5. Clean up temp file
+    // 1. Download .nimext file
+    logger.main.info(`[ExtMarketplace] Downloading: ${downloadUrl}`);
+    tempFile = await downloadFile(downloadUrl);
 
-    return { success: false, error: 'Download-based installation not yet implemented (mock registry)' };
+    // 2. Verify checksum
+    if (expectedChecksum) {
+      const valid = await verifyChecksum(tempFile, expectedChecksum);
+      if (!valid) {
+        return { success: false, error: 'Checksum verification failed. The download may be corrupted or tampered with.' };
+      }
+      logger.main.info(`[ExtMarketplace] Checksum verified for ${extensionId}`);
+    }
+
+    // 3. Remove existing installation if present
+    try {
+      await fs.rm(installPath, { recursive: true, force: true });
+    } catch {
+      // Not installed yet
+    }
+
+    // 4. Extract to install path
+    await extractNimext(tempFile, installPath);
+
+    // 5. Verify manifest.json exists
+    const manifestPath = path.join(installPath, 'manifest.json');
+    try {
+      await fs.access(manifestPath);
+    } catch {
+      await fs.rm(installPath, { recursive: true, force: true });
+      return { success: false, error: 'Invalid .nimext package: missing manifest.json' };
+    }
+
+    // 6. Track the install
+    addMarketplaceInstall({
+      extensionId,
+      version,
+      installedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      downloadUrl,
+      checksum: expectedChecksum,
+      source: 'marketplace',
+    });
+
+    // 7. Re-register file types and notify renderer
+    await initializeExtensionFileTypes();
+    notifyExtensionsChanged();
+
+    logger.main.info(`[ExtMarketplace] Successfully installed ${extensionId} v${version}`);
+    return { success: true, extensionId };
+
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     logger.main.error(`[ExtMarketplace] Failed to install ${extensionId}:`, err);
@@ -184,6 +300,15 @@ async function installFromUrl(
     }
 
     return { success: false, error: errorMsg };
+  } finally {
+    // Clean up temp file
+    if (tempFile) {
+      try {
+        await fs.unlink(tempFile);
+      } catch {
+        // Ignore
+      }
+    }
   }
 }
 

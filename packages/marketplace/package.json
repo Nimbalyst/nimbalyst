@@ -1,0 +1,16 @@
+{
+  "name": "@nimbalyst/marketplace",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev --local --ip 0.0.0.0",
+    "deploy": "wrangler deploy",
+    "deploy:production": "./scripts/deploy.sh patch --env production",
+    "deploy:staging": "./scripts/deploy.sh patch --env staging",
+    "types": "wrangler types"
+  },
+  "devDependencies": {
+    "wrangler": "^4.14.4",
+    "typescript": "^5.7.3"
+  }
+}

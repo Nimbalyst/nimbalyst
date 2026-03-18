@@ -673,6 +673,22 @@ export function ExtensionMarketplacePanel() {
             {selectedExtension.description}
           </p>
 
+          {/* Screenshots */}
+          {selectedExtension.screenshots && selectedExtension.screenshots.length > 0 && (
+            <div className="mb-5 flex flex-col gap-2">
+              {selectedExtension.screenshots.map((ss, idx) => (
+                <img
+                  key={idx}
+                  src={ss.src}
+                  alt={ss.alt}
+                  className="w-full rounded-lg border border-[var(--nim-border)] object-cover max-h-[300px]"
+                  loading="lazy"
+                  data-testid={`marketplace-screenshot-${idx}`}
+                />
+              ))}
+            </div>
+          )}
+
           <div className="flex flex-col gap-2 mb-6 p-3 bg-[var(--nim-bg-secondary)] rounded-lg">
             <div className="flex items-center gap-2 text-[0.8125rem]">
               <span className="text-[var(--nim-text-faint)]">Version:</span>

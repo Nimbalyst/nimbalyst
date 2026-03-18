@@ -62,6 +62,59 @@ export interface ExtensionManifest {
    * - false: Extension is disabled by default until the user enables it
    */
   defaultEnabled?: boolean;
+
+  /**
+   * Marketplace metadata for publishing to the extension marketplace.
+   * Only used when packaging extensions for distribution.
+   */
+  marketplace?: ExtensionMarketplaceMetadata;
+}
+
+/**
+ * Marketplace metadata declared in manifest.json.
+ * Used by the packaging pipeline to generate registry entries.
+ */
+export interface ExtensionMarketplaceMetadata {
+  /** Categories for marketplace browsing (e.g., 'developer-tools', 'diagrams') */
+  categories?: string[];
+
+  /** Tags for search (e.g., 'csv', 'spreadsheet', 'data') */
+  tags?: string[];
+
+  /** Material icon name for marketplace card */
+  icon?: string;
+
+  /** Whether this extension should be featured in the marketplace */
+  featured?: boolean;
+
+  /** GitHub repository URL */
+  repositoryUrl?: string;
+
+  /** Changelog text shown in extension details */
+  changelog?: string;
+
+  /**
+   * Screenshots for the marketplace listing.
+   * Each entry specifies a file to open and an alt text.
+   * The screenshot pipeline captures these automatically.
+   */
+  screenshots?: MarketplaceScreenshot[];
+}
+
+export interface MarketplaceScreenshot {
+  /** Alt text for the screenshot */
+  alt: string;
+
+  /**
+   * Relative path to a sample file to open for the screenshot.
+   * The screenshot pipeline opens this file in Nimbalyst and captures the editor.
+   */
+  fileToOpen?: string;
+
+  /**
+   * Optional CSS selector to capture a specific element instead of the full editor.
+   */
+  selector?: string;
 }
 
 export interface ExtensionPermissions {
