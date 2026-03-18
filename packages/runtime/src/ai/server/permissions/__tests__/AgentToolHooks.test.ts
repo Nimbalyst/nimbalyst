@@ -164,4 +164,75 @@ describe('AgentToolHooks', () => {
       expect(options.historyManager!.tagFile).toHaveBeenCalledTimes(2);
     });
   });
+
+  describe('ExitPlanMode pre-tool hook', () => {
+    it('denies ExitPlanMode when planFilePath is missing and tells the agent to retry with it', async () => {
+      const options = createMockOptions({
+        getCurrentMode: () => 'planning',
+        getPendingExitPlanModeConfirmations: () => new Map(),
+      });
+      const hooks = new AgentToolHooks(options);
+      const preToolHook = hooks.createPreToolUseHook();
+
+      const result = await preToolHook(
+        {
+          tool_name: 'ExitPlanMode',
+          tool_input: {
+            plan: 'Implement the approved plan',
+          },
+        },
+        'tool-use-exit-1',
+        { signal: new AbortController().signal }
+      );
+
+      expect(result).toEqual({
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          permissionDecision: 'deny',
+          permissionDecisionReason: 'ExitPlanMode requires the planFilePath argument. Try ExitPlanMode again and include the fully qualified plan file path.'
+        }
+      });
+      expect(options.emit).not.toHaveBeenCalled();
+      expect(options.logAgentMessage).not.toHaveBeenCalled();
+    });
+
+    it('continues to create an interactive confirmation when planFilePath is present', async () => {
+      const pending = new Map<string, { resolve: (value: { approved: boolean }) => void; reject: (error: Error) => void }>();
+      const options = createMockOptions({
+        getCurrentMode: () => 'planning',
+        getPendingExitPlanModeConfirmations: () => pending as any,
+      });
+      const hooks = new AgentToolHooks(options);
+      const preToolHook = hooks.createPreToolUseHook();
+
+      const resultPromise = preToolHook(
+        {
+          tool_name: 'ExitPlanMode',
+          tool_input: {
+            plan: 'Implement the approved plan',
+            planFilePath: 'plans/feature-plan.md',
+          },
+        },
+        'tool-use-exit-2',
+        { signal: new AbortController().signal }
+      );
+
+      await Promise.resolve();
+
+      expect(options.logAgentMessage).toHaveBeenCalledOnce();
+      expect(options.emit).toHaveBeenCalledWith('exitPlanMode:confirm', expect.objectContaining({
+        requestId: 'tool-use-exit-2',
+        planFilePath: 'plans/feature-plan.md',
+      }));
+
+      pending.get('tool-use-exit-2')!.resolve({ approved: true });
+
+      await expect(resultPromise).resolves.toEqual({
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          permissionDecision: 'allow',
+        }
+      });
+    });
+  });
 });

@@ -142,7 +142,9 @@ export const ExitPlanModeWidget: React.FC<CustomToolWidgetProps> = ({
     if (hasResponded || !isPending || !host) return;
 
     setIsSubmitting(true);
-    setLocalResult({ approved: true, startNewSession: true });
+    // Match the "Stop for now" end state in the original session while
+    // the replacement session opens with the implementation prompt.
+    setLocalResult({ approved: false, startNewSession: true });
     setHasResponded(true);
 
     try {
@@ -359,7 +361,7 @@ export const ExitPlanModeWidget: React.FC<CustomToolWidgetProps> = ({
             disabled={isSubmitting}
           >
             <span className="text-nim-muted mr-2">1.</span>
-            Yes, start new session to implement
+            Yes, start new session and implement (clean context window)
           </button>
           <button
             data-testid="exit-plan-mode-approve"
@@ -368,7 +370,7 @@ export const ExitPlanModeWidget: React.FC<CustomToolWidgetProps> = ({
             disabled={isSubmitting}
           >
             <span className="text-nim-muted mr-2">2.</span>
-            Yes
+            Yes, proceed in this same session
           </button>
           {!showFeedbackInput ? (
             <button

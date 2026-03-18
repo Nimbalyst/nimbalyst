@@ -489,6 +489,16 @@ export class AgentToolHooks {
     // planFilePath is optional - used for "Start new session to implement" option
     const planFilePath = toolInput?.planFilePath || '';
 
+    if (!planFilePath) {
+      return {
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse' as const,
+          permissionDecision: 'deny' as const,
+          permissionDecisionReason: 'ExitPlanMode requires the planFilePath argument. Try ExitPlanMode again and include the fully qualified plan file path.'
+        }
+      };
+    }
+
     // Use the SDK's tool_use ID as the request ID so the widget can match it via toolCall.id
     const requestId = toolUseID || `exit-plan-${this.sessionId}-${Date.now()}`;
     const planSummary = toolInput?.plan || '';

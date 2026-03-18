@@ -82,7 +82,7 @@ export function joinPath(...paths: string[]): string {
  * @returns Absolute path to the plan file, or null if inputs are invalid
  */
 export function resolvePlanFilePath(planFilePath: string | undefined, basePath: string | undefined): string | null {
-  if (!planFilePath || !basePath) return null;
+  if (!planFilePath) return null;
 
   // Normalize path separators for cross-platform compatibility
   const normalizedPath = normalize(planFilePath);
@@ -90,7 +90,37 @@ export function resolvePlanFilePath(planFilePath: string | undefined, basePath: 
   // Check for absolute path (Unix: starts with /, Windows: starts with drive letter like C:)
   const isAbsolute = normalizedPath.startsWith('/') || /^[A-Za-z]:/.test(normalizedPath);
 
-  return isAbsolute ? normalizedPath : join(basePath, normalizedPath);
+  if (isAbsolute) {
+    return normalizedPath;
+  }
+
+  if (!basePath) {
+    return null;
+  }
+
+  return join(basePath, normalizedPath);
+}
+
+/**
+ * Build the implementation draft used when a planning session spawns a fresh implementation session.
+ * Prefers the explicit plan path from ExitPlanMode, but can fall back to the currently open
+ * planning document when Claude does not provide planFilePath in the tool arguments.
+ */
+export function buildPlanImplementationPrompt(options: {
+  planFilePath?: string;
+  basePath?: string;
+}): string {
+  const resolvedPlanPath = resolvePlanFilePath(options.planFilePath, options.basePath);
+
+  if (resolvedPlanPath) {
+    return `Fully implement the following plan: ${resolvedPlanPath}`;
+  }
+
+  if (options.planFilePath) {
+    return `Fully implement the following plan: ${options.planFilePath}`;
+  }
+
+  return 'Fully implement the approved plan.';
 }
 
 /**

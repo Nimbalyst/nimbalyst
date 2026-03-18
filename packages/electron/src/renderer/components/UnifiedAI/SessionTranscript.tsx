@@ -30,7 +30,7 @@ import type { AIMode } from './ModeTag';
 // Note: ExitPlanMode, AskUserQuestion, and ToolPermission use inline widgets via InteractiveWidgetHost (in runtime package)
 import { SlashCommandSuggestions } from './SlashCommandSuggestions';
 import type { TextSelection } from './TextSelectionIndicator';
-import { detectFileType, type SerializableDocumentContext } from '../../hooks/useDocumentContext';
+import { type SerializableDocumentContext } from '../../hooks/useDocumentContext';
 import { diffTreeGroupByDirectoryAtom, setDiffTreeGroupByDirectoryAtom } from '../../store/atoms/projectState';
 import {
   sessionDraftInputAtom,
@@ -72,7 +72,7 @@ import { scrollToTeammateAtom, scrollToMessageAtom } from '../../store/atoms/age
 import { usePostHog } from 'posthog-js/react';
 import { setAgentModeSettingsAtom, showPromptAdditionsAtom, hasExternalEditorAtom, externalEditorNameAtom, openInExternalEditorAtom, defaultAgentModelAtom, defaultEffortLevelAtom } from '../../store/atoms/appSettings';
 import { supportsEffortLevel, parseEffortLevel, type EffortLevel } from '../../utils/modelUtils';
-import { resolvePlanFilePath } from '../../utils/pathUtils';
+import { buildPlanImplementationPrompt, resolvePlanFilePath } from '../../utils/pathUtils';
 import { autoCommitEnabledAtom, setAutoCommitEnabledAtom } from '../../store/atoms/autoCommitAtoms';
 import { registerSessionWorkspace, loadInitialSessionFileState } from '../../store/listeners/fileStateListeners';
 import { SESSION_PHASE_COLUMNS, setSessionPhaseAtom, type SessionPhase } from '../../store/atoms/sessionKanban';
@@ -167,7 +167,8 @@ function serializeDocumentContext(
   };
 }
 
-// Helper to read files from the main process (for persisted output files)
+// Read transcript-linked files through the main process so file widgets can
+// open persisted outputs and generated artifacts consistently.
 const readFile = async (filePath: string): Promise<{ success: boolean; content?: string; error?: string }> => {
   try {
     const result = await window.electronAPI.readFileContent(filePath);
@@ -975,31 +976,36 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     }
   }, [respondToPrompt, posthog]);
 
-  const queuePromptForSession = useCallback(async (
-    targetSessionId: string,
-    prompt: string,
-    options?: {
-      attachments?: ChatAttachment[];
-      documentContext?: SerializableDocumentContext;
-    }
-  ) => {
-    const queuedPrompt = await window.electronAPI.invoke(
-      'ai:createQueuedPrompt',
-      targetSessionId,
-      prompt,
-      options?.attachments,
-      options?.documentContext
-    ) as { id: string; prompt: string; timestamp: number };
-
-    if (workspacePath) {
-      await window.electronAPI.invoke('ai:triggerQueueProcessing', targetSessionId, workspacePath);
+  const openSessionWithDraft = useCallback((targetSessionId: string, draftInput: string) => {
+    if (!workspacePath) {
+      console.error('[SessionTranscript] Cannot open session with draft without workspacePath');
+      return;
     }
 
-    return queuedPrompt;
+    window.dispatchEvent(new CustomEvent('open-ai-session', {
+      detail: {
+        sessionId: targetSessionId,
+        workspacePath,
+        draftInput,
+      }
+    }));
   }, [workspacePath]);
 
+  const stopExitPlanModeSession = useCallback(async (requestId: string, confirmSessionId: string) => {
+    // Mark the prompt as cancelled in DB so it doesn't reappear
+    await respondToPrompt({
+      sessionId: confirmSessionId,
+      promptId: requestId,
+      promptType: 'exit_plan_mode_request',
+      response: { approved: false, cancelled: true },
+    });
+
+    // Cancel the entire agent session - this will abort the waiting ExitPlanMode request
+    await window.electronAPI.invoke('ai:cancelRequest', confirmSessionId);
+  }, [respondToPrompt]);
+
   // Handler for "Start new session to implement" option
-  // Creates a new session and queues the implementation prompt there before stopping the current plan session.
+  // Creates a new session and opens it with a populated draft before stopping the current plan session.
   // For worktree sessions: creates a new session in the same worktree (no parent-child hierarchy)
   // For regular sessions: creates a workstream hierarchy (converts to workstream if needed)
   const handleExitPlanModeStartNewSession = useCallback(async (requestId: string, confirmSessionId: string, planFilePath: string) => {
@@ -1047,76 +1053,32 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
       const basePath = sessionData?.worktreePath || workspacePath;
       const absolutePlanPath = resolvePlanFilePath(planFilePath, basePath);
-      if (!absolutePlanPath) {
-        console.warn('[SessionTranscript] Could not resolve plan file path:', planFilePath);
-        return;
+      if (!absolutePlanPath && planFilePath) {
+        console.warn('[SessionTranscript] Could not resolve plan file path, using raw path in draft:', planFilePath);
       }
 
-      const planFileResult = await readFile(absolutePlanPath);
-      if (!planFileResult.success || typeof planFileResult.content !== 'string') {
-        console.error('[SessionTranscript] Failed to read plan file for new implementation session:', planFileResult.error);
-        return;
-      }
-
-      const planContent = planFileResult.content;
-      const planFilename = absolutePlanPath.split(/[\\/]/).pop() || 'plan.md';
-      const planAttachment: ChatAttachment = {
-        id: `plan-${newSessionId}`,
-        filename: planFilename,
-        filepath: absolutePlanPath,
-        mimeType: 'text/plain',
-        size: new TextEncoder().encode(planContent).length,
-        type: 'document',
-        addedAt: Date.now(),
-      };
-      const planDocumentContext: SerializableDocumentContext = {
-        filePath: absolutePlanPath,
-        fileType: detectFileType(absolutePlanPath),
-        content: planContent,
-      };
-      const implementationPrompt = `Implement the attached plan from ${absolutePlanPath}. Start with updating your todo list if applicable.`;
-
-      // Queue the prompt on the new session with the plan file attached so Claude can start there
-      // with the actual plan contents instead of only a path reference.
-      await queuePromptForSession(newSessionId, implementationPrompt, {
-        attachments: [planAttachment],
-        documentContext: planDocumentContext,
+      const implementationPrompt = buildPlanImplementationPrompt({
+        planFilePath,
+        basePath,
       });
 
-      // Keep the original planning session in planning mode so Claude does not continue implementing there.
-      await respondToPrompt({
-        sessionId: confirmSessionId,
-        promptId: requestId,
-        promptType: 'exit_plan_mode_request',
-        response: {
-          approved: false,
-          feedback: 'Implementation was moved to a new session.',
-        },
-      });
+      openSessionWithDraft(newSessionId, implementationPrompt);
+      await stopExitPlanModeSession(requestId, confirmSessionId);
 
       posthog?.capture('exit_plan_mode_response', {
         decision: 'start_new_session',
         is_worktree: !!worktreeId,
       });
 
-      console.log('[SessionTranscript] Created new session for implementation:', newSessionId, 'with queued prompt:', implementationPrompt);
+      console.log('[SessionTranscript] Created new session for implementation:', newSessionId, 'with draft prompt:', implementationPrompt);
     } catch (error) {
       console.error('[SessionTranscript] Failed to start new session for implementation:', error);
     }
-  }, [sessionChildren, sessionParentId, workspacePath, worktreeId, onCreateWorktreeSession, createChildSession, convertToWorkstream, sessionData?.worktreePath, posthog, defaultModel, queuePromptForSession, respondToPrompt]);
+  }, [sessionChildren, sessionParentId, workspacePath, worktreeId, onCreateWorktreeSession, createChildSession, convertToWorkstream, sessionData?.worktreePath, posthog, defaultModel, openSessionWithDraft, stopExitPlanModeSession]);
 
   const handleExitPlanModeCancel = useCallback(async (requestId: string, confirmSessionId: string) => {
     try {
-      // Mark the prompt as cancelled in DB so it doesn't reappear
-      await respondToPrompt({
-        sessionId: confirmSessionId,
-        promptId: requestId,
-        promptType: 'exit_plan_mode_request',
-        response: { approved: false, cancelled: true },
-      });
-
-      // Cancel the entire agent session - this will abort the waiting ExitPlanMode request
-      await window.electronAPI.invoke('ai:cancelRequest', confirmSessionId);
+      await stopExitPlanModeSession(requestId, confirmSessionId);
 
       // Track cancellation
       posthog?.capture('exit_plan_mode_response', {
@@ -1125,7 +1087,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     } catch (error) {
       console.error('[SessionTranscript] Failed to cancel ExitPlanMode:', error);
     }
-  }, [respondToPrompt, posthog]);
+  }, [stopExitPlanModeSession, posthog]);
 
   // Note: AskUserQuestion, ToolPermission handlers removed - now handled by inline widgets via InteractiveWidgetHost
 
