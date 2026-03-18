@@ -776,6 +776,7 @@ interface ElectronAPI {
 
   // Open external links
   openExternal: (url: string) => Promise<void>;
+  openThirdPartyNotices: () => Promise<{ success: boolean; error?: string }>;
 
   // Image operations
   openImageInDefaultApp: (imagePath: string) => Promise<{ success: boolean; error?: string }>;

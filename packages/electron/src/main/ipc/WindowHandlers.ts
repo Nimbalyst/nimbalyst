@@ -6,6 +6,7 @@ import { writeFileSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { reportDesktopActivity, setWindowFocused, setScreenLocked, setIdleThresholdMs, attemptReconnect } from '../services/SyncManager';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
+import { getPackageRoot } from '../utils/appPaths';
 
 /** Timestamp of last app_foregrounded event, used to throttle to once per 30 minutes */
 let lastForegroundedEventAt = 0;
@@ -41,6 +42,23 @@ export function registerWindowHandlers() {
         if (url && typeof url === 'string') {
             await shell.openExternal(url);
         }
+    });
+
+    safeHandle('legal:open-third-party-notices', async () => {
+        const noticesPath = app.isPackaged
+            ? join(process.resourcesPath, 'legal', 'THIRD_PARTY_NOTICES.txt')
+            : join(getPackageRoot(), 'resources', 'generated', 'THIRD_PARTY_NOTICES.txt');
+
+        if (!existsSync(noticesPath)) {
+            return { success: false, error: `Third-party notices file not found at: ${noticesPath}` };
+        }
+
+        const result = await shell.openPath(noticesPath);
+        if (result) {
+            return { success: false, error: result };
+        }
+
+        return { success: true };
     });
 
     // Get current workspace path for the calling window

@@ -914,6 +914,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Open external links
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
+  openThirdPartyNotices: () => ipcRenderer.invoke('legal:open-third-party-notices'),
 
   // Image operations
   openImageInDefaultApp: (imagePath: string) => ipcRenderer.invoke('image:open-in-default-app', imagePath),

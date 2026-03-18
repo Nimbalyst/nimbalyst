@@ -283,6 +283,7 @@
       <div class="about-footer">
         <p>Built with ❤️ by <a href="https://nimbalyst.com" id="nimbalyst-link">Nimbalyst</a></p>
         <p class="about-copyright">© 2025-2026  Nimbalyst</p>
+        <p><a href="#" id="third-party-notices-link">Third-Party Notices</a></p>
 
         <div class="support-id-container">
           <div class="support-id-label">Your Nimbalyst Support ID:</div>
@@ -337,6 +338,14 @@
       document.getElementById('nimbalyst-link')?.addEventListener('click', (e) => {
         e.preventDefault();
         window.electronAPI?.openExternal?.('https://nimbalyst.com');
+      });
+
+      document.getElementById('third-party-notices-link')?.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const result = await window.electronAPI?.openThirdPartyNotices?.();
+        if (result && !result.success) {
+          console.error('Failed to open third-party notices:', result.error);
+        }
       });
 
       // Fetch and display Support ID
