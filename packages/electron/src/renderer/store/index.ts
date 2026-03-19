@@ -298,6 +298,7 @@ export {
   setSettingsInitialCategoryAtom,
   setSettingsInitialScopeAtom,
   incrementSettingsKeyAtom,
+  openSettingsCommandAtom,
   type SettingsScope,
   type SettingsNavigationState,
 } from './atoms/settingsNavigation';

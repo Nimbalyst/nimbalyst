@@ -1257,9 +1257,11 @@ export interface SessionSyncConfig {
   // login order doesn't affect which index room sessions sync to.
   personalOrgId?: string;
   personalUserId?: string;
-  // Prevent system sleep while sync is active (uses Electron powerSaveBlocker).
-  // Off by default. Suggested to user during mobile pairing.
+  // DEPRECATED: migrated to preventSleepMode
   preventSleepWhenSyncing?: boolean;
+  // Prevent system sleep while sync is active (uses Electron powerSaveBlocker).
+  // 'off' = no sleep prevention, 'always' = always prevent, 'pluggedIn' = only when on AC power.
+  preventSleepMode?: 'off' | 'always' | 'pluggedIn';
 }
 
 // Stytch Auth Configuration (stored separately from session sync)
@@ -1646,6 +1648,21 @@ export function shouldShowWalkthrough(walkthroughId: string, version?: number): 
  */
 export function resetWalkthroughState(): void {
   getAppStore().set('walkthroughs', { ...DEFAULT_WALKTHROUGH_STATE });
+}
+
+/**
+ * Reset only tip state (entries with 'tip-' prefix) without affecting walkthroughs.
+ */
+export function resetTipState(): void {
+  const current = getWalkthroughState();
+  getAppStore().set('walkthroughs', {
+    ...current,
+    completed: current.completed.filter((id) => !id.startsWith('tip-')),
+    dismissed: current.dismissed.filter((id) => !id.startsWith('tip-')),
+    history: Object.fromEntries(
+      Object.entries(current.history ?? {}).filter(([id]) => !id.startsWith('tip-'))
+    ),
+  });
 }
 
 /**

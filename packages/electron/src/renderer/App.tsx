@@ -61,6 +61,7 @@ import {
   setSettingsInitialScopeAtom,
   incrementSettingsKeyAtom,
   clearSettingsNavigationAtom,
+  openSettingsCommandAtom,
   // Unified navigation history
   goBackAtom,
   goForwardAtom,
@@ -106,6 +107,7 @@ import { getTextSelection } from './components/UnifiedAI/TextSelectionIndicator'
 import { NotificationSessionChecker } from './components/NotificationSessionChecker';
 import OnboardingService from './services/OnboardingService';
 import { WalkthroughProvider } from './walkthroughs';
+import { TipProvider } from './tips';
 import {
   initializePanelRegistry,
   getPanelById,
@@ -892,6 +894,19 @@ export default function App() {
     });
   }, []);
 
+  // React to openSettingsCommandAtom (used by tips to navigate to settings)
+  const openSettingsCommand = useAtomValue(openSettingsCommandAtom);
+  const openSettingsCommandProcessedRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!openSettingsCommand || openSettingsCommand.timestamp === openSettingsCommandProcessedRef.current) return;
+    openSettingsCommandProcessedRef.current = openSettingsCommand.timestamp;
+
+    setSettingsInitialCategory(openSettingsCommand.category);
+    if (openSettingsCommand.scope) setSettingsInitialScope(openSettingsCommand.scope);
+    incrementSettingsKey();
+    setTimeout(() => setActiveMode('settings'), 0);
+  }, [openSettingsCommand, setSettingsInitialCategory, setSettingsInitialScope, incrementSettingsKey]);
+
   // Listen for unified navigation back/forward IPC events
   useEffect(() => {
     if (!window.electronAPI?.on) return;
@@ -1634,6 +1649,7 @@ export default function App() {
       }}
     />
     <WalkthroughProvider currentMode={activeMode}>
+    <TipProvider currentMode={activeMode}>
     <div data-layout="root-container" className="h-screen flex flex-row">
       {/* Left: Navigation Gutter - full height */}
       <NavigationGutter
@@ -1964,6 +1980,7 @@ export default function App() {
       />
       {/* PostHogSurvey is now managed by DialogProvider */}
     </div>
+    </TipProvider>
     </WalkthroughProvider>
     </DialogProvider>
   );

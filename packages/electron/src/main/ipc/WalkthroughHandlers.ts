@@ -17,6 +17,7 @@ import {
   markWalkthroughDismissed,
   recordWalkthroughShown,
   resetWalkthroughState,
+  resetTipState,
   type WalkthroughState,
 } from '../utils/store';
 import { updateApplicationMenu } from '../menu/ApplicationMenu';
@@ -30,9 +31,17 @@ export interface WalkthroughMenuEntry {
 /** Registered walkthroughs from renderer - used for dynamic menu */
 let registeredWalkthroughs: WalkthroughMenuEntry[] = [];
 
+/** Registered tips from renderer - used for dynamic menu */
+let registeredTips: WalkthroughMenuEntry[] = [];
+
 /** Get the current list of registered walkthroughs */
 export function getRegisteredWalkthroughs(): WalkthroughMenuEntry[] {
   return registeredWalkthroughs;
+}
+
+/** Get the current list of registered tips */
+export function getRegisteredTips(): WalkthroughMenuEntry[] {
+  return registeredTips;
 }
 
 export function registerWalkthroughHandlers(): void {
@@ -100,4 +109,22 @@ export function registerWalkthroughHandlers(): void {
       await updateApplicationMenu();
     }
   );
+
+  /**
+   * Register tip metadata from renderer for dynamic menu generation.
+   */
+  safeHandle(
+    'tips:register-menu-entries',
+    async (_event, entries: WalkthroughMenuEntry[]): Promise<void> => {
+      registeredTips = entries;
+      await updateApplicationMenu();
+    }
+  );
+
+  /**
+   * Reset only tip state (not walkthroughs) for testing/debugging
+   */
+  safeHandle('tips:reset', async (): Promise<void> => {
+    resetTipState();
+  });
 }

@@ -133,3 +133,14 @@ export const incrementSettingsKeyAtom = atom(
     });
   }
 );
+
+/**
+ * Command atom for requesting settings navigation from outside App.tsx.
+ * Set this atom to trigger App.tsx to switch to settings mode with a specific category.
+ * App.tsx watches this atom and handles the mode switch.
+ */
+export const openSettingsCommandAtom = atom<{
+  category: SettingsCategory;
+  scope?: SettingsScope;
+  timestamp: number;
+} | null>(null);

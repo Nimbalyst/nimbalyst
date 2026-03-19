@@ -52,7 +52,7 @@ import {
 // Import shared SDK docs path function
 import { getExtensionSDKDocsPath } from '../utils/workspaceDetection';
 import { database } from '../database/PGLiteDatabaseWorker';
-import { getRegisteredWalkthroughs } from '../ipc/WalkthroughHandlers';
+import { getRegisteredWalkthroughs, getRegisteredTips } from '../ipc/WalkthroughHandlers';
 
 // Create window list menu items
 function createWindowListMenu(): any[] {
@@ -1356,6 +1356,30 @@ export async function createApplicationMenu() {
                                 const focused = getFocusedWindow();
                                 if (focused) {
                                     focused.webContents.send('reset-walkthroughs');
+                                }
+                            }
+                        }
+                    ]
+                },
+                {
+                    label: 'Show Tips',
+                    submenu: [
+                        ...getRegisteredTips().map(tip => ({
+                            label: tip.name,
+                            click: async () => {
+                                const focused = getFocusedWindow();
+                                if (focused) {
+                                    focused.webContents.send('trigger-tip', tip.id);
+                                }
+                            }
+                        })),
+                        ...(getRegisteredTips().length > 0 ? [{ type: 'separator' as const }] : []),
+                        {
+                            label: 'Reset All Tips',
+                            click: async () => {
+                                const focused = getFocusedWindow();
+                                if (focused) {
+                                    focused.webContents.send('reset-tips');
                                 }
                             }
                         }
