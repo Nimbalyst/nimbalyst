@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.56.5] - 2026-03-19
+
+
+### Added
+- Developer Dashboard with atomFamily instance tracking, live time-series charts for memory/watchers/atoms, DB query performance monitoring, IPC handler stats, and renderer memory tracking
+- Tracked atomFamily wrapper for debug monitoring in Developer menu
+
 ## [0.56.4] - 2026-03-19
 
 
