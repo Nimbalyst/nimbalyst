@@ -46,17 +46,18 @@ export function getFileType(
 ): EditorType {
   const ext = getExtname(filePath).toLowerCase();
 
+  // Check custom editors FIRST so extensions can override built-in types
+  // (e.g., .slides.md handled by an extension instead of Lexical)
+  if (customEditorCheck && customEditorCheck(ext)) {
+    return 'custom';
+  }
+
   if (ext === '.md' || ext === '.markdown' || ext === '.mdc') {
     return 'markdown';
   }
 
   if (isImageFile(filePath)) {
     return 'image';
-  }
-
-  // Check if a custom editor is registered for this extension
-  if (customEditorCheck && customEditorCheck(ext)) {
-    return 'custom';
   }
 
   return 'code';
