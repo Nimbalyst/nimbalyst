@@ -7,27 +7,11 @@ export interface ExtensionProjectIntroModalProps {
   onCancel: () => void;
 }
 
-const capabilityCards = [
-  {
-    imageSrc: new URL('/onboarding/extension-custom-editors-torus-knot.png', import.meta.url).href,
-    title: 'Custom editors',
-    description: 'Build file-specific editors, views, and interactions that feel native inside Nimbalyst.',
-  },
-  {
-    imageSrc: new URL('/onboarding/extension-panel-docker.png', import.meta.url).href,
-    title: 'Panels',
-    description: 'Add side panels and workspace views for dashboards, control surfaces, and live status.',
-  },
-  {
-    icon: 'psychology',
-    title: 'AI tools',
-    description: 'Expose extension features to agents so Claude can use them while working in your project.',
-  },
-  {
-    icon: 'deployed_code',
-    title: 'In-app dev loop',
-    description: 'Load the extension directly in Nimbalyst, then build, install, and reload it while you iterate.',
-  },
+const capabilities = [
+  { icon: 'edit_note', text: 'Custom editors for any file type, with native look and feel' },
+  { icon: 'view_sidebar', text: 'Side panels and workspace views for dashboards and live status' },
+  { icon: 'psychology', text: 'AI tools that Claude can use while working in your project' },
+  { icon: 'deployed_code', text: 'In-app dev loop — build, install, and reload without leaving Nimbalyst' },
 ];
 
 export const ExtensionProjectIntroModal: React.FC<ExtensionProjectIntroModalProps> = ({
@@ -44,69 +28,54 @@ export const ExtensionProjectIntroModal: React.FC<ExtensionProjectIntroModalProp
       onClick={onCancel}
     >
       <div
-        className="nim-modal w-[92%] max-w-[640px] overflow-hidden border border-nim bg-nim shadow-[0_30px_100px_rgba(0,0,0,0.35)]"
+        className="nim-modal w-[92%] max-w-[480px] border border-nim bg-nim shadow-[0_30px_100px_rgba(0,0,0,0.35)]"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="border-b border-nim bg-[linear-gradient(135deg,var(--nim-bg-secondary),color-mix(in_srgb,var(--nim-primary)_10%,var(--nim-bg-secondary)))] px-7 py-7">
-          <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-[color:color-mix(in_srgb,var(--nim-primary)_32%,var(--nim-border))] bg-[color:color-mix(in_srgb,var(--nim-primary)_14%,transparent)] text-[var(--nim-primary)]">
-            <span className="material-symbols-outlined text-[30px]">extension</span>
+        <div className="px-7 pt-7 pb-5">
+          <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl border border-[color:color-mix(in_srgb,var(--nim-primary)_32%,var(--nim-border))] bg-[color:color-mix(in_srgb,var(--nim-primary)_14%,transparent)] text-[var(--nim-primary)]">
+            <span className="material-symbols-outlined text-[26px]">extension</span>
           </div>
-          <h2 className="m-0 text-[28px] font-semibold tracking-[-0.02em] text-nim">
+          <h2 className="m-0 text-xl font-semibold tracking-[-0.02em] text-nim">
             Build with Extensions
           </h2>
-          <p className="mt-3 max-w-[520px] text-[15px] leading-7 text-nim-muted">
-            Extensions can add custom editors, AI tools, commands, panels, and other workspace features.
-            Nimbalyst can load your extension while you develop so you can test changes without leaving the app.
+          <p className="mt-2 text-[14px] leading-6 text-nim-muted">
+            Extensions add custom editors, AI tools, commands, panels, and more.
+            Nimbalyst loads your extension live while you develop.
           </p>
         </div>
 
-        <div className="px-7 py-6">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {capabilityCards.map((card) => (
-              <div
-                key={card.title}
-                className="rounded-2xl border border-nim bg-nim-secondary px-4 py-4"
-              >
-                {'imageSrc' in card ? (
-                  <img
-                    src={card.imageSrc}
-                    alt={`${card.title} preview`}
-                    className="mb-3 h-24 w-full rounded-xl border border-nim object-cover object-center"
-                  />
-                ) : (
-                  <span className="material-symbols-outlined mb-3 text-[22px] text-[var(--nim-primary)]">
-                    {card.icon}
-                  </span>
-                )}
-                <div className="mb-1 text-sm font-semibold text-nim">{card.title}</div>
-                <div className="text-[13px] leading-6 text-nim-muted">{card.description}</div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-5 rounded-2xl border border-nim bg-[color:color-mix(in_srgb,var(--nim-primary)_8%,var(--nim-bg-secondary))] px-4 py-4">
-            <div className="mb-1 text-sm font-semibold text-nim">What happens next</div>
-            <div className="text-[13px] leading-6 text-nim-muted">
-              Describe what you want to the agent, and watch it build, install, and test the extension right before your eyes.
+        <div className="flex flex-col gap-2.5 px-7 pb-5">
+          {capabilities.map((cap) => (
+            <div key={cap.icon} className="flex items-start gap-3">
+              <span className="material-symbols-outlined mt-0.5 text-[18px] text-[var(--nim-primary)]">
+                {cap.icon}
+              </span>
+              <span className="text-[13px] leading-5 text-nim-muted">{cap.text}</span>
             </div>
-          </div>
+          ))}
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-3 border-t border-nim px-7 py-5">
+        <div className="mx-7 mb-5 rounded-lg bg-nim-secondary px-4 py-3">
+          <span className="text-[13px] leading-5 text-nim-muted">
+            Describe what you want to the agent, and it will scaffold, build, and install the extension for you.
+          </span>
+        </div>
+
+        <div className="flex items-center justify-end gap-3 border-t border-nim px-7 py-4">
           <button
-            className="nim-btn-secondary rounded-lg px-5 py-2.5 text-sm font-medium"
+            className="nim-btn-secondary rounded-lg px-4 py-2 text-sm font-medium"
             onClick={onCancel}
           >
             Cancel
           </button>
           <button
-            className="rounded-lg border border-nim bg-transparent px-5 py-2.5 text-sm font-medium text-nim-muted transition-colors hover:bg-nim-secondary hover:text-nim"
+            className="rounded-lg border border-nim bg-transparent px-4 py-2 text-sm font-medium text-nim-muted transition-colors hover:bg-nim-secondary hover:text-nim"
             onClick={onDontShowAgain}
           >
             Don&apos;t Show Again
           </button>
           <button
-            className="nim-btn-primary rounded-lg px-6 py-2.5 text-sm font-semibold shadow-[0_8px_24px_color-mix(in_srgb,var(--nim-primary)_24%,transparent)] transition-transform hover:-translate-y-px"
+            className="nim-btn-primary rounded-lg px-5 py-2 text-sm font-semibold"
             onClick={onContinue}
           >
             Continue

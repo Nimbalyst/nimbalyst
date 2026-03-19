@@ -101,7 +101,10 @@ export async function showExtensionProjectIntroDialog(
 ): Promise<boolean> {
   const { forceShow = false, markShown = true } = options;
 
+  console.log('[ExtensionProjectScaffolder] showExtensionProjectIntroDialog called, forceShow:', forceShow, 'isShown:', isExtensionProjectIntroShown());
+
   if (!forceShow && isExtensionProjectIntroShown()) {
+    console.log('[ExtensionProjectScaffolder] Intro already shown, skipping');
     return true;
   }
 
@@ -111,21 +114,27 @@ export async function showExtensionProjectIntroDialog(
     result = await new Promise<ExtensionProjectIntroDialogResult>((resolve) => {
       const requestId = `extension-project-intro-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const channel = `extension-project-intro-dialog-response:${requestId}`;
+      console.log('[ExtensionProjectScaffolder] Sending IPC to renderer, channel:', channel);
       const timeout = setTimeout(async () => {
+        console.log('[ExtensionProjectScaffolder] Timeout reached, falling back to native dialog');
         ipcMain.removeAllListeners(channel);
         resolve(await showExtensionProjectIntroFallbackDialog(sourceWindow));
       }, 15000);
 
       ipcMain.once(channel, (_event, data: { action?: ExtensionProjectIntroDialogResult } | undefined) => {
         clearTimeout(timeout);
+        console.log('[ExtensionProjectScaffolder] Received response:', data?.action);
         resolve(data?.action ?? 'cancel');
       });
 
       sourceWindow.webContents.send('show-extension-project-intro-dialog', { requestId });
     });
   } else {
+    console.log('[ExtensionProjectScaffolder] No source window, using fallback dialog');
     result = await showExtensionProjectIntroFallbackDialog(sourceWindow);
   }
+
+  console.log('[ExtensionProjectScaffolder] Dialog result:', result);
 
   if (result === 'cancel') {
     return false;
@@ -139,7 +148,9 @@ export async function showExtensionProjectIntroDialog(
 }
 
 export async function showNewExtensionProjectDialog(sourceWindow?: BrowserWindow | null): Promise<void> {
+  console.log('[ExtensionProjectScaffolder] showNewExtensionProjectDialog called, sourceWindow:', !!sourceWindow);
   const shouldContinue = await showExtensionProjectIntroDialog(sourceWindow);
+  console.log('[ExtensionProjectScaffolder] shouldContinue:', shouldContinue);
   if (!shouldContinue) {
     return;
   }

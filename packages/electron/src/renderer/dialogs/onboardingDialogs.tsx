@@ -135,31 +135,18 @@ function ExtensionProjectIntroWrapper({
   onClose: () => void;
   data: ExtensionProjectIntroData;
 }) {
-  const handledRef = React.useRef(false);
-
-  React.useEffect(() => {
-    return () => {
-      if (!handledRef.current) {
-        data.onCancel();
-      }
-    };
-  }, [data]);
-
   return (
     <ExtensionProjectIntroModal
       isOpen={isOpen}
       onContinue={() => {
-        handledRef.current = true;
         data.onContinue();
         onClose();
       }}
       onDontShowAgain={() => {
-        handledRef.current = true;
         data.onDontShowAgain();
         onClose();
       }}
       onCancel={() => {
-        handledRef.current = true;
         data.onCancel();
         onClose();
       }}
