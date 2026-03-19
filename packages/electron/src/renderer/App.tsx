@@ -2,6 +2,9 @@
 // MUST be the very first import so it patches before any listeners are registered.
 import './hooks/useExtensionInputGuard';
 
+// Side-effect: ensure atomFamily registry is initialized and window.__atomFamilyStats is set
+import './store/debug/atomFamilyRegistry';
+
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
@@ -39,6 +42,7 @@ import { ErrorToastContainer } from './components/ErrorToast/ErrorToast';
 import { WorkspaceManager } from './components/WorkspaceManager/WorkspaceManager.tsx';
 import { AIUsageReport } from './components/AIUsageReport';
 import { DatabaseBrowser } from './components/DatabaseBrowser/DatabaseBrowser';
+import { DeveloperDashboard } from './components/DeveloperDashboard/DeveloperDashboard';
 import { AgentMode, type AgentModeRef } from './components/AgentMode';
 import { ChatSidebar, type ChatSidebarRef } from './components/ChatSidebar';
 import EditorMode, { type EditorModeRef } from './components/EditorMode/EditorMode';
@@ -308,6 +312,15 @@ export default function App() {
       }
     }, []);
     return <DatabaseBrowser />;
+  }
+
+  if (windowMode === 'developer-dashboard') {
+    React.useEffect(() => {
+      if (window.electronAPI) {
+        window.electronAPI.setTitle('Developer Dashboard - Nimbalyst');
+      }
+    }, []);
+    return <DeveloperDashboard />;
   }
 
   // IMPORTANT: These are refs, not state, to prevent re-renders when the active file changes.

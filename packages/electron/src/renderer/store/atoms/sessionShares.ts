@@ -10,7 +10,7 @@
  */
 
 import { atom } from 'jotai';
-import { atomFamily } from 'jotai/utils';
+import { atomFamily } from '../debug/atomFamilyRegistry';
 
 export interface ShareInfo {
   shareId: string;

@@ -11,7 +11,7 @@
 
 import React from 'react';
 import { atom } from 'jotai';
-import { atomFamily } from 'jotai/utils';
+import { atomFamily } from '../debug/atomFamilyRegistry';
 import type { TypeaheadOption } from '../../components/Typeahead/GenericTypeahead';
 import { sessionRegistryAtom } from './sessions';
 

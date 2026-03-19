@@ -13,7 +13,7 @@
  */
 
 import { atom } from 'jotai';
-import { atomFamily } from 'jotai/utils';
+import { atomFamily } from '../debug/atomFamilyRegistry';
 
 /**
  * Per-session error state.
@@ -51,3 +51,4 @@ export const sessionQueuedPromptsAtom = atomFamily((_sessionId: string) =>
 export const streamCompletionSignalAtom = atomFamily((_sessionId: string) =>
   atom<number>(0)
 );
+

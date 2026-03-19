@@ -31,6 +31,7 @@ import { createAboutWindow } from '../window/AboutWindow';
 import { createWorkspaceManagerWindow } from '../window/WorkspaceManagerWindow.ts';
 import { createAIUsageReportWindow } from '../window/AIUsageReportWindow';
 import { createDatabaseBrowserWindow } from '../window/DatabaseBrowserWindow';
+import { createDeveloperDashboardWindow } from '../window/DeveloperDashboardWindow';
 import { loadFileIntoWindow } from '../file/FileOperations';
 import { getRecentItems, clearRecentItems, addToRecentItems, getTheme, setTheme, store, getWorkspaceState, getWorkspaceWindowState, isExtensionDevToolsEnabled } from '../utils/store';
 import { updateWindowTitleBars, updateNativeTheme } from '../theme/ThemeManager';
@@ -1100,6 +1101,12 @@ export async function createApplicationMenu() {
                                 buttons: ['OK']
                             });
                         }
+                    }
+                },
+                {
+                    label: 'Developer Dashboard',
+                    click: () => {
+                        createDeveloperDashboardWindow();
                     }
                 },
                 {
