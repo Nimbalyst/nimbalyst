@@ -221,9 +221,10 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
         return filtered;
 
       case 'all-changes': {
-        // Merge session files with all uncommitted files
+        // Merge uncommitted session files with all other uncommitted files
         // For worktrees, use worktree changed files; for regular sessions, use workspace uncommitted files
-        const sessionFilePaths = new Set(filtered.map(f => f.filePath));
+        const uncommittedFiltered = filtered.filter(edit => isFileUncommitted(edit.filePath));
+        const sessionFilePaths = new Set(uncommittedFiltered.map(f => f.filePath));
         let additionalFiles: FileEditWithSession[];
 
         if (worktreeId && worktreePath) {
@@ -249,7 +250,7 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
               sessionId: '', // Not from a session
             }));
         }
-        return [...filtered, ...additionalFiles];
+        return [...uncommittedFiltered, ...additionalFiles];
       }
 
       default:
