@@ -20,6 +20,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.56.4] - 2026-03-19
+
+
+### Added
+- Codex todo_list items now render as checklists in transcript
+- Slash command menu sections appear in logical order
+
+### Changed
+- Replaced correlated subqueries with pre-aggregated LEFT JOIN for better query performance
+
+### Fixed
+- Codex provider no longer silently drops unrecognized event types
+- Symlinked skills and commands now discovered in slash menu
+
 ## [0.56.3] - 2026-03-18
 
 
