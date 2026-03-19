@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.56.6] - 2026-03-19
+
+
+### Fixed
+- Codex CLI binaries now bundle correctly in packaged builds (extraResources path pointed to monorepo root instead of local node_modules)
+
 ## [0.56.5] - 2026-03-19
 
 
