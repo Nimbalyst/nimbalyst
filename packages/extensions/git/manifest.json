@@ -8,6 +8,27 @@
   "styles": "dist/index.css",
   "apiVersion": "1.0.0",
   "requiredReleaseChannel": "alpha",
+  "marketplace": {
+    "categories": ["developer-tools"],
+    "tags": ["git", "version-control", "log", "commit", "branch", "diff"],
+    "icon": "call_split",
+    "tagline": "Visual git log with push, pull, and branch management",
+    "longDescription": "Browse your commit history in a visual log panel, inspect diffs, push and pull changes, and manage branches. Integrates into the bottom panel with a keyboard shortcut for quick access.",
+    "highlights": [
+      "Visual commit history with diff inspection",
+      "Push, pull, and rebase from the panel",
+      "Branch management and switching",
+      "Keyboard shortcut (Ctrl+Shift+G) for quick access"
+    ],
+    "screenshots": [
+      {
+        "alt": "Git log panel showing commit history with diffs and branch management",
+        "src": "screenshots/com.nimbalyst.git-0-dark.png",
+        "srcLight": "screenshots/com.nimbalyst.git-0-light.png",
+        "selector": "[data-testid=\"bottom-panel\"]"
+      }
+    ]
+  },
   "permissions": {
     "filesystem": true
   },

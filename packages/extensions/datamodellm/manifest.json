@@ -7,6 +7,29 @@
   "main": "dist/index.js",
   "styles": "dist/index.css",
   "apiVersion": "1.0.0",
+  "marketplace": {
+    "categories": ["data"],
+    "tags": ["prisma", "database", "schema", "erd", "entity-relationship", "data-model"],
+    "icon": "database",
+    "featured": true,
+    "tagline": "Visual database schema design with Prisma syntax",
+    "longDescription": "Design database schemas visually as entity-relationship diagrams backed by real Prisma syntax. Drag entities around the canvas, define fields and relations, and switch to source mode to edit the Prisma schema directly. The AI can generate schemas from descriptions or modify existing ones.",
+    "highlights": [
+      "Visual ERD canvas backed by real Prisma schema files",
+      "AI generates and modifies database schemas from descriptions",
+      "Embed data models inline in markdown documents",
+      "Bidirectional editing between visual and source modes"
+    ],
+    "fileTypes": [".prisma"],
+    "screenshots": [
+      {
+        "alt": "Visual entity-relationship diagram with User, Post, Comment, Tag, and Category models",
+        "src": "screenshots/com.nimbalyst.datamodellm-0-dark.png",
+        "srcLight": "screenshots/com.nimbalyst.datamodellm-0-light.png",
+        "fileToOpen": "samples/demo.prisma"
+      }
+    ]
+  },
   "permissions": {
     "filesystem": true,
     "ai": true

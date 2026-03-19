@@ -65,6 +65,58 @@ for NIMEXT in "$INPUT_DIR"/*.nimext; do
     const checksum = '$CHECKSUM';
     const screenshots = \`$SCREENSHOTS\`.split('\n').filter(Boolean);
 
+    // Build screenshot entries: use manifest metadata when available,
+    // fall back to files found in the package screenshots/ dir
+    const manifestScreenshots = manifest.marketplace?.screenshots || [];
+    const screenshotEntries = [];
+
+    // First, include manifest-declared screenshots with their alt text and theme variants
+    for (const ms of manifestScreenshots) {
+      if (ms.src) {
+        // Resolve src/srcLight paths to CDN URLs (paths are relative to extension root)
+        const filename = ms.src.replace(/^screenshots\//, '');
+        const entry = {
+          src: baseUrl + '/screenshots/' + manifest.id + '/' + filename,
+          alt: ms.alt || manifest.name + ' screenshot',
+        };
+        if (ms.srcLight) {
+          const lightFilename = ms.srcLight.replace(/^screenshots\//, '');
+          entry.srcLight = baseUrl + '/screenshots/' + manifest.id + '/' + lightFilename;
+        }
+        screenshotEntries.push(entry);
+      }
+    }
+
+    // If no manifest src entries, fall back to package file listing
+    // Group dark/light pairs by index (convention: {id}-{n}-dark.png / {id}-{n}-light.png)
+    if (screenshotEntries.length === 0) {
+      const darkFiles = screenshots.filter(s => s.includes('-dark.'));
+      const lightFiles = screenshots.filter(s => s.includes('-light.'));
+      if (darkFiles.length > 0) {
+        for (const s of darkFiles) {
+          const filename = s.replace('screenshots/', '');
+          const lightFile = lightFiles.find(l => l.replace('-light.', '-dark.') === s);
+          const entry = {
+            src: baseUrl + '/screenshots/' + manifest.id + '/' + filename,
+            alt: manifest.name + ' screenshot',
+          };
+          if (lightFile) {
+            entry.srcLight = baseUrl + '/screenshots/' + manifest.id + '/' + lightFile.replace('screenshots/', '');
+          }
+          screenshotEntries.push(entry);
+        }
+      } else {
+        // No dark/light convention -- include all files as-is
+        for (const s of screenshots) {
+          const filename = s.replace('screenshots/', '');
+          screenshotEntries.push({
+            src: baseUrl + '/screenshots/' + manifest.id + '/' + filename,
+            alt: manifest.name + ' screenshot',
+          });
+        }
+      }
+    }
+
     const entry = {
       id: manifest.id,
       name: manifest.name,
@@ -74,13 +126,7 @@ for NIMEXT in "$INPUT_DIR"/*.nimext; do
       categories: manifest.marketplace?.categories || ['other'],
       tags: manifest.marketplace?.tags || [],
       icon: manifest.marketplace?.icon || 'extension',
-      screenshots: screenshots.map(s => {
-        const filename = s.replace('screenshots/', '');
-        return {
-          src: baseUrl + '/screenshots/' + manifest.id + '/' + filename,
-          alt: manifest.name + ' screenshot',
-        };
-      }),
+      screenshots: screenshotEntries,
       downloads: 0,
       featured: manifest.marketplace?.featured || false,
       permissions: Object.entries(manifest.permissions || {})
@@ -91,6 +137,10 @@ for NIMEXT in "$INPUT_DIR"/*.nimext; do
       checksum: checksum,
       repositoryUrl: manifest.marketplace?.repositoryUrl || '',
       changelog: manifest.marketplace?.changelog || '',
+      tagline: manifest.marketplace?.tagline || '',
+      longDescription: manifest.marketplace?.longDescription || '',
+      highlights: manifest.marketplace?.highlights || [],
+      fileTypes: manifest.marketplace?.fileTypes || [],
     };
 
     console.log(JSON.stringify(entry));

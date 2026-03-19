@@ -87,6 +87,21 @@ export interface ExtensionMarketplaceMetadata {
   /** Whether this extension should be featured in the marketplace */
   featured?: boolean;
 
+  /** Short tagline for marketplace cards (e.g., "Visual CSV editing with formula support") */
+  tagline?: string;
+
+  /**
+   * Rich description for the in-app detail view and as a baseline for the marketing website.
+   * Supports markdown. Should cover what the extension does and why it's useful.
+   */
+  longDescription?: string;
+
+  /** Key selling points shown as a bullet list in both in-app detail view and website */
+  highlights?: string[];
+
+  /** Human-readable file types this extension works with (e.g., [".csv", ".tsv"]) */
+  fileTypes?: string[];
+
   /** GitHub repository URL */
   repositoryUrl?: string;
 
@@ -106,13 +121,30 @@ export interface MarketplaceScreenshot {
   alt: string;
 
   /**
+   * Relative path to a dark-theme screenshot image bundled with the extension
+   * (e.g., "screenshots/overview-dark.png").
+   * This is the primary way external extensions provide screenshots.
+   * If only one variant is provided, it will be used for both themes.
+   */
+  src?: string;
+
+  /**
+   * Relative path to a light-theme screenshot image bundled with the extension
+   * (e.g., "screenshots/overview-light.png").
+   * Optional -- if omitted, `src` is used for both themes.
+   */
+  srcLight?: string;
+
+  /**
    * Relative path to a sample file to open for the screenshot.
-   * The screenshot pipeline opens this file in Nimbalyst and captures the editor.
+   * Used by the automated screenshot pipeline (internal extensions).
+   * The pipeline opens this file in Nimbalyst and captures the editor.
    */
   fileToOpen?: string;
 
   /**
    * Optional CSS selector to capture a specific element instead of the full editor.
+   * Only used with fileToOpen by the automated pipeline.
    */
   selector?: string;
 }

@@ -6,6 +6,28 @@
   "author": "Nimbalyst",
   "main": "dist/index.js",
   "apiVersion": "1.0.0",
+  "marketplace": {
+    "categories": ["data"],
+    "tags": ["sqlite", "database", "sql", "query", "browser", "db"],
+    "icon": "table_chart",
+    "tagline": "Browse and query SQLite databases with AI assistance",
+    "longDescription": "Open any SQLite database file and browse tables, run queries, and explore data visually. The AI can write SQL queries, analyze table structures, and help you understand your data. Supports .db, .sqlite, .sqlite3, and .db3 files.",
+    "highlights": [
+      "Visual table browser with data preview",
+      "AI writes and explains SQL queries",
+      "Schema introspection and table analysis",
+      "Works with .db, .sqlite, .sqlite3, and .db3 files"
+    ],
+    "fileTypes": [".db", ".sqlite", ".sqlite3", ".db3"],
+    "screenshots": [
+      {
+        "alt": "SQLite database browser showing tables, schema, and query results",
+        "src": "screenshots/com.nimbalyst.sqlite-browser-0-dark.png",
+        "srcLight": "screenshots/com.nimbalyst.sqlite-browser-0-light.png",
+        "fileToOpen": "samples/demo.db"
+      }
+    ]
+  },
   "permissions": {
     "filesystem": true,
     "ai": true

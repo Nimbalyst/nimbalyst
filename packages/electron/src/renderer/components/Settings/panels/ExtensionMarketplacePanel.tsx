@@ -13,7 +13,7 @@ interface RegistryExtension {
   categories: string[];
   tags: string[];
   icon: string;
-  screenshots: Array<{ src: string; alt: string }>;
+  screenshots: Array<{ src: string; srcLight?: string; alt: string }>;
   downloads: number;
   featured: boolean;
   permissions: string[];
@@ -22,6 +22,10 @@ interface RegistryExtension {
   checksum: string;
   repositoryUrl: string;
   changelog: string;
+  tagline?: string;
+  longDescription?: string;
+  highlights?: string[];
+  fileTypes?: string[];
 }
 
 interface RegistryCategory {
@@ -250,7 +254,8 @@ export function ExtensionMarketplacePanel() {
         const matches = ext.name.toLowerCase().includes(query) ||
           ext.description.toLowerCase().includes(query) ||
           ext.author.toLowerCase().includes(query) ||
-          ext.tags.some(t => t.toLowerCase().includes(query));
+          ext.tags.some(t => t.toLowerCase().includes(query)) ||
+          (ext.tagline && ext.tagline.toLowerCase().includes(query));
         if (!matches) return false;
       }
       // Category filter
@@ -394,7 +399,7 @@ export function ExtensionMarketplacePanel() {
           </div>
           <div className="font-semibold text-[0.9375rem] text-[var(--nim-text)] truncate">{ext.name}</div>
         </div>
-        <div className="text-[0.8125rem] text-[var(--nim-text-muted)] leading-relaxed mb-3 flex-1 line-clamp-2">{ext.description}</div>
+        <div className="text-[0.8125rem] text-[var(--nim-text-muted)] leading-relaxed mb-3 flex-1 line-clamp-2">{ext.tagline || ext.description}</div>
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <span className="text-xs text-[var(--nim-text-faint)]">by {ext.author}</span>
@@ -669,23 +674,41 @@ export function ExtensionMarketplacePanel() {
             </div>
           </div>
 
-          <p className="text-[0.9375rem] text-[var(--nim-text-muted)] leading-relaxed m-0 mb-5">
-            {selectedExtension.description}
+          {selectedExtension.tagline && (
+            <p className="text-[0.9375rem] text-[var(--nim-text)] leading-relaxed m-0 mb-2 font-medium">
+              {selectedExtension.tagline}
+            </p>
+          )}
+
+          <p className="text-[0.875rem] text-[var(--nim-text-muted)] leading-relaxed m-0 mb-4">
+            {selectedExtension.longDescription || selectedExtension.description}
           </p>
 
-          {/* Screenshots */}
+          {/* Highlights */}
+          {selectedExtension.highlights && selectedExtension.highlights.length > 0 && (
+            <ul className="m-0 mb-5 pl-5 flex flex-col gap-1.5">
+              {selectedExtension.highlights.map((h, idx) => (
+                <li key={idx} className="text-[0.8125rem] text-[var(--nim-text-muted)] leading-relaxed">{h}</li>
+              ))}
+            </ul>
+          )}
+
+          {/* Screenshots (theme-aware: use light variant when available) */}
           {selectedExtension.screenshots && selectedExtension.screenshots.length > 0 && (
             <div className="mb-5 flex flex-col gap-2">
-              {selectedExtension.screenshots.map((ss, idx) => (
-                <img
-                  key={idx}
-                  src={ss.src}
-                  alt={ss.alt}
-                  className="w-full rounded-lg border border-[var(--nim-border)] object-cover max-h-[300px]"
-                  loading="lazy"
-                  data-testid={`marketplace-screenshot-${idx}`}
-                />
-              ))}
+              {selectedExtension.screenshots.map((ss, idx) => {
+                const imgSrc = (theme === 'light' && ss.srcLight) ? ss.srcLight : ss.src;
+                return (
+                  <img
+                    key={idx}
+                    src={imgSrc}
+                    alt={ss.alt}
+                    className="w-full rounded-lg border border-[var(--nim-border)] object-cover max-h-[300px]"
+                    loading="lazy"
+                    data-testid={`marketplace-screenshot-${idx}`}
+                  />
+                );
+              })}
             </div>
           )}
 
@@ -700,6 +723,18 @@ export function ExtensionMarketplacePanel() {
                 {registry?.categories.find(c => c.id === selectedExtension.categories[0])?.name || selectedExtension.categories[0]}
               </span>
             </div>
+            {selectedExtension.fileTypes && selectedExtension.fileTypes.length > 0 && (
+              <div className="flex items-center gap-2 text-[0.8125rem]">
+                <span className="text-[var(--nim-text-faint)]">File types:</span>
+                <div className="flex gap-1">
+                  {selectedExtension.fileTypes.map(ft => (
+                    <span key={ft} className="inline-flex items-center px-2 py-0.5 rounded text-[0.6875rem] font-mono bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)]">
+                      {ft}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             {selectedExtension.permissions.length > 0 && (
               <div className="flex items-center gap-2 text-[0.8125rem]">
                 <span className="text-[var(--nim-text-faint)]">Permissions:</span>

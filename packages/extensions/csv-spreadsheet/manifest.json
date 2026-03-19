@@ -7,6 +7,29 @@
   "main": "dist/index.js",
   "styles": "dist/index.css",
   "apiVersion": "1.0.0",
+  "marketplace": {
+    "categories": ["data"],
+    "tags": ["csv", "tsv", "spreadsheet", "data", "table", "formula"],
+    "icon": "table_chart",
+    "featured": true,
+    "tagline": "Visual CSV editing with formulas and column formatting",
+    "longDescription": "Open CSV and TSV files in a full spreadsheet interface with formula support, column resizing, frozen rows/columns, and sortable headers. Edit data visually while the underlying CSV stays clean and git-friendly. Toggle to source mode to see and edit the raw text.",
+    "highlights": [
+      "Spreadsheet UI for CSV and TSV files",
+      "Formula support with cell references",
+      "Frozen rows and columns, sortable headers",
+      "Source mode toggle for raw CSV editing"
+    ],
+    "fileTypes": [".csv", ".tsv"],
+    "screenshots": [
+      {
+        "alt": "CSV spreadsheet editor with revenue data",
+        "src": "screenshots/com.nimbalyst.csv-spreadsheet-0-dark.png",
+        "srcLight": "screenshots/com.nimbalyst.csv-spreadsheet-0-light.png",
+        "fileToOpen": "samples/demo.csv"
+      }
+    ]
+  },
   "permissions": {
     "filesystem": true
   },

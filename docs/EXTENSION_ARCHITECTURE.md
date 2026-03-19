@@ -173,6 +173,33 @@ When working on extensions in `packages/extensions/`:
 - Use `mcp__nimbalyst-extension-dev__extension_get_status` to verify extension state
 - **Never use manual `npm run build`** - always use the MCP tools for extension builds
 
+## Marketplace Screenshots
+
+Extensions can include screenshots for the in-app marketplace and marketing website. Add a `screenshots` array to the `marketplace` section of `manifest.json`:
+
+```json
+{
+  "marketplace": {
+    "screenshots": [
+      {
+        "alt": "Description of what the screenshot shows",
+        "src": "screenshots/my-extension-dark.png",
+        "srcLight": "screenshots/my-extension-light.png"
+      }
+    ]
+  }
+}
+```
+
+**Fields:**
+- `src` (string) - Relative path to a dark-theme screenshot image bundled with the extension. If only one variant is provided, it is used for both themes.
+- `srcLight` (string, optional) - Relative path to a light-theme screenshot. When provided, the in-app marketplace and website automatically show the correct variant based on the user's theme.
+- `fileToOpen` (string) - Relative path to a sample file for the automated screenshot pipeline (internal extensions only).
+- `selector` (string) - CSS selector to capture a specific element (used with `fileToOpen`).
+- `alt` (string) - Alt text describing the screenshot.
+
+External extension developers should place their screenshots in a `screenshots/` directory and reference them via `src` and optionally `srcLight`. The `fileToOpen` and `selector` fields are used by Nimbalyst's internal Playwright-based screenshot pipeline and can be ignored by external developers.
+
 ## Related Documentation
 
 - [FILE_TYPE_HANDLING.md](./FILE_TYPE_HANDLING.md) - How file types are associated with editors

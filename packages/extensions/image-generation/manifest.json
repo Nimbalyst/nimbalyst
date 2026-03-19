@@ -8,6 +8,28 @@
   "styles": "dist/index.css",
   "apiVersion": "1.0.0",
   "requiredReleaseChannel": "alpha",
+  "marketplace": {
+    "categories": ["ai-tools"],
+    "tags": ["image", "generation", "ai", "sketch", "illustration", "diagram"],
+    "icon": "image",
+    "tagline": "Generate images from text prompts with multiple style options",
+    "longDescription": "Create sketches, diagrams, illustrations, and other images by describing what you want. Manage multiple generations in a project file, compare variations, and iterate on prompts. Configurable style presets and generation settings.",
+    "highlights": [
+      "Generate images from natural language prompts",
+      "Multiple style presets: sketch, diagram, illustration",
+      "Project files to organize and compare generations",
+      "AI tool integration for generating images during conversations"
+    ],
+    "fileTypes": [".imgproj"],
+    "screenshots": [
+      {
+        "alt": "Image generation project with AI-generated sketches and style options",
+        "src": "screenshots/com.nimbalyst.image-generation-0-dark.png",
+        "srcLight": "screenshots/com.nimbalyst.image-generation-0-light.png",
+        "fileToOpen": "samples/demo.imgproj"
+      }
+    ]
+  },
   "permissions": {
     "filesystem": true,
     "ai": true,
