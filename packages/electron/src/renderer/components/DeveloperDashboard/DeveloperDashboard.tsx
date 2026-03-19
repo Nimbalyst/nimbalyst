@@ -29,6 +29,19 @@ interface WorkspaceWatcherInfo {
   subscriberIds: string[];
 }
 
+interface SampleSummary {
+  count: number;
+  p50: number;
+  p95: number;
+  p99: number;
+  max: number;
+  totalMs: number;
+  blockedP50: number;
+  blockedP95: number;
+  blockedMax: number;
+  blockedTotalMs: number;
+}
+
 interface SystemStats {
   fileWatchers: {
     type: string;
@@ -45,6 +58,12 @@ interface SystemStats {
     nodeVersion: string;
     electronVersion: string;
   };
+  ipc: {
+    registeredHandlers: number;
+  };
+  database: {
+    queryStats: Record<string, { reads: SampleSummary; writes: SampleSummary }>;
+  };
   windows: Array<{
     id: number;
     mode: string;
@@ -59,11 +78,15 @@ interface TimeSeriesPoint {
   timestamp: number;
   memoryRssMB: number;
   heapUsedMB: number;
+  rendererHeapMB: number;
   activeHandles: number;
+  ipcHandlers: number;
   activeWorkspaces: number;
   totalSubscribers: number;
   atomFamilies: number;
   atomInstances: number;
+  dbReads: number;
+  dbWrites: number;
 }
 
 const REFRESH_INTERVAL_MS = 15_000;
@@ -94,13 +117,17 @@ async function fetchSystemStats(): Promise<SystemStats | null> {
 // ---------------------------------------------------------------------------
 
 const CHART_COLORS = {
-  rss: '#60a5fa',       // blue-400
-  heap: '#34d399',      // emerald-400
-  handles: '#f97316',   // orange-500
-  workspaces: '#a78bfa', // violet-400
+  rss: '#60a5fa',         // blue-400
+  heap: '#34d399',        // emerald-400
+  rendererHeap: '#818cf8', // indigo-400
+  handles: '#f97316',     // orange-500
+  ipcHandlers: '#e879f9', // fuchsia-400
+  workspaces: '#a78bfa',  // violet-400
   subscribers: '#f472b6', // pink-400
-  families: '#38bdf8',  // sky-400
-  instances: '#fbbf24', // amber-400
+  families: '#38bdf8',    // sky-400
+  instances: '#fbbf24',   // amber-400
+  dbReads: '#2dd4bf',     // teal-400
+  dbWrites: '#fb923c',    // orange-400
 };
 
 // ---------------------------------------------------------------------------
@@ -124,22 +151,36 @@ function OverviewPanel({
     );
   }
 
-  const { fileWatchers, process: proc } = systemStats;
+  const { fileWatchers, process: proc, ipc, database: db } = systemStats;
   const totalInstances = atomStats.reduce((sum, s) => sum + s.count, 0);
   const nonEmptyFamilies = atomStats.filter(s => s.count > 0).length;
+
+  // Renderer heap (available in Chromium)
+  const perfMemory = (performance as any).memory;
+  const rendererHeapMB = perfMemory ? Math.round(perfMemory.usedJSHeapSize / 1024 / 1024) : null;
+  const rendererHeapTotalMB = perfMemory ? Math.round(perfMemory.jsHeapSizeLimit / 1024 / 1024) : null;
+
+  // Database totals
+  const dbEntries = Object.entries(db.queryStats);
+  const totalDbReads = dbEntries.reduce((sum, [, s]) => sum + s.reads.count, 0);
+  const totalDbWrites = dbEntries.reduce((sum, [, s]) => sum + s.writes.count, 0);
 
   return (
     <div className="flex flex-col gap-4 p-4 overflow-auto h-full">
       {/* Stats cards */}
       <div className="grid grid-cols-4 gap-3">
-        <StatCard label="Memory (RSS)" value={`${proc.memoryRssMB} MB`} />
-        <StatCard label="Heap Used" value={`${proc.heapUsedMB} / ${proc.heapTotalMB} MB`} />
+        <StatCard label="Main Memory (RSS)" value={`${proc.memoryRssMB} MB`} />
+        <StatCard label="Main Heap" value={`${proc.heapUsedMB} / ${proc.heapTotalMB} MB`} />
+        <StatCard label="Renderer Heap" value={rendererHeapMB != null ? `${rendererHeapMB} / ${rendererHeapTotalMB} MB` : 'N/A'} />
         <StatCard label="Active Handles" value={String(proc.activeHandles)} />
+        <StatCard label="IPC Handlers" value={String(ipc.registeredHandlers)} />
         <StatCard label="Watcher Type" value={fileWatchers.type.replace('WorkspaceEventBus ', '').replace(/[()]/g, '')} />
         <StatCard label="Watched Workspaces" value={String(fileWatchers.activeWorkspaces)} />
         <StatCard label="Watcher Subscribers" value={String(fileWatchers.totalSubscribers)} />
         <StatCard label="Atom Families" value={`${nonEmptyFamilies} active / ${atomStats.length} total`} />
         <StatCard label="Atom Instances" value={String(totalInstances)} />
+        <StatCard label="DB Queries (5m)" value={`${totalDbReads} R / ${totalDbWrites} W`} />
+        <StatCard label="DB Tables Active" value={String(dbEntries.length)} />
       </div>
 
       {/* Charts */}
@@ -161,8 +202,9 @@ function OverviewPanel({
                   }}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="memoryRssMB" name="RSS" stroke={CHART_COLORS.rss} dot={false} strokeWidth={2} />
-                <Line type="monotone" dataKey="heapUsedMB" name="Heap Used" stroke={CHART_COLORS.heap} dot={false} strokeWidth={2} />
+                <Line type="monotone" dataKey="memoryRssMB" name="Main RSS" stroke={CHART_COLORS.rss} dot={false} strokeWidth={2} />
+                <Line type="monotone" dataKey="heapUsedMB" name="Main Heap" stroke={CHART_COLORS.heap} dot={false} strokeWidth={2} />
+                <Line type="monotone" dataKey="rendererHeapMB" name="Renderer Heap" stroke={CHART_COLORS.rendererHeap} dot={false} strokeWidth={2} />
               </LineChart>
             </ResponsiveContainer>
           </ChartSection>
@@ -184,6 +226,7 @@ function OverviewPanel({
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Line type="monotone" dataKey="activeHandles" name="Active Handles" stroke={CHART_COLORS.handles} dot={false} strokeWidth={2} />
+                <Line type="monotone" dataKey="ipcHandlers" name="IPC Handlers" stroke={CHART_COLORS.ipcHandlers} dot={false} strokeWidth={2} />
                 <Line type="monotone" dataKey="activeWorkspaces" name="Workspaces" stroke={CHART_COLORS.workspaces} dot={false} strokeWidth={2} />
                 <Line type="monotone" dataKey="totalSubscribers" name="Subscribers" stroke={CHART_COLORS.subscribers} dot={false} strokeWidth={2} />
               </LineChart>
@@ -211,7 +254,94 @@ function OverviewPanel({
               </LineChart>
             </ResponsiveContainer>
           </ChartSection>
+
+          <ChartSection title="Database Queries (rolling count per sample)">
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={history}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--nim-border)" />
+                <XAxis dataKey="time" stroke="var(--nim-text-muted)" tick={{ fontSize: 11 }} />
+                <YAxis stroke="var(--nim-text-muted)" tick={{ fontSize: 11 }} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'var(--nim-surface)',
+                    border: '1px solid var(--nim-border)',
+                    borderRadius: 6,
+                    color: 'var(--nim-text)',
+                    fontSize: 12,
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Line type="monotone" dataKey="dbReads" name="Reads (5m)" stroke={CHART_COLORS.dbReads} dot={false} strokeWidth={2} />
+                <Line type="monotone" dataKey="dbWrites" name="Writes (5m)" stroke={CHART_COLORS.dbWrites} dot={false} strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          </ChartSection>
         </>
+      )}
+
+      {/* Database query performance table */}
+      {dbEntries.length > 0 && (
+        <div>
+          <h3 className="text-sm font-medium text-[var(--nim-text)] mb-2">Database Query Performance (5m window)</h3>
+          <div className="overflow-auto">
+            <table className="w-full text-xs font-mono border-collapse">
+              <thead>
+                <tr className="text-left text-[var(--nim-text-muted)] border-b border-[var(--nim-border)]">
+                  <th className="px-2 py-1.5">Table</th>
+                  <th className="px-2 py-1.5 text-right">Op</th>
+                  <th className="px-2 py-1.5 text-right">Count</th>
+                  <th className="px-2 py-1.5 text-right">p50</th>
+                  <th className="px-2 py-1.5 text-right">p95</th>
+                  <th className="px-2 py-1.5 text-right">p99</th>
+                  <th className="px-2 py-1.5 text-right">Max</th>
+                  <th className="px-2 py-1.5 text-right">Blocked p95</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dbEntries.sort(([a], [b]) => a.localeCompare(b)).flatMap(([table, stats]) => {
+                  const rows: React.ReactElement[] = [];
+                  if (stats.reads.count > 0) {
+                    rows.push(
+                      <tr key={`${table}-r`} className="border-b border-[var(--nim-border)] hover:bg-[var(--nim-surface-hover)]">
+                        <td className="px-2 py-1 text-[var(--nim-text)]">{table}</td>
+                        <td className="px-2 py-1 text-right text-[var(--nim-text-muted)]">R</td>
+                        <td className="px-2 py-1 text-right">{stats.reads.count}</td>
+                        <td className="px-2 py-1 text-right">{stats.reads.p50}ms</td>
+                        <td className="px-2 py-1 text-right">{stats.reads.p95}ms</td>
+                        <td className="px-2 py-1 text-right">{stats.reads.p99}ms</td>
+                        <td className="px-2 py-1 text-right">
+                          <span className={stats.reads.max > 100 ? 'text-[var(--nim-error)]' : ''}>{stats.reads.max}ms</span>
+                        </td>
+                        <td className="px-2 py-1 text-right">
+                          {stats.reads.blockedP95 > 0 ? <span className="text-[var(--nim-warning)]">{stats.reads.blockedP95}ms</span> : '-'}
+                        </td>
+                      </tr>
+                    );
+                  }
+                  if (stats.writes.count > 0) {
+                    rows.push(
+                      <tr key={`${table}-w`} className="border-b border-[var(--nim-border)] hover:bg-[var(--nim-surface-hover)]">
+                        <td className="px-2 py-1 text-[var(--nim-text)]">{table}</td>
+                        <td className="px-2 py-1 text-right text-[var(--nim-text-muted)]">W</td>
+                        <td className="px-2 py-1 text-right">{stats.writes.count}</td>
+                        <td className="px-2 py-1 text-right">{stats.writes.p50}ms</td>
+                        <td className="px-2 py-1 text-right">{stats.writes.p95}ms</td>
+                        <td className="px-2 py-1 text-right">{stats.writes.p99}ms</td>
+                        <td className="px-2 py-1 text-right">
+                          <span className={stats.writes.max > 100 ? 'text-[var(--nim-error)]' : ''}>{stats.writes.max}ms</span>
+                        </td>
+                        <td className="px-2 py-1 text-right">
+                          {stats.writes.blockedP95 > 0 ? <span className="text-[var(--nim-warning)]">{stats.writes.blockedP95}ms</span> : '-'}
+                        </td>
+                      </tr>
+                    );
+                  }
+                  return rows;
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
       {/* File watcher detail */}
@@ -437,17 +567,25 @@ export function DeveloperDashboard() {
       if (sys) {
         const nonEmptyFamilies = atoms.filter(s => s.count > 0).length;
         const totalInstances = atoms.reduce((sum, s) => sum + s.count, 0);
+        const perfMem = (performance as any).memory;
+        const dbEntries = Object.values(sys.database.queryStats);
+        const dbReadCount = dbEntries.reduce((sum, s) => sum + s.reads.count, 0);
+        const dbWriteCount = dbEntries.reduce((sum, s) => sum + s.writes.count, 0);
 
         const point: TimeSeriesPoint = {
           time: formatTime(now),
           timestamp: now.getTime(),
           memoryRssMB: sys.process.memoryRssMB,
           heapUsedMB: sys.process.heapUsedMB,
+          rendererHeapMB: perfMem ? Math.round(perfMem.usedJSHeapSize / 1024 / 1024) : 0,
           activeHandles: sys.process.activeHandles,
+          ipcHandlers: sys.ipc.registeredHandlers,
           activeWorkspaces: sys.fileWatchers.activeWorkspaces,
           totalSubscribers: sys.fileWatchers.totalSubscribers,
           atomFamilies: nonEmptyFamilies,
           atomInstances: totalInstances,
+          dbReads: dbReadCount,
+          dbWrites: dbWriteCount,
         };
 
         setHistory(prev => {

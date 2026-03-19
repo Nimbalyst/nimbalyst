@@ -1,11 +1,12 @@
 import { app, BrowserWindow } from 'electron';
 import { join } from 'path';
-import { safeHandle } from '../utils/ipcRegistry';
+import { safeHandle, getRegisteredHandlerCount } from '../utils/ipcRegistry';
 import { getPreloadPath } from '../utils/appPaths';
 import { getTheme } from '../utils/store';
 import { getBackgroundColor } from '../theme/ThemeManager';
 import { windows, windowStates } from './windowState';
 import * as workspaceEventBus from '../file/WorkspaceEventBus';
+import { database } from '../database/PGLiteDatabaseWorker';
 
 let developerDashboardWindow: BrowserWindow | null = null;
 
@@ -65,6 +66,15 @@ safeHandle('dev:get-system-stats', async () => {
         });
     }
 
+    // Database query stats (rolling 5-min window)
+    let dbQueryStats: Record<string, any> = {};
+    try {
+        const dbStats = await database.getStats();
+        dbQueryStats = dbStats?.queryStats ?? {};
+    } catch {
+        // Database may not be initialized yet
+    }
+
     return {
         fileWatchers: {
             type: busStats.type,
@@ -80,6 +90,12 @@ safeHandle('dev:get-system-stats', async () => {
             platform: process.platform,
             nodeVersion: process.version,
             electronVersion: process.versions.electron,
+        },
+        ipc: {
+            registeredHandlers: getRegisteredHandlerCount(),
+        },
+        database: {
+            queryStats: dbQueryStats,
         },
         windows: windowList,
     };
