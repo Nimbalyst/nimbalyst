@@ -537,7 +537,8 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
 
       const queryStart = performance.now();
       // Query includes parent_session_id and child_count for hierarchical session support
-      // child_count is calculated via a correlated subquery for sessions that have children
+      // child_count and max child updated_at are pre-aggregated once per parent session
+      // so list rendering does not pay for correlated subqueries on every row.
       // branched_from_session_id is separate from parent_session_id (branch vs hierarchy)
       // metadata is included for hasUnread state (transient UI state stored in DB for cross-device sync)
       // NOTE: message_count removed - it required an expensive LEFT JOIN on ai_agent_messages
@@ -546,9 +547,19 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
         `SELECT s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
                 s.worktree_id, s.parent_session_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned,
                 s.branched_from_session_id, s.branch_point_message_id, s.branched_at, s.metadata,
-                (SELECT COUNT(*) FROM ai_sessions c WHERE c.parent_session_id = s.id) as child_count,
-                GREATEST(s.updated_at, COALESCE((SELECT MAX(c.updated_at) FROM ai_sessions c WHERE c.parent_session_id = s.id), s.updated_at)) as effective_updated_at
+                COALESCE(child_stats.child_count, 0) as child_count,
+                GREATEST(s.updated_at, COALESCE(child_stats.max_child_updated_at, s.updated_at)) as effective_updated_at
          FROM ai_sessions s
+         LEFT JOIN (
+           SELECT
+             parent_session_id,
+             COUNT(*) AS child_count,
+             MAX(updated_at) AS max_child_updated_at
+           FROM ai_sessions
+           WHERE parent_session_id IS NOT NULL
+             AND workspace_id = $1
+           GROUP BY parent_session_id
+         ) child_stats ON child_stats.parent_session_id = s.id
          WHERE s.workspace_id=$1 ${archiveFilter}
          ORDER BY effective_updated_at DESC`,
         [workspaceId]
@@ -644,8 +655,14 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           s.branch_point_message_id,
           s.branched_at,
           ts_rank_cd(to_tsvector('english', COALESCE(s.title, '')), to_tsquery('english', $2)) * 2 as rank,
-          (SELECT COUNT(*) FROM ai_sessions c WHERE c.parent_session_id = s.id) as child_count
+          COALESCE(child_stats.child_count, 0) as child_count
         FROM ai_sessions s
+        LEFT JOIN (
+          SELECT parent_session_id, COUNT(*) AS child_count
+          FROM ai_sessions
+          WHERE parent_session_id IS NOT NULL AND workspace_id = $1
+          GROUP BY parent_session_id
+        ) child_stats ON child_stats.parent_session_id = s.id
         WHERE s.workspace_id = $1
           AND to_tsvector('english', COALESCE(s.title, '')) @@ to_tsquery('english', $2)
           ${archiveFilter}`,
@@ -714,8 +731,14 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
             s.branched_from_session_id,
             s.branch_point_message_id,
             s.branched_at,
-            (SELECT COUNT(*) FROM ai_sessions c WHERE c.parent_session_id = s.id) as child_count
+            COALESCE(child_stats.child_count, 0) as child_count
           FROM ai_sessions s
+          LEFT JOIN (
+            SELECT parent_session_id, COUNT(*) AS child_count
+            FROM ai_sessions
+            WHERE parent_session_id IS NOT NULL AND workspace_id = $2
+            GROUP BY parent_session_id
+          ) child_stats ON child_stats.parent_session_id = s.id
           WHERE s.id = ANY($1)
             AND s.workspace_id = $2
             ${archiveFilter}`,

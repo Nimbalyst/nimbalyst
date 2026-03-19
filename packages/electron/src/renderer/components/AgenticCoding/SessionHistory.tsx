@@ -304,6 +304,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const [worktreeCache, setWorktreeCache] = useState<Map<string, WorktreeWithStatus>>(new Map()); // Cache worktree data
   const [workstreamChildrenCache, setWorkstreamChildrenCache] = useState<Map<string, SessionItem[]>>(new Map()); // Cache workstream children
   const [blitzCache, setBlitzCache] = useState<Map<string, BlitzData>>(new Map()); // Cache blitz data
+  const pendingWorkstreamChildrenFetchesRef = useRef<Set<string>>(new Set());
 
   // View mode persisted via agentMode atoms
   const viewMode = useAtomValue(viewModeAtom);
@@ -2168,53 +2169,128 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
 
   // Fetch children for expanded workstreams
   useEffect(() => {
+    let isMounted = true;
+
+    const workstreamChildrenNeedRefresh = (session: SessionItem) => {
+      const cachedChildren = workstreamChildrenCache.get(session.id);
+      if (!cachedChildren) {
+        return true;
+      }
+
+      // Compare against the childCount that was current when we last fetched.
+      // If IPC returns fewer children than childCount (e.g., filtered server-side),
+      // we accept the result and don't re-fetch until childCount changes.
+      // The cache stores { children, fetchedForChildCount } to track this.
+
+      for (const child of cachedChildren) {
+        const registryChild = sessionRegistry.get(child.id);
+        if (!registryChild) {
+          return true;
+        }
+
+        if (
+          registryChild.title !== child.title ||
+          registryChild.updatedAt !== child.updatedAt ||
+          registryChild.isArchived !== child.isArchived ||
+          registryChild.isPinned !== child.isPinned ||
+          registryChild.parentSessionId !== child.parentSessionId ||
+          registryChild.worktreeId !== child.worktreeId
+        ) {
+          return true;
+        }
+      }
+
+      return false;
+    };
+
     // Find workstream sessions that are expanded
-    const workstreamSessions = sessions.filter(s =>
+    const workstreamSessionsNeedingFetch = sessions.filter(s =>
       !s.worktreeId &&
       (s.childCount ?? 0) > 0 &&
-      !collapsedGroups.includes(`workstream:${s.id}`)
+      !collapsedGroups.includes(`workstream:${s.id}`) &&
+      !pendingWorkstreamChildrenFetchesRef.current.has(s.id) &&
+      workstreamChildrenNeedRefresh(s)
     );
 
-    if (workstreamSessions.length === 0) {
-      return;
+    if (workstreamSessionsNeedingFetch.length === 0) {
+      return () => { isMounted = false; };
     }
 
     const fetchChildren = async () => {
-      for (const session of workstreamSessions) {
-        try {
-          const result = await window.electronAPI.invoke('sessions:list-children', session.id, workspacePath);
-          if (result.success && Array.isArray(result.children)) {
-            const children: SessionItem[] = result.children.map((c: any) => ({
-              id: c.id,
-              title: c.title || 'Untitled Session',
-              createdAt: c.createdAt,
-              updatedAt: c.updatedAt,
-              provider: c.provider || 'claude',
-              model: c.model,
-              sessionType: c.sessionType || 'session',
-              messageCount: c.messageCount || 0,
-              workspaceId: workspacePath,
-              isArchived: c.isArchived || false,
-              isPinned: c.isPinned || false,
-              worktreeId: c.worktreeId || null,
-              parentSessionId: c.parentSessionId || null,
-              childCount: c.childCount || 0,
-              uncommittedCount: c.uncommittedCount || 0,
-            }));
-            setWorkstreamChildrenCache(prev => {
-              const updated = new Map(prev);
-              updated.set(session.id, children);
-              return updated;
-            });
-          }
-        } catch (err) {
-          console.error(`[SessionHistory] Failed to fetch children for workstream ${session.id}:`, err);
+      const sessionIds = workstreamSessionsNeedingFetch.map(session => session.id);
+      sessionIds.forEach(sessionId => pendingWorkstreamChildrenFetchesRef.current.add(sessionId));
+
+      try {
+        const results = await Promise.all(
+          workstreamSessionsNeedingFetch.map(async (session) => {
+            try {
+              const result = await window.electronAPI.invoke('sessions:list-children', session.id, workspacePath);
+              if (!result.success || !Array.isArray(result.children)) {
+                return null;
+              }
+
+              const children: SessionItem[] = result.children.map((c: any) => ({
+                id: c.id,
+                title: c.title || 'Untitled Session',
+                createdAt: c.createdAt,
+                updatedAt: c.updatedAt,
+                provider: c.provider || 'claude',
+                model: c.model,
+                sessionType: c.sessionType || 'session',
+                mode: c.mode || null,
+                messageCount: c.messageCount || 0,
+                workspaceId: workspacePath,
+                isArchived: c.isArchived || false,
+                isPinned: c.isPinned || false,
+                worktreeId: c.worktreeId || null,
+                parentSessionId: c.parentSessionId || null,
+                childCount: c.childCount || 0,
+                uncommittedCount: c.uncommittedCount || 0,
+              }));
+
+              return { sessionId: session.id, children };
+            } catch (err) {
+              console.error(`[SessionHistory] Failed to fetch children for workstream ${session.id}:`, err);
+              return null;
+            }
+          })
+        );
+
+        if (!isMounted) return;
+
+        const successfulResults = results.filter((result): result is { sessionId: string; children: SessionItem[] } => result !== null);
+        if (successfulResults.length === 0) {
+          return;
         }
+
+        setWorkstreamChildrenCache(prev => {
+          const updated = new Map(prev);
+          for (const result of successfulResults) {
+            updated.set(result.sessionId, result.children);
+          }
+          return updated;
+        });
+
+        const registry = new Map(store.get(sessionRegistryAtom));
+        let didUpdateRegistry = false;
+        for (const result of successfulResults) {
+          for (const child of result.children) {
+            registry.set(child.id, child);
+            didUpdateRegistry = true;
+          }
+        }
+        if (didUpdateRegistry) {
+          store.set(sessionRegistryAtom, registry);
+        }
+      } finally {
+        sessionIds.forEach(sessionId => pendingWorkstreamChildrenFetchesRef.current.delete(sessionId));
       }
     };
 
     fetchChildren();
-  }, [sessions, collapsedGroups, workspacePath]);
+
+    return () => { isMounted = false; };
+  }, [sessions, collapsedGroups, workspacePath, workstreamChildrenCache, sessionRegistry]);
 
   if (loading) {
     return (
