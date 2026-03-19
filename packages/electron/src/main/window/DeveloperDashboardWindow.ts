@@ -4,7 +4,8 @@ import { safeHandle } from '../utils/ipcRegistry';
 import { getPreloadPath } from '../utils/appPaths';
 import { getTheme } from '../utils/store';
 import { getBackgroundColor } from '../theme/ThemeManager';
-import { windows } from './windowState';
+import { windows, windowStates } from './windowState';
+import * as workspaceEventBus from '../file/WorkspaceEventBus';
 
 let developerDashboardWindow: BrowserWindow | null = null;
 
@@ -39,6 +40,51 @@ safeHandle('dev:get-atomfamily-stats', async () => {
     }
 });
 
+/**
+ * Combined system stats for the developer dashboard: file watchers, process metrics, window state.
+ */
+safeHandle('dev:get-system-stats', async () => {
+    const busStats = workspaceEventBus.getStats();
+    const memUsage = process.memoryUsage();
+    const handles = (process as any)._getActiveHandles?.()?.length ?? 0;
+
+    const windowList: Array<{
+        id: number;
+        mode: string;
+        workspacePath: string | null;
+        filePath: string | null;
+        documentEdited: boolean;
+    }> = [];
+    for (const [id, state] of windowStates.entries()) {
+        windowList.push({
+            id,
+            mode: state.mode,
+            workspacePath: state.workspacePath || null,
+            filePath: state.filePath || null,
+            documentEdited: state.documentEdited,
+        });
+    }
+
+    return {
+        fileWatchers: {
+            type: busStats.type,
+            activeWorkspaces: busStats.activeWorkspaces,
+            workspaces: busStats.workspaces,
+            totalSubscribers: busStats.workspaces.reduce((sum, ws) => sum + ws.subscriberCount, 0),
+        },
+        process: {
+            memoryRssMB: Math.round(memUsage.rss / 1024 / 1024),
+            heapUsedMB: Math.round(memUsage.heapUsed / 1024 / 1024),
+            heapTotalMB: Math.round(memUsage.heapTotal / 1024 / 1024),
+            activeHandles: handles,
+            platform: process.platform,
+            nodeVersion: process.version,
+            electronVersion: process.versions.electron,
+        },
+        windows: windowList,
+    };
+});
+
 export function createDeveloperDashboardWindow() {
     if (developerDashboardWindow) {
         developerDashboardWindow.focus();
@@ -46,8 +92,8 @@ export function createDeveloperDashboardWindow() {
     }
 
     developerDashboardWindow = new BrowserWindow({
-        width: 900,
-        height: 700,
+        width: 1100,
+        height: 750,
         title: 'Developer Dashboard',
         webPreferences: {
             nodeIntegration: false,

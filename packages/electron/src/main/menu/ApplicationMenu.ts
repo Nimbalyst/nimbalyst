@@ -35,7 +35,7 @@ import { createDeveloperDashboardWindow } from '../window/DeveloperDashboardWind
 import { loadFileIntoWindow } from '../file/FileOperations';
 import { getRecentItems, clearRecentItems, addToRecentItems, getTheme, setTheme, store, getWorkspaceState, getWorkspaceWindowState, isExtensionDevToolsEnabled } from '../utils/store';
 import { updateWindowTitleBars, updateNativeTheme } from '../theme/ThemeManager';
-import { getFileWatcherStatus, refreshWorkspaceFileTree, getGlobalFileWatcherStats } from '../file/FileWatcherDebug';
+import { refreshWorkspaceFileTree } from '../file/FileWatcherDebug';
 import { getFolderContents } from '../utils/FileTree';
 import { logger } from '../utils/logger';
 import { getFocusedWindow } from '../utils/windowFocus';
@@ -1071,38 +1071,6 @@ export async function createApplicationMenu() {
                     }
                 },
                 { type: 'separator' },
-                {
-                    label: 'File Watcher Status',
-                    click: async () => {
-                        const focused = getFocusedWindow();
-                        if (focused) {
-                            const status = getFileWatcherStatus(focused.id);
-                            dialog.showMessageBox(focused, {
-                                type: 'info',
-                                title: 'File Watcher Status',
-                                message: 'File Watcher Diagnostics',
-                                detail: status,
-                                buttons: ['OK']
-                            });
-                        }
-                    }
-                },
-                {
-                    label: 'Global Watcher Stats',
-                    click: async () => {
-                        const focused = getFocusedWindow();
-                        if (focused) {
-                            const stats = getGlobalFileWatcherStats();
-                            dialog.showMessageBox(focused, {
-                                type: 'info',
-                                title: 'Global File Watcher Statistics',
-                                message: 'File Watcher Performance & Statistics',
-                                detail: stats,
-                                buttons: ['OK']
-                            });
-                        }
-                    }
-                },
                 {
                     label: 'Developer Dashboard',
                     click: () => {

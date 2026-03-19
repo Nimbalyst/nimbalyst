@@ -1,6 +1,20 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from 'recharts';
 
-type TabId = 'atomfamily';
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+type TabId = 'overview' | 'atomfamily';
 
 interface AtomFamilyStat {
   name: string;
@@ -9,11 +23,56 @@ interface AtomFamilyStat {
   params: string[];
 }
 
-/**
- * Fetch atomFamily stats from the main app window via IPC.
- * The dashboard runs in a separate BrowserWindow, so it can't access
- * the registry directly -- the main process relays the request.
- */
+interface WorkspaceWatcherInfo {
+  workspacePath: string;
+  subscriberCount: number;
+  subscriberIds: string[];
+}
+
+interface SystemStats {
+  fileWatchers: {
+    type: string;
+    activeWorkspaces: number;
+    workspaces: WorkspaceWatcherInfo[];
+    totalSubscribers: number;
+  };
+  process: {
+    memoryRssMB: number;
+    heapUsedMB: number;
+    heapTotalMB: number;
+    activeHandles: number;
+    platform: string;
+    nodeVersion: string;
+    electronVersion: string;
+  };
+  windows: Array<{
+    id: number;
+    mode: string;
+    workspacePath: string | null;
+    filePath: string | null;
+    documentEdited: boolean;
+  }>;
+}
+
+interface TimeSeriesPoint {
+  time: string;
+  timestamp: number;
+  memoryRssMB: number;
+  heapUsedMB: number;
+  activeHandles: number;
+  activeWorkspaces: number;
+  totalSubscribers: number;
+  atomFamilies: number;
+  atomInstances: number;
+}
+
+const REFRESH_INTERVAL_MS = 15_000;
+const MAX_HISTORY_POINTS = 120; // 30 minutes of data at 15s intervals
+
+// ---------------------------------------------------------------------------
+// Data fetchers
+// ---------------------------------------------------------------------------
+
 async function fetchAtomFamilyStats(): Promise<AtomFamilyStat[]> {
   try {
     return await window.electronAPI.invoke('dev:get-atomfamily-stats');
@@ -22,24 +81,216 @@ async function fetchAtomFamilyStats(): Promise<AtomFamilyStat[]> {
   }
 }
 
-function AtomFamilyPanel() {
-  const [stats, setStats] = useState<AtomFamilyStat[]>([]);
+async function fetchSystemStats(): Promise<SystemStats | null> {
+  try {
+    return await window.electronAPI.invoke('dev:get-system-stats');
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Chart theme
+// ---------------------------------------------------------------------------
+
+const CHART_COLORS = {
+  rss: '#60a5fa',       // blue-400
+  heap: '#34d399',      // emerald-400
+  handles: '#f97316',   // orange-500
+  workspaces: '#a78bfa', // violet-400
+  subscribers: '#f472b6', // pink-400
+  families: '#38bdf8',  // sky-400
+  instances: '#fbbf24', // amber-400
+};
+
+// ---------------------------------------------------------------------------
+// Overview Panel
+// ---------------------------------------------------------------------------
+
+function OverviewPanel({
+  systemStats,
+  atomStats,
+  history,
+}: {
+  systemStats: SystemStats | null;
+  atomStats: AtomFamilyStat[];
+  history: TimeSeriesPoint[];
+}) {
+  if (!systemStats) {
+    return (
+      <div className="flex items-center justify-center h-full text-[var(--nim-text-muted)]">
+        Loading...
+      </div>
+    );
+  }
+
+  const { fileWatchers, process: proc } = systemStats;
+  const totalInstances = atomStats.reduce((sum, s) => sum + s.count, 0);
+  const nonEmptyFamilies = atomStats.filter(s => s.count > 0).length;
+
+  return (
+    <div className="flex flex-col gap-4 p-4 overflow-auto h-full">
+      {/* Stats cards */}
+      <div className="grid grid-cols-4 gap-3">
+        <StatCard label="Memory (RSS)" value={`${proc.memoryRssMB} MB`} />
+        <StatCard label="Heap Used" value={`${proc.heapUsedMB} / ${proc.heapTotalMB} MB`} />
+        <StatCard label="Active Handles" value={String(proc.activeHandles)} />
+        <StatCard label="Watcher Type" value={fileWatchers.type.replace('WorkspaceEventBus ', '').replace(/[()]/g, '')} />
+        <StatCard label="Watched Workspaces" value={String(fileWatchers.activeWorkspaces)} />
+        <StatCard label="Watcher Subscribers" value={String(fileWatchers.totalSubscribers)} />
+        <StatCard label="Atom Families" value={`${nonEmptyFamilies} active / ${atomStats.length} total`} />
+        <StatCard label="Atom Instances" value={String(totalInstances)} />
+      </div>
+
+      {/* Charts */}
+      {history.length > 1 && (
+        <>
+          <ChartSection title="Memory">
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={history}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--nim-border)" />
+                <XAxis dataKey="time" stroke="var(--nim-text-muted)" tick={{ fontSize: 11 }} />
+                <YAxis stroke="var(--nim-text-muted)" tick={{ fontSize: 11 }} unit=" MB" />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'var(--nim-surface)',
+                    border: '1px solid var(--nim-border)',
+                    borderRadius: 6,
+                    color: 'var(--nim-text)',
+                    fontSize: 12,
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Line type="monotone" dataKey="memoryRssMB" name="RSS" stroke={CHART_COLORS.rss} dot={false} strokeWidth={2} />
+                <Line type="monotone" dataKey="heapUsedMB" name="Heap Used" stroke={CHART_COLORS.heap} dot={false} strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          </ChartSection>
+
+          <ChartSection title="Handles and Watchers">
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={history}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--nim-border)" />
+                <XAxis dataKey="time" stroke="var(--nim-text-muted)" tick={{ fontSize: 11 }} />
+                <YAxis stroke="var(--nim-text-muted)" tick={{ fontSize: 11 }} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'var(--nim-surface)',
+                    border: '1px solid var(--nim-border)',
+                    borderRadius: 6,
+                    color: 'var(--nim-text)',
+                    fontSize: 12,
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Line type="monotone" dataKey="activeHandles" name="Active Handles" stroke={CHART_COLORS.handles} dot={false} strokeWidth={2} />
+                <Line type="monotone" dataKey="activeWorkspaces" name="Workspaces" stroke={CHART_COLORS.workspaces} dot={false} strokeWidth={2} />
+                <Line type="monotone" dataKey="totalSubscribers" name="Subscribers" stroke={CHART_COLORS.subscribers} dot={false} strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          </ChartSection>
+
+          <ChartSection title="Jotai Atom Families">
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={history}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--nim-border)" />
+                <XAxis dataKey="time" stroke="var(--nim-text-muted)" tick={{ fontSize: 11 }} />
+                <YAxis stroke="var(--nim-text-muted)" tick={{ fontSize: 11 }} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'var(--nim-surface)',
+                    border: '1px solid var(--nim-border)',
+                    borderRadius: 6,
+                    color: 'var(--nim-text)',
+                    fontSize: 12,
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Line type="monotone" dataKey="atomFamilies" name="Active Families" stroke={CHART_COLORS.families} dot={false} strokeWidth={2} />
+                <Line type="monotone" dataKey="atomInstances" name="Live Instances" stroke={CHART_COLORS.instances} dot={false} strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          </ChartSection>
+        </>
+      )}
+
+      {/* File watcher detail */}
+      {fileWatchers.workspaces.length > 0 && (
+        <div>
+          <h3 className="text-sm font-medium text-[var(--nim-text)] mb-2">Watched Workspaces</h3>
+          <div className="space-y-1">
+            {fileWatchers.workspaces.map(ws => (
+              <div
+                key={ws.workspacePath}
+                className="text-xs font-mono px-3 py-2 rounded bg-[var(--nim-surface-hover)]"
+              >
+                <div className="text-[var(--nim-text)]">{ws.workspacePath}</div>
+                <div className="text-[var(--nim-text-muted)] mt-0.5">
+                  Subscribers ({ws.subscriberCount}): {ws.subscriberIds.join(', ')}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Window state detail */}
+      {systemStats.windows.length > 0 && (
+        <div>
+          <h3 className="text-sm font-medium text-[var(--nim-text)] mb-2">Windows</h3>
+          <div className="space-y-1">
+            {systemStats.windows.map(win => (
+              <div
+                key={win.id}
+                className="text-xs font-mono px-3 py-2 rounded bg-[var(--nim-surface-hover)] flex items-center gap-3"
+              >
+                <span className="text-[var(--nim-text-muted)]">#{win.id}</span>
+                <span className="text-[var(--nim-text)]">{win.mode}</span>
+                <span className="text-[var(--nim-text-muted)] truncate flex-1">
+                  {win.workspacePath || win.filePath || '(none)'}
+                </span>
+                {win.documentEdited && (
+                  <span className="text-[var(--nim-warning)] text-[10px]">edited</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* System info */}
+      <div className="text-xs text-[var(--nim-text-muted)] pb-2">
+        {proc.platform} | Node {proc.nodeVersion} | Electron {proc.electronVersion}
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="px-3 py-2 rounded bg-[var(--nim-surface-hover)] border border-[var(--nim-border)]">
+      <div className="text-[10px] uppercase tracking-wider text-[var(--nim-text-muted)] mb-0.5">{label}</div>
+      <div className="text-sm font-mono text-[var(--nim-text)]">{value}</div>
+    </div>
+  );
+}
+
+function ChartSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <h3 className="text-sm font-medium text-[var(--nim-text)] mb-2">{title}</h3>
+      {children}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// AtomFamily Panel (preserved from original)
+// ---------------------------------------------------------------------------
+
+function AtomFamilyPanel({ stats, loading, refresh }: { stats: AtomFamilyStat[]; loading: boolean; refresh: () => void }) {
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [filterEmpty, setFilterEmpty] = useState(true);
-  const [loading, setLoading] = useState(false);
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    try {
-      setStats(await fetchAtomFamilyStats());
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
 
   const displayed = filterEmpty ? stats.filter(s => s.count > 0) : stats;
   const totalInstances = stats.reduce((sum, s) => sum + s.count, 0);
@@ -152,12 +403,71 @@ function CountBadge({ count }: { count: number }) {
   return <span className={color}>{count}</span>;
 }
 
+// ---------------------------------------------------------------------------
+// Main Dashboard
+// ---------------------------------------------------------------------------
+
 const TABS: { id: TabId; label: string }[] = [
-  { id: 'atomfamily', label: 'AtomFamily Stats' },
+  { id: 'overview', label: 'Overview' },
+  { id: 'atomfamily', label: 'Atom Families' },
 ];
 
+function formatTime(date: Date): string {
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
 export function DeveloperDashboard() {
-  const [activeTab, setActiveTab] = useState<TabId>('atomfamily');
+  const [activeTab, setActiveTab] = useState<TabId>('overview');
+  const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
+  const [atomStats, setAtomStats] = useState<AtomFamilyStat[]>([]);
+  const [history, setHistory] = useState<TimeSeriesPoint[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [sys, atoms] = await Promise.all([fetchSystemStats(), fetchAtomFamilyStats()]);
+      const now = new Date();
+      setSystemStats(sys);
+      setAtomStats(atoms);
+      setLastRefresh(now);
+
+      if (sys) {
+        const nonEmptyFamilies = atoms.filter(s => s.count > 0).length;
+        const totalInstances = atoms.reduce((sum, s) => sum + s.count, 0);
+
+        const point: TimeSeriesPoint = {
+          time: formatTime(now),
+          timestamp: now.getTime(),
+          memoryRssMB: sys.process.memoryRssMB,
+          heapUsedMB: sys.process.heapUsedMB,
+          activeHandles: sys.process.activeHandles,
+          activeWorkspaces: sys.fileWatchers.activeWorkspaces,
+          totalSubscribers: sys.fileWatchers.totalSubscribers,
+          atomFamilies: nonEmptyFamilies,
+          atomInstances: totalInstances,
+        };
+
+        setHistory(prev => {
+          const next = [...prev, point];
+          return next.length > MAX_HISTORY_POINTS ? next.slice(-MAX_HISTORY_POINTS) : next;
+        });
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Auto-refresh every 15 seconds
+  useEffect(() => {
+    refresh();
+    intervalRef.current = setInterval(refresh, REFRESH_INTERVAL_MS);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [refresh]);
 
   return (
     <div className="flex flex-col h-screen bg-[var(--nim-surface)] text-[var(--nim-text)] select-text">
@@ -179,11 +489,24 @@ export function DeveloperDashboard() {
             {tab.label}
           </button>
         ))}
+        <div className="flex-1" />
+        <div className="flex items-center gap-2 text-xs text-[var(--nim-text-muted)]">
+          {loading && <span className="animate-pulse">Refreshing...</span>}
+          {lastRefresh && !loading && (
+            <span>Last: {formatTime(lastRefresh)}</span>
+          )}
+          <span className="opacity-50">Auto-refresh 15s</span>
+        </div>
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-hidden">
-        {activeTab === 'atomfamily' && <AtomFamilyPanel />}
+        {activeTab === 'overview' && (
+          <OverviewPanel systemStats={systemStats} atomStats={atomStats} history={history} />
+        )}
+        {activeTab === 'atomfamily' && (
+          <AtomFamilyPanel stats={atomStats} loading={loading} refresh={refresh} />
+        )}
       </div>
     </div>
   );
