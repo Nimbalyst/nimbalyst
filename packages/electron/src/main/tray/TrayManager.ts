@@ -16,8 +16,8 @@ import { findWindowByWorkspace } from '../window/WindowManager';
 import { getPackageRoot } from '../utils/appPaths';
 import { isShowTrayIcon, setShowTrayIcon, getSessionSyncConfig, setSessionSyncConfig } from '../utils/store';
 import { logger } from '../utils/logger';
-import { isPreventingSleep } from '../services/PowerSaveService';
-import { updateSleepPrevention } from '../services/SyncManager';
+import { isPreventingSleep, getSleepPreventionMode } from '../services/PowerSaveService';
+import { updateSleepPrevention, resolvePreventSleepMode } from '../services/SyncManager';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -459,27 +459,29 @@ export class TrayManager {
         }
       },
     });
-    // Keep Awake toggle (only show when sync is configured)
+    // Prevent Sleep submenu (only show when sync is configured)
     const syncConfig = getSessionSyncConfig();
     if (syncConfig?.enabled) {
-      const keepAwakeActive = isPreventingSleep();
-      menuItems.push({
-        label: 'Keep Awake',
-        type: 'checkbox',
-        checked: keepAwakeActive,
-        click: () => {
-          const currentConfig = getSessionSyncConfig();
-          if (currentConfig) {
-            const newValue = !currentConfig.preventSleepWhenSyncing;
-            setSessionSyncConfig({ ...currentConfig, preventSleepWhenSyncing: newValue });
-            updateSleepPrevention();
-            this.scheduleMenuRebuild();
-            // Notify all renderer windows so Jotai atoms stay in sync
-            for (const win of BrowserWindow.getAllWindows()) {
-              win.webContents.send('sync:config-updated', { ...currentConfig, preventSleepWhenSyncing: newValue });
-            }
+      const currentMode = resolvePreventSleepMode(syncConfig);
+      const setMode = (mode: 'off' | 'always' | 'pluggedIn') => {
+        const currentConfig = getSessionSyncConfig();
+        if (currentConfig) {
+          const updated = { ...currentConfig, preventSleepMode: mode, preventSleepWhenSyncing: undefined };
+          setSessionSyncConfig(updated);
+          updateSleepPrevention();
+          this.scheduleMenuRebuild();
+          for (const win of BrowserWindow.getAllWindows()) {
+            win.webContents.send('sync:config-updated', updated);
           }
-        },
+        }
+      };
+      menuItems.push({
+        label: 'Prevent Sleep',
+        submenu: [
+          { label: 'Off', type: 'radio', checked: currentMode === 'off', click: () => setMode('off') },
+          { label: 'Always', type: 'radio', checked: currentMode === 'always', click: () => setMode('always') },
+          { label: 'When Plugged In', type: 'radio', checked: currentMode === 'pluggedIn', click: () => setMode('pluggedIn') },
+        ],
       });
     }
     menuItems.push({

@@ -27,7 +27,7 @@ import { startProjectFileSync } from '../file/WorkspaceWatcher';
 import { windowStates } from '../window/WindowManager';
 import { getNormalizedGitRemote } from '../utils/gitUtils';
 import { createHash } from 'crypto';
-import { startPreventingSleep, stopPreventingSleep } from './PowerSaveService';
+import { setSleepPreventionMode, setSyncConnected, shutdownSleepPrevention, type PreventSleepMode } from './PowerSaveService';
 
 function loadSyncModule() {
   return syncModule;
@@ -132,12 +132,7 @@ function updateSyncStatus(update: Partial<{ connected: boolean; syncing: boolean
 
     // Manage sleep prevention based on connection state and user preference
     if (update.connected !== undefined) {
-      const config = getSessionSyncConfig();
-      if (update.connected && config?.preventSleepWhenSyncing) {
-        startPreventingSleep();
-      } else if (!update.connected) {
-        stopPreventingSleep();
-      }
+      setSyncConnected(update.connected);
     }
   }
 }
@@ -312,6 +307,9 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
     logger.main.info('[SyncManager] Session sync not enabled in config');
     return baseStore;
   }
+
+  // Initialize sleep prevention mode from persisted config
+  setSleepPreventionMode(resolvePreventSleepMode(config));
 
   // Determine server URL based on environment setting
   const PRODUCTION_SYNC_URL = 'wss://sync.nimbalyst.com';
@@ -779,16 +777,25 @@ export function getMessageSyncHandler(): ReturnType<typeof import('@nimbalyst/ru
 }
 
 /**
+ * Resolve the effective sleep prevention mode from config,
+ * handling migration from the old boolean field.
+ */
+export function resolvePreventSleepMode(config: { preventSleepMode?: PreventSleepMode; preventSleepWhenSyncing?: boolean } | null | undefined): PreventSleepMode {
+  if (!config) return 'off';
+  if (config.preventSleepMode) return config.preventSleepMode;
+  // Migrate old boolean: true -> 'always', false/undefined -> 'off'
+  if (config.preventSleepWhenSyncing === true) return 'always';
+  return 'off';
+}
+
+/**
  * Update sleep prevention state based on current config.
- * Call this when the preventSleepWhenSyncing setting changes at runtime.
+ * Call this when the preventSleepMode setting changes at runtime.
  */
 export function updateSleepPrevention(): void {
   const config = getSessionSyncConfig();
-  if (state.connected && config?.preventSleepWhenSyncing) {
-    startPreventingSleep();
-  } else {
-    stopPreventingSleep();
-  }
+  const mode = resolvePreventSleepMode(config);
+  setSleepPreventionMode(mode);
 }
 
 /**
@@ -839,7 +846,7 @@ export function getPersonalDocSyncConfig(): {
  * Shutdown sync and disconnect all sessions.
  */
 export function shutdownSync(): void {
-  stopPreventingSleep();
+  shutdownSleepPrevention();
 
   if (state.sessionKeepAliveInterval) {
     clearInterval(state.sessionKeepAliveInterval);

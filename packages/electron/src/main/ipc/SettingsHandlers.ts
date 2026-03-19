@@ -557,10 +557,10 @@ export function registerSettingsHandlers() {
         return { success: true };
     });
 
-    safeHandle('sync:set-prevent-sleep', (_event, enabled: boolean) => {
+    safeHandle('sync:set-prevent-sleep', (_event, mode: 'off' | 'always' | 'pluggedIn') => {
         const currentConfig = getSessionSyncConfig();
         if (currentConfig) {
-            setSessionSyncConfig({ ...currentConfig, preventSleepWhenSyncing: enabled });
+            setSessionSyncConfig({ ...currentConfig, preventSleepMode: mode, preventSleepWhenSyncing: undefined });
         }
         // Update the blocker state without full sync reinit
         updateSleepPrevention();

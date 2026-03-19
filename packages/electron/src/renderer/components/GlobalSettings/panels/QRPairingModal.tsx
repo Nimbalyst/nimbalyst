@@ -6,10 +6,10 @@ interface QRPairingModalProps {
   isOpen: boolean;
   onClose: () => void;
   serverUrl: string;
-  /** Current value of preventSleepWhenSyncing from sync config */
-  preventSleepEnabled?: boolean;
-  /** Called when the user toggles the prevent-sleep setting */
-  onPreventSleepChange?: (enabled: boolean) => void;
+  /** Current sleep prevention mode */
+  preventSleepMode?: 'off' | 'always' | 'pluggedIn';
+  /** Called when the user changes the prevent-sleep mode */
+  onPreventSleepModeChange?: (mode: 'off' | 'always' | 'pluggedIn') => void;
 }
 
 /**
@@ -45,7 +45,7 @@ function replaceLocalhostWithIP(url: string, ip: string): string {
  * Mobile devices authenticate independently via Stytch OAuth - the QR code only shares
  * the encryption key needed for E2E encrypted sync.
  */
-export function QRPairingModal({ isOpen, onClose, serverUrl, preventSleepEnabled, onPreventSleepChange }: QRPairingModalProps) {
+export function QRPairingModal({ isOpen, onClose, serverUrl, preventSleepMode, onPreventSleepModeChange }: QRPairingModalProps) {
   const [qrDataUrl, setQRDataUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [qrPayload, setQRPayload] = useState<object | null>(null);
@@ -242,23 +242,26 @@ export function QRPairingModal({ isOpen, onClose, serverUrl, preventSleepEnabled
                 </p>
               </div>
 
-              {/* Keep Awake suggestion */}
-              {onPreventSleepChange && (
+              {/* Prevent sleep suggestion */}
+              {onPreventSleepModeChange && (
                 <div className="mt-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-                  <label className="flex items-start gap-2.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={preventSleepEnabled ?? false}
-                      onChange={(e) => onPreventSleepChange(e.target.checked)}
-                      className="mt-0.5 shrink-0"
-                    />
-                    <div>
-                      <span className="text-[13px] font-medium text-nim">Keep Mac awake while syncing</span>
+                  <div className="flex items-start gap-2.5">
+                    <div className="flex-1">
+                      <span className="text-[13px] font-medium text-nim">Prevent sleep while syncing</span>
                       <p className="text-[11px] text-nim-muted mt-1 mb-0">
-                        Prevents your Mac from sleeping so your mobile device stays connected. Your display can still turn off normally.
+                        Keeps your computer awake so you can send prompts from your phone. Display can still turn off.
                       </p>
                     </div>
-                  </label>
+                    <select
+                      value={preventSleepMode ?? 'off'}
+                      onChange={(e) => onPreventSleepModeChange(e.target.value as 'off' | 'always' | 'pluggedIn')}
+                      className="bg-nim-secondary border border-nim rounded px-2 py-1 text-[12px] text-nim cursor-pointer shrink-0 mt-0.5"
+                    >
+                      <option value="off">Off</option>
+                      <option value="always">Always</option>
+                      <option value="pluggedIn">When plugged in</option>
+                    </select>
+                  </div>
                 </div>
               )}
 
