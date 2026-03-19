@@ -678,7 +678,7 @@ const appLaunchTime = Date.now();
 function activationLog(msg: string) {
     const elapsed = Date.now() - appLaunchTime;
     // Use logger directly since overrideConsole() hasn't run yet at startup
-    logger.main.info(`[ACTIVATION +${elapsed}ms] ${msg}`);
+    // logger.main.info(`[ACTIVATION +${elapsed}ms] ${msg}`);
 }
 
 app.on('browser-window-focus', (_event, win) => {
