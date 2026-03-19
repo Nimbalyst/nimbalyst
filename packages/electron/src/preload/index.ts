@@ -295,8 +295,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   reportUserActivity: () => ipcRenderer.send('user-activity'),
   /** Set the idle threshold for sync presence (in milliseconds). For testing, use 10000 (10 seconds). */
   setSyncIdleThreshold: (ms: number) => ipcRenderer.invoke('sync:set-idle-threshold', ms),
-  /** Toggle prevent-sleep when syncing (uses powerSaveBlocker). */
-  setSyncPreventSleep: (enabled: boolean) => ipcRenderer.invoke('sync:set-prevent-sleep', enabled),
+  /** Set sleep prevention mode: 'off', 'always', or 'pluggedIn'. */
+  setSyncPreventSleep: (mode: 'off' | 'always' | 'pluggedIn') => ipcRenderer.invoke('sync:set-prevent-sleep', mode),
 
   // Get initial window state
   getInitialState: () => ipcRenderer.invoke('get-initial-state'),
@@ -927,6 +927,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     optIn: () => ipcRenderer.invoke('analytics:opt-in'),
     optOut: () => ipcRenderer.invoke('analytics:opt-out'),
     setSessionId: (sessionId: string) => ipcRenderer.invoke('analytics:set-session-id', sessionId),
+  },
+
+  // Feature usage tracking (local UX decisions -- tips, walkthroughs, onboarding)
+  featureUsage: {
+    record: (feature: string) => ipcRenderer.invoke('feature-usage:record', feature),
+    get: (feature: string) => ipcRenderer.invoke('feature-usage:get', feature),
+    getCount: (feature: string) => ipcRenderer.invoke('feature-usage:get-count', feature),
+    getAll: () => ipcRenderer.invoke('feature-usage:get-all'),
   },
 
   // Credentials (for sync and mobile pairing)

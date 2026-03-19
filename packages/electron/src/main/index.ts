@@ -103,6 +103,8 @@ import { initializeDatabase } from './database/initialize';
 import { database, HandledError } from './database/PGLiteDatabaseWorker';
 import { AnalyticsService } from "./services/analytics/AnalyticsService.ts";
 import { registerAnalyticsHandlers } from "./ipc/AnalyticsHandlers.ts";
+import { registerFeatureUsageHandlers } from "./ipc/FeatureUsageHandlers.ts";
+import { FeatureUsageService, FEATURES } from "./services/FeatureUsageService.ts";
 import { shutdownStytchAuth, handleAuthCallback } from './services/StytchAuthService';
 import { registerTrackerSyncHandlers, initializeTrackerSync } from './services/TrackerSyncManager';
 import { registerTeamHandlers, autoMatchTeamForWorkspace } from './services/TeamService';
@@ -789,6 +791,9 @@ app.whenReady().then(async () => {
     const launchCount = incrementLaunchCount();
     logger.main.info(`App launch count: ${launchCount}`);
 
+    // Track app launch in feature usage system
+    FeatureUsageService.getInstance().recordUsage(FEATURES.APP_LAUNCH);
+
     // Check if Claude Code is installed (only on very first launch)
     checkClaudeCodeInstallationOnFirstLaunch();
 
@@ -921,6 +926,7 @@ app.whenReady().then(async () => {
     registerClaudeCodeHandlers();
     initializeClaudeCodeSessionHandlers();  // Initialize Claude Code session import
     registerAnalyticsHandlers();
+    registerFeatureUsageHandlers();
     registerNotificationHandlers();
     registerClaudeUsageHandlers();
     claudeUsageService.initialize();

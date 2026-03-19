@@ -41,6 +41,7 @@ import { sessionFileTracker } from '../SessionFileTracker';
 import { toolCallMatcher, unwrapShellCommand } from '../ToolCallMatcher';
 import { workspaceFileEditAttributionService } from '../WorkspaceFileEditAttributionService';
 import {AnalyticsService} from "../analytics/AnalyticsService.ts";
+import { FeatureUsageService, FEATURES } from "../FeatureUsageService.ts";
 import { historyManager } from '../../HistoryManager';
 import { FileSnapshotCache } from '../../file/FileSnapshotCache';
 import { SessionFileWatcher } from '../../file/SessionFileWatcher';
@@ -1779,6 +1780,9 @@ export class AIService {
         worktreeProjectPath
       );
 
+      // Track session creation in feature usage system
+      FeatureUsageService.getInstance().recordUsage(FEATURES.SESSION_CREATED);
+
       // Track AI chat feature first use
       const { FeatureTrackingService } = await import('../analytics/FeatureTrackingService');
       const { AnalyticsService } = await import('../analytics/AnalyticsService');
@@ -1908,6 +1912,9 @@ export class AIService {
         this.processingQueuedPromptIds.add(queuedPromptId);
         logger.main.info(`[AIService] Processing queued prompt: ${queuedPromptId}, session: ${sessionId}, total prompts in progress: ${this.processingQueuedPromptIds.size}`);
       }
+
+      // Track prompt submission in feature usage system
+      FeatureUsageService.getInstance().recordUsage(FEATURES.AI_PROMPT_SUBMITTED);
 
       // Extract attachments from documentContext if present
       // Mobile attachments arrive as EncryptedAttachment[] (with encryptedData/iv fields)
@@ -3614,6 +3621,12 @@ export class AIService {
                     session.title || 'AI Session',
                     notificationBody
                   );
+                }
+
+                // Track session completion in feature usage system
+                FeatureUsageService.getInstance().recordUsage(FEATURES.SESSION_COMPLETED);
+                if (!hadError && toolCallCount > 0) {
+                  FeatureUsageService.getInstance().recordUsage(FEATURES.SESSION_COMPLETED_WITH_TOOLS);
                 }
 
                 // Show community popup after 3 completed sessions that used tools.

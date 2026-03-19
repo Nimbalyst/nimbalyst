@@ -385,6 +385,14 @@ interface ElectronAPI {
     setSessionId: (sessionId: string) => Promise<void>;
   };
 
+  // Feature usage tracking (local UX decisions)
+  featureUsage: {
+    record: (feature: string) => Promise<{ count: number; firstUsed: string; lastUsed: string }>;
+    get: (feature: string) => Promise<{ count: number; firstUsed: string; lastUsed: string } | undefined>;
+    getCount: (feature: string) => Promise<number>;
+    getAll: () => Promise<Record<string, { count: number; firstUsed: string; lastUsed: string }>>;
+  };
+
   // Credentials (for E2E encryption key management)
   credentials: {
     get: () => Promise<{ encryptionKeySeed: string; createdAt: number; isSecure: boolean }>;
