@@ -9,6 +9,8 @@ class NimbalystRepository(
 
     fun observeActiveSessions() = database.sessionDao().observeActiveSessions()
 
+    fun observeSessionsForProject(projectId: String) = database.sessionDao().observeSessionsForProject(projectId)
+
     fun observeSession(sessionId: String) = database.sessionDao().observeSession(sessionId)
 
     fun observeMessagesForSession(sessionId: String) = database.messageDao().observeMessagesForSession(sessionId)

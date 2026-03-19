@@ -53,6 +53,8 @@ class SyncManager(
     private var activeCredentials: PairingCredentials? = null
     private var crypto: CryptoManager? = null
     private var jwtRefreshJob: Job? = null
+    private var pendingSessionJoin: String? = null
+    private var lastJwtRefreshAttempt: Long = 0
 
     val state: StateFlow<SyncConnectionState> = _state.asStateFlow()
     val connectedDevices: StateFlow<List<DeviceInfo>> = _connectedDevices.asStateFlow()
@@ -72,6 +74,12 @@ class SyncManager(
                 notificationManager.state.value.deviceToken?.let(::registerPushToken)
                 requestFullSync()
                 startJwtRefreshTimer()
+                // If a session join was deferred waiting for index reconnection, do it now
+                pendingSessionJoin?.let { sessionId ->
+                    pendingSessionJoin = null
+                    Log.d(TAG, "[indexClient] Resuming deferred session join: $sessionId")
+                    connectSessionClient(sessionId)
+                }
             }
         }
         indexClient.onTextMessage = { message ->
@@ -82,9 +90,22 @@ class SyncManager(
         indexClient.onFailure = { error ->
             _state.update { it.copy(isConnecting = false, lastError = error) }
         }
+        indexClient.onHttpError = { code ->
+            if (code == 401) {
+                val now = System.currentTimeMillis()
+                if (now - lastJwtRefreshAttempt < 30_000) {
+                    Log.w(TAG, "[indexClient] 401 but JWT was refreshed recently, not retrying")
+                } else {
+                    Log.w(TAG, "[indexClient] 401 - refreshing JWT")
+                    lastJwtRefreshAttempt = now
+                    scope.launch { refreshJwt() }
+                }
+            }
+        }
 
         sessionClient.onConnectionStateChanged = { connected ->
             val sessionId = _state.value.activeSessionId
+            Log.d(TAG, "[sessionClient] connection=$connected activeSessionId=$sessionId")
             _state.update {
                 it.copy(
                     sessionConnected = connected,
@@ -93,17 +114,37 @@ class SyncManager(
             }
             if (connected && sessionId != null) {
                 scope.launch {
+                    Log.d(TAG, "[sessionClient] Sending syncRequest for $sessionId")
                     requestSessionSync(sessionId)
                 }
             }
         }
         sessionClient.onTextMessage = { message ->
             scope.launch {
+                val type = decodeEnvelope(message)?.type
+                Log.d(TAG, "[sessionClient] Received message type=$type len=${message.length}")
                 handleSessionMessage(message)
             }
         }
         sessionClient.onFailure = { error ->
+            Log.e(TAG, "[sessionClient] WebSocket failure: $error")
             _state.update { it.copy(lastError = error) }
+        }
+        sessionClient.onHttpError = { code ->
+            if (code == 401) {
+                val now = System.currentTimeMillis()
+                if (now - lastJwtRefreshAttempt < 30_000) {
+                    Log.w(TAG, "[sessionClient] 401 but JWT was refreshed recently, not retrying")
+                } else {
+                    val sessionId = _state.value.activeSessionId
+                    Log.w(TAG, "[sessionClient] 401 - refreshing JWT and retrying session $sessionId")
+                    if (sessionId != null) {
+                        pendingSessionJoin = sessionId
+                        lastJwtRefreshAttempt = now
+                        scope.launch { refreshJwt() }
+                    }
+                }
+            }
         }
 
         notificationManager.onTokenReceived = { token ->
@@ -191,17 +232,43 @@ class SyncManager(
     }
 
     fun joinSessionRoom(sessionId: String) {
-        val credentials = activeCredentials ?: pairingStore.state.value.credentials
-        if (credentials == null || !credentials.hasAuthToken) {
+        _state.update { it.copy(activeSessionId = sessionId) }
+
+        // If the index client isn't connected, we need to reconnect first
+        // (likely expired JWT). Queue the session join for after reconnection.
+        if (!indexClient.isConnected) {
+            Log.w(TAG, "[joinSessionRoom] Index not connected, reconnecting first")
+            pendingSessionJoin = sessionId
+            scope.launch {
+                // Try JWT refresh first, then reconnect
+                refreshJwt()
+                // After reconnect, the index onConnectionStateChanged callback
+                // will fire, and we check pendingSessionJoin there.
+            }
             return
         }
 
-        val effectiveUserId = credentials.routingUserId ?: return
-        val orgId = credentials.routingOrgId ?: return
-        _state.update { it.copy(activeSessionId = sessionId) }
+        connectSessionClient(sessionId)
+    }
+
+    private fun connectSessionClient(sessionId: String) {
+        val credentials = activeCredentials ?: pairingStore.state.value.credentials
+        if (credentials == null || !credentials.hasAuthToken) {
+            Log.w(TAG, "[connectSessionClient] No credentials or auth token")
+            return
+        }
+
+        val effectiveUserId = credentials.routingUserId ?: run {
+            Log.w(TAG, "[connectSessionClient] No routingUserId"); return
+        }
+        val orgId = credentials.routingOrgId ?: run {
+            Log.w(TAG, "[connectSessionClient] No routingOrgId"); return
+        }
+        val roomId = "org:$orgId:user:$effectiveUserId:session:$sessionId"
+        Log.d(TAG, "[connectSessionClient] sessionId=$sessionId roomId=$roomId")
         sessionClient.connect(
             serverUrl = credentials.serverUrl,
-            roomId = "org:$orgId:user:$effectiveUserId:session:$sessionId",
+            roomId = roomId,
             authToken = credentials.authJwt.orEmpty()
         )
     }
@@ -656,11 +723,17 @@ class SyncManager(
     }
 
     private suspend fun handleSessionSyncResponse(message: String) {
-        val sessionId = _state.value.activeSessionId ?: return
-        val response = parse<SessionSyncResponse>(message) ?: return
+        val sessionId = _state.value.activeSessionId ?: run {
+            Log.w(TAG, "[sessionSync] No activeSessionId, ignoring syncResponse"); return
+        }
+        val response = parse<SessionSyncResponse>(message) ?: run {
+            Log.w(TAG, "[sessionSync] Failed to parse SessionSyncResponse"); return
+        }
+        Log.d(TAG, "[sessionSync] Got syncResponse: ${response.messages.size} encrypted messages, hasMore=${response.hasMore}, cursor=${response.cursor}")
         response.metadata?.let { mergeSessionMetadata(sessionId, it) }
 
         val decryptedMessages = response.messages.mapNotNull { processMessageEntry(it, sessionId) }
+        Log.d(TAG, "[sessionSync] Decrypted ${decryptedMessages.size}/${response.messages.size} messages")
         val lastSequence = maxOf(
             repository.syncState(sessionId)?.lastSequence ?: 0,
             decryptedMessages.maxOfOrNull { it.sequence } ?: 0
@@ -674,6 +747,8 @@ class SyncManager(
             lastSequence = lastSequence,
             syncedAt = syncedAt
         )
+        val storedCount = repository.messageCount(sessionId)
+        Log.d(TAG, "[sessionSync] After persist: $storedCount messages in DB for $sessionId")
         _state.update { it.copy(lastSessionSyncAt = syncedAt, lastError = null) }
 
         if (response.hasMore) {
@@ -724,9 +799,11 @@ class SyncManager(
 
     private suspend fun requestSessionSync(sessionId: String, explicitSinceSeq: Int? = null) {
         val sinceSeq = explicitSinceSeq ?: repository.syncState(sessionId)?.lastSequence
+        val effectiveSinceSeq = sinceSeq?.takeIf { it > 0 }
+        Log.d(TAG, "[requestSessionSync] sessionId=$sessionId sinceSeq=$effectiveSinceSeq")
         sessionClient.sendRaw(
             gson.toJson(
-                SessionSyncRequest(sinceSeq = sinceSeq?.takeIf { it > 0 })
+                SessionSyncRequest(sinceSeq = effectiveSinceSeq)
             )
         )
     }

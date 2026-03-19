@@ -2,6 +2,7 @@ package com.nimbalyst.app.sync
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.util.UUID
@@ -21,6 +22,7 @@ class WebSocketClient(
     private val reconnectDelayMs: Long = 3_000L,
 ) {
     companion object {
+        private const val TAG = "WebSocketClient"
         private const val PREFS_NAME = "nimbalyst_device"
         private const val KEY_DEVICE_ID = "device_id"
 
@@ -54,6 +56,7 @@ class WebSocketClient(
     var onTextMessage: ((String) -> Unit)? = null
     var onConnectionStateChanged: ((Boolean) -> Unit)? = null
     var onFailure: ((String) -> Unit)? = null
+    var onHttpError: ((Int) -> Unit)? = null
 
     fun connect(serverUrl: String, roomId: String, authToken: String) {
         connectionParams = ConnectionParams(serverUrl, roomId, authToken)
@@ -79,12 +82,16 @@ class WebSocketClient(
         currentWebSocket = null
         updateConnection(false)
 
+        val url = buildWebSocketUrl(params)
+        Log.d(TAG, "Connecting to: ${url.take(120)}...")
+
         val request = Request.Builder()
-            .url(buildWebSocketUrl(params))
+            .url(url)
             .build()
 
         currentWebSocket = okHttpClient.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
+                Log.d(TAG, "WebSocket onOpen: ${response.code}")
                 reconnectJob?.cancel()
                 updateConnection(true)
             }
@@ -94,11 +101,13 @@ class WebSocketClient(
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                Log.d(TAG, "WebSocket onClosing: code=$code reason=$reason")
                 webSocket.close(code, reason)
                 updateConnection(false)
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                Log.d(TAG, "WebSocket onClosed: code=$code reason=$reason")
                 updateConnection(false)
                 if (!isIntentionallyClosed) {
                     scheduleReconnect()
@@ -106,9 +115,16 @@ class WebSocketClient(
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                Log.e(TAG, "WebSocket onFailure: ${t.message}, response=${response?.code}", t)
                 updateConnection(false)
+                val httpCode = response?.code
+                if (httpCode != null) {
+                    onHttpError?.invoke(httpCode)
+                }
                 onFailure?.invoke(t.message ?: "WebSocket failure")
                 if (!isIntentionallyClosed) {
+                    // Don't auto-reconnect on auth errors - let the caller handle JWT refresh
+                    if (httpCode == 401) return
                     scheduleReconnect()
                 }
             }

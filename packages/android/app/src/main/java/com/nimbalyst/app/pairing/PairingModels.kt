@@ -32,6 +32,9 @@ data class PairingState(
     val isPaired: Boolean
         get() = credentials != null
 
+    val isAuthenticated: Boolean
+        get() = credentials?.hasAuthToken == true && credentials?.authUserId != null
+
     val isSyncConfigured: Boolean
         get() = credentials?.hasAuthToken == true
 }

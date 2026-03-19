@@ -10,6 +10,9 @@ interface SessionDao {
     @Query("SELECT * FROM sessions WHERE isArchived = 0 ORDER BY updatedAt DESC")
     fun observeActiveSessions(): Flow<List<SessionEntity>>
 
+    @Query("SELECT * FROM sessions WHERE projectId = :projectId AND isArchived = 0 ORDER BY updatedAt DESC")
+    fun observeSessionsForProject(projectId: String): Flow<List<SessionEntity>>
+
     @Query("SELECT * FROM sessions WHERE id = :sessionId LIMIT 1")
     fun observeSession(sessionId: String): Flow<SessionEntity?>
 

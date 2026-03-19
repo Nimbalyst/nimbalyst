@@ -5,7 +5,7 @@ import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.posthog.PostHog
-import com.posthog.PostHogConfig
+import com.posthog.android.PostHogAndroidConfig
 import com.posthog.android.PostHogAndroid
 import java.util.UUID
 
@@ -63,7 +63,7 @@ object AnalyticsManager {
         isEnabled = preferences.getBoolean(KEY_ANALYTICS_ENABLED, true)
 
         // Configure PostHog
-        val config = PostHogConfig(apiKey = POSTHOG_KEY, host = POSTHOG_HOST).apply {
+        val config = PostHogAndroidConfig(apiKey = POSTHOG_KEY, host = POSTHOG_HOST).apply {
             captureScreenViews = false
             captureApplicationLifecycleEvents = false
         }

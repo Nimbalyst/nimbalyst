@@ -1,82 +1,89 @@
 package com.nimbalyst.app.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.Row
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.nimbalyst.app.NimbalystApplication
 import com.nimbalyst.app.analytics.AnalyticsManager
-import com.nimbalyst.app.pairing.PairingState
 import com.nimbalyst.app.pairing.QRPairingData
-import com.nimbalyst.app.sync.DeviceInfo
-import com.nimbalyst.app.sync.SyncedAvailableModel
-import com.nimbalyst.app.sync.SyncConnectionState
-import com.nimbalyst.app.notifications.NotificationState
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    pairingState: PairingState,
-    syncState: SyncConnectionState,
-    connectedDevices: List<DeviceInfo>,
-    availableModels: List<SyncedAvailableModel>,
-    desktopDefaultModel: String?,
-    notificationState: NotificationState,
-    onSavePairing: (com.nimbalyst.app.pairing.PairingCredentials) -> Unit,
-    onStartLogin: () -> Unit,
-    onConnect: () -> Unit,
-    onDisconnect: () -> Unit,
-    onRefresh: () -> Unit,
-    onEnableNotifications: () -> Unit,
-    onRefreshNotifications: () -> Unit,
-    onClearPairing: () -> Unit
+    onBack: () -> Unit,
+    onSignOut: () -> Unit,
+    onUnpair: () -> Unit
 ) {
+    val context = LocalContext.current
+    val app = context.applicationContext as NimbalystApplication
+    val pairingState by app.pairingStore.state.collectAsState()
+    val syncState by app.syncManager.state.collectAsState()
+    val connectedDevices by app.syncManager.connectedDevices.collectAsState()
+    val coroutineScope = rememberCoroutineScope()
+
+    // Dev section: tap version label 7 times to reveal
+    var devTapCount by remember { mutableIntStateOf(0) }
+    var showDevSection by remember { mutableStateOf(false) }
+
+    // Dev section state
     var showQrScanner by remember { mutableStateOf(false) }
     var qrPayload by remember { mutableStateOf("") }
-    var editorMessage by remember { mutableStateOf<String?>(null) }
-    var formState by remember { mutableStateOf(PairingFormState()) }
-
-    LaunchedEffect(pairingState.credentials) {
-        val credentials = pairingState.credentials
-        formState = PairingFormState(
-            serverUrl = credentials?.serverUrl.orEmpty(),
-            encryptionSeed = credentials?.encryptionSeed.orEmpty(),
-            pairedUserId = credentials?.pairedUserId.orEmpty(),
-            authOrgId = credentials?.orgId.orEmpty(),
-            orgId = credentials?.personalOrgId.orEmpty(),
-            authUserId = credentials?.authUserId.orEmpty(),
-            personalUserId = credentials?.personalUserId.orEmpty(),
-            authJwt = credentials?.authJwt.orEmpty()
-        )
-    }
+    var devMessage by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
     ) {
-        ScreenScaffold(title = "Settings")
+        TopAppBar(
+            title = { Text("Settings") },
+            navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
+            }
+        )
 
-        // Connection status section
+        // Account section
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -87,56 +94,34 @@ fun SettingsScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = if (pairingState.isPaired) "Pairing configured" else "Not paired",
+                    text = "Account",
                     style = MaterialTheme.typography.titleMedium
                 )
 
                 pairingState.credentials?.let { credentials ->
-                    Text("Server: ${credentials.serverUrl}", style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        "Sync status: ${syncState.statusLabel}",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    syncState.lastError?.let { error ->
-                        Text(
-                            text = "Last error: $error",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
                     if (!credentials.authEmail.isNullOrBlank()) {
                         Text(
-                            "Account: ${credentials.authEmail}",
-                            style = MaterialTheme.typography.bodyMedium
+                            text = credentials.authEmail!!,
+                            style = MaterialTheme.typography.bodyLarge
                         )
                     }
+                    Text(
+                        text = "Server: ${credentials.serverUrl}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
 
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = onStartLogin,
-                        enabled = pairingState.isPaired
-                    ) {
-                        Text("Open browser login")
-                    }
-                    Button(
-                        onClick = onConnect,
-                        enabled = pairingState.isSyncConfigured && !syncState.indexConnected
-                    ) {
-                        Text("Connect sync")
-                    }
-                    OutlinedButton(
-                        onClick = onRefresh,
-                        enabled = syncState.indexConnected
-                    ) {
-                        Text("Request full sync")
-                    }
-                    OutlinedButton(
-                        onClick = onDisconnect,
-                        enabled = syncState.indexConnected || syncState.sessionConnected
-                    ) {
-                        Text("Disconnect sync")
-                    }
+                Text(
+                    text = "Sync: ${syncState.statusLabel}",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                syncState.lastError?.let { error ->
+                    Text(
+                        text = error,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
             }
         }
@@ -153,7 +138,7 @@ fun SettingsScreen(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        text = "Connected devices",
+                        text = "Connected Devices",
                         style = MaterialTheme.typography.titleMedium
                     )
                     connectedDevices.forEach { device ->
@@ -162,79 +147,6 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
-                }
-            }
-        }
-
-        // Available models section
-        if (availableModels.isNotEmpty()) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        text = "Desktop models",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    desktopDefaultModel?.let { defaultModel ->
-                        Text(
-                            text = "Default: $defaultModel",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    availableModels.forEach { model ->
-                        Text(
-                            text = "${model.name} (${model.provider})",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                }
-            }
-        }
-
-        // Notifications section
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = "Notifications",
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Text(
-                    text = if (notificationState.isAuthorized) "Authorized" else "Not authorized",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                if (!notificationState.deviceToken.isNullOrBlank()) {
-                    Text(
-                        text = "FCM token stored",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                notificationState.lastError?.let { error ->
-                    Text(
-                        text = error,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-                OutlinedButton(onClick = onEnableNotifications) {
-                    Text("Enable notifications")
-                }
-                OutlinedButton(onClick = onRefreshNotifications) {
-                    Text("Refresh notification state")
                 }
             }
         }
@@ -274,18 +186,14 @@ fun SettingsScreen(
                         checked = analyticsEnabled,
                         onCheckedChange = { enabled ->
                             analyticsEnabled = enabled
-                            if (enabled) {
-                                AnalyticsManager.optIn()
-                            } else {
-                                AnalyticsManager.optOut()
-                            }
+                            if (enabled) AnalyticsManager.optIn() else AnalyticsManager.optOut()
                         }
                     )
                 }
             }
         }
 
-        // Pairing credentials section
+        // Sign out / Unpair section
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -293,103 +201,140 @@ fun SettingsScreen(
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = "Pairing credentials",
-                    style = MaterialTheme.typography.titleMedium
-                )
+                OutlinedButton(
+                    onClick = onSignOut,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Sign Out")
+                }
 
-                OutlinedTextField(
-                    value = qrPayload,
-                    onValueChange = { qrPayload = it },
+                Button(
+                    onClick = onUnpair,
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("QR payload or nimbalyst://pair link") },
-                    minLines = 3
-                )
-                OutlinedButton(
-                    onClick = {
-                        val parsed = QRPairingData.parse(qrPayload)
-                        if (parsed == null) {
-                            editorMessage = "Invalid QR payload."
-                        } else {
-                            AnalyticsManager.setDistinctIdFromPairing(parsed.analyticsId)
-                            formState = formState.copy(
-                                serverUrl = parsed.serverUrl,
-                                encryptionSeed = parsed.seed,
-                                pairedUserId = parsed.userId,
-                                orgId = parsed.personalOrgId.orEmpty(),
-                                personalUserId = parsed.personalUserId.orEmpty()
-                            )
-                            editorMessage = "Imported pairing payload."
-                        }
-                    },
-                    enabled = qrPayload.isNotBlank()
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
                 ) {
-                    Text("Import pairing payload")
+                    Text("Unpair Device")
                 }
-                OutlinedButton(
-                    onClick = { showQrScanner = !showQrScanner }
-                ) {
-                    Text(if (showQrScanner) "Hide QR scanner" else "Scan pairing QR")
-                }
+            }
+        }
 
-                if (showQrScanner) {
-                    PairingQrScanner(
-                        onScanned = { rawValue ->
-                            val parsed = QRPairingData.parse(rawValue)
+        // Version label (tap to reveal dev section)
+        val packageInfo = remember {
+            runCatching {
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            }.getOrNull()
+        }
+        Text(
+            text = "Nimbalyst Android v${packageInfo?.versionName ?: "dev"}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .padding(16.dp)
+                .clickable {
+                    devTapCount++
+                    if (devTapCount >= 7) {
+                        showDevSection = true
+                    }
+                }
+        )
+
+        // Hidden dev/debug section
+        if (showDevSection) {
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Developer",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+
+                    OutlinedButton(
+                        onClick = { app.syncManager.requestFullSync() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Force Full Sync")
+                    }
+
+                    OutlinedTextField(
+                        value = qrPayload,
+                        onValueChange = { qrPayload = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("QR payload or nimbalyst://pair link") },
+                        minLines = 3
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            val parsed = QRPairingData.parse(qrPayload)
                             if (parsed == null) {
-                                editorMessage = "Invalid pairing QR code."
+                                devMessage = "Invalid QR payload."
                             } else {
                                 AnalyticsManager.setDistinctIdFromPairing(parsed.analyticsId)
-                                formState = formState.copy(
-                                    serverUrl = parsed.serverUrl,
-                                    encryptionSeed = parsed.seed,
-                                    pairedUserId = parsed.userId,
-                                    orgId = parsed.personalOrgId.orEmpty(),
-                                    personalUserId = parsed.personalUserId.orEmpty()
-                                )
-                                editorMessage = "Scanned pairing payload."
-                                showQrScanner = false
+                                val existing = pairingState.credentials
+                                if (existing != null) {
+                                    app.pairingStore.savePairing(
+                                        existing.copy(
+                                            serverUrl = parsed.serverUrl,
+                                            encryptionSeed = parsed.seed,
+                                            pairedUserId = parsed.userId,
+                                            personalOrgId = parsed.personalOrgId,
+                                            personalUserId = parsed.personalUserId
+                                        )
+                                    )
+                                }
+                                devMessage = "Imported pairing payload."
                             }
                         },
-                        onCancel = { showQrScanner = false }
-                    )
+                        enabled = qrPayload.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Import pairing payload")
+                    }
+                    OutlinedButton(
+                        onClick = { showQrScanner = !showQrScanner },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (showQrScanner) "Hide QR scanner" else "Scan pairing QR")
+                    }
+
+                    if (showQrScanner) {
+                        PairingQrScanner(
+                            onScanned = { rawValue ->
+                                val parsed = QRPairingData.parse(rawValue)
+                                if (parsed == null) {
+                                    devMessage = "Invalid pairing QR code."
+                                } else {
+                                    AnalyticsManager.setDistinctIdFromPairing(parsed.analyticsId)
+                                    devMessage = "Scanned pairing payload."
+                                    showQrScanner = false
+                                }
+                            },
+                            onCancel = { showQrScanner = false }
+                        )
+                    }
+
+                    devMessage?.let { msg ->
+                        Text(
+                            text = msg,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
-
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
-                PairingCredentialsForm(
-                    state = formState,
-                    onStateChange = { formState = it },
-                    onSave = {
-                        onSavePairing(formState.toCredentials())
-                        editorMessage = "Saved pairing credentials."
-                    },
-                    message = editorMessage
-                )
             }
         }
 
-        // Danger zone
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = "Danger zone",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.error
-                )
-                Button(onClick = onClearPairing, enabled = pairingState.isPaired) {
-                    Text("Clear pairing")
-                }
-            }
-        }
+        Spacer(modifier = Modifier.height(32.dp))
     }
 }

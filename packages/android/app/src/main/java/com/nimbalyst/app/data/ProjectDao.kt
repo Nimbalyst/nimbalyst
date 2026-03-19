@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ProjectDao {
-    @Query("SELECT * FROM projects ORDER BY sortOrder ASC, name ASC")
+    @Query("SELECT * FROM projects ORDER BY sortOrder ASC, lastUpdatedAt DESC, name ASC")
     fun observeAll(): Flow<List<ProjectEntity>>
 
     @Query("DELETE FROM projects WHERE id = :projectId")

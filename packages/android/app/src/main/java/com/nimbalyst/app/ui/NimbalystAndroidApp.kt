@@ -4,26 +4,18 @@ import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.browser.customtabs.CustomTabsIntent
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.nimbalyst.app.NimbalystApplication
 import com.nimbalyst.app.analytics.AnalyticsManager
 import kotlinx.coroutines.launch
@@ -33,19 +25,9 @@ fun NimbalystAndroidApp() {
     val app = LocalContext.current.applicationContext as NimbalystApplication
     val context = LocalContext.current
     val pairingState by app.pairingStore.state.collectAsState()
-    val syncState by app.syncManager.state.collectAsState()
-    val connectedDevices by app.syncManager.connectedDevices.collectAsState()
-    val availableModels by app.syncManager.availableModels.collectAsState()
-    val desktopDefaultModel by app.syncManager.desktopDefaultModel.collectAsState()
-    val notificationState by app.notificationManager.state.collectAsState()
     val coroutineScope = rememberCoroutineScope()
-    var currentScreen by remember { mutableStateOf(AndroidScreen.Projects) }
-    val notificationPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        app.notificationManager.handlePermissionResult(granted)
-    }
 
+    // Track app open
     LaunchedEffect(Unit) {
         val packageInfo = runCatching {
             context.packageManager.getPackageInfo(context.packageName, 0)
@@ -59,6 +41,7 @@ fun NimbalystAndroidApp() {
         )
     }
 
+    // Auto-connect sync when credentials are ready
     LaunchedEffect(pairingState.credentials) {
         if (pairingState.isSyncConfigured) {
             app.syncManager.connectIfConfigured()
@@ -73,82 +56,119 @@ fun NimbalystAndroidApp() {
         }
     }
 
-    if (!pairingState.isPaired) {
-        OnboardingScreen(
-            onSavePairing = { credentials ->
-                app.pairingStore.savePairing(credentials)
-            }
-        )
-        return
+    // State-driven navigation matching iOS: Pairing -> Login -> Main app
+    when {
+        !pairingState.isPaired -> {
+            PairingScreen(
+                onPaired = { credentials ->
+                    app.pairingStore.savePairing(credentials)
+                }
+            )
+        }
+
+        !pairingState.isAuthenticated -> {
+            LoginScreen(
+                serverUrl = pairingState.credentials?.serverUrl ?: "",
+                pairedEmail = pairingState.credentials?.pairedUserId,
+                onUnpair = {
+                    app.syncManager.disconnect()
+                    coroutineScope.launch {
+                        app.repository.clearPrototypeData()
+                    }
+                    app.pairingStore.clearPairing()
+                }
+            )
+        }
+
+        else -> {
+            MainApp()
+        }
+    }
+}
+
+@Composable
+private fun MainApp() {
+    val app = LocalContext.current.applicationContext as NimbalystApplication
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val navController = rememberNavController()
+
+    // Request notification permission once after auth
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        app.notificationManager.handlePermissionResult(granted)
+    }
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            app.notificationManager.handlePermissionResult(true)
+        }
     }
 
-    Scaffold(
-        bottomBar = {
-            NavigationBar {
-                AndroidScreen.entries.forEach { screen ->
-                    NavigationBarItem(
-                        selected = currentScreen == screen,
-                        onClick = { currentScreen = screen },
-                        icon = { Icon(screen.icon, contentDescription = screen.label) },
-                        label = { Text(screen.label) }
-                    )
-                }
-            }
+    NavHost(navController = navController, startDestination = "projects") {
+        composable("projects") {
+            ProjectListScreen(navController = navController)
         }
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            when (currentScreen) {
-                AndroidScreen.Projects -> ProjectsScreen()
 
-                AndroidScreen.Sessions -> SessionsScreen()
+        composable(
+            "sessions?projectId={projectId}&name={projectName}",
+            arguments = listOf(
+                navArgument("projectId") { type = NavType.StringType },
+                navArgument("projectName") { type = NavType.StringType; defaultValue = "Sessions" }
+            )
+        ) { backStackEntry ->
+            val projectId = backStackEntry.arguments?.getString("projectId") ?: return@composable
+            val projectName = backStackEntry.arguments?.getString("projectName") ?: "Sessions"
+            SessionListScreen(
+                projectId = projectId,
+                projectName = projectName,
+                navController = navController
+            )
+        }
 
-                AndroidScreen.Settings -> SettingsScreen(
-                    pairingState = pairingState,
-                    syncState = syncState,
-                    connectedDevices = connectedDevices,
-                    availableModels = availableModels,
-                    desktopDefaultModel = desktopDefaultModel,
-                    notificationState = notificationState,
-                    onSavePairing = { credentials ->
-                        app.pairingStore.savePairing(credentials)
-                    },
-                    onStartLogin = {
-                        pairingState.credentials?.serverUrl?.let { serverUrl ->
-                            val loginUrl = serverUrl
-                                .replace("wss://", "https://")
-                                .replace("ws://", "http://")
-                                .trimEnd('/') + "/auth/login/google"
-                            CustomTabsIntent.Builder()
-                                .build()
-                                .launchUrl(context, android.net.Uri.parse(loginUrl))
-                        }
-                    },
-                    onConnect = { app.syncManager.connect() },
-                    onDisconnect = { app.syncManager.disconnect() },
-                    onRefresh = { app.syncManager.requestFullSync() },
-                    onEnableNotifications = {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        } else {
-                            app.notificationManager.handlePermissionResult(true)
-                        }
-                    },
-                    onRefreshNotifications = { app.notificationManager.refreshAuthorization() },
-                    onClearPairing = {
-                        app.syncManager.disconnect()
-                        coroutineScope.launch {
-                            app.repository.clearPrototypeData()
-                        }
-                        app.pairingStore.clearPairing()
-                        AnalyticsManager.capture("mobile_device_unpairing")
-                        AnalyticsManager.reset()
+        composable(
+            "sessions/{sessionId}",
+            arguments = listOf(
+                navArgument("sessionId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val sessionId = backStackEntry.arguments?.getString("sessionId") ?: return@composable
+            SessionDetailScreen(
+                sessionId = sessionId,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable("settings") {
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
+                onSignOut = {
+                    // Clear auth but keep pairing -- goes to LoginScreen
+                    val existing = app.pairingStore.state.value.credentials ?: return@SettingsScreen
+                    app.syncManager.disconnect()
+                    app.pairingStore.savePairing(
+                        existing.copy(
+                            authJwt = null,
+                            authUserId = null,
+                            orgId = null,
+                            sessionToken = null,
+                            authEmail = null,
+                            authExpiresAt = null
+                        )
+                    )
+                },
+                onUnpair = {
+                    app.syncManager.disconnect()
+                    coroutineScope.launch {
+                        app.repository.clearPrototypeData()
                     }
-                )
-            }
+                    app.pairingStore.clearPairing()
+                    AnalyticsManager.capture("mobile_device_unpairing")
+                    AnalyticsManager.reset()
+                }
+            )
         }
     }
 }
