@@ -228,7 +228,7 @@
         "to": "app.asar.unpacked/node_modules/@openai/codex-sdk"
       },
       {
-        "from": "../../node_modules/@openai",
+        "from": "node_modules/@openai",
         "to": "app.asar.unpacked/node_modules/@openai"
       },
       {
