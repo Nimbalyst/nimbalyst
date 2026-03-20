@@ -4,19 +4,111 @@
  * Manages offscreen editor instances in the renderer process.
  * Creates hidden DOM containers and mounts React editors without visible UI.
  * Editors register their APIs in the same registry used by visible editors.
+ *
+ * Screenshot capture uses Electron's native capturePage() via the main process,
+ * which captures actual composited pixels (including WebGL, canvas, complex CSS).
+ * The renderer's role is to find/position the editor element and return its
+ * bounding rect so the main process can capture the correct region.
  */
 
 import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import type { EditorHost, DrawingPath } from '@nimbalyst/runtime';
-import { getExtensionLoader } from '@nimbalyst/runtime';
+import type { EditorHost } from '@nimbalyst/runtime';
+import { getExtensionLoader, getBaseThemeColors, type ExtendedThemeColors } from '@nimbalyst/runtime';
 // Note: Window globals for mockup annotations are declared in @nimbalyst/runtime
+
+/**
+ * Map theme color keys to CSS variable names.
+ * Duplicated from useTheme.ts (not exported) -- only the core subset needed for capture.
+ */
+const CSS_VAR_MAP: Record<keyof ExtendedThemeColors, string> = {
+  'bg': '--nim-bg',
+  'bg-secondary': '--nim-bg-secondary',
+  'bg-tertiary': '--nim-bg-tertiary',
+  'bg-hover': '--nim-bg-hover',
+  'bg-selected': '--nim-bg-selected',
+  'bg-active': '--nim-bg-active',
+  'text': '--nim-text',
+  'text-muted': '--nim-text-muted',
+  'text-faint': '--nim-text-faint',
+  'text-disabled': '--nim-text-disabled',
+  'border': '--nim-border',
+  'border-focus': '--nim-border-focus',
+  'primary': '--nim-primary',
+  'primary-hover': '--nim-primary-hover',
+  'link': '--nim-link',
+  'link-hover': '--nim-link-hover',
+  'success': '--nim-success',
+  'warning': '--nim-warning',
+  'error': '--nim-error',
+  'info': '--nim-info',
+  'purple': '--nim-purple',
+  'code-bg': '--nim-code-bg',
+  'code-text': '--nim-code-text',
+  'code-border': '--nim-code-border',
+  'code-gutter': '--nim-code-gutter',
+  'table-border': '--nim-table-border',
+  'table-header': '--nim-table-header',
+  'table-cell': '--nim-table-cell',
+  'table-stripe': '--nim-table-stripe',
+  'toolbar-bg': '--nim-toolbar-bg',
+  'toolbar-border': '--nim-toolbar-border',
+  'toolbar-hover': '--nim-toolbar-hover',
+  'toolbar-active': '--nim-toolbar-active',
+  'highlight-bg': '--nim-highlight-bg',
+  'highlight-border': '--nim-highlight-border',
+  'quote-text': '--nim-quote-text',
+  'quote-border': '--nim-quote-border',
+  'scrollbar-thumb': '--nim-scrollbar-thumb',
+  'scrollbar-thumb-hover': '--nim-scrollbar-thumb-hover',
+  'scrollbar-track': '--nim-scrollbar-track',
+  'diff-add-bg': '--nim-diff-add-bg',
+  'diff-add-border': '--nim-diff-add-border',
+  'diff-remove-bg': '--nim-diff-remove-bg',
+  'diff-remove-border': '--nim-diff-remove-border',
+  'code-comment': '--nim-code-comment',
+  'code-punctuation': '--nim-code-punctuation',
+  'code-property': '--nim-code-property',
+  'code-selector': '--nim-code-selector',
+  'code-operator': '--nim-code-operator',
+  'code-attr': '--nim-code-attr',
+  'code-variable': '--nim-code-variable',
+  'code-function': '--nim-code-function',
+  'terminal-bg': '--terminal-bg',
+  'terminal-fg': '--terminal-fg',
+  'terminal-cursor': '--terminal-cursor',
+  'terminal-cursor-accent': '--terminal-cursor-accent',
+  'terminal-selection': '--terminal-selection',
+  'terminal-ansi-black': '--terminal-ansi-black',
+  'terminal-ansi-red': '--terminal-ansi-red',
+  'terminal-ansi-green': '--terminal-ansi-green',
+  'terminal-ansi-yellow': '--terminal-ansi-yellow',
+  'terminal-ansi-blue': '--terminal-ansi-blue',
+  'terminal-ansi-magenta': '--terminal-ansi-magenta',
+  'terminal-ansi-cyan': '--terminal-ansi-cyan',
+  'terminal-ansi-white': '--terminal-ansi-white',
+  'terminal-ansi-bright-black': '--terminal-ansi-bright-black',
+  'terminal-ansi-bright-red': '--terminal-ansi-bright-red',
+  'terminal-ansi-bright-green': '--terminal-ansi-bright-green',
+  'terminal-ansi-bright-yellow': '--terminal-ansi-bright-yellow',
+  'terminal-ansi-bright-blue': '--terminal-ansi-bright-blue',
+  'terminal-ansi-bright-magenta': '--terminal-ansi-bright-magenta',
+  'terminal-ansi-bright-cyan': '--terminal-ansi-bright-cyan',
+  'terminal-ansi-bright-white': '--terminal-ansi-bright-white',
+};
 
 interface OffscreenEditorInstance {
   filePath: string;
   container: HTMLDivElement;
   root: Root;
   host: EditorHost;
+}
+
+export interface CaptureRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 class OffscreenEditorRendererImpl {
@@ -267,354 +359,208 @@ class OffscreenEditorRendererImpl {
       },
     };
 
+    // Internal helper for theme change notification (used by applyTheme)
+    (host as any)._notifyThemeChanged = (newTheme: string) => {
+      // Override the readonly 'theme' property on the host object
+      Object.defineProperty(host, 'theme', { value: newTheme, writable: true, configurable: true });
+      for (const cb of themeChangeCallbacks) {
+        cb(newTheme);
+      }
+    };
+
     return host;
   }
 
   /**
-   * Capture screenshot from an editor (visible or offscreen).
-   * First checks if a visible editor has the file open, otherwise uses offscreen.
-   * Handles iframe-based editors (mockups) specially.
-   * Returns base64-encoded PNG data (without data URL prefix).
+   * Apply a theme to the capture window DOM.
+   * Sets CSS class, data-theme attribute, and all --nim-* CSS variables.
+   * Also notifies mounted editors via their onThemeChanged callbacks.
    */
-  public async captureScreenshot(filePath: string, selector?: string): Promise<string> {
+  private applyTheme(theme: string): void {
+    const isDark = theme === 'dark';
+    const colors = getBaseThemeColors(isDark);
+    const root = document.documentElement;
+
+    // Set class and data-theme attribute
+    const targetClass = isDark ? 'dark-theme' : 'light-theme';
+    root.classList.remove('dark-theme', 'light-theme');
+    root.classList.add(targetClass);
+    root.setAttribute('data-theme', theme);
+
+    // Apply all CSS variables
+    for (const [key, cssVar] of Object.entries(CSS_VAR_MAP)) {
+      const value = colors[key as keyof ExtendedThemeColors];
+      if (value) {
+        root.style.setProperty(cssVar, value);
+      }
+    }
+
+    // Notify mounted editors so extensions can react to the theme change
+    for (const instance of this.editors.values()) {
+      (instance.host as any)._notifyThemeChanged?.(theme);
+    }
+
+    console.log(`[OffscreenEditorRenderer] Applied ${theme} theme`);
+  }
+
+  /**
+   * Capture a screenshot of an editor using Electron's native capturePage().
+   *
+   * For visible editors: gets bounding rect and invokes native capture directly.
+   * For offscreen editors: temporarily positions the editor in the viewport,
+   * invokes native capture, then IMMEDIATELY restores -- all within this method
+   * to guarantee restore always happens and minimize visible flash.
+   *
+   * Returns base64-encoded PNG data.
+   */
+  public async captureScreenshot(filePath: string, selector?: string, theme?: string): Promise<string> {
+    const electronAPI = (window as any).electronAPI;
+
+    // Apply theme if requested (for the capture window)
+    if (theme) {
+      this.applyTheme(theme);
+      // Wait for extensions to re-render with new theme
+      await new Promise<void>(resolve => {
+        requestAnimationFrame(() => setTimeout(resolve, 100));
+      });
+    }
+
     // First, check if a visible editor has this file open
-    // Extensions expose their editor APIs on window for this purpose
-    if (filePath.endsWith('.excalidraw')) {
-      const getAPI = (window as any).__excalidraw_getEditorAPI;
-      if (getAPI && getAPI(filePath)) {
-        console.log('[OffscreenEditorRenderer] Visible Excalidraw editor found, capturing from visible DOM');
-        return this.captureVisibleExcalidraw(filePath, selector);
+    const visibleRect = this.findVisibleEditorRect(filePath, selector);
+    if (visibleRect) {
+      console.log('[OffscreenEditorRenderer] Capturing visible editor for', filePath);
+      const result = await electronAPI.invoke('offscreen-editor:native-capture', { rect: visibleRect });
+      if (!result.success) {
+        throw new Error(result.error || 'Native capture failed');
       }
+      return result.imageBase64;
     }
 
-    // Check for visible mockup editor by looking for editor in DOM
-    if (filePath.endsWith('.mockup.html')) {
-      const visibleMockup = this.findVisibleMockupEditor(filePath);
-      if (visibleMockup) {
-        return this.captureVisibleMockup(visibleMockup, filePath, selector);
-      }
-    }
-
-    // Fall back to offscreen editor
+    // Fall back to offscreen editor -- position, capture, restore all here
     const instance = this.editors.get(filePath);
     if (!instance) {
       throw new Error(`No offscreen editor mounted for ${filePath}`);
     }
 
-    // Temporarily make visible for screenshot
-    const wasHidden = this.hiddenContainer!.style.visibility === 'hidden';
-    if (wasHidden) {
-      this.hiddenContainer!.style.visibility = 'visible';
-    }
+    const container = instance.container;
 
-    // Wait for iframe content to render (if mockup or other iframe-based editor)
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Save original styles
+    const originalStyles = {
+      position: container.style.position,
+      left: container.style.left,
+      top: container.style.top,
+      width: container.style.width,
+      height: container.style.height,
+      zIndex: container.style.zIndex,
+      visibility: container.style.visibility,
+    };
 
     try {
-      // Check if this is a mockup editor with iframe content
-      const iframe = instance.container.querySelector('iframe');
+      // Position this specific editor at viewport origin
+      container.style.position = 'fixed';
+      container.style.left = '0px';
+      container.style.top = '0px';
+      container.style.width = '1280px';
+      container.style.height = '800px';
+      container.style.zIndex = '999999';
+      container.style.visibility = 'visible';
 
-      if (iframe && filePath.endsWith('.mockup.html')) {
-        console.log('[OffscreenEditorRenderer] Detected mockup iframe, using special capture');
-
-        // Access iframe document directly (same as captureMockupComposite does)
-        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-        if (!iframeDoc || !iframeDoc.body) {
-          throw new Error('Cannot access iframe document');
-        }
-
-        // Wait for iframe to be fully loaded
-        if (iframeDoc.readyState !== 'complete') {
-          await new Promise((resolve) => {
-            iframe.contentWindow?.addEventListener('load', resolve, { once: true });
-            setTimeout(resolve, 3000);
-          });
-        }
-
-        // Import html2canvas and capture iframe body
-        const html2canvas = (await import('html2canvas')).default;
-        const targetElement = iframeDoc.body;
-        const elemWidth = targetElement.scrollWidth || targetElement.offsetWidth || iframe.offsetWidth;
-        const elemHeight = targetElement.scrollHeight || targetElement.offsetHeight || iframe.offsetHeight;
-
-        const canvas = await html2canvas(targetElement, {
-          backgroundColor: '#ffffff',
-          scale: 2,
-          logging: false,
-          useCORS: false,
-          allowTaint: true,
-          foreignObjectRendering: true,
-          imageTimeout: 0,
-          width: elemWidth,
-          height: elemHeight,
-          windowWidth: elemWidth,
-          windowHeight: elemHeight,
-        });
-
-        // Validate canvas before converting
-        if (!canvas || canvas.width === 0 || canvas.height === 0) {
-          throw new Error('html2canvas produced an empty canvas for offscreen mockup iframe');
-        }
-
-        return this.canvasToBase64(canvas, 'offscreen mockup iframe');
+      // Also make the parent visible (it's hidden by default)
+      if (this.hiddenContainer) {
+        this.hiddenContainer.style.visibility = 'visible';
       }
 
-      // For non-iframe editors, use html2canvas
-      const html2canvas = (await import('html2canvas')).default;
+      // Wait for the compositor to render the repositioned content
+      await new Promise<void>(resolve => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setTimeout(resolve, 100);
+          });
+        });
+      });
 
       const targetElement = selector
-        ? instance.container.querySelector(selector) as HTMLElement
-        : instance.container;
+        ? container.querySelector(selector) as HTMLElement
+        : container;
 
       if (!targetElement) {
         throw new Error(`Element not found: ${selector || 'container'}`);
       }
 
-      const canvas = await html2canvas(targetElement, {
-        logging: false,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: null,
-      });
+      const domRect = targetElement.getBoundingClientRect();
 
-      // Validate canvas before converting
-      if (!canvas || canvas.width === 0 || canvas.height === 0) {
-        throw new Error('html2canvas produced an empty canvas for offscreen editor');
+      if (domRect.width <= 0 || domRect.height <= 0) {
+        throw new Error(`Editor element has zero dimensions: ${domRect.width}x${domRect.height}`);
       }
 
-      return this.canvasToBase64(canvas, 'offscreen editor');
+      const rect = {
+        x: Math.round(domRect.x),
+        y: Math.round(domRect.y),
+        width: Math.round(domRect.width),
+        height: Math.round(domRect.height),
+      };
+
+      console.log('[OffscreenEditorRenderer] Capturing offscreen editor:', rect.width, 'x', rect.height);
+
+      // Invoke native capture -- main process calls capturePage(rect)
+      const result = await electronAPI.invoke('offscreen-editor:native-capture', { rect });
+      if (!result.success) {
+        throw new Error(result.error || 'Native capture failed');
+      }
+
+      return result.imageBase64;
     } finally {
-      // Hide again
-      if (wasHidden) {
-        this.hiddenContainer!.style.visibility = 'hidden';
+      // ALWAYS restore -- this runs even if capture throws
+      for (const [prop, value] of Object.entries(originalStyles)) {
+        (container.style as any)[prop] = value;
+      }
+      if (this.hiddenContainer) {
+        this.hiddenContainer.style.visibility = 'hidden';
       }
     }
   }
 
   /**
-   * Capture screenshot from a visible Excalidraw editor.
-   * Finds the editor's DOM element and captures it using html2canvas.
+   * Find the bounding rect of a visible editor for the given file.
+   * Returns null if no visible editor is found.
    */
-  private async captureVisibleExcalidraw(filePath: string, selector?: string): Promise<string> {
-    // Find the Excalidraw editor container in the visible DOM
-    // The editor uses class "excalidraw-editor" as its wrapper
-    const editors = document.querySelectorAll('.excalidraw-editor');
-
-    if (editors.length === 0) {
-      throw new Error('No visible Excalidraw editor found in DOM');
-    }
-
-    // Use the first one for now (in practice there should only be one visible)
-    // In the future we could match by filePath if needed
-    const editorElement = (selector
-      ? editors[0].querySelector(selector)
-      : editors[0]) as HTMLElement;
-
-    if (!editorElement) {
-      throw new Error(`Element not found: ${selector || 'excalidraw-editor'}`);
-    }
-
-    // Import html2canvas and capture
-    const html2canvas = (await import('html2canvas')).default;
-
-    const canvas = await html2canvas(editorElement, {
-      logging: false,
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: null,
-      scale: 2, // Higher resolution for quality
-    });
-
-    // Validate canvas before converting
-    if (!canvas || canvas.width === 0 || canvas.height === 0) {
-      throw new Error('html2canvas produced an empty canvas for Excalidraw editor');
-    }
-
-    return this.canvasToBase64(canvas, 'Excalidraw editor');
-  }
-
-  /**
-   * Convert a canvas to base64 PNG data, with validation.
-   * @param canvas - The canvas to convert
-   * @param context - Description of the context for error messages
-   * @returns Base64-encoded PNG data (without data URL prefix)
-   */
-  private canvasToBase64(canvas: HTMLCanvasElement, context: string): string {
-    const dataUrl = canvas.toDataURL('image/png');
-    const base64Data = dataUrl.replace(/^data:image\/png;base64,/, '');
-
-    if (!base64Data || base64Data.length === 0) {
-      throw new Error(`toDataURL produced empty base64 data for ${context}`);
-    }
-
-    return base64Data;
-  }
-
-  /**
-   * Find a visible mockup editor by looking for the tab with this file path.
-   */
-  private findVisibleMockupEditor(filePath: string): HTMLElement | null {
-    // Check if there's a visible tab editor for this file
-    const editorWrapper = document.querySelector(`[data-file-path="${filePath}"]`) as HTMLElement | null;
-    if (!editorWrapper) {
-      return null;
-    }
-
-    // Check if it has an iframe (MockupEditor renders mockups in an iframe)
-    const iframe = editorWrapper.querySelector('iframe');
-    if (!iframe) {
-      return null;
-    }
-
-    // Check bounding rect to ensure it's visible
-    const rect = editorWrapper.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) {
-      return null;
-    }
-
-    // Find the content area that contains both iframe and canvas
-    const contentArea = iframe.closest('.flex-1.overflow-hidden') as HTMLElement | null;
-    if (contentArea) {
-      const contentRect = contentArea.getBoundingClientRect();
-      if (contentRect.width > 0 && contentRect.height > 0) {
-        return contentArea;
-      }
-    }
-
-    // Fall back to the wrapper itself
-    return editorWrapper;
-  }
-
-  /**
-   * Capture screenshot from a visible mockup editor.
-   * Includes any drawing annotations that have been made on the mockup.
-   */
-  private async captureVisibleMockup(container: HTMLElement, filePath: string, selector?: string): Promise<string> {
-    // Find the iframe inside the mockup container
-    const iframe = container.querySelector('iframe');
-
-    if (iframe) {
-      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-      if (!iframeDoc || !iframeDoc.body) {
-        throw new Error('Cannot access iframe document');
-      }
-
-      // Wait for iframe to be fully loaded
-      if (iframeDoc.readyState !== 'complete') {
-        await new Promise((resolve) => {
-          iframe.contentWindow?.addEventListener('load', resolve, { once: true });
-          setTimeout(resolve, 3000);
-        });
-      }
-
-      // Import html2canvas and capture iframe body
-      const html2canvas = (await import('html2canvas')).default;
-      const targetElement = iframeDoc.body;
-      const elemWidth = targetElement.scrollWidth || targetElement.offsetWidth || iframe.offsetWidth;
-      const elemHeight = targetElement.scrollHeight || targetElement.offsetHeight || iframe.offsetHeight;
-
-      const mockupCanvas = await html2canvas(targetElement, {
-        backgroundColor: '#ffffff',
-        scale: 2,
-        logging: false,
-        useCORS: false,
-        allowTaint: true,
-        foreignObjectRendering: true,
-        imageTimeout: 0,
-        width: elemWidth,
-        height: elemHeight,
-        windowWidth: elemWidth,
-        windowHeight: elemHeight,
-      });
-
-      // Validate canvas before compositing
-      if (!mockupCanvas || mockupCanvas.width === 0 || mockupCanvas.height === 0) {
-        throw new Error('html2canvas produced an empty canvas for visible mockup iframe');
-      }
-
-      // Check for drawing annotations from MockupEditor
-      // First try the per-file annotations map (persists when tab is inactive)
-      // Then fall back to legacy globals (only set when tab is active)
-      const fileAnnotations = window.__mockupAnnotations?.get(filePath);
-
-      // Prefer per-file annotations, fall back to legacy globals
-      const drawingPaths: DrawingPath[] | undefined = fileAnnotations?.drawingPaths ?? window.__mockupDrawingPaths;
-
-      // Determine which canvas to convert to base64
-      let finalCanvas: HTMLCanvasElement = mockupCanvas;
-
-      // If there are drawing annotations, composite them onto the mockup
-      if (drawingPaths && drawingPaths.length > 0) {
-        // Calculate scale factor (html2canvas uses scale: 2)
-        const scale = mockupCanvas.width / elemWidth;
-
-        // Validate scale is a finite positive number
-        if (!Number.isFinite(scale) || scale <= 0) {
-          throw new Error(`Invalid scale factor: ${scale} (canvas width: ${mockupCanvas.width}, element width: ${elemWidth})`);
-        }
-
-        // Create a composite canvas
-        const compositeCanvas = document.createElement('canvas');
-        compositeCanvas.width = mockupCanvas.width;
-        compositeCanvas.height = mockupCanvas.height;
-        const ctx = compositeCanvas.getContext('2d');
-
-        if (!ctx) {
-          throw new Error('Failed to get composite canvas context');
-        }
-
-        // Draw the mockup first
-        ctx.drawImage(mockupCanvas, 0, 0);
-
-        // Draw the annotation paths
-        drawingPaths.forEach(path => {
-          if (path.points.length < 2) return;
-          if (!path.color || typeof path.color !== 'string') return;
-
-          ctx.strokeStyle = path.color;
-          ctx.lineWidth = 3 * scale;
-          ctx.lineCap = 'round';
-          ctx.lineJoin = 'round';
-
-          ctx.beginPath();
-          const firstPoint = path.points[0];
-          ctx.moveTo(firstPoint.x * scale, firstPoint.y * scale);
-
-          for (let i = 1; i < path.points.length; i++) {
-            const point = path.points[i];
-            ctx.lineTo(point.x * scale, point.y * scale);
+  private findVisibleEditorRect(filePath: string, selector?: string): CaptureRect | null {
+    // Check for visible Excalidraw editor
+    if (filePath.endsWith('.excalidraw')) {
+      const getAPI = (window as any).__excalidraw_getEditorAPI;
+      if (getAPI && getAPI(filePath)) {
+        const editors = document.querySelectorAll('.excalidraw-editor');
+        if (editors.length > 0) {
+          const el = (selector ? editors[0].querySelector(selector) : editors[0]) as HTMLElement;
+          if (el) {
+            const rect = el.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) {
+              return { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) };
+            }
           }
-          ctx.stroke();
-        });
-
-        finalCanvas = compositeCanvas;
+        }
       }
-
-      // Convert final canvas to base64 (single return path)
-      return this.canvasToBase64(finalCanvas, drawingPaths ? 'composited mockup' : 'mockup iframe');
     }
 
-    // Fall back to capturing the container itself
-    const html2canvas = (await import('html2canvas')).default;
-    const targetElement = selector ? container.querySelector(selector) as HTMLElement : container;
+    // Check for any visible editor by data-file-path attribute
+    const editorWrapper = document.querySelector(`[data-file-path="${filePath}"]`) as HTMLElement | null;
+    if (editorWrapper) {
+      const rect = editorWrapper.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        // For mockups/iframe editors, try to find the content area
+        const contentArea = editorWrapper.querySelector('.flex-1.overflow-hidden') as HTMLElement | null;
+        if (contentArea) {
+          const contentRect = contentArea.getBoundingClientRect();
+          if (contentRect.width > 0 && contentRect.height > 0) {
+            return { x: Math.round(contentRect.x), y: Math.round(contentRect.y), width: Math.round(contentRect.width), height: Math.round(contentRect.height) };
+          }
+        }
 
-    if (!targetElement) {
-      throw new Error(`Element not found: ${selector || 'container'}`);
+        return { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) };
+      }
     }
 
-    const canvas = await html2canvas(targetElement, {
-      logging: false,
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: null,
-    });
-
-    // Validate canvas before converting
-    if (!canvas || canvas.width === 0 || canvas.height === 0) {
-      throw new Error('html2canvas produced an empty canvas for visible mockup container');
-    }
-
-    return this.canvasToBase64(canvas, 'visible mockup container');
+    return null;
   }
 
   /**

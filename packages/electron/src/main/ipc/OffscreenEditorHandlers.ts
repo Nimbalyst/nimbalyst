@@ -8,6 +8,7 @@
  * - Getting statistics
  */
 
+import { BrowserWindow } from 'electron';
 import { OffscreenEditorManager } from '../services/OffscreenEditorManager';
 import { logger } from '../utils/logger';
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
@@ -81,7 +82,7 @@ export function registerOffscreenEditorHandlers(): void {
   // Capture screenshot from offscreen editor
   safeHandle(
     'offscreen-editor:capture-screenshot',
-    async (_event, payload: { filePath: string; workspacePath: string; selector?: string }) => {
+    async (_event, payload: { filePath: string; workspacePath: string; selector?: string; theme?: string }) => {
       logger.main.info(`[OffscreenEditorHandlers] Screenshot request: ${payload.filePath}`);
 
       // Validate required workspace path - never fall back to path.dirname
@@ -98,7 +99,8 @@ export function registerOffscreenEditorHandlers(): void {
         const imageBuffer = await manager.captureScreenshot(
           payload.filePath,
           payload.workspacePath,
-          payload.selector
+          payload.selector,
+          payload.theme
         );
 
         const imageBase64 = imageBuffer.toString('base64');
@@ -115,6 +117,34 @@ export function registerOffscreenEditorHandlers(): void {
           success: false,
           error: errorMessage,
         };
+      }
+    }
+  );
+
+  // Native capturePage service for renderer to call during screenshot capture.
+  // The renderer controls positioning/restoration; this just does the pixel capture.
+  safeHandle(
+    'offscreen-editor:native-capture',
+    async (event, payload: { rect: { x: number; y: number; width: number; height: number } }) => {
+      try {
+        const win = BrowserWindow.fromWebContents(event.sender);
+        if (!win || win.isDestroyed()) {
+          return { success: false, error: 'Window not available' };
+        }
+
+        const nativeImage = await win.webContents.capturePage(payload.rect);
+        const buffer = nativeImage.toPNG();
+
+        logger.main.info(`[OffscreenEditorHandlers] Native capture: ${buffer.length} bytes, ${nativeImage.getSize().width}x${nativeImage.getSize().height}`);
+
+        return {
+          success: true,
+          imageBase64: buffer.toString('base64'),
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        logger.main.error(`[OffscreenEditorHandlers] Native capture failed: ${errorMessage}`);
+        return { success: false, error: errorMessage };
       }
     }
   );

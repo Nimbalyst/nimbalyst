@@ -32,6 +32,12 @@ export function getEditorToolSchemas(sessionId: string | undefined) {
             description:
               "CSS selector to capture a specific element (optional, captures full editor area if not specified)",
           },
+          theme: {
+            type: "string",
+            enum: ["dark", "light"],
+            description:
+              "Theme to use for the screenshot (optional, uses the app's current theme if not specified). Useful for capturing both dark and light mode versions.",
+          },
         },
       },
     },
@@ -267,6 +273,7 @@ export async function handleCaptureEditorScreenshot(
 ): Promise<McpToolResult> {
   const filePath = args?.file_path as string | undefined;
   const selector = args?.selector as string | undefined;
+  const theme = args?.theme as string | undefined;
 
   if (!filePath) {
     return {
@@ -328,7 +335,8 @@ export async function handleCaptureEditorScreenshot(
     const imageBuffer = await manager.captureScreenshot(
       filePath,
       fileWorkspacePath,
-      selector
+      selector,
+      theme
     );
     const imageBase64 = imageBuffer.toString("base64");
 

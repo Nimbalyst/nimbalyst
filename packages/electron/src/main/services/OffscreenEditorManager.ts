@@ -11,8 +11,10 @@
  * - Seamless integration with visible editors (same registry)
  */
 
-import { BrowserWindow } from 'electron';
+import electron, { BrowserWindow } from 'electron';
+import { join } from 'path';
 import { logger } from '../utils/logger';
+import { getPreloadPath } from '../utils/appPaths';
 import { findWindowByWorkspace } from '../window/WindowManager';
 
 interface OffscreenEditorEntry {
@@ -29,6 +31,13 @@ export class OffscreenEditorManager {
   // Track mounted offscreen editors by file path
   private editors = new Map<string, OffscreenEditorEntry>();
 
+  // Hidden BrowserWindow for flash-free offscreen editor screenshots.
+  // Loads the same renderer URL with ?mode=capture, which initializes only
+  // the offscreen editor system. capturePage() on a hidden window captures
+  // real pixels without ever displaying to the user.
+  private captureWindow: BrowserWindow | null = null;
+  private captureWindowReady = false;
+
   // Configuration
   private cacheTTL = 30000; // 30 seconds
   private maxCached = 5;
@@ -43,8 +52,64 @@ export class OffscreenEditorManager {
   }
 
   /**
+   * Get or create the hidden capture window.
+   * This window loads the renderer in capture mode (?mode=capture) which only
+   * initializes the offscreen editor system -- no Monaco, PostHog, React, or settings.
+   */
+  private async getCaptureWindow(): Promise<BrowserWindow> {
+    if (this.captureWindow && !this.captureWindow.isDestroyed()) {
+      return this.captureWindow;
+    }
+
+    logger.main.info('[OffscreenEditorManager] Creating hidden capture window');
+
+    this.captureWindow = new BrowserWindow({
+      show: false,
+      width: 1280,
+      height: 800,
+      webPreferences: {
+        preload: getPreloadPath(),
+        sandbox: false,
+        contextIsolation: true,
+      },
+    });
+
+    this.captureWindow.on('closed', () => {
+      this.captureWindow = null;
+      this.captureWindowReady = false;
+    });
+
+    // Load renderer in capture mode
+    const { app } = electron;
+    if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
+      await this.captureWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}?mode=capture`);
+    } else {
+      const appPath = app.getAppPath();
+      let htmlPath: string;
+      if (app.isPackaged) {
+        htmlPath = join(appPath, 'out/renderer/index.html');
+      } else if (appPath.includes('/out/main') || appPath.includes('\\out\\main')) {
+        htmlPath = join(appPath, '../renderer/index.html');
+      } else {
+        htmlPath = join(appPath, 'out/renderer/index.html');
+      }
+      await this.captureWindow.loadFile(htmlPath, {
+        query: { mode: 'capture' },
+      });
+    }
+
+    // Wait for capture window to initialize
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    this.captureWindowReady = true;
+
+    logger.main.info('[OffscreenEditorManager] Hidden capture window ready');
+    return this.captureWindow;
+  }
+
+  /**
    * Mount an editor offscreen for a file.
    * If already mounted, increments reference count and refreshes TTL.
+   * Mounts in the hidden capture window (not the main window).
    */
   public async mountOffscreen(filePath: string, workspacePath: string): Promise<void> {
     logger.main.info(`[OffscreenEditorManager] Mount request for ${filePath}`);
@@ -71,13 +136,10 @@ export class OffscreenEditorManager {
       this.evictLRU();
     }
 
-    // Send mount request to renderer
-    const window = this.getTargetWindow(workspacePath);
-    if (!window || window.isDestroyed()) {
-      throw new Error('No renderer window available for offscreen mounting');
-    }
+    // Mount in the hidden capture window (not the main window)
+    const captureWin = await this.getCaptureWindow();
 
-    logger.main.info(`[OffscreenEditorManager] Sending mount request to renderer`);
+    logger.main.info(`[OffscreenEditorManager] Sending mount request to capture window`);
 
     // Create entry before sending IPC (renderer will report when ready)
     const entry: OffscreenEditorEntry = {
@@ -90,9 +152,9 @@ export class OffscreenEditorManager {
 
     this.editors.set(filePath, entry);
 
-    // Send IPC to renderer to mount
+    // Send IPC to capture window renderer to mount
     try {
-      window.webContents.send('offscreen-editor:mount', {
+      captureWin.webContents.send('offscreen-editor:mount', {
         filePath,
         workspacePath,
       });
@@ -164,36 +226,94 @@ export class OffscreenEditorManager {
   }
 
   /**
-   * Capture screenshot from an offscreen editor.
-   * If not mounted, mounts it temporarily.
-   * Delegates to renderer to capture the DOM element via IPC.
+   * Capture screenshot from an editor using Electron's native capturePage().
+   *
+   * This captures actual composited pixels from the GPU, so WebGL, canvas,
+   * complex CSS transforms, and iframe content all work correctly.
+   *
+   * For visible editors (open in a tab): captures from the main window.
+   * For offscreen editors: captures from the hidden capture window (no flash).
    */
-  public async captureScreenshot(filePath: string, workspacePath: string, selector?: string): Promise<Buffer> {
-    // Check if already mounted offscreen
+  public async captureScreenshot(filePath: string, workspacePath: string, selector?: string, theme?: string): Promise<Buffer> {
     const wasMounted = this.editors.has(filePath);
 
-    logger.main.info(`[OffscreenEditorManager] captureScreenshot - wasMounted: ${wasMounted}, editorCount: ${this.editors.size}, filePath: ${filePath}`);
-    logger.main.info(`[OffscreenEditorManager] Current editors: ${Array.from(this.editors.keys()).join(', ')}`);
+    logger.main.info(`[OffscreenEditorManager] captureScreenshot - wasMounted: ${wasMounted}, editorCount: ${this.editors.size}, filePath: ${filePath}, theme: ${theme || 'current'}`);
 
+    // First, try to capture from a visible editor in the main window.
+    // This is the fast path -- no mounting, no flash.
+    // Only use this path if no specific theme is requested (we can't change the main window's theme).
+    if (!theme) {
+      const mainWin = this.getTargetWindow(workspacePath);
+      if (mainWin && !mainWin.isDestroyed()) {
+        const visibleResult = await this.tryCaptureFromWindow(mainWin, filePath, selector);
+        if (visibleResult) {
+          logger.main.info(`[OffscreenEditorManager] Captured from visible editor: ${visibleResult.length} bytes`);
+          return visibleResult;
+        }
+      }
+    }
+
+    // Not visible in main window (or specific theme requested) -- use the hidden capture window
     if (!wasMounted) {
-      logger.main.info(`[OffscreenEditorManager] Mounting temporarily for screenshot: ${filePath}`);
+      logger.main.info(`[OffscreenEditorManager] Mounting in capture window for screenshot: ${filePath}`);
       await this.mountOffscreen(filePath, workspacePath);
     }
 
-    // Request screenshot via IPC (renderer handles the actual capture)
-    const window = this.getTargetWindow(workspacePath);
-    if (!window || window.isDestroyed()) {
-      throw new Error('No renderer window available for screenshot');
+    const captureWin = await this.getCaptureWindow();
+
+    // Capture from the hidden window -- editor is positioned at 0,0 there
+    const result = await this.captureFromWindow(captureWin, filePath, selector, theme);
+
+    if (!wasMounted) {
+      this.unmountOffscreen(filePath);
     }
 
-    // Send request and wait for response
-    const result = await new Promise<{ success: boolean; imageBase64?: string; error?: string }>((resolve, reject) => {
+    return result;
+  }
+
+  /**
+   * Try to capture a visible editor from a window.
+   * Returns null if no visible editor is found for the file.
+   */
+  private async tryCaptureFromWindow(win: BrowserWindow, filePath: string, selector?: string): Promise<Buffer | null> {
+    const result = await this.sendCaptureRequest(win, filePath, selector);
+
+    if (!result.success) {
+      // If it failed because no visible editor was found, return null
+      if (result.error?.includes('No offscreen editor mounted') || result.error?.includes('No visible')) {
+        return null;
+      }
+      // Other errors are real failures
+      return null;
+    }
+
+    if (!result.imageBase64) return null;
+    return Buffer.from(result.imageBase64, 'base64');
+  }
+
+  /**
+   * Capture from a window, throwing on failure.
+   */
+  private async captureFromWindow(win: BrowserWindow, filePath: string, selector?: string, theme?: string): Promise<Buffer> {
+    const result = await this.sendCaptureRequest(win, filePath, selector, theme);
+
+    if (!result.success || !result.imageBase64) {
+      throw new Error(result.error || 'Screenshot failed');
+    }
+
+    const buffer = Buffer.from(result.imageBase64, 'base64');
+    logger.main.info(`[OffscreenEditorManager] Screenshot captured: ${buffer.length} bytes`);
+    return buffer;
+  }
+
+  /**
+   * Send a capture request to a window's renderer and wait for the response.
+   */
+  private async sendCaptureRequest(win: BrowserWindow, filePath: string, selector?: string, theme?: string): Promise<{ success: boolean; imageBase64?: string; error?: string }> {
+    return new Promise((resolve, reject) => {
+      const { ipcMain } = require('electron');
       const responseChannel = `offscreen-editor:capture-screenshot-response:${Date.now()}-${Math.random()}`;
 
-      logger.main.info(`[OffscreenEditorManager] Sending screenshot request, response channel: ${responseChannel}`);
-
-      // Set up one-time listener for response
-      const { ipcMain } = require('electron');
       const timeout = setTimeout(() => {
         ipcMain.removeHandler(responseChannel);
         reject(new Error('Screenshot request timed out after 30s'));
@@ -202,36 +322,21 @@ export class OffscreenEditorManager {
       ipcMain.handle(responseChannel, async (_event: any, response: any) => {
         clearTimeout(timeout);
         ipcMain.removeHandler(responseChannel);
-        logger.main.info(`[OffscreenEditorManager] Screenshot response received: ${response.success}`);
         resolve(response);
         return { received: true };
       });
 
-      // Send request to renderer
-      window.webContents.send('offscreen-editor:capture-screenshot-request', {
+      win.webContents.send('offscreen-editor:capture-screenshot-request', {
         filePath,
         selector,
+        theme,
         responseChannel,
       });
     });
-
-    // If we mounted temporarily, unmount after screenshot completes
-    if (!wasMounted) {
-      this.unmountOffscreen(filePath);
-    }
-
-    if (!result.success || !result.imageBase64) {
-      throw new Error(result.error || 'Screenshot failed');
-    }
-
-    const buffer = Buffer.from(result.imageBase64, 'base64');
-    logger.main.info(`[OffscreenEditorManager] Screenshot captured: ${buffer.length} bytes`);
-
-    return buffer;
   }
 
   /**
-   * Actually unmount the editor and notify renderer.
+   * Actually unmount the editor and notify the capture window renderer.
    */
   private performUnmount(filePath: string): void {
     const entry = this.editors.get(filePath);
@@ -239,10 +344,9 @@ export class OffscreenEditorManager {
 
     logger.main.info(`[OffscreenEditorManager] Unmounting ${filePath}`);
 
-    // Get any window to send unmount request
-    const window = BrowserWindow.getAllWindows().find(w => !w.isDestroyed());
-    if (window) {
-      window.webContents.send('offscreen-editor:unmount', { filePath });
+    // Send unmount to the capture window where offscreen editors live
+    if (this.captureWindow && !this.captureWindow.isDestroyed()) {
+      this.captureWindow.webContents.send('offscreen-editor:unmount', { filePath });
     }
 
     this.editors.delete(filePath);
@@ -302,14 +406,12 @@ export class OffscreenEditorManager {
       }
     }
 
-    // Send unmount for all editors
-    const window = BrowserWindow.getAllWindows().find(w => !w.isDestroyed());
-    if (window) {
-      for (const filePath of this.editors.keys()) {
-        window.webContents.send('offscreen-editor:unmount', { filePath });
-      }
-    }
-
     this.editors.clear();
+
+    // Close the hidden capture window
+    if (this.captureWindow && !this.captureWindow.isDestroyed()) {
+      this.captureWindow.close();
+      this.captureWindow = null;
+    }
   }
 }

@@ -1,5 +1,11 @@
 // console.log('[RENDERER] index.tsx executing at', new Date().toISOString());
 
+// Check if this is the hidden capture window (used for flash-free offscreen screenshots).
+// The capture window loads the same renderer URL with ?mode=capture but skips all heavy
+// initialization (Monaco, PostHog, React, settings). It only sets up the offscreen editor
+// system for mounting editors and capturing screenshots via native capturePage().
+const isCaptureMode = new URLSearchParams(window.location.search).get('mode') === 'capture';
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { Provider as JotaiProvider } from 'jotai';
@@ -49,22 +55,11 @@ import {
 
 // console.log('[RENDERER] Imports complete at', new Date().toISOString());
 
-// Initialize Monaco Editor before rendering any components
-initMonacoEditor();
-
-// Initialize theme from main process and set up IPC listener
-// This must happen before React renders to avoid flash
-initializeTheme();
-
-// Initialize offscreen editor renderer and set up IPC listeners
+// Initialize offscreen editor renderer and set up IPC listeners.
+// This runs in BOTH normal mode and capture mode.
 offscreenEditorRenderer.initialize();
 
-// Expose offscreen renderer on window for main process access
-(window as any).offscreenEditorRenderer = offscreenEditorRenderer;
-
-// Set up IPC listeners for offscreen editor mount/unmount
 window.electronAPI.onOffscreenEditorMount(async (payload: { filePath: string; workspacePath: string }) => {
-  console.log('[Renderer] Received offscreen-editor:mount IPC:', payload);
   try {
     await offscreenEditorRenderer.mountEditor(payload.filePath, payload.workspacePath);
   } catch (error) {
@@ -76,16 +71,35 @@ window.electronAPI.onOffscreenEditorUnmount((payload: { filePath: string }) => {
   offscreenEditorRenderer.unmountEditor(payload.filePath);
 });
 
-// Handle screenshot capture requests
-window.electronAPI.onOffscreenEditorCaptureScreenshotRequest(async (payload: { filePath: string; selector?: string; responseChannel: string }) => {
+// Handle screenshot capture requests.
+// Renderer controls the full lifecycle: position, native capture via IPC, restore.
+// This guarantees restore always happens (try/finally in captureScreenshot).
+window.electronAPI.onOffscreenEditorCaptureScreenshotRequest(async (payload: { filePath: string; selector?: string; theme?: string; responseChannel: string }) => {
   try {
-    const imageBase64 = await offscreenEditorRenderer.captureScreenshot(payload.filePath, payload.selector);
+    const imageBase64 = await offscreenEditorRenderer.captureScreenshot(payload.filePath, payload.selector, payload.theme);
     await window.electronAPI.invoke(payload.responseChannel, { success: true, imageBase64 });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     await window.electronAPI.invoke(payload.responseChannel, { success: false, error: errorMessage });
   }
 });
+
+// In capture mode, initialize extensions (needed for mounting editors) but skip everything else.
+if (isCaptureMode) {
+  const { registerExtensionSystem } = await import('./plugins/registerExtensionSystem');
+  await registerExtensionSystem();
+  console.log('[CaptureWindow] Ready - extensions and offscreen editor renderer initialized');
+} else {
+
+// Initialize Monaco Editor before rendering any components
+initMonacoEditor();
+
+// Initialize theme from main process and set up IPC listener
+// This must happen before React renders to avoid flash
+initializeTheme();
+
+// Expose offscreen renderer on window for main process access
+(window as any).offscreenEditorRenderer = offscreenEditorRenderer;
 
 // Initialize app settings atoms from main process
 // This loads settings and hydrates the Jotai atoms before React renders
@@ -203,3 +217,5 @@ root.render(
 );
 
 // console.log('[RENDERER] React render called at', new Date().toISOString());
+
+} // end of !isCaptureMode block
