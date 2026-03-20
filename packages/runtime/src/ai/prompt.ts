@@ -87,6 +87,8 @@ export interface ClaudeCodePromptOptions {
     append?: string;
   };
   enableAgentTeams?: boolean;
+  /** When true, includes plan tracking frontmatter instructions and directs plans to nimbalyst-local/plans/ */
+  planTrackingEnabled?: boolean;
   // Legacy fields - kept for backward compatibility but no longer used in prompt building
   /** @deprecated No longer used - prompt is now static for all session types */
   sessionType?: string;
@@ -111,6 +113,7 @@ export function buildClaudeCodeSystemPrompt(options: ClaudeCodePromptOptions): s
     worktreePath,
     isVoiceMode = false,
     voiceModeCodingAgentPrompt,
+    planTrackingEnabled = false,
   } = options;
   const effectiveToolReferenceStyle = sessionNamingInstructionStyle ?? toolReferenceStyle;
   const displayToUserTool = formatMcpToolReference('nimbalyst-mcp', 'display_to_user', effectiveToolReferenceStyle);
@@ -157,6 +160,54 @@ Consider which diagram type best suits the data you want to convey.
 - **Mermaid**: Use fenced code blocks with \`mermaid\` language in markdown files. Avoid ASCII diagrams.
 - **Excalidraw**: Create \`.excalidraw\` files and use MCP tools, or import Mermaid via \`excalidraw.import_mermaid\`
 - **Verify visuals**: Use \`capture_editor_screenshot\` to confirm diagrams render correctly`;
+
+  // Add plan tracking frontmatter instructions when enabled
+  if (planTrackingEnabled) {
+  prompt += `
+
+## Plan File Tracking
+
+When creating or editing plan files (in \`nimbalyst-local/plans/\`), always include YAML frontmatter with a \`planStatus\` block for tracking. Use the following template:
+
+\`\`\`yaml
+---
+planStatus:
+  planId: plan-[unique-identifier]
+  title: [Plan Title]
+  status: draft
+  planType: [feature|bug-fix|refactor|system-design|research|initiative|improvement]
+  priority: medium
+  owner: unassigned
+  stakeholders: []
+  tags: []
+  created: "YYYY-MM-DD"
+  updated: "YYYY-MM-DDTHH:MM:SS.sssZ"
+  progress: 0
+---
+\`\`\`
+
+### Status Values
+
+- \`draft\`: Initial planning phase
+- \`ready-for-development\`: Approved and ready to start
+- \`in-development\`: Currently being worked on
+- \`in-review\`: Implementation complete, pending review
+- \`completed\`: Successfully completed
+- \`rejected\`: Plan has been rejected
+- \`blocked\`: Progress blocked by dependencies
+
+### Plan Types
+
+- \`feature\`: New feature development
+- \`bug-fix\`: Bug fix or issue resolution
+- \`refactor\`: Code refactoring/improvement
+- \`system-design\`: Architecture/design work
+- \`research\`: Research/investigation task
+- \`initiative\`: Large multi-feature effort
+- \`improvement\`: Enhancement to existing feature
+
+Update the \`updated\` timestamp and \`progress\` field (0-100) whenever modifying a plan. Use kebab-case for file names (e.g., \`dark-mode-implementation.md\`).`;
+  }
 
   // Add worktree warning if in worktree
   if (worktreePath) {

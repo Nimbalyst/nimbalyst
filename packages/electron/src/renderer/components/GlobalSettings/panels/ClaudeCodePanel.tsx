@@ -81,6 +81,9 @@ export function ClaudeCodePanel({
   // Agent teams toggle (experimental) - stored as env var in ~/.claude/settings.json
   const [agentTeamsEnabled, setAgentTeamsEnabled] = useState(false);
 
+  // Plan tracking toggle - stores plans in nimbalyst-local/plans/ with tracking frontmatter
+  const [planTrackingEnabled, setPlanTrackingEnabledState] = useState(true);
+
   // Detect Windows platform using navigator.platform (client-side, no IPC needed)
   const isWindowsPlatform = navigator.platform === 'Win32';
 
@@ -195,6 +198,7 @@ export function ClaudeCodePanel({
       const settings = await window.electronAPI.aiGetSettings();
       setUseStandaloneBinaryState(settings?.useStandaloneBinary ?? false);
       setCustomClaudeCodePathState(settings?.customClaudeCodePath ?? '');
+      setPlanTrackingEnabledState(settings?.planTrackingEnabled ?? true);
     } catch (error) {
       console.error('[ClaudeCodePanel] Failed to load standalone binary setting:', error);
     }
@@ -229,6 +233,21 @@ export function ClaudeCodePanel({
     } catch (error) {
       console.error('[ClaudeCodePanel] Failed to save custom Claude Code path:', error);
       setCustomClaudeCodePathState(previousPath);
+    }
+  };
+
+  // Save plan tracking setting
+  const handleSetPlanTrackingEnabled = async (enabled: boolean) => {
+    setPlanTrackingEnabledState(enabled);
+    try {
+      const currentSettings = await window.electronAPI.aiGetSettings();
+      await window.electronAPI.aiSaveSettings({
+        ...currentSettings,
+        planTrackingEnabled: enabled,
+      });
+    } catch (error) {
+      console.error('[ClaudeCodePanel] Failed to save plan tracking setting:', error);
+      setPlanTrackingEnabledState(!enabled);
     }
   };
 
@@ -382,6 +401,28 @@ export function ClaudeCodePanel({
         <p className="text-[11px] text-[var(--nim-text-faint)] leading-relaxed">
           Leave empty to use the built-in SDK. Changes take effect on the next agent session.
         </p>
+      </div>
+
+      {/* Plan Tracking Toggle */}
+      <div className="provider-enable flex items-center justify-between gap-4 py-4 mb-4 border-b border-[var(--nim-border)]">
+        <div>
+          <span className="provider-enable-label text-sm font-medium text-[var(--nim-text)]">Plan Tracking</span>
+          <p className="text-xs text-[var(--nim-text-muted)] mt-1">
+            Save plans to <code className="text-xs bg-[var(--nim-bg-tertiary)] px-1 py-0.5 rounded">nimbalyst-local/plans/</code> with
+            tracking frontmatter for status, progress, and priority.
+            When disabled, plans use Claude Code's default behavior and are saved in your home directory instead of the project.
+          </p>
+        </div>
+        <label className="provider-toggle relative inline-block w-11 h-6 cursor-pointer">
+          <input
+            data-testid="plan-tracking-toggle"
+            type="checkbox"
+            checked={planTrackingEnabled}
+            onChange={(e) => handleSetPlanTrackingEnabled(e.target.checked)}
+            className="hidden peer"
+          />
+          <span className="provider-toggle-slider absolute cursor-pointer inset-0 rounded-full transition-all bg-[var(--nim-bg-tertiary)] before:absolute before:content-[''] before:h-5 before:w-5 before:left-0.5 before:bottom-0.5 before:rounded-full before:transition-all before:bg-white before:shadow-sm peer-checked:bg-[var(--nim-primary)] peer-checked:before:translate-x-5"></span>
+        </label>
       </div>
 
       {/* Agent Teams Toggle (Experimental) */}

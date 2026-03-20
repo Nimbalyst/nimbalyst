@@ -125,6 +125,11 @@ export async function buildSdkOptions(
     // The SDK's `permissionMode: 'plan'` natively enforces planning restrictions (scopes
     // Write to the plan file only). Manual filtering was removed in favour of this approach.
     permissionMode: currentMode === 'planning' ? 'plan' : 'default',
+    // When plan tracking is enabled, direct plan files to the project's plans folder
+    // (relative to cwd). This applies whenever the agent enters plan mode, even mid-session.
+    settings: {
+      ...(ClaudeCodeDeps.planTrackingEnabled && { plansDirectory: 'nimbalyst-local/plans' }),
+    },
     canUseTool: createCanUseToolHandler(sessionId, workspacePath, permissionsPath),
     hooks: {
       'PreToolUse': [{ hooks: [toolHooksService.createPreToolUseHook()] }],

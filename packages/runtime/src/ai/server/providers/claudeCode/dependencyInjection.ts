@@ -99,6 +99,13 @@ export const ClaudeCodeDeps = {
   // Used in planning mode to allow editing extension-registered file types (e.g., .mockup.html)
   extensionFileTypesLoader: null as ExtensionFileTypesLoader | null,
 
+  // ---- Plan Tracking ----
+
+  PLAN_TRACKING_DEFAULT: true as const,
+
+  // When true, plans are saved to nimbalyst-local/plans/ with tracking frontmatter
+  planTrackingEnabled: true,
+
   // ---- Default Model ----
 
   DEFAULT_MODEL: 'claude-code:sonnet' as const,
@@ -172,5 +179,9 @@ export const ClaudeCodeDeps = {
 
   setExtensionFileTypesLoader(loader: ExtensionFileTypesLoader | null): void {
     this.extensionFileTypesLoader = loader;
+  },
+
+  setPlanTrackingEnabled(enabled: boolean): void {
+    this.planTrackingEnabled = enabled;
   },
 };
