@@ -409,14 +409,42 @@ async function scanDirectoryForClaudePlugins(
       // Verify the plugin path exists
       try {
         await fs.access(pluginPath);
-        plugins.push({
-          type: 'local' as const,
-          path: pluginPath,
-        });
-        // logger.main.info(`[ExtensionHandlers] Found Claude plugin: ${extensionId} at ${pluginPath}`);
       } catch {
         logger.main.warn(`[ExtensionHandlers] Claude plugin path not found: ${pluginPath}`);
+        continue;
       }
+
+      // Validate plugin.json against the Claude Code SDK's expected schema.
+      // The SDK silently drops plugins with invalid plugin.json, so we catch
+      // common issues here and log warnings to help extension developers.
+      const pluginJsonPath = path.join(pluginPath, '.claude-plugin', 'plugin.json');
+      try {
+        const pluginJsonContent = await fs.readFile(pluginJsonPath, 'utf-8');
+        const pluginJson = JSON.parse(pluginJsonContent);
+        const issues: string[] = [];
+
+        if (!pluginJson.name || typeof pluginJson.name !== 'string') {
+          issues.push('"name" must be a non-empty string');
+        } else if (pluginJson.name.includes(' ')) {
+          issues.push('"name" cannot contain spaces (use kebab-case)');
+        }
+
+        if (pluginJson.author !== undefined && typeof pluginJson.author === 'string') {
+          issues.push('"author" must be an object { name: string }, not a string. The SDK will silently reject this plugin.');
+        }
+
+        if (issues.length > 0) {
+          logger.main.warn(`[ExtensionHandlers] Claude plugin ${extensionId} has plugin.json issues that may cause the SDK to reject it: ${issues.join('; ')}`);
+        }
+      } catch {
+        // plugin.json missing or unreadable -- SDK will handle this
+      }
+
+      plugins.push({
+        type: 'local' as const,
+        path: pluginPath,
+      });
+      // logger.main.info(`[ExtensionHandlers] Found Claude plugin: ${extensionId} at ${pluginPath}`);
     } catch {
       // Skip directories without valid manifest
     }
