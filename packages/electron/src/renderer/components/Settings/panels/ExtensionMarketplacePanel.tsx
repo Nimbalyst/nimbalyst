@@ -76,6 +76,7 @@ export function ExtensionMarketplacePanel() {
   const [error, setError] = useState<string | null>(null);
   const [registry, setRegistry] = useState<RegistryData | null>(null);
   const [installedExtensions, setInstalledExtensions] = useState<Record<string, MarketplaceInstallRecord>>({});
+  const [allInstalledIds, setAllInstalledIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedExtension, setSelectedExtension] = useState<RegistryExtension | null>(null);
@@ -111,9 +112,10 @@ export function ExtensionMarketplacePanel() {
     setError(null);
 
     try {
-      const [registryResult, installedResult] = await Promise.all([
+      const [registryResult, installedResult, allExtensionsResult] = await Promise.all([
         window.electronAPI.invoke('extension-marketplace:fetch-registry'),
         window.electronAPI.invoke('extension-marketplace:get-installed'),
+        window.electronAPI.invoke('extensions:list-installed'),
       ]);
 
       if (registryResult.success) {
@@ -124,6 +126,11 @@ export function ExtensionMarketplacePanel() {
 
       if (installedResult.success) {
         setInstalledExtensions(installedResult.data || {});
+      }
+
+      // Track all installed extension IDs (built-in + user-installed)
+      if (Array.isArray(allExtensionsResult)) {
+        setAllInstalledIds(new Set(allExtensionsResult.map((e: { id: string }) => e.id)));
       }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load marketplace data';
@@ -241,8 +248,12 @@ export function ExtensionMarketplacePanel() {
   }, [githubUrl, posthog]);
 
   const isExtensionInstalled = useCallback((extensionId: string): boolean => {
-    return !!installedExtensions[extensionId];
-  }, [installedExtensions]);
+    return !!installedExtensions[extensionId] || allInstalledIds.has(extensionId);
+  }, [installedExtensions, allInstalledIds]);
+
+  const isBuiltinExtension = useCallback((extensionId: string): boolean => {
+    return allInstalledIds.has(extensionId) && !installedExtensions[extensionId];
+  }, [installedExtensions, allInstalledIds]);
 
   // Filter extensions
   const filteredExtensions = useMemo(() => {
@@ -410,8 +421,12 @@ export function ExtensionMarketplacePanel() {
             )}
           </div>
           {installed ? (
-            <span className="inline-flex items-center px-2 py-1 rounded text-[0.6875rem] font-semibold uppercase tracking-tight bg-[rgba(39,174,96,0.15)] text-[#27ae60]">
-              Installed
+            <span className={`inline-flex items-center px-2 py-1 rounded text-[0.6875rem] font-semibold uppercase tracking-tight ${
+              isBuiltinExtension(ext.id)
+                ? 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)]'
+                : 'bg-[rgba(39,174,96,0.15)] text-[#27ae60]'
+            }`}>
+              {isBuiltinExtension(ext.id) ? 'Built-in' : 'Installed'}
             </span>
           ) : (
             <button
@@ -783,18 +798,24 @@ export function ExtensionMarketplacePanel() {
           <div className="flex items-center gap-3">
             {installed ? (
               <>
-                <span className="inline-flex items-center py-1.5 px-3 rounded bg-[rgba(39,174,96,0.15)] text-[#27ae60] text-[0.8125rem] font-medium">
-                  Installed
+                <span className={`inline-flex items-center py-1.5 px-3 rounded text-[0.8125rem] font-medium ${
+                  isBuiltinExtension(selectedExtension.id)
+                    ? 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)]'
+                    : 'bg-[rgba(39,174,96,0.15)] text-[#27ae60]'
+                }`}>
+                  {isBuiltinExtension(selectedExtension.id) ? 'Built-in' : 'Installed'}
                 </span>
-                <button
-                  className="py-1.5 px-3 border border-[var(--nim-error)] rounded bg-transparent text-[var(--nim-error)] text-xs font-medium cursor-pointer transition-all duration-150 hover:bg-[var(--nim-error)] hover:text-white"
-                  onClick={() => {
-                    handleUninstall(selectedExtension.id);
-                    setSelectedExtension(null);
-                  }}
-                >
-                  Uninstall
-                </button>
+                {!isBuiltinExtension(selectedExtension.id) && (
+                  <button
+                    className="py-1.5 px-3 border border-[var(--nim-error)] rounded bg-transparent text-[var(--nim-error)] text-xs font-medium cursor-pointer transition-all duration-150 hover:bg-[var(--nim-error)] hover:text-white"
+                    onClick={() => {
+                      handleUninstall(selectedExtension.id);
+                      setSelectedExtension(null);
+                    }}
+                  >
+                    Uninstall
+                  </button>
+                )}
               </>
             ) : (
               <button

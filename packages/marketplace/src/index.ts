@@ -159,8 +159,7 @@ async function handleRegistry(request: Request, env: Env): Promise<Response> {
 }
 
 /**
- * Increment download count and redirect to CDN for the actual file.
- * The .nimext is served directly from the R2 public bucket, not proxied through the Worker.
+ * Serve .nimext package directly from R2 and increment download count.
  */
 async function handleDownload(
   request: Request,
@@ -170,31 +169,30 @@ async function handleDownload(
 ): Promise<Response> {
   const key = `extensions/${extensionId}/${version}.nimext`;
 
-  // Verify the object exists before redirecting (HEAD is cheap)
-  const head = await env.EXTENSIONS_BUCKET.head(key);
-  if (!head) {
+  const object = await env.EXTENSIONS_BUCKET.get(key);
+  if (!object) {
     return jsonResponse({ error: 'Extension not found' }, 404, request);
   }
 
-  // Increment download count (fire-and-forget, don't block the redirect)
+  // Increment download count (fire-and-forget)
   incrementDownloadCount(env, extensionId).catch((err) => {
     console.error(`Failed to increment download count for ${extensionId}:`, err);
   });
 
-  // Redirect to CDN -- the R2 public bucket serves the file directly
-  const cdnUrl = `${env.CDN_BASE_URL}/${key}`;
-  return new Response(null, {
-    status: 302,
+  return new Response(object.body, {
+    status: 200,
     headers: {
-      'Location': cdnUrl,
+      'Content-Type': 'application/zip',
+      'Content-Length': object.size.toString(),
+      'Cache-Control': 'public, max-age=86400',
+      'Content-Disposition': `attachment; filename="${extensionId}-${version}.nimext"`,
       ...corsHeaders(request),
     },
   });
 }
 
 /**
- * Redirect to CDN for extension screenshot images.
- * Screenshots are served directly from the R2 public bucket.
+ * Serve extension screenshot images directly from R2.
  */
 async function handleScreenshot(
   request: Request,
@@ -206,12 +204,21 @@ async function handleScreenshot(
   const sanitized = filename.replace(/\.\./g, '').replace(/[^a-zA-Z0-9._-]/g, '');
   const key = `screenshots/${extensionId}/${sanitized}`;
 
-  // Redirect to CDN -- the R2 public bucket serves the file directly
-  const cdnUrl = `${env.CDN_BASE_URL}/${key}`;
-  return new Response(null, {
-    status: 302,
+  const object = await env.EXTENSIONS_BUCKET.get(key);
+  if (!object) {
+    return jsonResponse({ error: 'Screenshot not found' }, 404, request);
+  }
+
+  // Determine content type from filename
+  let contentType = 'application/octet-stream';
+  if (sanitized.endsWith('.png')) contentType = 'image/png';
+  else if (sanitized.endsWith('.jpg') || sanitized.endsWith('.jpeg')) contentType = 'image/jpeg';
+  else if (sanitized.endsWith('.webp')) contentType = 'image/webp';
+
+  return new Response(object.body, {
+    status: 200,
     headers: {
-      'Location': cdnUrl,
+      'Content-Type': contentType,
       'Cache-Control': 'public, max-age=86400',
       ...corsHeaders(request),
     },

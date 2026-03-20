@@ -13,7 +13,7 @@ bucket_name = "nimbalyst-extensions"
 # KV namespace for download counts
 [[kv_namespaces]]
 binding = "DOWNLOAD_COUNTS"
-id = "placeholder-create-via-wrangler"
+id = "305c78b0f94849f193c95f494adf95dc"
 
 # Build-time version injection (set by deploy script)
 [vars]
@@ -31,7 +31,7 @@ bucket_name = "nimbalyst-extensions-staging"
 
 [[env.staging.kv_namespaces]]
 binding = "DOWNLOAD_COUNTS"
-id = "placeholder-staging"
+id = "305c78b0f94849f193c95f494adf95dc"
 
 [env.staging.vars]
 VERSION = "staging"
@@ -53,7 +53,7 @@ bucket_name = "nimbalyst-extensions"
 
 [[env.production.kv_namespaces]]
 binding = "DOWNLOAD_COUNTS"
-id = "placeholder-production"
+id = "305c78b0f94849f193c95f494adf95dc"
 
 [env.production.vars]
 VERSION = "0.1.0"
