@@ -453,10 +453,21 @@ function setupRendererEvalListener(): void {
     console.log('[ExtensionSystem] Renderer eval request');
 
     try {
-      // Wrap in async IIFE to support await expressions
-      // This allows expressions like: await fetch('/api/status').then(r => r.json())
-      // eslint-disable-next-line no-eval
-      const asyncEval = eval(`(async () => { return (${data.expression}); })()`);
+      // Wrap in async IIFE to support await expressions and statements
+      // Try as expression first (e.g. "1 + 2", "await fetch(...)"), fall back to statements (e.g. "const x = 1; x")
+      let asyncEval;
+      try {
+        // eslint-disable-next-line no-eval
+        asyncEval = eval(`(async () => { return (${data.expression}); })()`);
+      } catch (syntaxErr) {
+        if (syntaxErr instanceof SyntaxError) {
+          // Expression failed to parse — treat as statement(s) where the last expression is the result
+          // eslint-disable-next-line no-eval
+          asyncEval = eval(`(async () => { ${data.expression} })()`);
+        } else {
+          throw syntaxErr;
+        }
+      }
 
       // Await the result (handles both sync and async expressions)
       const result = await asyncEval;
