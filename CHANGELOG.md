@@ -20,6 +20,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.56.7] - 2026-03-20
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Hardened plan tracking defaults so unconfigured callers don't silently inject plan tracking instructions
+- Settings merge in sdkOptionsBuilder is now safe against future key overwrites
+- Added data-testid to plan tracking toggle for E2E testability
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.56.6] - 2026-03-19
 
 
