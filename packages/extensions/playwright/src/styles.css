@@ -44,7 +44,31 @@
 }
 
 .pw-toolbar-right {
-  max-width: 240px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 360px;
+}
+
+.pw-config-select {
+  padding: 3px 6px;
+  background: var(--nim-bg, #2d2d2d);
+  border: 1px solid var(--nim-border, #4a4a4a);
+  border-radius: 4px;
+  color: var(--nim-text, #ffffff);
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+  max-width: 140px;
+}
+
+.pw-config-select:focus {
+  border-color: var(--nim-primary, #60a5fa);
+}
+
+.pw-config-select option {
+  background: var(--nim-bg-secondary, #1a1a1a);
+  color: var(--nim-text, #ffffff);
 }
 
 .pw-toolbar-summary {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PanelHostProps } from '@nimbalyst/extension-sdk';
-import type { TestNode } from '../types';
+import type { TestConfig, TestNode } from '../types';
 import { TestRunner, setRunner } from '../testRunner';
 import { HistoryStore, setHistoryStore } from '../historyStore';
 import { TestTreeNode } from './TestTreeNode';
@@ -9,6 +9,66 @@ import { SummaryBar } from './SummaryBar';
 import { TabBar, type TabId } from './TabBar';
 import { TraceViewer } from './TraceViewer';
 import { HistoryPanel } from './HistoryPanel';
+
+const DEFAULT_E2E_CONFIG: TestConfig = {
+  id: 'e2e',
+  label: 'E2E Tests',
+  configPath: 'playwright.config.ts',
+};
+
+const EXTENSION_TEST_CONFIG: TestConfig = {
+  id: 'extensions',
+  label: 'Extension Tests',
+  configPath: 'packages/electron/playwright-extension.config.ts',
+};
+
+/**
+ * Scan for extension test spec files to determine if the extension config
+ * should be auto-added. Uses host.exec to glob for spec files.
+ */
+async function detectExtensionTests(host: PanelHostProps['host']): Promise<TestConfig[]> {
+  try {
+    const result = await host.exec(
+      'find packages/extensions -path "*/tests/*.spec.ts" -maxdepth 4 2>/dev/null | head -20',
+      { timeout: 5000 },
+    );
+    if (result.success && result.stdout.trim()) {
+      // Found extension tests — build per-extension configs with NIMBALYST_EXT_TEST_DIR
+      const lines = result.stdout.trim().split('\n');
+      const testDirs = new Set<string>();
+      for (const line of lines) {
+        // e.g. packages/extensions/csv-spreadsheet/tests/csv-editor.spec.ts -> packages/extensions/csv-spreadsheet/tests
+        const dir = line.substring(0, line.lastIndexOf('/'));
+        testDirs.add(dir);
+      }
+
+      // Create one config per extension that has tests
+      // NIMBALYST_EXT_TEST_DIR must be absolute — the playwright config resolves
+      // it relative to its own directory (packages/electron/), not workspace root.
+      const configs: TestConfig[] = [];
+      for (const dir of testDirs) {
+        // Extract extension name: packages/extensions/<name>/tests
+        const parts = dir.split('/');
+        const extIdx = parts.indexOf('extensions');
+        const extName = extIdx >= 0 ? parts[extIdx + 1] : dir;
+        const absoluteDir = dir.startsWith('/') ? dir : `${host.workspacePath}/${dir}`;
+        configs.push({
+          id: `ext-${extName}`,
+          label: `${extName}`,
+          configPath: EXTENSION_TEST_CONFIG.configPath,
+          env: {
+            NIMBALYST_EXT_TEST_DIR: absoluteDir,
+            NIMBALYST_WORKSPACE_PATH: host.workspacePath,
+          },
+        });
+      }
+      return configs;
+    }
+  } catch {
+    // Silently ignore — no extension tests found
+  }
+  return [];
+}
 
 export function TestExplorerPanel({ host }: PanelHostProps) {
   const runnerRef = useRef<TestRunner | null>(null);
@@ -23,58 +83,113 @@ export function TestExplorerPanel({ host }: PanelHostProps) {
   const [activeTab, setActiveTab] = useState<TabId>('tests');
   const [tracePath, setTracePath] = useState<string | undefined>();
   const [, setFailedCount] = useState(0);
+  const [configs, setConfigs] = useState<TestConfig[]>([]);
+  const [activeConfigId, setActiveConfigId] = useState('e2e');
 
   // Initialize runner and history store
   useEffect(() => {
-    const configPath = host.storage.get<string>('configPath') ?? 'playwright.config.ts';
-    const runner = new TestRunner(host.workspacePath, configPath);
-    runnerRef.current = runner;
-    setRunner(runner);
+    let cancelled = false;
 
-    const historyStore = new HistoryStore();
-    historyStoreRef.current = historyStore;
-    setHistoryStore(historyStore);
+    async function init() {
+      // Detect extension tests
+      const extConfigs = await detectExtensionTests(host);
+      const allConfigs = [DEFAULT_E2E_CONFIG, ...extConfigs];
 
-    const unsub = runner.subscribe((state) => {
-      setTree(state.tree);
-      setIsRunning(state.isRunning);
-      setError(state.error);
-      if (state.lastRun) {
-        setLastRun({
-          passed: state.lastRun.passed,
-          failed: state.lastRun.failed,
-          skipped: state.lastRun.skipped,
-          flaky: state.lastRun.flaky,
-          durationMs: state.lastRun.durationMs,
-        });
-        setFailedCount(state.lastRun.failed);
+      if (cancelled) return;
 
-        // Record to history
-        historyStore.recordRun(state.lastRun);
+      // Restore saved active config or use first
+      const savedActiveConfig = host.storage.get<string>('activeConfigId');
+      const initialActiveId = savedActiveConfig && allConfigs.some(c => c.id === savedActiveConfig)
+        ? savedActiveConfig
+        : allConfigs[0].id;
+
+      const runner = new TestRunner(host.workspacePath, allConfigs);
+      runnerRef.current = runner;
+      setRunner(runner);
+      setConfigs(allConfigs);
+      setActiveConfigId(initialActiveId);
+      runner.setActiveConfig(initialActiveId);
+
+      const historyStore = new HistoryStore();
+      historyStoreRef.current = historyStore;
+      setHistoryStore(historyStore);
+
+      const unsub = runner.subscribe((state) => {
+        setTree(state.tree);
+        setIsRunning(state.isRunning);
+        setError(state.error);
+        setConfigs(state.configs);
+        setActiveConfigId(state.activeConfigId);
+        if (state.lastRun) {
+          setLastRun({
+            passed: state.lastRun.passed,
+            failed: state.lastRun.failed,
+            skipped: state.lastRun.skipped,
+            flaky: state.lastRun.flaky,
+            durationMs: state.lastRun.durationMs,
+          });
+          setFailedCount(state.lastRun.failed);
+          historyStore.recordRun(state.lastRun);
+        }
+      });
+
+      // Load persisted state from storage
+      await runner.connectStorage(host.storage);
+      historyStore.connectStorage(host.storage);
+
+      // Auto-discover tests for all configs
+      if (!cancelled) {
+        await discoverAllConfigs(runner, allConfigs);
       }
-    });
 
-    // Load persisted state from storage
-    runner.connectStorage(host.storage);
-    historyStore.connectStorage(host.storage);
+      return unsub;
+    }
 
-    // Auto-discover tests on mount
-    discoverTests(runner);
+    let unsub: (() => void) | undefined;
+    init().then(u => { unsub = u; });
 
-    return unsub;
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [host.workspacePath]);
 
-  async function discoverTests(runner: TestRunner) {
+  async function discoverAllConfigs(runner: TestRunner, cfgs: TestConfig[]) {
     setIsDiscovering(true);
     setError(null);
     try {
-      const cmd = runner.getDiscoverCommand();
-      const result = await host.exec(cmd, { timeout: 30000 });
-      // Playwright outputs JSON to stdout regardless of exit code
+      // Discover tests for each config in sequence to avoid overwhelming the system
+      for (const config of cfgs) {
+        const cmd = runner.getDiscoverCommand(config.id);
+        const env = runner.getExecEnv(config.id);
+        try {
+          const result = await host.exec(cmd, { timeout: 30000, env });
+          const output = result.stdout || result.stderr;
+          if (output && output.includes('"suites"')) {
+            runner.parseDiscoveryOutput(output, config.id);
+          }
+          // Silently skip configs that fail discovery (e.g. CDP not running)
+        } catch {
+          // Individual config discovery failure is non-fatal
+        }
+      }
+    } finally {
+      setIsDiscovering(false);
+    }
+  }
+
+  async function discoverTests(runner: TestRunner, configId?: string) {
+    setIsDiscovering(true);
+    setError(null);
+    try {
+      const id = configId ?? runner.getState().activeConfigId;
+      const cmd = runner.getDiscoverCommand(id);
+      const env = runner.getExecEnv(id);
+      const result = await host.exec(cmd, { timeout: 30000, env });
       const output = result.stdout || result.stderr;
       if (output && output.includes('"suites"')) {
-        runner.parseDiscoveryOutput(output);
+        runner.parseDiscoveryOutput(output, id);
       } else if (!result.success) {
         runner.setError(result.stderr || 'Test discovery failed');
       }
@@ -91,14 +206,14 @@ export function TestExplorerPanel({ host }: PanelHostProps) {
 
     runner.setRunning(true);
     try {
-      // Use extension file storage for test artifacts (screenshots, traces)
+      const configId = runner.getState().activeConfigId;
+      const env = runner.getExecEnv(configId);
       const outputDir = await host.files.getBasePath();
-      const cmd = runner.getRunCommand(scope, `${outputDir}/test-results`);
-      const result = await host.exec(cmd, { timeout: 300000 }); // 5min timeout for test runs
-      // Playwright outputs JSON to stdout even on test failures (non-zero exit)
+      const cmd = runner.getRunCommand(scope, `${outputDir}/test-results`, configId);
+      const result = await host.exec(cmd, { timeout: 300000, env });
       const output = result.stdout || result.stderr;
       if (output && output.includes('"stats"')) {
-        runner.parseRunOutput(output);
+        runner.parseRunOutput(output, configId);
       } else {
         runner.setRunning(false);
         runner.setError(result.stderr || 'Test run failed');
@@ -115,12 +230,18 @@ export function TestExplorerPanel({ host }: PanelHostProps) {
       testCount: countTests(tree),
       isRunning,
       lastRun,
+      configs: configs.map(c => ({ id: c.id, label: c.label })),
+      activeConfig: activeConfigId,
       historyRuns: historyStoreRef.current?.getHistory().runs.length ?? 0,
     });
-  }, [tree, isRunning, lastRun, host.ai]);
+  }, [tree, isRunning, lastRun, configs, activeConfigId, host.ai]);
 
   const handleRun = useCallback((node: TestNode) => {
     const scope = node.filePath || undefined;
+    // Switch to the node's config before running so the correct config/env is used
+    if (node.configId) {
+      runnerRef.current?.setActiveConfig(node.configId);
+    }
     runTests(scope);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRunning]);
@@ -134,6 +255,19 @@ export function TestExplorerPanel({ host }: PanelHostProps) {
     const runner = runnerRef.current;
     if (runner) discoverTests(runner);
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleRefreshAll = useCallback(() => {
+    const runner = runnerRef.current;
+    if (runner) discoverAllConfigs(runner, runner.getConfigs());
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleConfigChange = useCallback((configId: string) => {
+    const runner = runnerRef.current;
+    if (runner) {
+      runner.setActiveConfig(configId);
+    }
   }, []);
 
   const handleSelect = useCallback((node: TestNode) => {
@@ -166,6 +300,8 @@ export function TestExplorerPanel({ host }: PanelHostProps) {
     },
   ];
 
+  const showConfigSelector = configs.length > 1;
+
   return (
     <div className="pw-panel">
       {/* Toolbar */}
@@ -193,9 +329,9 @@ export function TestExplorerPanel({ host }: PanelHostProps) {
               )}
               <button
                 className="pw-icon-btn"
-                onClick={handleRefresh}
+                onClick={showConfigSelector ? handleRefreshAll : handleRefresh}
                 disabled={isDiscovering}
-                title="Refresh test list"
+                title={showConfigSelector ? 'Refresh all test configs' : 'Refresh test list'}
               >
                 <span
                   className="material-symbols-outlined"
@@ -212,6 +348,18 @@ export function TestExplorerPanel({ host }: PanelHostProps) {
         </div>
         {activeTab === 'tests' && (
           <div className="pw-toolbar-right">
+            {showConfigSelector && (
+              <select
+                className="pw-config-select"
+                value={activeConfigId}
+                onChange={(e) => handleConfigChange(e.target.value)}
+                title="Select test config for running tests"
+              >
+                {configs.map(c => (
+                  <option key={c.id} value={c.id}>{c.label}</option>
+                ))}
+              </select>
+            )}
             <input
               type="text"
               className="pw-search-input"

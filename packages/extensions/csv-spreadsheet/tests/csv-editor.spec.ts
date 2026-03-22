@@ -11,6 +11,13 @@
 
 import { test as base, expect } from '@playwright/test';
 import { chromium } from 'playwright';
+import * as path from 'path';
+
+/**
+ * Workspace root — set by Nimbalyst's Playwright panel via NIMBALYST_WORKSPACE_PATH env var.
+ * Falls back to cwd for manual CLI runs (npm run test:extensions).
+ */
+const WORKSPACE_ROOT = process.env.NIMBALYST_WORKSPACE_PATH || process.cwd();
 
 const test = base.extend<{ page: import('playwright').Page }>({
   page: async ({}, use) => {
@@ -24,7 +31,7 @@ const test = base.extend<{ page: import('playwright').Page }>({
           const ws = await p.evaluate(async () =>
             (await (window as any).electronAPI.getInitialState?.())?.workspacePath
           );
-          if (ws === '/Users/ghinkle/sources/stravu-editor') {
+          if (ws === WORKSPACE_ROOT) {
             target = p;
             break;
           }
@@ -32,13 +39,13 @@ const test = base.extend<{ page: import('playwright').Page }>({
       }
       if (target) break;
     }
-    if (!target) throw new Error('stravu-editor workspace window not found via CDP');
+    if (!target) throw new Error(`Workspace window not found via CDP (looking for ${WORKSPACE_ROOT})`);
     await use(target);
     browser.close();
   },
 });
 
-const CSV_PATH = '/Users/ghinkle/sources/stravu-editor/packages/extensions/csv-spreadsheet/samples/demo.csv';
+const CSV_PATH = path.join(WORKSPACE_ROOT, 'packages/extensions/csv-spreadsheet/samples/demo.csv');
 
 /**
  * Open the CSV file and wait for the grid to be ready.

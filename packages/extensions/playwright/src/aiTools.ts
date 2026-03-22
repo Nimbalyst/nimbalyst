@@ -17,13 +17,17 @@ function flattenTests(nodes: TestNode[]): TestNode[] {
 export const aiTools: ExtensionAITool[] = [
   {
     name: 'playwright.list_tests',
-    description: 'List all Playwright tests in the project with their hierarchy and current status from the last run. If no tests have been discovered yet, returns the command to run for discovery.',
+    description: 'List all Playwright tests in the project with their hierarchy and current status from the last run. Supports multiple test configs (e.g. E2E tests and extension tests). If no tests have been discovered yet, returns the command to run for discovery.',
     inputSchema: {
       type: 'object',
       properties: {
         jsonOutput: {
           type: 'string',
-          description: 'Raw JSON output from `npx playwright test --list --reporter=json`. If provided, parses and stores the test list. If omitted, returns cached results or the command to run.',
+          description: 'Raw JSON output from `npx playwright test --list --reporter=json`. If provided, parses and stores the test list.',
+        },
+        configId: {
+          type: 'string',
+          description: 'Config profile to use (e.g. "e2e", "ext-csv-spreadsheet"). If omitted, uses the active config.',
         },
       },
     },
@@ -34,9 +38,11 @@ export const aiTools: ExtensionAITool[] = [
         return { success: false, error: 'Playwright test runner not initialized. Open the Playwright Tests panel first.' };
       }
 
+      const configId = params.configId as string | undefined;
+
       // If JSON output provided, parse and store it
       if (params.jsonOutput) {
-        const tree = runner.parseDiscoveryOutput(params.jsonOutput as string);
+        const tree = runner.parseDiscoveryOutput(params.jsonOutput as string, configId);
         const tests = flattenTests(tree);
         return {
           success: true,
@@ -52,7 +58,9 @@ export const aiTools: ExtensionAITool[] = [
           success: true,
           message: 'No tests discovered yet. Run the discovery command and pass the JSON output back.',
           data: {
-            command: runner.getDiscoverCommand(),
+            command: runner.getDiscoverCommand(configId),
+            env: runner.getExecEnv(configId),
+            configs: state.configs.map(c => ({ id: c.id, label: c.label })),
             hint: 'Run this command via Bash, then call playwright.list_tests again with the jsonOutput parameter.',
           },
         };
@@ -64,6 +72,8 @@ export const aiTools: ExtensionAITool[] = [
         data: {
           totalTests: tests.length,
           tree: summarizeTree(state.tree),
+          configs: state.configs.map(c => ({ id: c.id, label: c.label })),
+          activeConfig: state.activeConfigId,
           status: {
             passed: tests.filter((t) => t.status === 'passed').length,
             failed: tests.filter((t) => t.status === 'failed').length,
@@ -89,6 +99,10 @@ export const aiTools: ExtensionAITool[] = [
           type: 'string',
           description: 'Raw JSON output from `npx playwright test --reporter=json`. If provided, parses results and updates the test panel.',
         },
+        configId: {
+          type: 'string',
+          description: 'Config profile to use (e.g. "e2e", "ext-csv-spreadsheet"). If omitted, uses the active config.',
+        },
       },
     },
     scope: 'global',
@@ -98,10 +112,12 @@ export const aiTools: ExtensionAITool[] = [
         return { success: false, error: 'Playwright test runner not initialized. Open the Playwright Tests panel first.' };
       }
 
+      const configId = params.configId as string | undefined;
+
       // If JSON output provided, parse and store results
       if (params.jsonOutput) {
         runner.setRunning(false);
-        const result = runner.parseRunOutput(params.jsonOutput as string);
+        const result = runner.parseRunOutput(params.jsonOutput as string, configId);
         if (!result) {
           return { success: false, error: runner.getState().error ?? 'Failed to parse test results' };
         }
@@ -129,11 +145,15 @@ export const aiTools: ExtensionAITool[] = [
       // Return the command to run
       const scope = params.scope as string | undefined;
       runner.setRunning(true);
+      if (configId) {
+        runner.setActiveConfig(configId);
+      }
       return {
         success: true,
         message: 'Run this command via Bash, then call playwright.run_test again with the jsonOutput parameter to update the panel.',
         data: {
-          command: runner.getRunCommand(scope),
+          command: runner.getRunCommand(scope, undefined, configId),
+          env: runner.getExecEnv(configId),
           hint: 'Playwright exits non-zero on test failures but still outputs valid JSON to stdout. Capture stdout regardless of exit code.',
         },
       };

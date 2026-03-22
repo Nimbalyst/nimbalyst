@@ -1,5 +1,17 @@
 export type TestStatus = 'passed' | 'failed' | 'skipped' | 'flaky' | 'running' | 'pending';
 
+/** A named Playwright config profile (e.g. E2E tests vs extension tests) */
+export interface TestConfig {
+  /** Unique key, e.g. 'e2e' or 'extensions' */
+  id: string;
+  /** Display label, e.g. 'E2E Tests' */
+  label: string;
+  /** Path to playwright config file, relative to workspace root */
+  configPath: string;
+  /** Extra environment variables to pass when running tests */
+  env?: Record<string, string>;
+}
+
 export interface TestNode {
   id: string;
   type: 'project' | 'file' | 'describe' | 'test';
@@ -16,6 +28,8 @@ export interface TestNode {
   error?: TestError;
   /** Number of retries */
   retries?: number;
+  /** Which config profile this node belongs to (set during merge) */
+  configId?: string;
 }
 
 export interface TestError {
