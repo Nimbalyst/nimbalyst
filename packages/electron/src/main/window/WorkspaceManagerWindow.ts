@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, statSync } from 'fs';
 import { readdir } from 'fs/promises';
 import { resolveEntryType } from '../utils/FileTree';
 import { getRecentItems, addToRecentItems, store, getWorkspaceWindowState, getTheme } from '../utils/store';
-import { createWindow, findWindowByWorkspace } from './WindowManager';
+import { createWindow, findWindowByWorkspace, windowStates } from './WindowManager';
 import { safeHandle } from '../utils/ipcRegistry';
 import { getBackgroundColor } from '../theme/ThemeManager';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
@@ -229,6 +229,17 @@ export function setupWorkspaceManagerHandlers() {
     );
 
     return workspacesWithInfo.filter(w => w.exists);
+  });
+
+  // Get currently open workspace paths (for Project Quick Open)
+  safeHandle('workspace-manager:get-open-workspaces', async () => {
+    const openPaths: string[] = [];
+    for (const [, state] of windowStates) {
+      if (state.workspacePath && state.mode === 'workspace') {
+        openPaths.push(state.workspacePath);
+      }
+    }
+    return openPaths;
   });
 
   // Get workspace statistics

@@ -18,6 +18,7 @@ export {
   type SessionQuickOpenData,
   type PromptQuickOpenData,
   type AgentCommandPaletteData,
+  type ProjectQuickOpenData,
 } from './navigation';
 export {
   registerSimpleDialogs,

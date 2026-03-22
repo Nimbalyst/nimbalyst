@@ -13,6 +13,7 @@ import type {
   SessionQuickOpenData,
   PromptQuickOpenData,
   AgentCommandPaletteData,
+  ProjectQuickOpenData,
 } from './navigation';
 
 export interface UseNavigationDialogsReturn {
@@ -20,6 +21,7 @@ export interface UseNavigationDialogsReturn {
   openSessionQuickOpen: (data: SessionQuickOpenData) => void;
   openPromptQuickOpen: (data: PromptQuickOpenData) => void;
   openAgentCommandPalette: (data: AgentCommandPaletteData) => void;
+  openProjectQuickOpen: (data: ProjectQuickOpenData) => void;
   closeNavigationDialogs: () => void;
 }
 
@@ -69,6 +71,13 @@ export function useNavigationDialogs(): UseNavigationDialogsReturn {
     [open],
   );
 
+  const openProjectQuickOpen = useCallback(
+    (data: ProjectQuickOpenData) => {
+      open(DIALOG_IDS.PROJECT_QUICK_OPEN, data);
+    },
+    [open],
+  );
+
   // Close all navigation dialogs
   const closeNavigationDialogs = useCallback(() => {
     const navigationDialogIds = [
@@ -76,6 +85,7 @@ export function useNavigationDialogs(): UseNavigationDialogsReturn {
       DIALOG_IDS.SESSION_QUICK_OPEN,
       DIALOG_IDS.PROMPT_QUICK_OPEN,
       DIALOG_IDS.AGENT_COMMAND_PALETTE,
+      DIALOG_IDS.PROJECT_QUICK_OPEN,
     ];
 
     navigationDialogIds.forEach((id) => {
@@ -90,6 +100,7 @@ export function useNavigationDialogs(): UseNavigationDialogsReturn {
     openSessionQuickOpen,
     openPromptQuickOpen,
     openAgentCommandPalette,
+    openProjectQuickOpen,
     closeNavigationDialogs,
   };
 }

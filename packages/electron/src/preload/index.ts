@@ -679,6 +679,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     createWorkspaceDialog: () => ipcRenderer.invoke('workspace-manager:create-workspace-dialog'),
     openWorkspace: (workspacePath: string) => ipcRenderer.invoke('workspace-manager:open-workspace', workspacePath),
     removeRecent: (workspacePath: string) => ipcRenderer.invoke('workspace-manager:remove-recent', workspacePath),
+    getOpenWorkspaces: () => ipcRenderer.invoke('workspace-manager:get-open-workspaces') as Promise<string[]>,
   },
 
   // Project Migration (move/rename)

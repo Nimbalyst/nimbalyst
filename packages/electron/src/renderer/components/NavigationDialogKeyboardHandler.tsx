@@ -14,6 +14,7 @@ import type {
   SessionQuickOpenData,
   PromptQuickOpenData,
   AgentCommandPaletteData,
+  ProjectQuickOpenData,
 } from '../dialogs';
 
 interface NavigationDialogKeyboardHandlerProps {
@@ -54,6 +55,7 @@ export function NavigationDialogKeyboardHandler({
     openSessionQuickOpen,
     openPromptQuickOpen,
     openAgentCommandPalette,
+    openProjectQuickOpen,
   } = useNavigationDialogs();
 
   // Store props in refs so keyboard handler always has latest values
@@ -87,6 +89,7 @@ export function NavigationDialogKeyboardHandler({
     openSessionQuickOpen,
     openPromptQuickOpen,
     openAgentCommandPalette,
+    openProjectQuickOpen,
   });
 
   useEffect(() => {
@@ -95,6 +98,7 @@ export function NavigationDialogKeyboardHandler({
       openSessionQuickOpen,
       openPromptQuickOpen,
       openAgentCommandPalette,
+      openProjectQuickOpen,
     };
   });
 
@@ -109,6 +113,21 @@ export function NavigationDialogKeyboardHandler({
 
       // On macOS, app shortcuts use Command (metaKey). On Windows/Linux, they use Ctrl.
       const isAppModifier = isMac ? e.metaKey : e.ctrlKey;
+
+      // Cmd+Shift+P (Mac) or Ctrl+Shift+P (Windows/Linux) for Project Quick Open
+      if (
+        isAppModifier &&
+        e.shiftKey &&
+        (e.key === 'P' || e.key === 'p')
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        dialogs.openProjectQuickOpen({
+          currentWorkspacePath: props.workspacePath,
+        });
+        return;
+      }
 
       // Cmd+Shift+F (Mac) or Ctrl+Shift+F (Windows/Linux) for Quick Open in content search mode
       if (
@@ -216,6 +235,79 @@ export function NavigationDialogKeyboardHandler({
     // Use capture phase to handle before other handlers
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, []);
+
+  // Listen for menu-triggered dialog opens via IPC
+  useEffect(() => {
+    const handleOpenDialog = (dialogId: string) => {
+      const props = propsRef.current;
+      const dialogs = dialogsRef.current;
+
+      if (!props.workspaceMode || !props.workspacePath) return;
+
+      switch (dialogId) {
+        case 'project-quick-open':
+          dialogs.openProjectQuickOpen({
+            currentWorkspacePath: props.workspacePath,
+          });
+          break;
+        case 'quick-open':
+          dialogs.openQuickOpen({
+            workspacePath: props.workspacePath,
+            currentFilePath: props.currentFilePath,
+            onFileSelect: props.onFileSelect,
+            onFolderSelect: props.onFolderSelect,
+            onShowFileSessions: (filePath: string) => {
+              dialogs.openSessionQuickOpen({
+                workspacePath: props.workspacePath!,
+                onSessionSelect: props.onSessionSelect,
+                initialSearchQuery: `@${filePath}`,
+              });
+            },
+          });
+          break;
+        case 'session-quick-open':
+          dialogs.openSessionQuickOpen({
+            workspacePath: props.workspacePath,
+            onSessionSelect: props.onSessionSelect,
+            onSwitchToPrompts: (query: string) => {
+              dialogs.openPromptQuickOpen({
+                workspacePath: props.workspacePath!,
+                onSessionSelect: props.onPromptSelect,
+                initialSearchQuery: query,
+              });
+            },
+          });
+          break;
+        case 'prompt-quick-open':
+          dialogs.openPromptQuickOpen({
+            workspacePath: props.workspacePath,
+            onSessionSelect: props.onPromptSelect,
+          });
+          break;
+        case 'content-search':
+          dialogs.openQuickOpen({
+            workspacePath: props.workspacePath,
+            currentFilePath: props.currentFilePath,
+            onFileSelect: props.onFileSelect,
+            onFolderSelect: props.onFolderSelect,
+            startInContentSearchMode: true,
+            onShowFileSessions: (filePath: string) => {
+              dialogs.openSessionQuickOpen({
+                workspacePath: props.workspacePath!,
+                onSessionSelect: props.onSessionSelect,
+                initialSearchQuery: `@${filePath}`,
+              });
+            },
+          });
+          break;
+      }
+    };
+
+    window.electronAPI.on('open-navigation-dialog', handleOpenDialog);
+    return () => {
+      window.electronAPI.off?.('open-navigation-dialog', handleOpenDialog);
+    };
   }, []);
 
   // This component renders nothing

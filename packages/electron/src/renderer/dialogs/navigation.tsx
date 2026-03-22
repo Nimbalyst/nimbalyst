@@ -12,6 +12,7 @@ import { QuickOpen } from '../components/QuickOpen';
 import { SessionQuickOpen } from '../components/SessionQuickOpen';
 import { PromptQuickOpen } from '../components/PromptQuickOpen';
 import { AgentCommandPalette } from '../components/AgentCommandPalette';
+import { ProjectQuickOpen } from '../components/ProjectQuickOpen';
 import { DIALOG_IDS } from './registry';
 
 // Type definitions for dialog data
@@ -47,6 +48,10 @@ export interface PromptQuickOpenData {
 export interface AgentCommandPaletteData {
   workspacePath?: string;
   documentContext?: { content?: string; filePath?: string };
+}
+
+export interface ProjectQuickOpenData {
+  currentWorkspacePath: string | null;
 }
 
 // Wrapper components that bridge DialogComponentProps to the original component props
@@ -143,6 +148,24 @@ function AgentCommandPaletteWrapper({
   );
 }
 
+function ProjectQuickOpenWrapper({
+  isOpen,
+  onClose,
+  data,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  data: ProjectQuickOpenData;
+}) {
+  return (
+    <ProjectQuickOpen
+      isOpen={isOpen}
+      onClose={onClose}
+      currentWorkspacePath={data.currentWorkspacePath}
+    />
+  );
+}
+
 // Register all navigation dialogs
 export function registerNavigationDialogs() {
   registerDialog<QuickOpenData>({
@@ -173,6 +196,14 @@ export function registerNavigationDialogs() {
     group: 'navigation',
     component:
       AgentCommandPaletteWrapper as DialogConfig<AgentCommandPaletteData>['component'],
+    priority: 100,
+  });
+
+  registerDialog<ProjectQuickOpenData>({
+    id: DIALOG_IDS.PROJECT_QUICK_OPEN,
+    group: 'navigation',
+    component:
+      ProjectQuickOpenWrapper as DialogConfig<ProjectQuickOpenData>['component'],
     priority: 100,
   });
 }

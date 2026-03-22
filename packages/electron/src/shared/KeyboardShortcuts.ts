@@ -79,6 +79,7 @@ export const KeyboardShortcuts = {
     sessionQuickOpen: 'Cmd+L',
     promptQuickOpen: 'Cmd+Shift+L',
     contentSearch: 'Cmd+Shift+F',
+    projectQuickOpen: 'Cmd+Shift+P',
     kanbanView: 'Cmd+Shift+K',
     newWorktree: 'Cmd+Alt+W',
     aiModels: 'Cmd+,',

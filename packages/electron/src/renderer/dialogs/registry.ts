@@ -15,6 +15,7 @@ export const DIALOG_IDS = {
   SESSION_QUICK_OPEN: 'session-quick-open',
   PROMPT_QUICK_OPEN: 'prompt-quick-open',
   AGENT_COMMAND_PALETTE: 'agent-command-palette',
+  PROJECT_QUICK_OPEN: 'project-quick-open',
 
   // Help group
   KEYBOARD_SHORTCUTS: 'keyboard-shortcuts',

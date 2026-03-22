@@ -307,6 +307,7 @@ interface ElectronAPI {
     createWorkspaceDialog: () => Promise<{ success: true; path: string } | { success: false; error?: string }>;
     openWorkspace: (workspacePath: string) => Promise<{ success: boolean }>;
     removeRecent: (workspacePath: string) => Promise<{ success: boolean }>;
+    getOpenWorkspaces: () => Promise<string[]>;
   };
 
   // Project Migration (move/rename)

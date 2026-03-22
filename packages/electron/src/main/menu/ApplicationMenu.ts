@@ -975,6 +975,53 @@ export async function createApplicationMenu() {
                     }
                 },
                 {
+                    label: 'Switch Project',
+                    accelerator: KeyboardShortcuts.window.projectQuickOpen,
+                    registerAccelerator: false, // Handled by renderer keyboard handler
+                    click: () => {
+                        const focused = getFocusedWindow();
+                        if (focused) focused.webContents.send('open-navigation-dialog', 'project-quick-open');
+                    }
+                },
+                { type: 'separator' },
+                {
+                    label: 'Quick Open',
+                    accelerator: KeyboardShortcuts.file.open,
+                    registerAccelerator: false,
+                    click: () => {
+                        const focused = getFocusedWindow();
+                        if (focused) focused.webContents.send('open-navigation-dialog', 'quick-open');
+                    }
+                },
+                {
+                    label: 'Session Quick Open',
+                    accelerator: KeyboardShortcuts.window.sessionQuickOpen,
+                    registerAccelerator: false,
+                    click: () => {
+                        const focused = getFocusedWindow();
+                        if (focused) focused.webContents.send('open-navigation-dialog', 'session-quick-open');
+                    }
+                },
+                {
+                    label: 'Prompt Quick Open',
+                    accelerator: KeyboardShortcuts.window.promptQuickOpen,
+                    registerAccelerator: false,
+                    click: () => {
+                        const focused = getFocusedWindow();
+                        if (focused) focused.webContents.send('open-navigation-dialog', 'prompt-quick-open');
+                    }
+                },
+                {
+                    label: 'Content Search',
+                    accelerator: KeyboardShortcuts.window.contentSearch,
+                    registerAccelerator: false,
+                    click: () => {
+                        const focused = getFocusedWindow();
+                        if (focused) focused.webContents.send('open-navigation-dialog', 'content-search');
+                    }
+                },
+                { type: 'separator' },
+                {
                     label: 'AI Usage Report',
                     click: async () => {
                         // Track menu action
