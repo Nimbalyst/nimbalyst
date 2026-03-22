@@ -13,16 +13,13 @@ import { test as base, expect } from '@playwright/test';
 import { chromium } from 'playwright';
 import * as path from 'path';
 
-/**
- * Workspace root — set by Nimbalyst's Playwright panel via NIMBALYST_WORKSPACE_PATH env var.
- * Falls back to cwd for manual CLI runs (npm run test:extensions).
- */
-const WORKSPACE_ROOT = process.env.NIMBALYST_WORKSPACE_PATH || process.cwd();
+const TEST_DIR = __dirname;
 
 const test = base.extend<{ page: import('playwright').Page }>({
   page: async ({}, use) => {
     const browser = await chromium.connectOverCDP('http://localhost:9222');
     let target: import('playwright').Page | undefined;
+    // Find the window whose workspace contains this test file
     for (const ctx of browser.contexts()) {
       for (const p of ctx.pages()) {
         const url = p.url();
@@ -31,7 +28,7 @@ const test = base.extend<{ page: import('playwright').Page }>({
           const ws = await p.evaluate(async () =>
             (await (window as any).electronAPI.getInitialState?.())?.workspacePath
           );
-          if (ws === WORKSPACE_ROOT) {
+          if (ws && TEST_DIR.startsWith(ws)) {
             target = p;
             break;
           }
@@ -39,13 +36,13 @@ const test = base.extend<{ page: import('playwright').Page }>({
       }
       if (target) break;
     }
-    if (!target) throw new Error(`Workspace window not found via CDP (looking for ${WORKSPACE_ROOT})`);
+    if (!target) throw new Error(`No Nimbalyst window found whose workspace contains ${TEST_DIR}`);
     await use(target);
     browser.close();
   },
 });
 
-const CSV_PATH = path.join(WORKSPACE_ROOT, 'packages/extensions/csv-spreadsheet/samples/demo.csv');
+const CSV_PATH = path.resolve(TEST_DIR, '../samples/demo.csv');
 
 /**
  * Open the CSV file and wait for the grid to be ready.

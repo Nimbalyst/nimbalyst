@@ -56,10 +56,7 @@ async function detectExtensionTests(host: PanelHostProps['host']): Promise<TestC
           id: `ext-${extName}`,
           label: `${extName}`,
           configPath: EXTENSION_TEST_CONFIG.configPath,
-          env: {
-            NIMBALYST_EXT_TEST_DIR: absoluteDir,
-            NIMBALYST_WORKSPACE_PATH: host.workspacePath,
-          },
+          env: { NIMBALYST_EXT_TEST_DIR: absoluteDir },
         });
       }
       return configs;
