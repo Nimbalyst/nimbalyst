@@ -30,7 +30,7 @@ import * as fs from "fs";
 import { ExtensionLogService } from "../services/ExtensionLogService";
 import { database } from "../database/initialize";
 import { findWindowByWorkspace } from "../window/WindowManager";
-import { getRestartSignalPath } from "../utils/appPaths";
+import { getRestartSignalPath, getPackageRoot } from "../utils/appPaths";
 
 // ============================================================================
 // File Utilities
@@ -1045,6 +1045,86 @@ function createExtensionDevMcpServer(
                     },
                   },
                   required: ["expression"],
+                },
+              },
+              {
+                name: "extension_test_run",
+                description:
+                  "Run a Playwright test script against the running Nimbalyst instance via CDP. The agent writes real Playwright code (locators, assertions, interactions) and this tool executes it. Supports inline scripts or test file paths. Tests run against the live app -- full Playwright API available.",
+                inputSchema: {
+                  type: "object",
+                  properties: {
+                    script: {
+                      type: "string",
+                      description:
+                        "Inline Playwright script to execute. Write code as if inside an async test function with `page` already connected to Nimbalyst. Example: `await page.locator('.my-btn').click(); await expect(page.locator('.result')).toHaveText('Done');`",
+                    },
+                    testFile: {
+                      type: "string",
+                      description:
+                        "Absolute path to a .spec.ts test file to run. The file should import from the extension-test-fixture for CDP connection.",
+                    },
+                    timeout: {
+                      type: "number",
+                      description:
+                        "Maximum execution time in milliseconds (default: 30000, max: 120000)",
+                    },
+                  },
+                },
+              },
+              {
+                name: "extension_test_open_file",
+                description:
+                  "Open a file in Nimbalyst for testing. Creates a tab and waits for the editor (including extension editors) to mount. Use this before running Playwright tests that need a specific file open.",
+                inputSchema: {
+                  type: "object",
+                  properties: {
+                    filePath: {
+                      type: "string",
+                      description: "Absolute path to the file to open",
+                    },
+                    waitForExtension: {
+                      type: "string",
+                      description:
+                        "Extension ID to wait for (e.g., 'com.nimbalyst.csv-spreadsheet'). Tool waits until the extension's editor container is rendered.",
+                    },
+                    timeout: {
+                      type: "number",
+                      description:
+                        "Max wait time in ms for editor to mount (default: 5000)",
+                    },
+                  },
+                  required: ["filePath"],
+                },
+              },
+              {
+                name: "extension_test_ai_tool",
+                description:
+                  "Execute an extension's AI tool handler directly and return the result. Faster than going through a full Claude Code session. Useful for testing that extension tools return correct data.",
+                inputSchema: {
+                  type: "object",
+                  properties: {
+                    extensionId: {
+                      type: "string",
+                      description:
+                        "The extension ID (e.g., 'com.nimbalyst.excalidraw')",
+                    },
+                    toolName: {
+                      type: "string",
+                      description:
+                        "The tool name without extension prefix (e.g., 'get_elements')",
+                    },
+                    args: {
+                      type: "object",
+                      description: "Arguments to pass to the tool handler",
+                    },
+                    filePath: {
+                      type: "string",
+                      description:
+                        "For editor-scoped tools: the file path to provide as context",
+                    },
+                  },
+                  required: ["extensionId", "toolName"],
                 },
               },
             ]
@@ -2094,6 +2174,459 @@ function createExtensionDevMcpServer(
 
           targetWindow.webContents.send("renderer:eval", {
             expression,
+            responseChannel,
+          });
+        });
+      }
+
+      case "extension_test_run": {
+        const script = args?.script as string | undefined;
+        const testFile = args?.testFile as string | undefined;
+        let timeout = (args?.timeout as number) || 30000;
+        timeout = Math.min(Math.max(1000, timeout), 120000);
+
+        if (!script && !testFile) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Error: Either 'script' (inline Playwright code) or 'testFile' (path to .spec.ts) is required.",
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const packageRoot = getPackageRoot();
+        const configPath = path.resolve(
+          packageRoot,
+          "playwright-extension.config.ts"
+        );
+
+        // Determine the test file to run
+        let targetTestFile: string;
+        let tempFile: string | null = null;
+
+        if (testFile) {
+          // Run an existing test file
+          const resolvedFile = path.resolve(testFile);
+          if (!fs.existsSync(resolvedFile)) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Error: Test file not found: ${resolvedFile}`,
+                },
+              ],
+              isError: true,
+            };
+          }
+          targetTestFile = resolvedFile;
+        } else {
+          // Wrap inline script in a self-contained test file.
+          // We inline the CDP connection rather than importing from the fixture
+          // to avoid CJS/ESM module resolution issues with temp files.
+          const cdpPort = process.env.NIMBALYST_CDP_PORT || "9222";
+          // Use a temp dir inside the monorepo so Playwright's testDir can find it
+          const tempDir = path.resolve(
+            packageRoot,
+            "../../e2e_test_output/extension-tests-tmp"
+          );
+          if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true });
+          }
+          tempFile = path.join(
+            tempDir,
+            `ext-test-${Date.now()}-${Math.random()
+              .toString(36)
+              .slice(2)}.spec.ts`
+          );
+          const wrappedScript = `import { test as base, expect } from '@playwright/test';
+import { chromium } from 'playwright';
+
+const test = base.extend<{ page: import('playwright').Page }>({
+  page: async ({}, use) => {
+    const browser = await chromium.connectOverCDP('http://localhost:${cdpPort}');
+    const contexts = browser.contexts();
+    // Find the main editor page (skip offscreen capture windows and DevTools)
+    let mainPage: import('playwright').Page | undefined;
+    for (const ctx of contexts) {
+      for (const p of ctx.pages()) {
+        const url = p.url();
+        if (url.includes('theme=') && !url.includes('mode=capture') && !url.startsWith('devtools://')) {
+          mainPage = p;
+          break;
+        }
+      }
+      if (mainPage) break;
+    }
+    if (!mainPage) throw new Error('No Nimbalyst editor window found via CDP');
+    await use(mainPage);
+    browser.close();
+  },
+});
+
+test('extension test', async ({ page }) => {
+${script}
+});
+`;
+          fs.writeFileSync(tempFile, wrappedScript, "utf-8");
+          targetTestFile = tempFile;
+        }
+
+        // Run Playwright
+        return new Promise((resolve) => {
+          const cwd = packageRoot;
+          const npxPath = process.platform === "win32" ? "npx.cmd" : "npx";
+
+          const child = spawn(
+            npxPath,
+            [
+              "playwright",
+              "test",
+              targetTestFile,
+              "--config",
+              configPath,
+              "--reporter=json",
+            ],
+            {
+              cwd,
+              timeout,
+              env: {
+                ...process.env,
+                NIMBALYST_CDP_PORT:
+                  process.env.NIMBALYST_CDP_PORT || "9222",
+                // Tell the config where to find test files
+                NIMBALYST_EXT_TEST_DIR: testFile
+                  ? path.dirname(path.resolve(testFile))
+                  : path.resolve(
+                      packageRoot,
+                      "../../e2e_test_output/extension-tests-tmp"
+                    ),
+              },
+            }
+          );
+
+          let stdout = "";
+          let stderr = "";
+
+          child.stdout?.on("data", (data: Buffer) => {
+            stdout += data.toString();
+          });
+          child.stderr?.on("data", (data: Buffer) => {
+            stderr += data.toString();
+          });
+
+          child.on("close", (code) => {
+            // Clean up temp file
+            if (tempFile) {
+              try {
+                fs.unlinkSync(tempFile);
+              } catch {
+                // ignore cleanup errors
+              }
+            }
+
+            // Try to parse JSON results
+            let jsonResults: any = null;
+            try {
+              const resultsPath = path.resolve(
+                packageRoot,
+                "../../e2e_test_output",
+                "extension-test-results",
+                "results.json"
+              );
+              if (fs.existsSync(resultsPath)) {
+                jsonResults = JSON.parse(
+                  fs.readFileSync(resultsPath, "utf-8")
+                );
+                // Clean up results file
+                fs.unlinkSync(resultsPath);
+              }
+            } catch {
+              // JSON parse failed, use raw output
+            }
+
+            const passed = code === 0;
+
+            // Build output
+            let output = "";
+            if (jsonResults) {
+              const suites = jsonResults.suites || [];
+              const allSpecs = suites.flatMap((s: any) => s.specs || []);
+              const passCount = allSpecs.filter(
+                (s: any) => s.ok === true
+              ).length;
+              const failCount = allSpecs.filter(
+                (s: any) => s.ok === false
+              ).length;
+              output += `Results: ${passCount} passed, ${failCount} failed\n\n`;
+
+              // Include failure details
+              for (const spec of allSpecs) {
+                if (!spec.ok) {
+                  output += `FAIL: ${spec.title}\n`;
+                  for (const test of spec.tests || []) {
+                    for (const result of test.results || []) {
+                      if (result.error) {
+                        output += `  ${result.error.message || ""}\n`;
+                        if (result.error.snippet) {
+                          output += `  ${result.error.snippet}\n`;
+                        }
+                      }
+                    }
+                  }
+                  output += "\n";
+                }
+              }
+            } else {
+              // Fall back to raw output
+              output = stdout || stderr;
+            }
+
+            // Truncate if very long
+            if (output.length > 10000) {
+              output =
+                output.slice(0, 10000) + "\n\n... (output truncated)";
+            }
+
+            resolve({
+              content: [
+                {
+                  type: "text",
+                  text: passed
+                    ? `All tests passed.\n\n${output}`
+                    : `Tests failed (exit code ${code}).\n\n${output}${
+                        stderr && !output.includes(stderr)
+                          ? "\n\nStderr:\n" + stderr.slice(0, 3000)
+                          : ""
+                      }`,
+                },
+              ],
+              isError: !passed,
+            });
+          });
+
+          child.on("error", (err) => {
+            if (tempFile) {
+              try {
+                fs.unlinkSync(tempFile);
+              } catch {
+                // ignore
+              }
+            }
+            resolve({
+              content: [
+                {
+                  type: "text",
+                  text: `Error spawning Playwright: ${err.message}`,
+                },
+              ],
+              isError: true,
+            });
+          });
+        });
+      }
+
+      case "extension_test_open_file": {
+        const filePath = args?.filePath as string;
+        if (!filePath) {
+          return {
+            content: [
+              { type: "text", text: "Error: filePath is required" },
+            ],
+            isError: true,
+          };
+        }
+
+        if (!workspacePath) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Error: workspacePath is required to route to the correct window",
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const targetWindow = findWindowByWorkspace(workspacePath);
+        if (!targetWindow || targetWindow.isDestroyed()) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Error: No window found for workspace: ${workspacePath}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const waitForExtension = args?.waitForExtension as
+          | string
+          | undefined;
+        let openTimeout = (args?.timeout as number) || 5000;
+        openTimeout = Math.min(Math.max(500, openTimeout), 30000);
+
+        return new Promise((resolve) => {
+          const responseChannel = `extension-test-open-file-response-${Date.now()}-${Math.random()
+            .toString(36)
+            .slice(2)}`;
+
+          const timeoutId = setTimeout(() => {
+            resolve({
+              content: [
+                {
+                  type: "text",
+                  text: `Error: Timed out waiting for file to open (${openTimeout}ms)`,
+                },
+              ],
+              isError: true,
+            });
+          }, openTimeout);
+
+          const { ipcMain } = require("electron");
+          ipcMain.once(responseChannel, (_event: any, result: any) => {
+            clearTimeout(timeoutId);
+
+            if (result.error) {
+              resolve({
+                content: [
+                  { type: "text", text: `Error: ${result.error}` },
+                ],
+                isError: true,
+              });
+              return;
+            }
+
+            resolve({
+              content: [
+                {
+                  type: "text",
+                  text: `File opened: ${filePath}${
+                    result.extensionId
+                      ? ` (handled by ${result.extensionId})`
+                      : ""
+                  }`,
+                },
+              ],
+              isError: false,
+            });
+          });
+
+          // Send 'open-workspace-file' to trigger the standard file opening flow
+          // in useIPCHandlers.ts -> handleWorkspaceFileSelect, which loads file content
+          // and creates a tab with the correct extension editor.
+          targetWindow.webContents.send("open-workspace-file", filePath);
+
+          // Send the test handler to poll for extension mount if needed
+          targetWindow.webContents.send("extension-test:open-file", {
+            filePath,
+            waitForExtension,
+            timeout: openTimeout,
+            responseChannel,
+          });
+        });
+      }
+
+      case "extension_test_ai_tool": {
+        const extensionId = args?.extensionId as string;
+        const aiToolName = args?.toolName as string;
+        if (!extensionId || !aiToolName) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Error: extensionId and toolName are required",
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        if (!workspacePath) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Error: workspacePath is required to route to the correct window",
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const aiToolWindow = findWindowByWorkspace(workspacePath);
+        if (!aiToolWindow || aiToolWindow.isDestroyed()) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Error: No window found for workspace: ${workspacePath}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const toolArgs = (args?.args as Record<string, unknown>) || {};
+        const toolFilePath = args?.filePath as string | undefined;
+
+        return new Promise((resolve) => {
+          const responseChannel = `extension-test-ai-tool-response-${Date.now()}-${Math.random()
+            .toString(36)
+            .slice(2)}`;
+
+          const timeoutId = setTimeout(() => {
+            resolve({
+              content: [
+                {
+                  type: "text",
+                  text: "Error: AI tool execution timed out after 30s",
+                },
+              ],
+              isError: true,
+            });
+          }, 30000);
+
+          const { ipcMain } = require("electron");
+          ipcMain.once(responseChannel, (_event: any, result: any) => {
+            clearTimeout(timeoutId);
+
+            if (result.error) {
+              resolve({
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: ${result.error}${
+                      result.stack ? "\n\nStack:\n" + result.stack : ""
+                    }`,
+                  },
+                ],
+                isError: true,
+              });
+              return;
+            }
+
+            resolve({
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(result.data, null, 2),
+                },
+              ],
+              isError: false,
+            });
+          });
+
+          aiToolWindow.webContents.send("extension-test:ai-tool", {
+            extensionId,
+            toolName: aiToolName,
+            args: toolArgs,
+            filePath: toolFilePath,
+            workspacePath,
             responseChannel,
           });
         });

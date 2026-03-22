@@ -166,7 +166,7 @@ export function PanelContainer({
   const PanelComponent = panel.component;
 
   return (
-    <div className="panel-container flex flex-col h-full w-full overflow-hidden" data-panel-id={panel.id} data-theme={theme}>
+    <div className="panel-container flex flex-col h-full w-full overflow-hidden" data-panel-id={panel.id} data-extension-id={panel.extensionId} data-theme={theme}>
       <PanelErrorBoundary panelId={panel.id}>
         <PanelComponent host={host} />
       </PanelErrorBoundary>

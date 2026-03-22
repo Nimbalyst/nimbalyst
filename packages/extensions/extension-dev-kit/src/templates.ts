@@ -98,7 +98,28 @@ Extensions are built with Vite and installed into the running Nimbalyst app usin
 - Check extension load status: \`extension_get_status\` with \`extensionId: "${extensionId}"\`
 - Main process logs: \`mcp__nimbalyst-extension-dev__get_main_process_logs\` (filter by component: "EXTENSION")
 - Renderer logs: \`mcp__nimbalyst-extension-dev__get_renderer_debug_logs\`
-- Verify the result visually: \`mcp__nimbalyst-mcp__capture_editor_screenshot\``);
+- Verify the result visually: \`mcp__nimbalyst-mcp__capture_editor_screenshot\`
+
+### Testing with Playwright
+
+Run Playwright tests against the live running Nimbalyst instance using the \`extension_test_run\` MCP tool. Tests connect via CDP -- no separate Electron launch needed.
+
+**Inline script (quick check):**
+\`\`\`
+extension_test_run({ script: "await expect(page.locator('[data-extension-id=\\"${extensionId}\\"]')).toBeVisible();" })
+\`\`\`
+
+**Test file (persistent tests):**
+\`\`\`
+extension_test_run({ testFile: "<project-root>/tests/basics.spec.ts" })
+\`\`\`
+
+**Open a file first:**
+\`\`\`
+extension_test_open_file({ filePath: "/path/to/sample.ext", waitForExtension: "${extensionId}" })
+\`\`\`
+
+Tests use the full Playwright API -- locators, assertions, interactions, screenshots. See \`tests/\` for examples.`);
 
   // Project structure
   sections.push(`## Project Structure
@@ -112,6 +133,8 @@ src/
   index.ts         # Entry point -- exports ${entryPointExports.join(', ')}${hasEditor ? `
   *Editor.tsx      # Custom editor React component` : ''}${hasAiTools ? `
   aiTools.ts       # AI tool definitions` : ''}
+tests/
+  basics.spec.ts   # Playwright extension tests (run via extension_test_run)
 dist/              # Build output (do not edit)
 \`\`\``);
 
@@ -397,6 +420,56 @@ Use these docs in this order:
 }
 
 /**
+ * Generate a sample Playwright test file for the extension.
+ */
+function generateTestFile(options: TemplateOptions & { hasEditor: boolean }): string {
+  const { extensionId, hasEditor } = options;
+
+  if (hasEditor) {
+    return `/**
+ * Extension tests -- run via the extension_test_run MCP tool.
+ *
+ * These tests connect to the running Nimbalyst instance via CDP.
+ * Make sure Nimbalyst is running in dev mode (npm run dev).
+ *
+ * Usage:
+ *   extension_test_run({ testFile: "<absolute-path>/tests/basics.spec.ts" })
+ */
+import { test, expect, extensionEditor } from '@nimbalyst/extension-sdk/testing';
+
+test.describe('${options.name}', () => {
+  test('editor renders for the target file', async ({ page }) => {
+    const editor = extensionEditor(page, '${extensionId}');
+    await expect(editor).toBeVisible({ timeout: 5000 });
+  });
+
+  // Add more tests here as you build out the extension
+});
+`;
+  }
+
+  return `/**
+ * Extension tests -- run via the extension_test_run MCP tool.
+ *
+ * These tests connect to the running Nimbalyst instance via CDP.
+ * Make sure Nimbalyst is running in dev mode (npm run dev).
+ *
+ * Usage:
+ *   extension_test_run({ testFile: "<absolute-path>/tests/basics.spec.ts" })
+ */
+import { test, expect } from '@nimbalyst/extension-sdk/testing';
+
+test.describe('${options.name}', () => {
+  test('extension is loaded', async ({ page }) => {
+    // Verify the extension contributes tools or panels
+    // Customize this test based on what your extension provides
+    await expect(page.locator('body')).toBeVisible();
+  });
+});
+`;
+}
+
+/**
  * Minimal extension template
  * Simple custom editor with basic functionality
  */
@@ -567,6 +640,8 @@ export function ${componentName}({ host }: EditorHostProps) {
   );
 }
 `,
+
+    'tests/basics.spec.ts': generateTestFile({ ...options, hasEditor: true }),
   };
 }
 
@@ -884,6 +959,8 @@ export const aiTools: ExtensionAITool[] = [
   outline: none;
 }
 `,
+
+    'tests/basics.spec.ts': generateTestFile({ ...options, hasEditor: true }),
   };
 }
 
@@ -1089,6 +1166,8 @@ export function deactivate() {
   console.log('${name} extension deactivated');
 }
 `,
+
+    'tests/basics.spec.ts': generateTestFile({ ...options, hasEditor: false }),
   };
 }
 
@@ -1191,6 +1270,8 @@ export function deactivate() {
   console.log('${name} extension deactivated');
 }
 `,
+
+    'tests/basics.spec.ts': generateTestFile({ ...options, hasEditor: true }),
   };
 }
 

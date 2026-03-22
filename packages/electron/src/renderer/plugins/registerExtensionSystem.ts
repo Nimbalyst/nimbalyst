@@ -46,6 +46,9 @@ let extensionToolListenerSetup = false;
 // Track if renderer eval listener is set up
 let rendererEvalListenerSetup = false;
 
+// Track if extension test listeners are set up
+let extensionTestListenersSetup = false;
+
 /**
  * Set up IPC listener for screenshot capture requests from main process.
  * Uses the generic screenshotService to route requests to the appropriate capability.
@@ -489,6 +492,108 @@ function setupRendererEvalListener(): void {
 }
 
 /**
+ * Set up IPC listeners for extension test tools (open-file, ai-tool).
+ * These support the extension_test_open_file and extension_test_ai_tool MCP tools.
+ */
+function setupExtensionTestListeners(): void {
+  if (extensionTestListenersSetup) return;
+  extensionTestListenersSetup = true;
+
+  const electronAPI = (window as any).electronAPI;
+  if (!electronAPI?.on || !electronAPI?.send) {
+    console.warn('[ExtensionSystem] electronAPI not available for extension test listeners');
+    return;
+  }
+
+  // Handle extension_test_open_file requests
+  electronAPI.on('extension-test:open-file', async (data: {
+    filePath: string;
+    waitForExtension?: string;
+    timeout: number;
+    responseChannel: string;
+  }) => {
+    // console.log('[ExtensionSystem] Extension test: open file', data.filePath);
+
+    try {
+      // Use the E2E-exposed handleWorkspaceFileSelect to open the file.
+      // This switches to Files mode, loads file content, and creates a tab
+      // with the correct extension editor.
+      const handler = (window as any).__handleWorkspaceFileSelect;
+      if (handler) {
+        await handler(data.filePath);
+      } else {
+        console.warn('[ExtensionSystem] __handleWorkspaceFileSelect not available');
+      }
+
+      // If we need to wait for a specific extension editor to render
+      if (data.waitForExtension) {
+        const selector = `[data-extension-id="${data.waitForExtension}"]`;
+        const startTime = Date.now();
+        const pollInterval = 100;
+
+        while (Date.now() - startTime < data.timeout) {
+          const container = document.querySelector(selector);
+          if (container) {
+            electronAPI.send(data.responseChannel, {
+              extensionId: data.waitForExtension,
+            });
+            return;
+          }
+          await new Promise(resolve => setTimeout(resolve, pollInterval));
+        }
+
+        electronAPI.send(data.responseChannel, {
+          error: `Timed out waiting for extension editor: ${data.waitForExtension}`,
+        });
+      } else {
+        // Just wait a moment for the tab to render
+        await new Promise(resolve => setTimeout(resolve, 300));
+        electronAPI.send(data.responseChannel, {});
+      }
+    } catch (error) {
+      electronAPI.send(data.responseChannel, {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  // Handle extension_test_ai_tool requests
+  electronAPI.on('extension-test:ai-tool', async (data: {
+    extensionId: string;
+    toolName: string;
+    args: Record<string, unknown>;
+    filePath?: string;
+    workspacePath?: string;
+    responseChannel: string;
+  }) => {
+    // console.log('[ExtensionSystem] Extension test: AI tool', data.extensionId, data.toolName);
+
+    try {
+      // Build the full tool name as the bridge expects it
+      // Extension tools are namespaced: "extensionShortName.toolName"
+      const extensionShortName = data.extensionId.split('.').pop() || data.extensionId;
+      const fullToolName = `${extensionShortName}.${data.toolName}`;
+
+      const context = {
+        workspacePath: data.workspacePath,
+        activeFilePath: data.filePath,
+      };
+
+      const result = await executeExtensionTool(fullToolName, data.args, context);
+
+      electronAPI.send(data.responseChannel, { data: result });
+    } catch (error) {
+      electronAPI.send(data.responseChannel, {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+    }
+  });
+
+  // console.log('[ExtensionSystem] Extension test IPC listeners set up');
+}
+
+/**
  * Set the workspace path for extension tool registration.
  * Should be called when workspace changes.
  */
@@ -568,8 +673,19 @@ export async function registerExtensionSystem(): Promise<void> {
     // Set up IPC listener for renderer eval requests (dev mode only)
     setupRendererEvalListener();
 
+    // Set up IPC listeners for extension test tools (dev mode only)
+    setupExtensionTestListeners();
+
     // Initialize the AI tools bridge to register extension tools with the tool registry
     initializeExtensionAIToolsBridge();
+
+    // Expose extension tools bridge on window in dev mode for Playwright page.evaluate() access
+    if (process.env.NODE_ENV !== 'production') {
+      (window as any).__nimbalyst_extension_tools__ = {
+        executeExtensionTool,
+        getMCPToolDefinitions,
+      };
+    }
 
     // Set up offscreen editor mounting callback for AI tools
     setOffscreenMountCallback(async (filePath: string, workspacePath: string) => {

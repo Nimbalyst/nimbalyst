@@ -200,6 +200,69 @@ Extensions can include screenshots for the in-app marketplace and marketing webs
 
 External extension developers should place their screenshots in a `screenshots/` directory and reference them via `src` and optionally `srcLight`. The `fileToOpen` and `selector` fields are used by Nimbalyst's internal Playwright-based screenshot pipeline and can be ignored by external developers.
 
+## Testing Extensions
+
+Nimbalyst provides a Playwright-based testing system that runs against the live running app via CDP (Chrome DevTools Protocol). This enables both AI agents and human developers to test extensions without launching a separate Electron instance.
+
+### Quick Start
+
+```typescript
+// tests/basics.spec.ts
+import { test, expect, extensionEditor } from '@nimbalyst/extension-sdk/testing';
+
+test('editor loads data', async ({ page }) => {
+  const editor = extensionEditor(page, 'com.nimbalyst.my-extension');
+  await expect(editor.locator('.header')).toBeVisible();
+  await expect(editor.locator('.data-row')).toHaveCount(10);
+});
+```
+
+### How It Works
+
+1. Nimbalyst dev mode enables `--remote-debugging-port=9222`
+2. The `@nimbalyst/extension-sdk/testing` fixture connects to the running app via `chromium.connectOverCDP()`
+3. Tests get the real `page` object -- full Playwright API (locators, assertions, interactions, screenshots)
+4. Tests are NOT sandboxed -- they can interact with the entire Nimbalyst UI, not just the extension
+
+### MCP Tools for Agent-Driven Testing
+
+| Tool | Description |
+| --- | --- |
+| `extension_test_run` | Run inline Playwright scripts or `.spec.ts` files |
+| `extension_test_open_file` | Open a file and wait for extension editor to mount |
+| `extension_test_ai_tool` | Call extension tool handlers directly |
+
+### Data Attributes for Targeting
+
+The host infrastructure sets stable attributes on extension containers:
+
+| Context | Attributes |
+| --- | --- |
+| Custom editor | `data-extension-id`, `data-file-path` |
+| Panel | `data-extension-id`, `data-panel` |
+
+Use the SDK helpers to scope locators:
+
+```typescript
+import { extensionEditor, extensionPanel } from '@nimbalyst/extension-sdk/testing';
+
+const editor = extensionEditor(page, 'com.nimbalyst.csv', '/path/to/data.csv');
+const panel = extensionPanel(page, 'com.nimbalyst.git', 'git-log');
+```
+
+### Testing AI Tools
+
+```typescript
+import { callExtensionTool } from '@nimbalyst/extension-sdk/testing';
+
+const result = await callExtensionTool(page, 'excalidraw.get_elements', {});
+expect(result.success).toBe(true);
+```
+
+### Design Document
+
+See [extension-live-test-infrastructure.md](../design/Extensions/extension-live-test-infrastructure.md) for the full architecture and implementation details.
+
 ## Related Documentation
 
 - [FILE_TYPE_HANDLING.md](./FILE_TYPE_HANDLING.md) - How file types are associated with editors

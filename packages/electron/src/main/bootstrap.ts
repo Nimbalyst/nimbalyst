@@ -119,6 +119,15 @@ try {
   console.log('[Bootstrap] V8 heap limit set to 4096MB (default)');
 }
 
+// Enable CDP remote debugging in dev mode for Playwright extension testing.
+// This allows `playwright connectOverCDP("http://localhost:9222")` to drive
+// the running Nimbalyst instance without launching a separate Electron process.
+if (process.env.NODE_ENV !== 'production') {
+  const cdpPort = process.env.NIMBALYST_CDP_PORT || '9222';
+  app.commandLine.appendSwitch('remote-debugging-port', cdpPort);
+  console.log(`[Bootstrap] CDP remote debugging enabled on port ${cdpPort}`);
+}
+
 // Static import - no chunk boundary, no module duplication issues.
 // This works because:
 // 1. electron-store is lazy-initialized (store.ts)

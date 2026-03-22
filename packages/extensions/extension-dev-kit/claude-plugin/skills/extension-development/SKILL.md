@@ -69,6 +69,44 @@ mcp__nimbalyst-extension-dev__restart_nimbalyst
 ```
 Restarts the entire Nimbalyst application. **Only use when explicitly requested by the user.**
 
+## Testing Tools
+
+### Run Playwright Tests
+```
+mcp__nimbalyst-extension-dev__extension_test_run
+```
+Execute Playwright scripts against the running Nimbalyst instance via CDP. Supports inline scripts or `.spec.ts` file paths.
+
+**Parameters:**
+- `script`: Inline Playwright code (runs inside an async test with `page` connected to Nimbalyst)
+- `testFile`: Absolute path to a `.spec.ts` file
+- `timeout`: Max execution time in ms (default: 30000)
+
+Provide either `script` or `testFile`, not both.
+
+### Open File for Testing
+```
+mcp__nimbalyst-extension-dev__extension_test_open_file
+```
+Opens a file in Nimbalyst and waits for the editor to mount. Use before running tests that need a specific file open.
+
+**Parameters:**
+- `filePath`: Absolute path to the file to open
+- `waitForExtension`: Extension ID to wait for (waits until the extension's editor container renders)
+- `timeout`: Max wait time in ms (default: 5000)
+
+### Test AI Tool Handler
+```
+mcp__nimbalyst-extension-dev__extension_test_ai_tool
+```
+Execute an extension's AI tool handler directly and return the result. Bypasses full MCP routing.
+
+**Parameters:**
+- `extensionId`: The extension ID
+- `toolName`: Tool name without extension prefix (e.g., "get_elements")
+- `args`: Arguments object to pass to the handler
+- `filePath`: For editor-scoped tools: file path for context
+
 ## Development Workflow
 
 ### Initial Setup
@@ -78,11 +116,32 @@ Restarts the entire Nimbalyst application. **Only use when explicitly requested 
 4. Install with `extension_install`
 5. Test in Nimbalyst
 
-### Iteration Loop
+### Iteration Loop with Testing
 1. Make code changes
 2. Run `extension_reload` to rebuild and reinstall
-3. Test changes immediately
-4. Repeat
+3. Run `extension_get_status` to verify it loaded
+4. Run `extension_test_open_file` to open a sample file
+5. Run `extension_test_run` with Playwright scripts to verify behavior
+6. Use `capture_editor_screenshot` for visual verification
+7. Check `get_renderer_debug_logs` for runtime errors
+8. Fix issues and repeat from step 1
+
+**Inline test example:**
+```
+extension_test_run({
+  script: `
+    const editor = page.locator('[data-extension-id="com.nimbalyst.my-ext"]');
+    await expect(editor).toBeVisible();
+    await editor.locator('.save-btn').click();
+    await expect(editor.locator('.status')).toHaveText('Saved');
+  `
+})
+```
+
+**Test file example:**
+```
+extension_test_run({ testFile: "/path/to/extension/tests/basics.spec.ts" })
+```
 
 ### Debugging
 1. Check extension status with `extension_get_status`

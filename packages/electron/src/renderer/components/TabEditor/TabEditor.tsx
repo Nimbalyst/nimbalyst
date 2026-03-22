@@ -43,6 +43,7 @@ import { logger } from '../../utils/logger';
 import { createEditorHost } from './createEditorHost';
 import type { EditorHost, DiffConfig } from '@nimbalyst/runtime';
 import { createExtensionStorage } from '@nimbalyst/runtime';
+import { setEditorContext, clearEditorContext } from '../../stores/editorContextStore';
 import { store, editorHasUnacceptedChangesAtom, makeEditorKey } from '@nimbalyst/runtime/store';
 import { UnifiedEditorHeaderBar } from './UnifiedEditorHeaderBar';
 import { usePersonalDocSync } from '../../hooks/usePersonalDocSync';
@@ -2345,6 +2346,11 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       // ============ STORAGE ============
       storage: extensionStorage,
 
+      // ============ EDITOR CONTEXT ============
+      onEditorContextChanged: (context) => {
+        setEditorContext(filePath, context);
+      },
+
       // ============ MENU ITEMS ============
       onMenuItemsChanged: (items) => {
         setExtensionMenuItems(items);
@@ -2352,6 +2358,13 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filePath, fileName, workspaceId, extensionStorage]); // Recreate when file, workspace, or storage changes (theme accessed via themeRef)
+
+  // Clean up editor context when tab unmounts
+  useEffect(() => {
+    return () => {
+      clearEditorContext(filePath);
+    };
+  }, [filePath]);
 
   // Register manual save function for custom editors
   // This ensures saveTabById works when closing dirty custom editor tabs
@@ -2478,7 +2491,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               // Built-in editors (no extensionId) are rendered directly
               if (registration.extensionId) {
                 return (
-                  <div className="custom-editor-container flex flex-col flex-1 min-h-0 overflow-hidden">
+                  <div className="custom-editor-container flex flex-col flex-1 min-h-0 overflow-hidden" data-extension-id={registration.extensionId} data-file-path={filePath}>
                     <DocumentHeaderContainer
                       filePath={filePath}
                       fileName={fileName}
