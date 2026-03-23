@@ -16,6 +16,11 @@ interface ResolveImmediateToolDecisionDeps {
     options: { signal: AbortSignal; suggestions?: any[]; toolUseID?: string },
     toolUseID?: string
   ) => Promise<ToolDecision>;
+  handleExitPlanMode: (
+    sessionId: string | undefined,
+    input: any,
+    options: { signal: AbortSignal; toolUseID?: string },
+  ) => Promise<ToolDecision>;
   logSecurity: (message: string, data?: Record<string, unknown>) => void;
 }
 
@@ -44,7 +49,7 @@ export async function resolveImmediateToolDecision(
   }
 
   if (toolName === 'ExitPlanMode') {
-    return { behavior: 'allow', updatedInput: input };
+    return deps.handleExitPlanMode(sessionId, input, options);
   }
 
   if (deps.teamTools.includes(toolName)) {

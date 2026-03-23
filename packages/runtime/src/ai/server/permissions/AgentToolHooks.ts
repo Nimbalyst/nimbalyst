@@ -507,10 +507,25 @@ export class AgentToolHooks {
     const confirmationPromise = new Promise<{ approved: boolean; clearContext?: boolean; feedback?: string }>((resolve, reject) => {
       this.getPendingExitPlanModeConfirmations!().set(requestId, { resolve, reject });
 
-      // Set up abort handler
+      // Set up abort handler - persist cancellation to DB to avoid orphaned pending prompts
       if (options.signal) {
         options.signal.addEventListener('abort', () => {
           this.getPendingExitPlanModeConfirmations!().delete(requestId);
+          if (this.sessionId) {
+            const cancelContent = {
+              type: 'exit_plan_mode_response' as const,
+              requestId,
+              approved: false,
+              cancelled: true,
+              respondedAt: Date.now(),
+              respondedBy: 'system',
+            };
+            this.logAgentMessage(
+              this.sessionId, 'claude-code', 'output',
+              JSON.stringify(cancelContent),
+              { messageType: 'exit_plan_mode_response' }
+            ).catch(() => {});
+          }
           reject(new Error('Request aborted'));
         }, { once: true });
       }

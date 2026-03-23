@@ -2125,6 +2125,111 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   }
 
   /**
+   * Handle ExitPlanMode in canUseTool - blocks until user approves or denies.
+   * This is the primary mechanism for ExitPlanMode confirmation since the Claude Agent SDK
+   * does not support the `hooks` option. The canUseTool callback is the only way to block
+   * tool execution from the SDK.
+   */
+  private async handleExitPlanMode(
+    sessionId: string | undefined,
+    input: any,
+    options: { signal: AbortSignal; toolUseID?: string },
+  ): Promise<{ behavior: 'allow' | 'deny'; updatedInput?: any; message?: string }> {
+    // If not in planning mode, allow immediately (no confirmation needed)
+    if (this.currentMode !== 'planning') {
+      return { behavior: 'allow', updatedInput: input };
+    }
+
+    const planFilePath = input?.planFilePath || '';
+    if (!planFilePath) {
+      return {
+        behavior: 'deny',
+        message: 'ExitPlanMode requires the planFilePath argument. Try ExitPlanMode again and include the fully qualified plan file path.',
+      };
+    }
+
+    const requestId = options.toolUseID || `exit-plan-${sessionId}-${Date.now()}`;
+    const planSummary = input?.plan || '';
+
+    // Create a promise that will be resolved when user responds via the widget
+    const confirmationPromise = new Promise<{ approved: boolean; clearContext?: boolean; feedback?: string }>((resolve, reject) => {
+      this.pendingExitPlanModeConfirmations.set(requestId, { resolve, reject });
+
+      if (options.signal) {
+        options.signal.addEventListener('abort', () => {
+          this.pendingExitPlanModeConfirmations.delete(requestId);
+          // Persist cancellation to DB so orphaned requests don't appear as perpetually pending
+          if (sessionId) {
+            const cancelContent = {
+              type: 'exit_plan_mode_response' as const,
+              requestId,
+              approved: false,
+              cancelled: true,
+              respondedAt: Date.now(),
+              respondedBy: 'system',
+            };
+            this.logAgentMessage(
+              sessionId, 'claude-code', 'output',
+              JSON.stringify(cancelContent),
+              { messageType: 'exit_plan_mode_response' }
+            ).catch(() => {});
+          }
+          reject(new Error('Request aborted'));
+        }, { once: true });
+      }
+    });
+
+    // Persist the request as a durable prompt
+    const exitPlanModeContent = {
+      type: 'exit_plan_mode_request' as const,
+      requestId,
+      planSummary,
+      planFilePath,
+      timestamp: Date.now(),
+      status: 'pending' as const,
+    };
+
+    if (sessionId) {
+      await this.logAgentMessage(
+        sessionId, 'claude-code', 'output',
+        JSON.stringify(exitPlanModeContent),
+        { messageType: 'exit_plan_mode_request' }
+      );
+    }
+
+    // Emit event to notify renderer to show confirmation UI
+    this.emit('exitPlanMode:confirm', {
+      requestId,
+      sessionId,
+      planSummary,
+      planFilePath,
+      timestamp: Date.now(),
+    });
+
+    try {
+      const response = await confirmationPromise;
+
+      if (response.approved) {
+        this.currentMode = 'agent';
+        return { behavior: 'allow', updatedInput: input };
+      } else {
+        const feedbackText = response.feedback
+          ? `\n\nUser feedback: "${response.feedback}"`
+          : '';
+        return {
+          behavior: 'deny',
+          message: `The user chose to continue planning.${feedbackText}`,
+        };
+      }
+    } catch (error) {
+      return {
+        behavior: 'deny',
+        message: 'ExitPlanMode was cancelled or interrupted.',
+      };
+    }
+  }
+
+  /**
    * Resolve a pending ExitPlanMode confirmation request
    * Called by AIService when renderer responds to confirmation prompt
    * @param requestId - Unique ID for this confirmation request
@@ -2559,6 +2664,8 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         resolveTeamContext: (resolvedSessionId) => this.teammateManager.resolveTeamContext(resolvedSessionId),
         handleAskUserQuestion: (resolvedSessionId, resolvedInput, resolvedOptions, resolvedToolUseId) =>
           this.handleAskUserQuestion(resolvedSessionId, resolvedInput, resolvedOptions, resolvedToolUseId),
+        handleExitPlanMode: (resolvedSessionId, resolvedInput, resolvedOptions) =>
+          this.handleExitPlanMode(resolvedSessionId, resolvedInput, resolvedOptions),
         logSecurity: (message, data) => this.logSecurity(message, data),
       },
       {
