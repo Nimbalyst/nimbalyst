@@ -69,6 +69,10 @@ export function ContextUsageDisplay({
 
   // Format numbers with k suffix for thousands
   const formatTokensShort = (tokens: number): string => {
+    if (tokens >= 1_000_000) {
+      const m = tokens / 1_000_000;
+      return `${Number.isInteger(m) ? m : m.toFixed(1)}M`;
+    }
     if (tokens >= 1000) {
       return `${Math.round(tokens / 1000)}k`;
     }
