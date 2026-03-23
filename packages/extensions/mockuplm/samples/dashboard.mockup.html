@@ -3,448 +3,99 @@
 <head>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: var(--mockup-bg-secondary, #1a1a1a);
-      color: var(--mockup-text, #ffffff);
-      display: flex;
-      height: 100vh;
-      overflow: hidden;
-    }
-
-    .sidebar {
-      width: 240px;
-      background: var(--mockup-bg, #2d2d2d);
-      border-right: 1px solid var(--mockup-border, #4a4a4a);
-      display: flex;
-      flex-direction: column;
-      flex-shrink: 0;
-    }
-    .sidebar-header {
-      padding: 20px;
-      border-bottom: 1px solid var(--mockup-border, #4a4a4a);
-    }
-    .sidebar-header .logo { font-size: 18px; font-weight: 700; }
-    .sidebar-header .logo span { color: var(--mockup-primary, #60a5fa); }
+    body { font-family: Inter, -apple-system, sans-serif; background: var(--mockup-bg-secondary, #1a1a1a); color: var(--mockup-text, #fff); display: flex; height: 100vh; overflow: hidden; }
+    .sidebar { width: 220px; background: var(--mockup-bg, #2d2d2d); border-right: 1px solid var(--mockup-border, #4a4a4a); display: flex; flex-direction: column; flex-shrink: 0; }
+    .sidebar-header { padding: 20px; border-bottom: 1px solid var(--mockup-border, #4a4a4a); font-size: 18px; font-weight: 700; }
+    .sidebar-header span { color: var(--mockup-primary, #60a5fa); }
     .sidebar-nav { padding: 12px; flex: 1; }
-    .nav-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px 12px;
-      border-radius: 8px;
-      font-size: 14px;
-      cursor: pointer;
-      color: var(--mockup-text-muted, #b3b3b3);
-      transition: all 0.15s;
-    }
-    .nav-item:hover {
-      background: var(--mockup-bg-tertiary, #3a3a3a);
-      color: var(--mockup-text, #ffffff);
-    }
-    .nav-item.active {
-      background: rgba(96, 165, 250, 0.15);
-      color: var(--mockup-primary, #60a5fa);
-    }
-    .nav-icon { width: 18px; text-align: center; font-size: 14px; }
-    .sidebar-footer {
-      padding: 16px;
-      border-top: 1px solid var(--mockup-border, #4a4a4a);
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .avatar {
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      background: var(--mockup-primary, #60a5fa);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 13px;
-      font-weight: 600;
-    }
-    .user-info { font-size: 13px; }
-    .user-info .name { font-weight: 500; color: var(--mockup-text, #ffffff); }
-    .user-info .role { font-size: 11px; color: var(--mockup-text-faint, #808080); }
-
+    .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; font-size: 14px; cursor: pointer; color: var(--mockup-text-muted, #b3b3b3); }
+    .nav-item:hover { background: var(--mockup-bg-tertiary, #3a3a3a); color: var(--mockup-text, #fff); }
+    .nav-item.active { background: rgba(96,165,250,0.15); color: var(--mockup-primary, #60a5fa); }
     .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-    .topbar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 16px 24px;
-      border-bottom: 1px solid var(--mockup-border, #4a4a4a);
-    }
+    .topbar { padding: 16px 24px; border-bottom: 1px solid var(--mockup-border, #4a4a4a); }
     .topbar h1 { font-size: 20px; font-weight: 600; }
-    .topbar-actions { display: flex; gap: 8px; }
-    .btn {
-      padding: 8px 16px;
-      border-radius: 8px;
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      border: none;
-    }
-    .btn-outline {
-      background: transparent;
-      border: 1px solid var(--mockup-border, #4a4a4a);
-      color: var(--mockup-text, #ffffff);
-    }
-    .btn-filled {
-      background: var(--mockup-primary, #60a5fa);
-      color: white;
-    }
     .content { flex: 1; padding: 24px; overflow-y: auto; }
-
-    .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
-    .stat-card {
-      background: var(--mockup-bg, #2d2d2d);
-      border: 1px solid var(--mockup-border, #4a4a4a);
-      border-radius: 12px;
-      padding: 20px;
-    }
-    .stat-label { font-size: 13px; color: var(--mockup-text-muted, #b3b3b3); margin-bottom: 8px; }
-    .stat-value { font-size: 28px; font-weight: 700; }
-    .stat-change { font-size: 12px; margin-top: 4px; }
-    .stat-change.up { color: var(--mockup-success, #4ade80); }
-
-    .chart-placeholder {
-      background: var(--mockup-bg, #2d2d2d);
-      border: 1px solid var(--mockup-border, #4a4a4a);
-      border-radius: 12px;
-      padding: 20px;
-    }
-    .chart-placeholder .title { font-size: 15px; font-weight: 600; margin-bottom: 16px; }
-    .chart-bars { display: flex; align-items: flex-end; gap: 8px; height: 120px; }
-    .chart-bar {
-      flex: 1;
-      background: var(--mockup-primary, #60a5fa);
-      border-radius: 4px 4px 0 0;
-      opacity: 0.7;
-      transition: opacity 0.15s;
-    }
-    .chart-bar:hover { opacity: 1; }
-
-    .projects-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
-    .project-card {
-      background: var(--mockup-bg, #2d2d2d);
-      border: 1px solid var(--mockup-border, #4a4a4a);
-      border-radius: 12px;
-      padding: 20px;
-    }
-    .project-card .name { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
-    .project-card .desc { font-size: 13px; color: var(--mockup-text-muted, #b3b3b3); margin-bottom: 16px; }
-    .project-meta { display: flex; justify-content: space-between; align-items: center; }
-    .project-status {
-      display: inline-block;
-      padding: 2px 10px;
-      border-radius: 10px;
-      font-size: 11px;
-      font-weight: 500;
-    }
-    .project-status.active { background: rgba(74, 222, 128, 0.15); color: var(--mockup-success, #4ade80); }
-    .project-status.paused { background: rgba(251, 191, 36, 0.15); color: var(--mockup-warning, #fbbf24); }
-    .progress-bar {
-      width: 80px;
-      height: 6px;
-      background: var(--mockup-bg-tertiary, #3a3a3a);
-      border-radius: 3px;
-      overflow: hidden;
-    }
-    .progress-fill {
-      height: 100%;
-      background: var(--mockup-primary, #60a5fa);
-      border-radius: 3px;
-    }
-
-    .settings-section {
-      background: var(--mockup-bg, #2d2d2d);
-      border: 1px solid var(--mockup-border, #4a4a4a);
-      border-radius: 12px;
-      padding: 24px;
-      margin-bottom: 16px;
-    }
-    .settings-section .section-title { font-size: 15px; font-weight: 600; margin-bottom: 20px; }
-    .setting-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 12px 0;
-      border-bottom: 1px solid var(--mockup-border, #4a4a4a);
-    }
-    .setting-row:last-child { border-bottom: none; }
-    .setting-label .name { font-size: 14px; font-weight: 500; }
-    .setting-label .desc { font-size: 12px; color: var(--mockup-text-faint, #808080); margin-top: 2px; }
-    .toggle {
-      width: 40px;
-      height: 22px;
-      border-radius: 11px;
-      cursor: pointer;
-      position: relative;
-      transition: background 0.2s;
-    }
-    .toggle.on { background: var(--mockup-primary, #60a5fa); }
-    .toggle.off { background: var(--mockup-bg-tertiary, #3a3a3a); }
-    .toggle::after {
-      content: '';
-      position: absolute;
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      background: white;
-      top: 2px;
-      transition: left 0.2s;
-    }
-    .toggle.on::after { left: 20px; }
-    .toggle.off::after { left: 2px; }
-
     .page { display: none; }
     .page.active { display: block; }
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+    .stat { background: var(--mockup-bg, #2d2d2d); border: 1px solid var(--mockup-border, #4a4a4a); border-radius: 12px; padding: 20px; }
+    .stat .label { font-size: 13px; color: var(--mockup-text-muted, #b3b3b3); margin-bottom: 8px; }
+    .stat .value { font-size: 28px; font-weight: 700; }
+    .stat .change { font-size: 12px; color: var(--mockup-success, #4ade80); margin-top: 4px; }
+    .projects { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .project { background: var(--mockup-bg, #2d2d2d); border: 1px solid var(--mockup-border, #4a4a4a); border-radius: 12px; padding: 20px; cursor: pointer; transition: border-color 0.15s; }
+    .project:hover { border-color: var(--mockup-primary, #60a5fa); }
+    .project .name { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+    .project .desc { font-size: 13px; color: var(--mockup-text-muted, #b3b3b3); }
+    .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--mockup-border, #4a4a4a); }
+    .setting-row:last-child { border-bottom: none; }
+    .toggle { width: 40px; height: 22px; border-radius: 11px; cursor: pointer; position: relative; }
+    .toggle.on { background: var(--mockup-primary, #60a5fa); }
+    .toggle.off { background: var(--mockup-bg-tertiary, #3a3a3a); }
+    .toggle::after { content: ''; position: absolute; width: 18px; height: 18px; border-radius: 50%; background: #fff; top: 2px; transition: left 0.2s; }
+    .toggle.on::after { left: 20px; }
+    .toggle.off::after { left: 2px; }
   </style>
 </head>
 <body>
   <div class="sidebar">
-    <div class="sidebar-header">
-      <div class="logo">Acme<span>Hub</span></div>
-    </div>
+    <div class="sidebar-header">Acme<span>Hub</span></div>
     <div class="sidebar-nav">
-      <div class="nav-item active" data-page="overview">
-        <span class="nav-icon">&#9679;</span> Overview
-      </div>
-      <div class="nav-item" data-page="projects">
-        <span class="nav-icon">&#9632;</span> Projects
-      </div>
-      <div class="nav-item" data-page="settings">
-        <span class="nav-icon">&#9881;</span> Settings
-      </div>
-    </div>
-    <div class="sidebar-footer">
-      <div class="avatar">JD</div>
-      <div class="user-info">
-        <div class="name">Jane Doe</div>
-        <div class="role">Admin</div>
-      </div>
+      <div class="nav-item active" data-page="overview">Overview</div>
+      <div class="nav-item" data-page="projects">Projects</div>
+      <div class="nav-item" data-page="settings">Settings</div>
     </div>
   </div>
-
   <div class="main">
-    <div class="topbar">
-      <h1 id="page-title">Overview</h1>
-      <div class="topbar-actions" id="topbar-actions" style="display: none;">
-        <button class="btn btn-outline">Import</button>
-        <button class="btn btn-filled">New Project</button>
-      </div>
-    </div>
-
+    <div class="topbar"><h1 id="title">Overview</h1></div>
     <div class="content">
-      <!-- Overview -->
       <div class="page active" id="page-overview">
-        <div class="stats-grid">
-          <div class="stat-card">
-            <div class="stat-label">Active Projects</div>
-            <div class="stat-value">12</div>
-            <div class="stat-change up">+2 this month</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Team Members</div>
-            <div class="stat-value">24</div>
-            <div class="stat-change up">+3 this quarter</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Tasks Completed</div>
-            <div class="stat-value">847</div>
-            <div class="stat-change up">+127 this week</div>
-          </div>
-        </div>
-        <div class="chart-placeholder">
-          <div class="title">Weekly Activity</div>
-          <div class="chart-bars">
-            <div class="chart-bar" style="height: 60%"></div>
-            <div class="chart-bar" style="height: 80%"></div>
-            <div class="chart-bar" style="height: 45%"></div>
-            <div class="chart-bar" style="height: 90%"></div>
-            <div class="chart-bar" style="height: 70%"></div>
-            <div class="chart-bar" style="height: 55%"></div>
-            <div class="chart-bar" style="height: 85%"></div>
-          </div>
+        <div class="stats">
+          <div class="stat"><div class="label">Active Projects</div><div class="value">12</div><div class="change">+2 this month</div></div>
+          <div class="stat"><div class="label">Team Members</div><div class="value">24</div><div class="change">+3 this quarter</div></div>
+          <div class="stat"><div class="label">Tasks Completed</div><div class="value">847</div><div class="change">+127 this week</div></div>
         </div>
       </div>
-
-      <!-- Projects -->
       <div class="page" id="page-projects">
-        <div class="projects-grid" id="projects-grid"></div>
+        <div class="projects" id="projects"></div>
       </div>
-
-      <!-- Settings -->
       <div class="page" id="page-settings">
-        <div class="settings-section">
-          <div class="section-title">Appearance</div>
-          <div class="setting-row">
-            <div class="setting-label">
-              <div class="name">Dark Mode</div>
-              <div class="desc">Use dark color scheme</div>
-            </div>
-            <div class="toggle on" id="toggle-dark"></div>
-          </div>
-        </div>
-        <div class="settings-section">
-          <div class="section-title">Notifications</div>
-          <div class="setting-row">
-            <div class="setting-label">
-              <div class="name">Push Notifications</div>
-              <div class="desc">Receive alerts for mentions and updates</div>
-            </div>
-            <div class="toggle on" id="toggle-notif"></div>
-          </div>
-          <div class="setting-row">
-            <div class="setting-label">
-              <div class="name">Auto-save</div>
-              <div class="desc">Automatically save changes every 30 seconds</div>
-            </div>
-            <div class="toggle on" id="toggle-autosave"></div>
-          </div>
-        </div>
+        <div class="setting-row"><span>Dark Mode</span><div class="toggle on"></div></div>
+        <div class="setting-row"><span>Notifications</span><div class="toggle on"></div></div>
+        <div class="setting-row"><span>Auto-save</span><div class="toggle off"></div></div>
       </div>
     </div>
   </div>
-
   <script>
-    // Nav switching
+    // Nav
     const navItems = document.querySelectorAll('.nav-item');
-    const pages = document.querySelectorAll('.page');
-    const pageTitle = document.getElementById('page-title');
-    const topbarActions = document.getElementById('topbar-actions');
-
     const titles = { overview: 'Overview', projects: 'Projects', settings: 'Settings' };
-
     navItems.forEach(item => {
       item.addEventListener('click', () => {
         const page = item.dataset.page;
         navItems.forEach(n => n.classList.remove('active'));
         item.classList.add('active');
-        pages.forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
         document.getElementById('page-' + page).classList.add('active');
-        pageTitle.textContent = titles[page];
-        topbarActions.style.display = page === 'projects' ? 'flex' : 'none';
+        document.getElementById('title').textContent = titles[page];
       });
     });
 
-    // Render projects
+    // Projects
     const projects = [
-      { name: 'Website Redesign', desc: 'Modernizing the marketing site', status: 'active', progress: 72, members: 5 },
-      { name: 'Mobile App v2', desc: 'Native iOS and Android rebuild', status: 'active', progress: 45, members: 8 },
-      { name: 'API Migration', desc: 'Moving to GraphQL from REST', status: 'paused', progress: 30, members: 3 },
-      { name: 'Design System', desc: 'Component library and tokens', status: 'active', progress: 88, members: 4 },
+      { name: 'Website Redesign', desc: 'Modernizing the marketing site' },
+      { name: 'Mobile App v2', desc: 'Native iOS and Android rebuild' },
+      { name: 'API Migration', desc: 'Moving to GraphQL' },
+      { name: 'Design System', desc: 'Component library and tokens' },
     ];
-
-    const grid = document.getElementById('projects-grid');
-    projects.forEach((p, i) => {
-      grid.innerHTML += `
-        <div class="project-card" data-project-idx="${i}" style="cursor:pointer;transition:border-color 0.15s;">
-          <div class="name">${p.name}</div>
-          <div class="desc">${p.desc}</div>
-          <div style="font-size:12px;color:var(--mockup-text-faint,#808080);margin-bottom:12px;">${p.members} members</div>
-          <div class="project-meta">
-            <span class="project-status ${p.status}">${p.status}</span>
-            <div style="display:flex;align-items:center;gap:8px;">
-              <span style="font-size:12px;color:var(--mockup-text-faint,#808080);">${p.progress}%</span>
-              <div class="progress-bar"><div class="progress-fill" style="width:${p.progress}%"></div></div>
-            </div>
-          </div>
-        </div>`;
+    const grid = document.getElementById('projects');
+    projects.forEach(p => {
+      grid.innerHTML += `<div class="project"><div class="name">${p.name}</div><div class="desc">${p.desc}</div></div>`;
     });
-
-    // Project card click -> expand details
-    document.querySelectorAll('.project-card').forEach(card => {
-      card.addEventListener('click', function() {
-        const idx = parseInt(this.dataset.projectIdx);
-        const p = projects[idx];
-        // Toggle expanded state
-        if (this.dataset.expanded === 'true') {
-          const detail = this.querySelector('.project-detail');
-          if (detail) detail.remove();
-          this.dataset.expanded = 'false';
-          this.style.borderColor = '';
-        } else {
-          const detail = document.createElement('div');
-          detail.className = 'project-detail';
-          detail.style.cssText = 'margin-top:12px;padding-top:12px;border-top:1px solid var(--mockup-border,#4a4a4a);font-size:12px;color:var(--mockup-text-muted,#b3b3b3);';
-          detail.innerHTML = `
-            <div style="margin-bottom:8px;font-weight:500;color:var(--mockup-text,#fff);">Recent Activity</div>
-            <div style="margin-bottom:4px;">Updated 2 tasks - 1h ago</div>
-            <div style="margin-bottom:4px;">New PR merged - 3h ago</div>
-            <div>Sprint planning completed - yesterday</div>
-          `;
-          this.appendChild(detail);
-          this.dataset.expanded = 'true';
-          this.style.borderColor = 'var(--mockup-primary, #60a5fa)';
-        }
-      });
-    });
-
-    // Chart bar tooltips
-    const barLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const barValues = [24, 32, 18, 36, 28, 22, 34];
-    document.querySelectorAll('.chart-bar').forEach((bar, i) => {
-      bar.title = `${barLabels[i]}: ${barValues[i]} tasks`;
-      bar.style.cursor = 'pointer';
-      bar.addEventListener('click', function() {
-        // Highlight selected bar
-        document.querySelectorAll('.chart-bar').forEach(b => b.style.opacity = '0.5');
-        this.style.opacity = '1';
-      });
-    });
-
-    // Stat cards - click to cycle timeframe
-    const timeframes = ['this month', 'this quarter', 'this year'];
-    document.querySelectorAll('.stat-card').forEach(card => {
-      let idx = 0;
-      card.style.cursor = 'pointer';
-      card.style.transition = 'border-color 0.15s';
-      card.addEventListener('click', () => {
-        idx = (idx + 1) % timeframes.length;
-        const change = card.querySelector('.stat-change');
-        if (change) {
-          change.textContent = '+' + (Math.floor(Math.random() * 50) + 1) + ' ' + timeframes[idx];
-        }
-        card.style.borderColor = 'var(--mockup-primary, #60a5fa)';
-        setTimeout(() => { card.style.borderColor = ''; }, 800);
-      });
-    });
-
-    // New Project button
-    const newProjectBtn = document.querySelector('.btn-filled');
-    if (newProjectBtn) {
-      newProjectBtn.addEventListener('click', () => {
-        const count = grid.querySelectorAll('.project-card').length + 1;
-        const card = document.createElement('div');
-        card.className = 'project-card';
-        card.innerHTML = `
-          <div class="name">New Project ${count}</div>
-          <div class="desc">Click to add description</div>
-          <div style="font-size:12px;color:var(--mockup-text-faint,#808080);margin-bottom:12px;">1 member</div>
-          <div class="project-meta">
-            <span class="project-status active">active</span>
-            <div style="display:flex;align-items:center;gap:8px;">
-              <span style="font-size:12px;color:var(--mockup-text-faint,#808080);">0%</span>
-              <div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>
-            </div>
-          </div>`;
-        card.style.borderColor = 'var(--mockup-primary, #60a5fa)';
-        card.style.transition = 'border-color 0.15s';
-        grid.appendChild(card);
-        setTimeout(() => { card.style.borderColor = ''; }, 1500);
-      });
-    }
 
     // Toggles
     document.querySelectorAll('.toggle').forEach(t => {
-      t.addEventListener('click', () => {
-        t.classList.toggle('on');
-        t.classList.toggle('off');
-      });
+      t.addEventListener('click', () => { t.classList.toggle('on'); t.classList.toggle('off'); });
     });
   </script>
 </body>

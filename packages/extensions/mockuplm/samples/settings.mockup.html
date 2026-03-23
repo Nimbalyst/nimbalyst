@@ -3,615 +3,137 @@
 <head>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: var(--mockup-bg-secondary, #1a1a1a);
-      color: var(--mockup-text, #ffffff);
-      display: flex;
-      height: 100vh;
-      overflow: hidden;
-    }
-
-    /* Sidebar (shared with dashboard) */
-    .sidebar {
-      width: 240px;
-      background: var(--mockup-bg, #2d2d2d);
-      border-right: 1px solid var(--mockup-border, #4a4a4a);
-      display: flex;
-      flex-direction: column;
-      flex-shrink: 0;
-    }
-    .sidebar-header { padding: 20px; border-bottom: 1px solid var(--mockup-border, #4a4a4a); }
-    .sidebar-header .logo { font-size: 18px; font-weight: 700; }
-    .sidebar-header .logo span { color: var(--mockup-primary, #60a5fa); }
+    body { font-family: Inter, -apple-system, sans-serif; background: var(--mockup-bg-secondary, #1a1a1a); color: var(--mockup-text, #fff); display: flex; height: 100vh; overflow: hidden; }
+    .sidebar { width: 220px; background: var(--mockup-bg, #2d2d2d); border-right: 1px solid var(--mockup-border, #4a4a4a); display: flex; flex-direction: column; flex-shrink: 0; }
+    .sidebar-header { padding: 20px; border-bottom: 1px solid var(--mockup-border, #4a4a4a); font-size: 18px; font-weight: 700; }
+    .sidebar-header span { color: var(--mockup-primary, #60a5fa); }
     .sidebar-nav { padding: 12px; flex: 1; }
-    .nav-item {
-      display: flex; align-items: center; gap: 10px;
-      padding: 10px 12px; border-radius: 8px; font-size: 14px;
-      cursor: pointer; color: var(--mockup-text-muted, #b3b3b3); transition: all 0.15s;
-    }
-    .nav-item:hover { background: var(--mockup-bg-tertiary, #3a3a3a); color: var(--mockup-text, #ffffff); }
-    .nav-item.active { background: rgba(96, 165, 250, 0.15); color: var(--mockup-primary, #60a5fa); }
-    .nav-icon { width: 18px; text-align: center; font-size: 14px; }
-    .sidebar-footer {
-      padding: 16px; border-top: 1px solid var(--mockup-border, #4a4a4a);
-      display: flex; align-items: center; gap: 10px;
-    }
-    .avatar {
-      width: 32px; height: 32px; border-radius: 50%;
-      background: var(--mockup-primary, #60a5fa);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 13px; font-weight: 600;
-    }
-    .user-info .name { font-size: 13px; font-weight: 500; color: var(--mockup-text, #ffffff); }
-    .user-info .role { font-size: 11px; color: var(--mockup-text-faint, #808080); }
-
-    /* Main content */
+    .nav-item { padding: 10px 12px; border-radius: 8px; font-size: 14px; cursor: pointer; color: var(--mockup-text-muted, #b3b3b3); }
+    .nav-item:hover { background: var(--mockup-bg-tertiary, #3a3a3a); color: var(--mockup-text, #fff); }
+    .nav-item.active { background: rgba(96,165,250,0.15); color: var(--mockup-primary, #60a5fa); }
     .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-    .topbar {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 16px 24px; border-bottom: 1px solid var(--mockup-border, #4a4a4a);
-    }
-    .topbar h1 { font-size: 20px; font-weight: 600; }
+    .topbar { padding: 16px 24px; border-bottom: 1px solid var(--mockup-border, #4a4a4a); font-size: 20px; font-weight: 600; }
     .content { flex: 1; display: flex; overflow: hidden; }
-
-    /* Settings sidebar tabs */
-    .settings-tabs {
-      width: 200px; padding: 16px 12px; border-right: 1px solid var(--mockup-border, #4a4a4a);
-      flex-shrink: 0;
-    }
-    .tab-item {
-      padding: 8px 12px; border-radius: 6px; font-size: 13px;
-      cursor: pointer; color: var(--mockup-text-muted, #b3b3b3); margin-bottom: 2px;
-    }
-    .tab-item:hover { background: var(--mockup-bg-tertiary, #3a3a3a); color: var(--mockup-text, #ffffff); }
-    .tab-item.active { background: var(--mockup-bg-tertiary, #3a3a3a); color: var(--mockup-text, #ffffff); font-weight: 500; }
-    .tab-group { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--mockup-text-faint, #808080); padding: 16px 12px 6px; }
-
-    /* Settings panels */
-    .settings-panel { flex: 1; padding: 24px 32px; overflow-y: auto; }
+    .tabs { width: 180px; padding: 16px 12px; border-right: 1px solid var(--mockup-border, #4a4a4a); flex-shrink: 0; }
+    .tab { padding: 8px 12px; border-radius: 6px; font-size: 13px; cursor: pointer; color: var(--mockup-text-muted, #b3b3b3); margin-bottom: 2px; }
+    .tab:hover { background: var(--mockup-bg-tertiary, #3a3a3a); }
+    .tab.active { background: var(--mockup-bg-tertiary, #3a3a3a); color: var(--mockup-text, #fff); font-weight: 500; }
+    .tab-group { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--mockup-text-faint, #808080); padding: 14px 12px 6px; }
+    .panel-area { flex: 1; padding: 24px 32px; overflow-y: auto; }
     .panel { display: none; }
     .panel.active { display: block; }
-    .section {
-      background: var(--mockup-bg, #2d2d2d);
-      border: 1px solid var(--mockup-border, #4a4a4a);
-      border-radius: 12px; padding: 24px; margin-bottom: 20px;
-    }
-    .section-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
-    .section-desc { font-size: 12px; color: var(--mockup-text-faint, #808080); margin-bottom: 20px; }
-
-    /* Form elements */
-    .form-row { margin-bottom: 20px; }
-    .form-row:last-child { margin-bottom: 0; }
-    .form-label { font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--mockup-text-muted, #b3b3b3); }
-    .form-input {
-      width: 100%; padding: 10px 14px;
-      background: var(--mockup-bg-secondary, #1a1a1a);
-      border: 1px solid var(--mockup-border, #4a4a4a);
-      border-radius: 8px; color: var(--mockup-text, #ffffff);
-      font-size: 14px; outline: none;
-    }
+    .section { background: var(--mockup-bg, #2d2d2d); border: 1px solid var(--mockup-border, #4a4a4a); border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+    .section-title { font-size: 15px; font-weight: 600; margin-bottom: 16px; }
+    .form-row { margin-bottom: 16px; }
+    .form-label { font-size: 13px; color: var(--mockup-text-muted, #b3b3b3); margin-bottom: 6px; }
+    .form-input { width: 100%; padding: 10px 14px; background: var(--mockup-bg-secondary, #1a1a1a); border: 1px solid var(--mockup-border, #4a4a4a); border-radius: 8px; color: var(--mockup-text, #fff); font-size: 14px; outline: none; }
     .form-input:focus { border-color: var(--mockup-primary, #60a5fa); }
-    .form-row-inline { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    .form-hint { font-size: 11px; color: var(--mockup-text-faint, #808080); margin-top: 4px; }
-
-    .setting-row {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 14px 0; border-bottom: 1px solid var(--mockup-border, #4a4a4a);
-    }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--mockup-border, #4a4a4a); }
     .setting-row:last-child { border-bottom: none; }
-    .setting-label .name { font-size: 14px; font-weight: 500; }
-    .setting-label .desc { font-size: 12px; color: var(--mockup-text-faint, #808080); margin-top: 2px; }
-
-    .toggle {
-      width: 40px; height: 22px; border-radius: 11px;
-      cursor: pointer; position: relative; transition: background 0.2s;
-    }
+    .setting-name { font-size: 14px; }
+    .setting-desc { font-size: 12px; color: var(--mockup-text-faint, #808080); margin-top: 2px; }
+    .toggle { width: 40px; height: 22px; border-radius: 11px; cursor: pointer; position: relative; }
     .toggle.on { background: var(--mockup-primary, #60a5fa); }
     .toggle.off { background: var(--mockup-bg-tertiary, #3a3a3a); }
-    .toggle::after {
-      content: ''; position: absolute; width: 18px; height: 18px;
-      border-radius: 50%; background: white; top: 2px; transition: left 0.2s;
-    }
+    .toggle::after { content: ''; position: absolute; width: 18px; height: 18px; border-radius: 50%; background: #fff; top: 2px; transition: left 0.2s; }
     .toggle.on::after { left: 20px; }
     .toggle.off::after { left: 2px; }
-
-    .btn {
-      padding: 8px 16px; border-radius: 8px; font-size: 13px;
-      font-weight: 500; cursor: pointer; border: none;
-    }
-    .btn-primary { background: var(--mockup-primary, #60a5fa); color: white; }
-    .btn-primary:hover { opacity: 0.9; }
-    .btn-outline {
-      background: transparent; border: 1px solid var(--mockup-border, #4a4a4a);
-      color: var(--mockup-text, #ffffff);
-    }
-    .btn-outline:hover { background: var(--mockup-bg-tertiary, #3a3a3a); }
-    .btn-danger {
-      background: transparent; border: 1px solid rgba(239,68,68,0.3);
-      color: #ef4444;
-    }
-    .btn-danger:hover { background: rgba(239,68,68,0.1); }
-    .btn-row { display: flex; gap: 8px; margin-top: 20px; }
-
-    /* Integration cards */
-    .integration-card {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 16px; background: var(--mockup-bg-secondary, #1a1a1a);
-      border: 1px solid var(--mockup-border, #4a4a4a);
-      border-radius: 10px; margin-bottom: 10px;
-    }
-    .integration-info { display: flex; align-items: center; gap: 12px; }
-    .integration-icon {
-      width: 36px; height: 36px; border-radius: 8px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 16px; font-weight: 700;
-    }
-    .integration-name { font-size: 14px; font-weight: 500; }
-    .integration-desc { font-size: 12px; color: var(--mockup-text-faint, #808080); }
-    .badge {
-      padding: 3px 10px; border-radius: 10px; font-size: 11px; font-weight: 500;
-    }
-    .badge-connected { background: rgba(74,222,128,0.15); color: var(--mockup-success, #4ade80); }
-    .badge-available { background: var(--mockup-bg-tertiary, #3a3a3a); color: var(--mockup-text-muted, #b3b3b3); }
-
-    /* Danger zone */
-    .danger-zone {
-      border-color: rgba(239,68,68,0.3);
-    }
-    .danger-zone .section-title { color: #ef4444; }
-
-    /* Toast notification */
-    .toast {
-      position: fixed; bottom: 24px; right: 24px;
-      padding: 12px 20px; border-radius: 8px; font-size: 13px; font-weight: 500;
-      background: var(--mockup-success, #4ade80); color: #000;
-      transform: translateY(80px); opacity: 0; transition: all 0.3s ease;
-      z-index: 100;
-    }
+    .btn { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; }
+    .btn-primary { background: var(--mockup-primary, #60a5fa); color: #fff; }
+    .btn-danger { background: transparent; border: 1px solid rgba(239,68,68,0.3); color: #ef4444; }
+    .toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: 8px; font-size: 13px; background: var(--mockup-success, #4ade80); color: #000; transform: translateY(80px); opacity: 0; transition: all 0.3s; z-index: 100; }
     .toast.visible { transform: translateY(0); opacity: 1; }
   </style>
 </head>
 <body>
   <div class="sidebar">
-    <div class="sidebar-header">
-      <div class="logo">Acme<span>Hub</span></div>
-    </div>
+    <div class="sidebar-header">Acme<span>Hub</span></div>
     <div class="sidebar-nav">
-      <div class="nav-item" data-page="overview">
-        <span class="nav-icon">&#9679;</span> Overview
-      </div>
-      <div class="nav-item" data-page="projects">
-        <span class="nav-icon">&#9632;</span> Projects
-      </div>
-      <div class="nav-item active" data-page="settings">
-        <span class="nav-icon">&#9881;</span> Settings
-      </div>
-    </div>
-    <div class="sidebar-footer">
-      <div class="avatar">JD</div>
-      <div class="user-info">
-        <div class="name">Jane Doe</div>
-        <div class="role">Admin</div>
-      </div>
+      <div class="nav-item" data-page="overview">Overview</div>
+      <div class="nav-item" data-page="projects">Projects</div>
+      <div class="nav-item active" data-page="settings">Settings</div>
     </div>
   </div>
-
   <div class="main">
-    <div class="topbar">
-      <h1>Settings</h1>
-    </div>
-
+    <div class="topbar">Settings</div>
     <div class="content">
-      <div class="settings-tabs">
+      <div class="tabs">
         <div class="tab-group">Account</div>
-        <div class="tab-item active" data-tab="profile">Profile</div>
-        <div class="tab-item" data-tab="security">Security</div>
+        <div class="tab active" data-tab="profile">Profile</div>
+        <div class="tab" data-tab="security">Security</div>
         <div class="tab-group">Workspace</div>
-        <div class="tab-item" data-tab="general">General</div>
-        <div class="tab-item" data-tab="notifications">Notifications</div>
-        <div class="tab-item" data-tab="integrations">Integrations</div>
-        <div class="tab-group">Advanced</div>
-        <div class="tab-item" data-tab="danger">Danger Zone</div>
+        <div class="tab" data-tab="general">General</div>
+        <div class="tab" data-tab="notifications">Notifications</div>
       </div>
-
-      <div class="settings-panel">
-        <!-- Profile -->
+      <div class="panel-area">
         <div class="panel active" id="panel-profile">
           <div class="section">
-            <div class="section-title">Profile Information</div>
-            <div class="section-desc">Manage your public profile and contact details</div>
-            <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px;">
-              <div class="avatar" style="width:64px;height:64px;font-size:22px;">JD</div>
-              <div>
-                <button class="btn btn-outline" id="btn-change-avatar">Change Avatar</button>
-                <div class="form-hint" style="margin-top:6px;">JPG or PNG, max 2MB</div>
-              </div>
+            <div class="section-title">Profile</div>
+            <div class="row2">
+              <div class="form-row"><div class="form-label">First Name</div><input class="form-input" value="Jane" /></div>
+              <div class="form-row"><div class="form-label">Last Name</div><input class="form-input" value="Doe" /></div>
             </div>
-            <div class="form-row-inline">
-              <div class="form-row">
-                <div class="form-label">First Name</div>
-                <input class="form-input" value="Jane" id="first-name" />
-              </div>
-              <div class="form-row">
-                <div class="form-label">Last Name</div>
-                <input class="form-input" value="Doe" id="last-name" />
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-label">Email</div>
-              <input class="form-input" value="jane@acmehub.com" />
-            </div>
-            <div class="form-row">
-              <div class="form-label">Role</div>
-              <input class="form-input" value="Engineering Lead" />
-            </div>
-            <div class="btn-row">
-              <button class="btn btn-primary" id="btn-save-profile">Save Changes</button>
-              <button class="btn btn-outline" id="btn-cancel-profile">Cancel</button>
-            </div>
+            <div class="form-row"><div class="form-label">Email</div><input class="form-input" value="jane@acmehub.com" /></div>
+            <button class="btn btn-primary" id="btn-save">Save Changes</button>
           </div>
         </div>
-
-        <!-- Security -->
         <div class="panel" id="panel-security">
           <div class="section">
             <div class="section-title">Password</div>
-            <div class="section-desc">Change your account password</div>
-            <div class="form-row">
-              <div class="form-label">Current Password</div>
-              <input class="form-input" type="password" placeholder="Enter current password" id="current-pw" />
+            <div class="form-row"><div class="form-label">Current Password</div><input class="form-input" type="password" id="curr-pw" /></div>
+            <div class="row2">
+              <div class="form-row"><div class="form-label">New Password</div><input class="form-input" type="password" id="new-pw" /></div>
+              <div class="form-row"><div class="form-label">Confirm</div><input class="form-input" type="password" id="confirm-pw" /></div>
             </div>
-            <div class="form-row-inline">
-              <div class="form-row">
-                <div class="form-label">New Password</div>
-                <input class="form-input" type="password" placeholder="Min 8 characters" id="new-pw" />
-              </div>
-              <div class="form-row">
-                <div class="form-label">Confirm Password</div>
-                <input class="form-input" type="password" placeholder="Re-enter password" id="confirm-pw" />
-              </div>
-            </div>
-            <div class="btn-row">
-              <button class="btn btn-primary" id="btn-update-pw">Update Password</button>
-            </div>
-          </div>
-          <div class="section">
-            <div class="section-title">Two-Factor Authentication</div>
-            <div class="section-desc">Add an extra layer of security to your account</div>
-            <div class="setting-row">
-              <div class="setting-label">
-                <div class="name">Authenticator App</div>
-                <div class="desc">Use an app like Google Authenticator or 1Password</div>
-              </div>
-              <button class="btn btn-outline" id="btn-setup-2fa">Set Up</button>
-            </div>
-            <div class="setting-row">
-              <div class="setting-label">
-                <div class="name">Recovery Codes</div>
-                <div class="desc">Generate backup codes for account recovery</div>
-              </div>
-              <button class="btn btn-outline" id="btn-recovery">Generate</button>
-            </div>
-          </div>
-          <div class="section">
-            <div class="section-title">Sessions</div>
-            <div class="section-desc">Manage your active sessions across devices</div>
-            <div class="setting-row">
-              <div class="setting-label">
-                <div class="name">MacBook Pro - Chrome</div>
-                <div class="desc">San Francisco, CA - Active now</div>
-              </div>
-              <span class="badge badge-connected">Current</span>
-            </div>
-            <div class="setting-row">
-              <div class="setting-label">
-                <div class="name">iPhone 15 - Safari</div>
-                <div class="desc">San Francisco, CA - 2 hours ago</div>
-              </div>
-              <button class="btn btn-outline" style="font-size:11px;padding:4px 10px;">Revoke</button>
-            </div>
+            <button class="btn btn-primary" id="btn-pw">Update Password</button>
           </div>
         </div>
-
-        <!-- General -->
         <div class="panel" id="panel-general">
           <div class="section">
             <div class="section-title">Appearance</div>
-            <div class="section-desc">Customize how AcmeHub looks</div>
-            <div class="setting-row">
-              <div class="setting-label">
-                <div class="name">Dark Mode</div>
-                <div class="desc">Use dark color scheme across the app</div>
-              </div>
-              <div class="toggle on" id="toggle-dark"></div>
-            </div>
-            <div class="setting-row">
-              <div class="setting-label">
-                <div class="name">Compact View</div>
-                <div class="desc">Reduce spacing for denser layouts</div>
-              </div>
-              <div class="toggle off" id="toggle-compact"></div>
-            </div>
-          </div>
-          <div class="section">
-            <div class="section-title">Language & Region</div>
-            <div class="section-desc">Set your preferred language and date format</div>
-            <div class="form-row-inline">
-              <div class="form-row">
-                <div class="form-label">Language</div>
-                <select class="form-input" id="select-lang">
-                  <option selected>English (US)</option>
-                  <option>Spanish</option>
-                  <option>French</option>
-                  <option>German</option>
-                  <option>Japanese</option>
-                </select>
-              </div>
-              <div class="form-row">
-                <div class="form-label">Timezone</div>
-                <select class="form-input" id="select-tz">
-                  <option selected>Pacific Time (PT)</option>
-                  <option>Eastern Time (ET)</option>
-                  <option>Central European (CET)</option>
-                  <option>Japan Standard (JST)</option>
-                </select>
-              </div>
-            </div>
-            <div class="btn-row">
-              <button class="btn btn-primary" id="btn-save-general">Save</button>
-            </div>
+            <div class="setting-row"><div><div class="setting-name">Dark Mode</div><div class="setting-desc">Use dark color scheme</div></div><div class="toggle on"></div></div>
+            <div class="setting-row"><div><div class="setting-name">Compact View</div><div class="setting-desc">Reduce spacing</div></div><div class="toggle off"></div></div>
           </div>
         </div>
-
-        <!-- Notifications -->
         <div class="panel" id="panel-notifications">
           <div class="section">
-            <div class="section-title">Email Notifications</div>
-            <div class="section-desc">Choose what updates you receive by email</div>
-            <div class="setting-row">
-              <div class="setting-label">
-                <div class="name">Project Updates</div>
-                <div class="desc">Status changes, milestones, and completions</div>
-              </div>
-              <div class="toggle on"></div>
-            </div>
-            <div class="setting-row">
-              <div class="setting-label">
-                <div class="name">Mentions</div>
-                <div class="desc">When someone @mentions you in a comment</div>
-              </div>
-              <div class="toggle on"></div>
-            </div>
-            <div class="setting-row">
-              <div class="setting-label">
-                <div class="name">Weekly Digest</div>
-                <div class="desc">Summary of activity every Monday morning</div>
-              </div>
-              <div class="toggle on"></div>
-            </div>
-            <div class="setting-row">
-              <div class="setting-label">
-                <div class="name">Marketing</div>
-                <div class="desc">Product updates and feature announcements</div>
-              </div>
-              <div class="toggle off"></div>
-            </div>
-          </div>
-          <div class="section">
-            <div class="section-title">Push Notifications</div>
-            <div class="section-desc">Real-time alerts on your devices</div>
-            <div class="setting-row">
-              <div class="setting-label">
-                <div class="name">Desktop Notifications</div>
-                <div class="desc">Show alerts in your system notification center</div>
-              </div>
-              <div class="toggle on"></div>
-            </div>
-            <div class="setting-row">
-              <div class="setting-label">
-                <div class="name">Sound</div>
-                <div class="desc">Play a sound for new notifications</div>
-              </div>
-              <div class="toggle off"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Integrations -->
-        <div class="panel" id="panel-integrations">
-          <div class="section">
-            <div class="section-title">Connected Services</div>
-            <div class="section-desc">Manage third-party integrations with your workspace</div>
-            <div class="integration-card">
-              <div class="integration-info">
-                <div class="integration-icon" style="background:#5865F2;color:#fff;">D</div>
-                <div>
-                  <div class="integration-name">Discord</div>
-                  <div class="integration-desc">Post updates to your team channel</div>
-                </div>
-              </div>
-              <span class="badge badge-connected">Connected</span>
-            </div>
-            <div class="integration-card">
-              <div class="integration-info">
-                <div class="integration-icon" style="background:#333;color:#fff;">GH</div>
-                <div>
-                  <div class="integration-name">GitHub</div>
-                  <div class="integration-desc">Link commits and PRs to projects</div>
-                </div>
-              </div>
-              <span class="badge badge-connected">Connected</span>
-            </div>
-            <div class="integration-card">
-              <div class="integration-info">
-                <div class="integration-icon" style="background:#4A154B;color:#fff;">S</div>
-                <div>
-                  <div class="integration-name">Slack</div>
-                  <div class="integration-desc">Send notifications to Slack channels</div>
-                </div>
-              </div>
-              <button class="btn btn-outline" id="btn-connect-slack" style="font-size:11px;padding:4px 12px;">Connect</button>
-            </div>
-            <div class="integration-card">
-              <div class="integration-info">
-                <div class="integration-icon" style="background:#0052CC;color:#fff;">J</div>
-                <div>
-                  <div class="integration-name">Jira</div>
-                  <div class="integration-desc">Sync issues and track progress</div>
-                </div>
-              </div>
-              <button class="btn btn-outline" id="btn-connect-jira" style="font-size:11px;padding:4px 12px;">Connect</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Danger Zone -->
-        <div class="panel" id="panel-danger">
-          <div class="section danger-zone">
-            <div class="section-title">Transfer Ownership</div>
-            <div class="section-desc">Transfer this workspace to another admin</div>
-            <button class="btn btn-danger" id="btn-transfer">Transfer Workspace</button>
-          </div>
-          <div class="section danger-zone">
-            <div class="section-title">Delete Workspace</div>
-            <div class="section-desc">Permanently delete this workspace and all its data. This action cannot be undone.</div>
-            <button class="btn btn-danger" id="btn-delete-workspace">Delete Workspace</button>
+            <div class="section-title">Notifications</div>
+            <div class="setting-row"><div><div class="setting-name">Mentions</div><div class="setting-desc">When someone @mentions you</div></div><div class="toggle on"></div></div>
+            <div class="setting-row"><div><div class="setting-name">Weekly Digest</div><div class="setting-desc">Summary every Monday</div></div><div class="toggle on"></div></div>
+            <div class="setting-row"><div><div class="setting-name">Marketing</div><div class="setting-desc">Product updates</div></div><div class="toggle off"></div></div>
           </div>
         </div>
       </div>
     </div>
   </div>
-
-  <div class="toast" id="toast">Saved successfully</div>
-
+  <div class="toast" id="toast">Saved</div>
   <script>
-    // Tab switching
-    const tabs = document.querySelectorAll('.tab-item');
-    const panels = document.querySelectorAll('.panel');
-
-    tabs.forEach(tab => {
+    // Tabs
+    document.querySelectorAll('.tab').forEach(tab => {
       tab.addEventListener('click', () => {
-        tabs.forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
-        panels.forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
         document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
       });
     });
 
-    // Toggle switches
+    // Toggles
     document.querySelectorAll('.toggle').forEach(t => {
-      t.addEventListener('click', () => {
-        t.classList.toggle('on');
-        t.classList.toggle('off');
-      });
+      t.addEventListener('click', () => { t.classList.toggle('on'); t.classList.toggle('off'); });
     });
 
-    // Toast helper
-    function showToast(msg) {
-      const toast = document.getElementById('toast');
-      toast.textContent = msg;
-      toast.classList.add('visible');
-      setTimeout(() => toast.classList.remove('visible'), 2000);
-    }
+    // Toast
+    function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('visible'); setTimeout(() => t.classList.remove('visible'), 2000); }
 
-    // Save profile
-    document.getElementById('btn-save-profile').addEventListener('click', () => {
-      showToast('Profile saved');
-    });
-    document.getElementById('btn-cancel-profile').addEventListener('click', () => {
-      document.getElementById('first-name').value = 'Jane';
-      document.getElementById('last-name').value = 'Doe';
-    });
-
-    // Update password
-    document.getElementById('btn-update-pw').addEventListener('click', () => {
-      const curr = document.getElementById('current-pw').value;
-      const newPw = document.getElementById('new-pw').value;
-      const confirm = document.getElementById('confirm-pw').value;
-      if (!curr || !newPw || !confirm) {
-        showToast('Please fill in all password fields');
-        return;
-      }
-      if (newPw !== confirm) {
-        showToast('Passwords do not match');
-        return;
-      }
-      if (newPw.length < 8) {
-        showToast('Password must be at least 8 characters');
-        return;
-      }
-      document.getElementById('current-pw').value = '';
-      document.getElementById('new-pw').value = '';
-      document.getElementById('confirm-pw').value = '';
-      showToast('Password updated');
-    });
-
-    // 2FA setup
-    document.getElementById('btn-setup-2fa').addEventListener('click', function() {
-      this.textContent = 'Enabled';
-      this.disabled = true;
-      this.style.opacity = '0.6';
-      showToast('2FA enabled');
-    });
-
-    // Recovery codes
-    document.getElementById('btn-recovery').addEventListener('click', () => {
-      showToast('Recovery codes generated');
-    });
-
-    // Connect integrations
-    document.getElementById('btn-connect-slack').addEventListener('click', function() {
-      this.textContent = 'Connecting...';
-      this.disabled = true;
-      setTimeout(() => {
-        const badge = document.createElement('span');
-        badge.className = 'badge badge-connected';
-        badge.textContent = 'Connected';
-        this.parentElement.replaceChild(badge, this);
-        showToast('Slack connected');
-      }, 1000);
-    });
-
-    document.getElementById('btn-connect-jira').addEventListener('click', function() {
-      this.textContent = 'Connecting...';
-      this.disabled = true;
-      setTimeout(() => {
-        const badge = document.createElement('span');
-        badge.className = 'badge badge-connected';
-        badge.textContent = 'Connected';
-        this.parentElement.replaceChild(badge, this);
-        showToast('Jira connected');
-      }, 1000);
-    });
-
-    // Save general settings
-    document.getElementById('btn-save-general').addEventListener('click', () => {
-      showToast('Settings saved');
-    });
-
-    // Danger zone
-    document.getElementById('btn-transfer').addEventListener('click', function() {
-      this.textContent = 'Contact support to transfer';
-      this.disabled = true;
-      this.style.opacity = '0.5';
-    });
-
-    document.getElementById('btn-delete-workspace').addEventListener('click', function() {
-      if (this.dataset.confirmed) {
-        this.textContent = 'Deleting...';
-        this.disabled = true;
-        this.style.opacity = '0.5';
-      } else {
-        this.textContent = 'Click again to confirm';
-        this.dataset.confirmed = 'true';
-        this.style.background = 'rgba(239,68,68,0.2)';
-      }
-    });
-
-    // Change avatar
-    document.getElementById('btn-change-avatar').addEventListener('click', () => {
-      showToast('File picker would open here');
+    document.getElementById('btn-save').addEventListener('click', () => toast('Profile saved'));
+    document.getElementById('btn-pw').addEventListener('click', () => {
+      const n = document.getElementById('new-pw').value;
+      const c = document.getElementById('confirm-pw').value;
+      if (!n || !c) return toast('Fill in all fields');
+      if (n !== c) return toast('Passwords do not match');
+      toast('Password updated');
     });
   </script>
 </body>

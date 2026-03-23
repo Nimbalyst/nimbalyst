@@ -9,7 +9,6 @@ import { memo, useRef, useEffect, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { renderMockupHtml } from '../utils/mockupDomUtils';
 import { injectTheme, type MockupTheme } from '../utils/themeEngine';
-import { injectComponents } from '../utils/componentInjector';
 import type { MockupReference } from '../types/project';
 import type { MockupProjectStoreApi } from '../store/projectStore';
 
@@ -37,7 +36,6 @@ export const MockupNode = memo(function MockupNode({ data }: NodeProps) {
     renderMockupHtml(iframeRef.current, htmlContent, {
       onAfterRender: (doc) => {
         injectTheme(doc, mockupTheme || 'dark');
-        injectComponents(doc);
       },
     });
   }, [htmlContent, mockupTheme]);

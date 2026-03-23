@@ -8,7 +8,6 @@
  */
 
 import type { MockupProjectFile } from '../types/project';
-import { BUILTIN_COMPONENTS_SCRIPT } from '../components-lib';
 import { generateThemeCSS, type MockupTheme } from './themeEngine';
 
 export interface BundleInput {
@@ -113,9 +112,6 @@ export function generateShareBundle(input: BundleInput): string {
     // Embedded mockup data
     var MOCKUPS = ${JSON.stringify(mockupData)};
     var PROJECT = ${JSON.stringify(project)};
-
-    // Component library
-    ${BUILTIN_COMPONENTS_SCRIPT}
 
     // Render cards
     var canvas = document.getElementById('canvas');

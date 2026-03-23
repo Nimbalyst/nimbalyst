@@ -14,6 +14,7 @@ import { useEditorLifecycle, type EditorHostProps } from '@nimbalyst/extension-s
 import { captureMockupComposite } from '../utils/screenshotUtils';
 import { renderMockupHtml } from '../utils/mockupDomUtils';
 import { MockupDiffViewer } from './MockupDiffViewer';
+import { injectTheme, type MockupTheme } from '../utils/themeEngine';
 
 // Import shared types for mockup annotations from runtime package
 import type { DrawingPath, MockupSelection } from '@nimbalyst/runtime';
@@ -87,6 +88,7 @@ export const MockupEditor = forwardRef<any, EditorHostProps>(function MockupEdit
   const [isCapturing, setIsCapturing] = useState(false);
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [isInteractive, setIsInteractive] = useState(false);
+  const [mockupTheme, setMockupTheme] = useState<MockupTheme>('dark');
   const [drawingColor, setDrawingColor] = useState('#FF0000');
   const [scrollOffset, setScrollOffset] = useState({ x: 0, y: 0 });
 
@@ -180,6 +182,8 @@ export const MockupEditor = forwardRef<any, EditorHostProps>(function MockupEdit
 
     renderMockupHtml(iframeRef.current, contentRef.current, {
       onAfterRender: (iframeDoc) => {
+        injectTheme(iframeDoc, mockupTheme);
+
         const style = iframeDoc.createElement('style');
         style.textContent = `
           .nimbalyst-selected {
@@ -191,7 +195,7 @@ export const MockupEditor = forwardRef<any, EditorHostProps>(function MockupEdit
         iframeDoc.head.appendChild(style);
       },
     });
-  }, [contentVersion, diffState]);
+  }, [contentVersion, diffState, mockupTheme]);
 
   // Separate effect for click handler -- toggling interactive mode shouldn't re-render iframe
   useEffect(() => {
@@ -695,9 +699,29 @@ export const MockupEditor = forwardRef<any, EditorHostProps>(function MockupEdit
           )}
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-nim-faint">
-            Mockup Preview
-          </span>
+          <button
+            onClick={() => setMockupTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))}
+            className="px-2 py-1 text-xs bg-nim border border-nim rounded text-nim cursor-pointer"
+            title={mockupTheme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+          >
+            {mockupTheme === 'dark' ? (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="5" />
+                <line x1="12" y1="1" x2="12" y2="3" />
+                <line x1="12" y1="21" x2="12" y2="23" />
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                <line x1="1" y1="12" x2="3" y2="12" />
+                <line x1="21" y1="12" x2="23" y2="12" />
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+              </svg>
+            )}
+          </button>
           <button
             onClick={handleToggleDrawing}
             className={`px-3 py-1 text-xs border border-nim rounded cursor-pointer ${
