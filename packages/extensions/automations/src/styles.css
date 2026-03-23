@@ -302,3 +302,19 @@
   background: var(--nim-bg-active, #4a4a4a);
   color: var(--nim-text, #ffffff);
 }
+
+.automation-header__run-btn--running {
+  color: var(--nim-primary, #60a5fa);
+  border-color: var(--nim-primary, #60a5fa);
+  cursor: default;
+  opacity: 0.8;
+}
+
+.automation-header__run-btn--running:hover {
+  background: var(--nim-bg-tertiary, #3a3a3a);
+  color: var(--nim-primary, #60a5fa);
+}
+
+.automation-header__run-btn:disabled {
+  cursor: default;
+}

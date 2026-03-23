@@ -5,7 +5,7 @@
  * Uses setTimeout chains for scheduling (not setInterval).
  */
 
-import type { AutomationStatus } from '../frontmatter/types';
+import type { AutomationStatus, ExecutionRecord } from '../frontmatter/types';
 import { parseAutomationStatus, extractPromptBody, updateAutomationStatus } from '../frontmatter/parser';
 import { calculateNextRun, msUntilNextRun } from './scheduleUtils';
 
@@ -28,12 +28,19 @@ interface ScheduledAutomation {
   timerId: ReturnType<typeof setTimeout> | null;
 }
 
+/** Result returned by the onFire callback. */
+export interface AutomationFireResult {
+  response: string;
+  sessionId?: string;
+  outputFile?: string;
+}
+
 /** Callback invoked when an automation fires. */
 export type OnAutomationFire = (
   filePath: string,
   status: AutomationStatus,
   prompt: string,
-) => Promise<string>;
+) => Promise<AutomationFireResult>;
 
 export class AutomationScheduler {
   private automations = new Map<string, ScheduledAutomation>();
@@ -193,13 +200,16 @@ export class AutomationScheduler {
     }
 
     this.ui.showInfo(`Running automation: ${status.title}`);
+    const startTime = Date.now();
 
     try {
       // Read fresh content to get the latest prompt
       const content = await this.fs.readFile(filePath);
       const prompt = extractPromptBody(content);
 
-      const response = await this.onFire(filePath, status, prompt);
+      const result = await this.onFire(filePath, status, prompt);
+      // console.log('[Automations] onFire result keys:', Object.keys(result), 'outputFile:', result.outputFile);
+      const durationMs = Date.now() - startTime;
 
       // Update frontmatter with run results
       const now = new Date().toISOString();
@@ -214,6 +224,16 @@ export class AutomationScheduler {
       });
       await this.fs.writeFile(filePath, updated);
 
+      // Record execution history
+      await this.appendHistory(status, {
+        id: `run_${Date.now()}`,
+        timestamp: now,
+        durationMs,
+        status: 'success',
+        sessionId: result.sessionId,
+        outputFile: result.outputFile,
+      });
+
       // Update in-memory status
       const tracked = this.automations.get(filePath);
       if (tracked) {
@@ -227,24 +247,96 @@ export class AutomationScheduler {
         };
       }
 
-      this.ui.showInfo(`Automation "${status.title}" completed. Output: ${response.slice(0, 100)}...`);
+      this.ui.showInfo(`Automation "${status.title}" completed. Output: ${result.response.slice(0, 100)}...`);
     } catch (err) {
+      const durationMs = Date.now() - startTime;
       const errorMsg = err instanceof Error ? err.message : String(err);
 
       // Update frontmatter with error
       try {
+        const now = new Date().toISOString();
         const freshContent = await this.fs.readFile(filePath);
         const updated = updateAutomationStatus(freshContent, {
-          lastRun: new Date().toISOString(),
+          lastRun: now,
           lastRunStatus: 'error',
           lastRunError: errorMsg,
         });
         await this.fs.writeFile(filePath, updated);
+
+        // Record failed execution history
+        await this.appendHistory(status, {
+          id: `run_${Date.now()}`,
+          timestamp: now,
+          durationMs,
+          status: 'error',
+          error: errorMsg,
+        });
       } catch {
         // Best effort
       }
 
       this.ui.showError(`Automation "${status.title}" failed: ${errorMsg}`);
+    }
+  }
+
+  /** Read execution history for an automation. */
+  async getHistory(automationId: string, limit?: number): Promise<ExecutionRecord[]> {
+    // Find the automation by ID to get its output location
+    for (const automation of this.automations.values()) {
+      if (automation.status.id === automationId) {
+        return this.readHistory(automation.status, limit);
+      }
+    }
+    return [];
+  }
+
+  private getHistoryPath(status: AutomationStatus): string {
+    const location = status.output.location.endsWith('/')
+      ? status.output.location
+      : status.output.location + '/';
+    return location + 'history.json';
+  }
+
+  private async readHistory(status: AutomationStatus, limit?: number): Promise<ExecutionRecord[]> {
+    const historyPath = this.getHistoryPath(status);
+    try {
+      if (await this.fs.fileExists(historyPath)) {
+        const raw = await this.fs.readFile(historyPath);
+        const records: ExecutionRecord[] = JSON.parse(raw);
+        // Return newest first
+        const sorted = records.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+        return limit ? sorted.slice(0, limit) : sorted;
+      }
+    } catch {
+      // History file doesn't exist or is malformed
+    }
+    return [];
+  }
+
+  private async appendHistory(status: AutomationStatus, record: ExecutionRecord): Promise<void> {
+    const historyPath = this.getHistoryPath(status);
+    // console.log('[Automations] Writing history to:', historyPath);
+    try {
+      let records: ExecutionRecord[] = [];
+      try {
+        const exists = await this.fs.fileExists(historyPath);
+        // console.log('[Automations] History file exists:', exists);
+        if (exists) {
+          const raw = await this.fs.readFile(historyPath);
+          records = JSON.parse(raw);
+        }
+      } catch (readErr) {
+        console.warn('[Automations] Could not read existing history, starting fresh:', readErr);
+      }
+      records.push(record);
+      // Keep last 100 records
+      if (records.length > 100) {
+        records = records.slice(-100);
+      }
+      await this.fs.writeFile(historyPath, JSON.stringify(records, null, 2));
+      // console.log('[Automations] History written successfully, records:', records.length);
+    } catch (err) {
+      console.error('[Automations] Failed to write history:', err);
     }
   }
 }

@@ -58,8 +58,9 @@ export async function activate(context: {
     _filePath: string,
     status: AutomationStatus,
     prompt: string,
-  ): Promise<string> => {
+  ) => {
     let response: string;
+    let sessionId: string | undefined;
 
     if (ai?.sendPrompt) {
       try {
@@ -70,6 +71,7 @@ export async function activate(context: {
           model: status.model,
         });
         response = result.response;
+        sessionId = result.sessionId;
       } catch (err) {
         response = `*Automation "${status.title}" failed at ${new Date().toLocaleString()}.*\n\nError: ${err}`;
         ui.showError(`Automation "${status.title}" failed: ${err}`);
@@ -78,8 +80,8 @@ export async function activate(context: {
       response = `*Automation "${status.title}" fired at ${new Date().toLocaleString()}.*\n\nThe AI service is not available. Check that the extension has AI permissions enabled.`;
     }
 
-    await outputWriter.write(status.output, response, status.title);
-    return response;
+    const outputFile = await outputWriter.write(status.output, response, status.title);
+    return { response, sessionId, outputFile };
   });
 
   // Wire up "Run Now" from the document header
@@ -273,4 +275,47 @@ const runAutomationTool: ExtensionAITool = {
   },
 };
 
-export const aiTools = [listAutomationsTool, createAutomationTool, runAutomationTool];
+const historyAutomationTool: ExtensionAITool = {
+  name: 'automations.history',
+  description: 'Get the execution history for an automation, showing timestamps, duration, status, and session links for past runs.',
+  scope: 'global',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', description: 'The automation ID (e.g., "standup-summary")' },
+      limit: { type: 'number', description: 'Max number of records to return (default: 10)' },
+    },
+    required: ['id'],
+  },
+  handler: async (args: Record<string, unknown>, _context: AIToolContext): Promise<ExtensionToolResult> => {
+    if (!scheduler) {
+      return { success: false, error: 'Automation scheduler is not initialized' };
+    }
+
+    const id = args.id as string;
+    const limit = (args.limit as number) ?? 10;
+    const records = await scheduler.getHistory(id, limit);
+
+    if (records.length === 0) {
+      return {
+        success: true,
+        message: `No execution history found for automation "${id}".`,
+      };
+    }
+
+    const lines = records.map((r) => {
+      const duration = r.durationMs < 1000 ? `${r.durationMs}ms` : `${(r.durationMs / 1000).toFixed(1)}s`;
+      const status = r.status === 'success' ? 'OK' : `FAILED: ${r.error ?? 'unknown'}`;
+      const session = r.sessionId ? ` (session: ${r.sessionId})` : '';
+      const output = r.outputFile ? ` -> ${r.outputFile}` : '';
+      return `- ${r.timestamp} [${duration}] ${status}${session}${output}`;
+    });
+
+    return {
+      success: true,
+      message: `Execution history for "${id}" (${records.length} records):\n${lines.join('\n')}`,
+    };
+  },
+};
+
+export const aiTools = [listAutomationsTool, createAutomationTool, runAutomationTool, historyAutomationTool];

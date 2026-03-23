@@ -89,6 +89,24 @@ export function detectTrackerFromFrontmatter(content: string): TrackerFrontmatte
     };
   }
 
+  // Check for automationStatus
+  if (frontmatter.automationStatus && typeof frontmatter.automationStatus === 'object') {
+    const auto = frontmatter.automationStatus as Record<string, any>;
+    const status = auto.enabled
+      ? (auto.lastRunStatus === 'error' ? 'failing' : 'active')
+      : (auto.runCount > 0 ? 'paused' : 'new');
+    return {
+      type: 'automation',
+      data: resolveFieldData('automation', {
+        title: auto.title,
+        status,
+        schedule: auto.schedule?.type,
+        lastRun: auto.lastRun,
+        runCount: auto.runCount ?? 0,
+      }),
+    };
+  }
+
   // Check for generic trackerStatus with type field
   if (frontmatter.trackerStatus && typeof frontmatter.trackerStatus === 'object') {
     const trackerData = frontmatter.trackerStatus as Record<string, any>;
@@ -150,6 +168,8 @@ export function updateTrackerInFrontmatter(
     frontmatterKey = 'planStatus';
   } else if (trackerType === 'decision') {
     frontmatterKey = 'decisionStatus';
+  } else if (trackerType === 'automation') {
+    frontmatterKey = 'automationStatus';
   }
 
   const existingData = (frontmatter[frontmatterKey] || {}) as Record<string, any>;

@@ -94,6 +94,7 @@ function insertTrackerItemNode(editor: LexicalEditor, type: TrackerItemType, exi
     else if (type === 'plan') prefix = 'pln';
     else if (type === 'idea') prefix = 'ida';
     else if (type === 'decision') prefix = 'dec';
+    else if (type === 'automation') prefix = 'aut';
 
     const itemData: TrackerItemData = {
       id: generateId(prefix),
@@ -664,6 +665,7 @@ function TrackerPlugin(): JSX.Element | null {
         else if (type === 'plan') prefix = 'pln';
         else if (type === 'idea') prefix = 'ida';
         else if (type === 'decision') prefix = 'dec';
+        else if (type === 'automation') prefix = 'aut';
 
         // Create tracker item
         const itemData: TrackerItemData = {

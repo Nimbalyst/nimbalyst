@@ -90,6 +90,15 @@ function getTypeDescription(type: TrackerItemType): { title: string; description
         'Click "+ New" to document a decision',
       ],
     },
+    'automation': {
+      title: 'Automations',
+      description: 'Automations are scheduled AI-powered tasks. Create a markdown file in nimbalyst-local/automations/ with a schedule and prompt.',
+      hints: [
+        'Use /automation in agent chat to create one',
+        'Open an automation file to configure its schedule',
+        'Automations run on a daily, weekly, or interval schedule',
+      ],
+    },
   };
   return descriptions[type] || descriptions['task'];
 }
@@ -104,6 +113,7 @@ function getTypeColor(type: TrackerItemType): string {
     'plan': '#7c3aed',
     'idea': '#ca8a04',
     'decision': '#8b5cf6',
+    'automation': '#60a5fa',
   };
   return colors[type] || '#6b7280';
 }
@@ -225,7 +235,8 @@ function getTypeIcon(type: TrackerItemType): string {
     'task': 'check_box',
     'plan': 'assignment',
     'idea': 'lightbulb',
-    'decision': 'gavel'
+    'decision': 'gavel',
+    'automation': 'auto_mode',
   };
   return icons[type];
 }

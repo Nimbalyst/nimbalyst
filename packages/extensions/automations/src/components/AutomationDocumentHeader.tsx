@@ -3,7 +3,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import type { AutomationStatus, AutomationSchedule, DayOfWeek, ScheduleType } from '../frontmatter/types';
+import type { AutomationStatus, AutomationSchedule, DayOfWeek, ScheduleType, ExecutionRecord } from '../frontmatter/types';
 
 interface AIModel {
   id: string;
@@ -15,45 +15,56 @@ import { ALL_DAYS, DAY_LABELS } from '../frontmatter/types';
 import { parseAutomationStatus, updateAutomationStatus } from '../frontmatter/parser';
 import { formatSchedule, formatRelativeTime, calculateNextRun } from '../scheduler/scheduleUtils';
 
-/** Discover output files for an automation and allow opening them. */
-function useOutputFiles(outputLocation: string | undefined) {
-  const [files, setFiles] = useState<string[]>([]);
+/** Load execution history from history.json in the output directory. */
+function useExecutionHistory(outputLocation: string | undefined) {
+  const [records, setRecords] = useState<ExecutionRecord[]>([]);
 
   const refresh = useCallback(async () => {
     if (!outputLocation) return;
     const electronAPI = (window as any).electronAPI;
     if (!electronAPI) return;
     try {
-      // Get workspace path to resolve relative output location
       const state = await electronAPI.getInitialState();
       const wp = state?.workspacePath;
       if (!wp) return;
-      const absDir = outputLocation.startsWith('/') ? outputLocation : `${wp}/${outputLocation}`;
-      const contents = await electronAPI.getFolderContents(absDir);
-      if (contents?.children) {
-        // Sort by name descending (newest date first for YYYY-MM-DD names)
-        const mdFiles = contents.children
-          .filter((c: any) => c.name?.endsWith('.md'))
-          .map((c: any) => c.path as string)
-          .sort((a: string, b: string) => b.localeCompare(a));
-        setFiles(mdFiles);
+      const location = outputLocation.endsWith('/') ? outputLocation : outputLocation + '/';
+      const historyPath = location + 'history.json';
+      const absPath = historyPath.startsWith('/') ? historyPath : `${wp}/${historyPath}`;
+      const result = await electronAPI.readFileContent(absPath);
+      const raw = typeof result === 'string' ? result : result?.content;
+      if (raw) {
+        const parsed: ExecutionRecord[] = JSON.parse(raw);
+        // Newest first
+        setRecords(parsed.sort((a, b) => b.timestamp.localeCompare(a.timestamp)));
       }
     } catch {
-      // Output directory may not exist yet
-      setFiles([]);
+      setRecords([]);
     }
   }, [outputLocation]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const openFile = useCallback((filePath: string) => {
+  const openFile = useCallback(async (filePath: string) => {
     const electronAPI = (window as any).electronAPI;
-    if (electronAPI?.switchWorkspaceFile) {
-      electronAPI.switchWorkspaceFile(filePath);
-    }
+    if (!electronAPI?.invoke) return;
+    const state = await electronAPI.getInitialState();
+    const wp = state?.workspacePath;
+    if (!wp) return;
+    const absPath = filePath.startsWith('/') ? filePath : `${wp}/${filePath}`;
+    // Use workspace:open-file which sends open-document event to properly open/switch tabs
+    electronAPI.invoke('workspace:open-file', { workspacePath: wp, filePath: absPath });
   }, []);
 
-  return { files, openFile, refresh };
+  return { records, openFile, refresh };
+}
+
+/** Format duration in human-readable form. */
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  const minutes = Math.floor(ms / 60_000);
+  const seconds = Math.round((ms % 60_000) / 1000);
+  return `${minutes}m ${seconds}s`;
 }
 
 interface DocumentHeaderComponentProps {
@@ -78,6 +89,7 @@ export const AutomationDocumentHeader: React.FC<DocumentHeaderComponentProps> = 
 }) => {
   const [status, setStatus] = useState<AutomationStatus | null>(null);
   const [availableModels, setAvailableModels] = useState<AIModel[]>([]);
+  const [isRunning, setIsRunning] = useState(false);
 
   useEffect(() => {
     const electronAPI = (window as any).electronAPI;
@@ -178,30 +190,37 @@ export const AutomationDocumentHeader: React.FC<DocumentHeaderComponentProps> = 
   );
 
   const handleRunNow = useCallback(() => {
-    if (runNowCallback) runNowCallback(filePath);
-  }, [filePath]);
+    if (runNowCallback && !isRunning) {
+      setIsRunning(true);
+      runNowCallback(filePath);
+      // The scheduler handles execution asynchronously and shows its own
+      // success/error toasts. We just show a brief "running" state on the button.
+      // Reset after a reasonable timeout since we don't have a completion callback.
+      setTimeout(() => setIsRunning(false), 5000);
+    }
+  }, [filePath, isRunning]);
 
-  const { files: outputFiles, openFile: openOutputFile, refresh: refreshOutputFiles } = useOutputFiles(status?.output?.location);
-  const [showOutputs, setShowOutputs] = useState(false);
-  const outputsRef = useRef<HTMLDivElement>(null);
+  const { records: historyRecords, openFile: openHistoryFile, refresh: refreshHistory } = useExecutionHistory(status?.output?.location);
+  const [showHistory, setShowHistory] = useState(false);
+  const historyRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on outside click
   useEffect(() => {
-    if (!showOutputs) return;
+    if (!showHistory) return;
     const handler = (e: MouseEvent) => {
-      if (outputsRef.current && !outputsRef.current.contains(e.target as Node)) {
-        setShowOutputs(false);
+      if (historyRef.current && !historyRef.current.contains(e.target as Node)) {
+        setShowHistory(false);
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [showOutputs]);
+  }, [showHistory]);
 
-  // Refresh output files when dropdown opens
-  const handleToggleOutputs = useCallback(() => {
-    if (!showOutputs) refreshOutputFiles();
-    setShowOutputs((v) => !v);
-  }, [showOutputs, refreshOutputFiles]);
+  // Refresh history when dropdown opens
+  const handleToggleHistory = useCallback(() => {
+    if (!showHistory) refreshHistory();
+    setShowHistory((v) => !v);
+  }, [showHistory, refreshHistory]);
 
   if (!status) return null;
 
@@ -327,45 +346,75 @@ export const AutomationDocumentHeader: React.FC<DocumentHeaderComponentProps> = 
           </span>
         )}
 
-        {/* Outputs dropdown */}
-        {(status.runCount > 0 || outputFiles.length > 0) && (
-          <div className="automation-header__outputs" ref={outputsRef}>
-            <button className="automation-header__outputs-btn" onClick={handleToggleOutputs}>
-              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>folder_open</span>
-              {outputFiles.length > 0 ? `${outputFiles.length} outputs` : `${status.runCount} runs`}
+        {/* History dropdown */}
+        {(status.runCount > 0 || historyRecords.length > 0) && (
+          <div className="automation-header__outputs" ref={historyRef}>
+            <button className="automation-header__outputs-btn" onClick={handleToggleHistory}>
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>history</span>
+              {historyRecords.length > 0 ? `${historyRecords.length} runs` : `${status.runCount} runs`}
               <span className="material-symbols-outlined" style={{ fontSize: 12 }}>
-                {showOutputs ? 'expand_less' : 'expand_more'}
+                {showHistory ? 'expand_less' : 'expand_more'}
               </span>
             </button>
-            {showOutputs && outputFiles.length > 0 && (
-              <div className="automation-header__outputs-dropdown">
-                {outputFiles.map((f) => {
-                  const name = f.split('/').pop() || f;
-                  return (
-                    <button
-                      key={f}
-                      className="automation-header__output-item"
-                      onClick={() => { openOutputFile(f); setShowOutputs(false); }}
-                    >
-                      <span className="material-symbols-outlined" style={{ fontSize: 14 }}>description</span>
-                      {name}
-                    </button>
-                  );
-                })}
+            {showHistory && historyRecords.length > 0 && (
+              <div className="automation-header__outputs-dropdown" style={{ minWidth: 300 }}>
+                {historyRecords.slice(0, 20).map((r) => (
+                  <button
+                    key={r.id}
+                    className="automation-header__output-item"
+                    onClick={() => {
+                      if (r.outputFile) {
+                        openHistoryFile(r.outputFile);
+                        setShowHistory(false);
+                      }
+                    }}
+                    style={{ opacity: r.outputFile ? 1 : 0.7, cursor: r.outputFile ? 'pointer' : 'default' }}
+                  >
+                    <span className="material-symbols-outlined" style={{
+                      fontSize: 14,
+                      color: r.status === 'success'
+                        ? 'var(--nim-success, #4ade80)'
+                        : 'var(--nim-error, #ef4444)',
+                    }}>
+                      {r.status === 'success' ? 'check_circle' : 'error'}
+                    </span>
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {formatRelativeTime(r.timestamp)}
+                    </span>
+                    <span style={{ fontSize: 10, color: 'var(--nim-text-disabled, #666666)', flexShrink: 0 }}>
+                      {formatDuration(r.durationMs)}
+                    </span>
+                    {r.outputFile && (
+                      <span className="material-symbols-outlined" style={{ fontSize: 12, color: 'var(--nim-text-faint, #808080)' }}>
+                        open_in_new
+                      </span>
+                    )}
+                  </button>
+                ))}
               </div>
             )}
-            {showOutputs && outputFiles.length === 0 && (
+            {showHistory && historyRecords.length === 0 && (
               <div className="automation-header__outputs-dropdown">
-                <div className="automation-header__output-empty">No output files yet</div>
+                <div className="automation-header__output-empty">
+                  {status.runCount > 0
+                    ? 'History tracking starts from next run'
+                    : 'No runs yet'}
+                </div>
               </div>
             )}
           </div>
         )}
 
         {/* Run Now */}
-        <button className="automation-header__run-btn" onClick={handleRunNow}>
-          <span className="material-symbols-outlined" style={{ fontSize: 15 }}>play_arrow</span>
-          Run
+        <button
+          className={`automation-header__run-btn ${isRunning ? 'automation-header__run-btn--running' : ''}`}
+          onClick={handleRunNow}
+          disabled={isRunning}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 15 }}>
+            {isRunning ? 'hourglass_top' : 'play_arrow'}
+          </span>
+          {isRunning ? 'Running...' : 'Run'}
         </button>
       </div>
     </div>

@@ -77,6 +77,19 @@ export interface AutomationStatus {
 }
 
 /**
+ * A single execution record stored in history.json.
+ */
+export interface ExecutionRecord {
+  id: string;
+  timestamp: string;
+  durationMs: number;
+  status: 'success' | 'error';
+  error?: string;
+  sessionId?: string;
+  outputFile?: string;
+}
+
+/**
  * Default values for a new automation.
  */
 export function createDefaultAutomationStatus(

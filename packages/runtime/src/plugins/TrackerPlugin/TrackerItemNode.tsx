@@ -13,7 +13,7 @@ import {
 } from 'lexical';
 import { ElementDOMSlot } from 'lexical';
 
-export type TrackerItemType = 'plan' | 'bug' | 'task' | 'idea' | 'decision';
+export type TrackerItemType = 'plan' | 'bug' | 'task' | 'idea' | 'decision' | 'automation';
 export type TrackerItemStatus = 'to-do' | 'in-progress' | 'in-review' | 'done' | 'blocked' | 'proposed' | 'in-discussion' | 'decided' | 'implemented' | 'rejected' | 'superseded';
 export type TrackerItemPriority = 'low' | 'medium' | 'high' | 'critical';
 

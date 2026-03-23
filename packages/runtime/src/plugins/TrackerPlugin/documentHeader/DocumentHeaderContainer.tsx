@@ -7,7 +7,7 @@
  * - Passes document context to each header
  */
 
-import React, { useMemo, useEffect } from 'react';
+import React, { useMemo, useEffect, useCallback } from 'react';
 import { DocumentHeaderRegistry } from './DocumentHeaderRegistry';
 import type { DocumentHeaderComponentProps } from './DocumentHeaderRegistry';
 
@@ -72,6 +72,16 @@ export const DocumentHeaderContainer: React.FC<DocumentHeaderContainerProps> = (
     return DocumentHeaderRegistry.getProviders(contentForMatching, filePath);
   }, [contentForMatching, filePath]);
 
+  // Wrap onContentChange to also bump localVersion so child headers
+  // re-parse their state after making changes via the header controls
+  const handleContentChange = useCallback((newContent: string) => {
+    if (onContentChange) {
+      onContentChange(newContent);
+      // Bump local version so children re-read content on next render
+      setLocalVersion(v => v + 1);
+    }
+  }, [onContentChange]);
+
   // Expose onContentChange handler globally for commands to access
   useEffect(() => {
     if (onContentChange) {
@@ -91,7 +101,7 @@ export const DocumentHeaderContainer: React.FC<DocumentHeaderContainerProps> = (
     fileName,
     getContent,
     contentVersion: effectiveVersion,
-    onContentChange,
+    onContentChange: handleContentChange,
     editor,
   };
 

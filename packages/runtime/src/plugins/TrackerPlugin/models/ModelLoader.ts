@@ -239,6 +239,47 @@ const builtinTrackers: TrackerDataModel[] = [
     ],
     inlineTemplate: '{icon} {title} {status}',
   },
+  {
+    type: 'automation',
+    displayName: 'Automation',
+    displayNamePlural: 'Automations',
+    icon: 'auto_mode',
+    color: '#60a5fa',
+    modes: { inline: false, fullDocument: true },
+    sync: { mode: 'local', scope: 'project' },
+    idPrefix: 'aut',
+    idFormat: 'ulid',
+    fields: [
+      { name: 'title', type: 'string', required: true, displayInline: true },
+      {
+        name: 'status',
+        type: 'select',
+        default: 'new',
+        options: [
+          { value: 'active', label: 'Active', icon: 'play_circle', color: '#22c55e' },
+          { value: 'failing', label: 'Failing', icon: 'error', color: '#ef4444' },
+          { value: 'paused', label: 'Paused', icon: 'pause_circle', color: '#64748b' },
+          { value: 'new', label: 'New', icon: 'fiber_new', color: '#3b82f6' },
+        ],
+      },
+      { name: 'schedule', type: 'string', displayInline: true, readOnly: true },
+      { name: 'lastRun', type: 'datetime', displayInline: true, readOnly: true },
+      { name: 'runCount', type: 'number', displayInline: true, readOnly: true },
+      { name: 'tags', type: 'array', itemType: 'string', displayInline: false },
+      { name: 'created', type: 'datetime', displayInline: false, readOnly: true },
+      { name: 'updated', type: 'datetime', displayInline: false, readOnly: true },
+    ],
+    statusBarLayout: [
+      {
+        row: [
+          { field: 'status', width: 150 },
+          { field: 'schedule', width: 150 },
+          { field: 'lastRun', width: 200 },
+          { field: 'runCount', width: 80 },
+        ],
+      },
+    ],
+  },
 ];
 
 /**
