@@ -20,6 +20,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.56.8] - 2026-03-23
+
+
+### Added
+- OpenCode open source coding agent integration
+- Route OS file opens to frontmost workspace window
+- MockupLM interactive mode with theme toggle, drag-and-drop, project system, and editor context API
+- Automation execution history and tracker integration
+- Clickable links in iOS session transcript
+- Multi-config support in Playwright panel for extension tests
+- Project quick open dialog and Window menu discoverability
+- Extension live integration test infrastructure
+- Extension marketplace deployment with live registry connection
+- Plugin.json validation before passing to Claude Code SDK
+- Native screenshot capture with dark/light theme support
+- Sleep prevention mode selector (off/always/when plugged in)
+- Feature usage tracking system for local UX decisions
+- Contextual tips system with mobile keep-awake tip
+- Extension marketplace screenshots with dark/light theme support
+- Default new users to Opus 4.6 (1M context) and auto-migrate existing Opus users
+
+### Changed
+- Commented out noisy debug logs in renderer
+
+### Fixed
+- Respect Codex API key without breaking CLI auth
+- Restore Claude Code image attachments in dev
+- Keep new markdown files syncing and expand tracker detection
+- Context usage indicator shows 1M for extended context models
+- ExitPlanMode now blocks for user confirmation instead of auto-allowing
+- Extensions can now override built-in editors for compound file types
+- "All Uncommitted Files" mode no longer shows committed session files
+- Extension project intro dialog Continue button not working
+- Android UX alignment with iOS navigation model and session sync fix
+- Docker E2E setup aborts instead of corrupting host binaries
+- Tracker dates no longer show Updated before Created
+- Tracker detail panel clears on type switch; existing items now save
+- Context window shows correct /1M instead of /200k when subagents are used
+- Display "1M" instead of "1000k" for million-token context windows
+- Hardened plan tracking defaults, settings merge, and test selectors
+
 ## [0.56.7] - 2026-03-20
 
 
