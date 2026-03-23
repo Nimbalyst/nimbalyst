@@ -346,6 +346,17 @@ function TranscriptApp() {
     }
   }, []);
 
+  const handleOpenFile = useCallback((filePath: string) => {
+    try {
+      (window as any).webkit?.messageHandlers?.bridge?.postMessage({
+        type: 'open_file',
+        filePath,
+      });
+    } catch (e) {
+      console.warn('Failed to send open_file to native:', e);
+    }
+  }, []);
+
   if (!sessionId || !sessionData) {
     return (
       <div style={{
@@ -369,6 +380,7 @@ function TranscriptApp() {
       sessionData={sessionData}
       hideSidebar={true}
       onCompact={handleCompact}
+      onFileClick={handleOpenFile}
     />
   );
 }

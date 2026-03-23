@@ -1,5 +1,6 @@
 import SwiftUI
 import GRDB
+import os
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -114,6 +115,11 @@ public struct SessionDetailView: View {
     /// Diagnostic info from sync, used in debug copy.
     @State private var lastDiagnostic: SyncManager.SessionSyncDiagnostic?
 
+    /// Document to present in a sheet when a file link is tapped.
+    @State private var fileSheetDocument: SyncedDocument?
+    /// Toast message when a tapped file is not available on this device.
+    @State private var fileNotAvailableToast: String?
+
     private var displaySession: Session {
         liveSession ?? session
     }
@@ -156,6 +162,9 @@ public struct SessionDetailView: View {
                                 loadError = .webViewFailed(errorMessage)
                             }
                         }
+                    },
+                    onOpenFile: { filePath in
+                        handleOpenFile(filePath)
                     }
                 )
 
@@ -297,6 +306,13 @@ public struct SessionDetailView: View {
             }
             .presentationDetents([.medium, .large])
         }
+        #endif
+        #if canImport(UIKit)
+        .modifier(FileSheetModifier(
+            document: $fileSheetDocument,
+            toast: $fileNotAvailableToast,
+            appState: appState
+        ))
         #endif
         .alert("Send Error", isPresented: Binding(
             get: { sendError != nil },
@@ -737,6 +753,58 @@ public struct SessionDetailView: View {
         }
     }
 
+    private func handleOpenFile(_ filePath: String) {
+        let logger = Logger(subsystem: "com.nimbalyst.app", category: "SessionDetailView")
+        logger.info("handleOpenFile called with: \(filePath)")
+
+        guard let db = appState.databaseManager else {
+            logger.error("handleOpenFile: no database manager")
+            return
+        }
+
+        // Project.id is the workspace path. Strip it to get the relative path.
+        let projectId = session.projectId
+        logger.info("handleOpenFile: projectId = \(projectId)")
+
+        let relativePath: String
+        if filePath.hasPrefix(projectId + "/") {
+            relativePath = String(filePath.dropFirst(projectId.count + 1))
+        } else {
+            logger.warning("handleOpenFile: path doesn't match project. filePath=\(filePath), projectId=\(projectId)")
+            withAnimation { fileNotAvailableToast = "This file is on your Mac and not available on this device" }
+            return
+        }
+
+        logger.info("handleOpenFile: relativePath = \(relativePath)")
+
+        // Look up the synced document by relative path
+        do {
+            let document = try db.writer.read { db in
+                try SyncedDocument
+                    .filter(SyncedDocument.Columns.projectId == projectId)
+                    .filter(SyncedDocument.Columns.relativePath == relativePath)
+                    .fetchOne(db)
+            }
+
+            if let document {
+                logger.info("handleOpenFile: found document id=\(document.id), title=\(document.title)")
+                fileSheetDocument = document
+            } else {
+                // Debug: list all synced docs for this project to see what's available
+                let allDocs = try db.writer.read { db in
+                    try SyncedDocument
+                        .filter(SyncedDocument.Columns.projectId == projectId)
+                        .fetchAll(db)
+                }
+                logger.info("handleOpenFile: no match for '\(relativePath)'. Available docs (\(allDocs.count)): \(allDocs.map { $0.relativePath }.joined(separator: ", "))")
+                withAnimation { fileNotAvailableToast = "This file is not synced to this device" }
+            }
+        } catch {
+            logger.error("handleOpenFile: DB error: \(error.localizedDescription)")
+            withAnimation { fileNotAvailableToast = "Could not look up file" }
+        }
+    }
+
     private func cancelSession() {
         guard let syncManager = appState.syncManager else { return }
         syncManager.sendSessionControlMessage(sessionId: session.id, messageType: "cancel")
@@ -908,6 +976,51 @@ private struct PromptPickerList: View {
                 ContentUnavailableView.search(text: searchText)
             }
         }
+    }
+}
+#endif
+
+// MARK: - File Sheet Modifier
+
+#if canImport(UIKit)
+/// Extracted to reduce type-checker complexity in SessionDetailView.body.
+private struct FileSheetModifier: ViewModifier {
+    @Binding var document: SyncedDocument?
+    @Binding var toast: String?
+    var appState: AppState
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(item: $document) { doc in
+                NavigationStack {
+                    DocumentEditorView(document: doc)
+                        .environmentObject(appState)
+                        .navigationTitle(doc.displayName)
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Done") { document = nil }
+                            }
+                        }
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if let toastText = toast {
+                    Text(toastText)
+                        .font(.subheadline)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color(white: 0.2), in: Capsule())
+                        .padding(.bottom, 80)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .onAppear {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                                withAnimation { toast = nil }
+                            }
+                        }
+                }
+            }
     }
 }
 #endif

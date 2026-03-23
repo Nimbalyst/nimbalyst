@@ -35,6 +35,7 @@ public struct TranscriptWebView: UIViewRepresentable {
     let controller: TranscriptController?
     let onReady: (() -> Void)?
     let onError: ((String) -> Void)?
+    let onOpenFile: ((String) -> Void)?
 
     public init(
         session: Session,
@@ -43,7 +44,8 @@ public struct TranscriptWebView: UIViewRepresentable {
         onInteractiveResponse: @escaping (String, String, [String: Any]) -> Void,
         controller: TranscriptController? = nil,
         onReady: (() -> Void)? = nil,
-        onError: ((String) -> Void)? = nil
+        onError: ((String) -> Void)? = nil,
+        onOpenFile: ((String) -> Void)? = nil
     ) {
         self.session = session
         self.messages = messages
@@ -52,6 +54,7 @@ public struct TranscriptWebView: UIViewRepresentable {
         self.controller = controller
         self.onReady = onReady
         self.onError = onError
+        self.onOpenFile = onOpenFile
     }
 
     private static let logger = Logger(subsystem: "com.nimbalyst.app", category: "TranscriptWebView")
@@ -62,7 +65,8 @@ public struct TranscriptWebView: UIViewRepresentable {
             onSendPrompt: onSendPrompt,
             onInteractiveResponse: onInteractiveResponse,
             onReady: onReady,
-            onError: onError
+            onError: onError,
+            onOpenFile: onOpenFile
         )
         // Wire up the external controller
         controller?.coordinator = coordinator
@@ -79,6 +83,7 @@ public struct TranscriptWebView: UIViewRepresentable {
             pooled.configuration.userContentController.add(context.coordinator, name: "bridge")
             context.coordinator.webView = pooled
             pooled.navigationDelegate = context.coordinator
+            pooled.uiDelegate = context.coordinator
 
             // The JS app already mounted and sent `ready` during warmup, but
             // there was no bridge handler to receive it. Probe whether the
@@ -136,6 +141,7 @@ public struct TranscriptWebView: UIViewRepresentable {
         // Store reference for later JS calls
         context.coordinator.webView = webView
         webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
 
         // Load the transcript HTML from the app bundle
         loadTranscriptHTML(webView: webView)
@@ -209,7 +215,7 @@ public struct TranscriptWebView: UIViewRepresentable {
 
     // MARK: - Coordinator
 
-    public class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
+    public class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
         private let logger = Logger(subsystem: "com.nimbalyst.app", category: "TranscriptWebView.Coordinator")
 
         weak var webView: WKWebView?
@@ -237,6 +243,7 @@ public struct TranscriptWebView: UIViewRepresentable {
         private let onInteractiveResponse: (String, String, [String: Any]) -> Void
         private let onReady: (() -> Void)?
         fileprivate let onError: ((String) -> Void)?
+        private let onOpenFile: ((String) -> Void)?
 
         /// Timer for detecting web view initialization timeout.
         private var readyTimeoutItem: DispatchWorkItem?
@@ -246,13 +253,15 @@ public struct TranscriptWebView: UIViewRepresentable {
             onSendPrompt: @escaping (String) -> Void,
             onInteractiveResponse: @escaping (String, String, [String: Any]) -> Void,
             onReady: (() -> Void)? = nil,
-            onError: ((String) -> Void)? = nil
+            onError: ((String) -> Void)? = nil,
+            onOpenFile: ((String) -> Void)? = nil
         ) {
             self.session = session
             self.onSendPrompt = onSendPrompt
             self.onInteractiveResponse = onInteractiveResponse
             self.onReady = onReady
             self.onError = onError
+            self.onOpenFile = onOpenFile
         }
 
         // MARK: - WKScriptMessageHandler
@@ -298,6 +307,19 @@ public struct TranscriptWebView: UIViewRepresentable {
                 let style = body["style"] as? String ?? "medium"
                 triggerHaptic(style: style)
 
+            case "open_file":
+                if let filePath = body["filePath"] as? String {
+                    logger.info("Bridge: open_file received for '\(filePath)'")
+                    onOpenFile?(filePath)
+                } else {
+                    logger.warning("Bridge: open_file missing filePath")
+                }
+
+            case "open_url":
+                if let urlString = body["url"] as? String, let url = URL(string: urlString) {
+                    UIApplication.shared.open(url)
+                }
+
             case "js_error":
                 let msg = body["message"] as? String ?? "unknown"
                 let url = body["url"] as? String ?? ""
@@ -310,6 +332,58 @@ public struct TranscriptWebView: UIViewRepresentable {
         }
 
         // MARK: - WKNavigationDelegate
+
+        /// Intercept link clicks: allow file:// (transcript HTML), open http(s) in Safari.
+        public func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
+            guard let url = navigationAction.request.url else {
+                decisionHandler(.allow)
+                return
+            }
+
+            // Always allow the initial file:// load of transcript.html and its assets
+            if url.isFileURL {
+                decisionHandler(.allow)
+                return
+            }
+
+            // External links (http, https, mailto, etc.) -- open outside the web view.
+            // Dispatch async to avoid SOAuthorizationCoordinator warnings from WKWebView.
+            if let scheme = url.scheme, ["http", "https", "mailto"].contains(scheme.lowercased()) {
+                logger.info("decidePolicyFor: opening external URL in Safari: \(url.absoluteString)")
+                decisionHandler(.cancel)
+                DispatchQueue.main.async {
+                    UIApplication.shared.open(url)
+                }
+                return
+            }
+
+            // Block any other navigation to keep the web view on transcript.html
+            logger.info("decidePolicyFor: blocking navigation to \(url.absoluteString)")
+            decisionHandler(.cancel)
+        }
+
+        // MARK: - WKUIDelegate
+
+        /// Handle target="_blank" links. WKWebView asks us to create a new web view;
+        /// instead we open the URL externally and return nil to cancel the new window.
+        public func webView(
+            _ webView: WKWebView,
+            createWebViewWith configuration: WKWebViewConfiguration,
+            for navigationAction: WKNavigationAction,
+            windowFeatures: WKWindowFeatures
+        ) -> WKWebView? {
+            if let url = navigationAction.request.url {
+                logger.info("createWebViewWith: opening \(url.absoluteString) externally")
+                DispatchQueue.main.async {
+                    UIApplication.shared.open(url)
+                }
+            }
+            return nil
+        }
 
         public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             // Page loaded successfully - JS bridge will send "ready" message
