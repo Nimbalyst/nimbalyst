@@ -5154,6 +5154,10 @@ export class AIService {
           // Codex SDK uses its own auth (codex auth login), API key is optional
           enabled: providerSettings['openai-codex']?.enabled === true,
         },
+        'opencode': {
+          // OpenCode uses its own config, API key is optional
+          enabled: providerSettings['opencode']?.enabled === true,
+        },
         'lmstudio': {
           enabled: providerSettings['lmstudio']?.enabled === true,
           models: providerSettings['lmstudio']?.models
