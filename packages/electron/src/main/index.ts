@@ -8,7 +8,7 @@ import * as path from 'path';
 import { join } from 'path';
 import * as fs from 'fs';
 import { appendFileSync, existsSync, renameSync, unlinkSync, writeFileSync } from 'fs';
-import { createWindow, findWindowByFilePath, findWindowByWorkspace } from './window/WindowManager';
+import { createWindow, findWindowByFilePath, findWindowByWorkspace, getMostRecentlyFocusedWorkspaceWindow } from './window/WindowManager';
 import { loadFileIntoWindow } from './file/FileOperations';
 import { createApplicationMenu } from './menu/ApplicationMenu';
 import { updateNativeTheme, updateWindowTitleBars } from './theme/ThemeManager';
@@ -52,6 +52,7 @@ import {
     shouldShowRosettaWarning,
     dismissRosettaWarning,
     getSessionSyncConfig,
+    addToRecentItems,
     getTheme,
     hasCheckedClaudeCodeInstallation,
     incrementLaunchCount,
@@ -613,22 +614,35 @@ async function openFileWithWorkspaceDetection(filePath: string): Promise<void> {
             });
         }
     } else {
-        // File is not in a known workspace - send event to show project selection dialog
-        logger.main.info(`File not in known workspace, requesting project selection`);
+        // File is not in a known workspace - open it in the frontmost workspace window as an external file
+        logger.main.info(`File not in known workspace, opening as external file in frontmost window`);
 
-        // Create a temporary window to host the dialog
-        const tempWindow = createWindow(true);
-        tempWindow.once('ready-to-show', () => {
-            tempWindow.show();
-            // Wait a bit for renderer to initialize, then send event to show project selection dialog
-            setTimeout(() => {
-                tempWindow.webContents.send('show-project-selection-dialog', {
-                    filePath,
-                    fileName: path.basename(filePath),
-                    suggestedWorkspace: suggestWorkspaceForFile(filePath)
+        const frontmostWindow = getMostRecentlyFocusedWorkspaceWindow();
+        if (frontmostWindow) {
+            await loadFileIntoWindow(frontmostWindow, filePath);
+        } else {
+            // No workspace windows open - try to detect a project root and open it
+            const suggestedWorkspace = suggestWorkspaceForFile(filePath);
+            if (suggestedWorkspace && suggestedWorkspace !== path.dirname(filePath)) {
+                logger.main.info(`Opening suggested workspace: ${suggestedWorkspace}`);
+                addToRecentItems('workspaces', suggestedWorkspace, path.basename(suggestedWorkspace));
+                const newWindow = createWindow(false, true, suggestedWorkspace);
+                newWindow.once('ready-to-show', async () => {
+                    newWindow.show();
+                    await loadFileIntoWindow(newWindow, filePath);
                 });
-            }, 100);
-        });
+            } else {
+                // No project root detected - use the file's directory as workspace
+                const fileDir = path.dirname(filePath);
+                logger.main.info(`Using file directory as workspace: ${fileDir}`);
+                addToRecentItems('workspaces', fileDir, path.basename(fileDir));
+                const newWindow = createWindow(false, true, fileDir);
+                newWindow.once('ready-to-show', async () => {
+                    newWindow.show();
+                    await loadFileIntoWindow(newWindow, filePath);
+                });
+            }
+        }
     }
 }
 

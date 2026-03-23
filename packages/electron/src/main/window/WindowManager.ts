@@ -678,6 +678,36 @@ export function findWindowByWorkspace(workspacePath: string): BrowserWindow | nu
     return null;
 }
 
+/**
+ * Find the most recently focused workspace window.
+ * Uses the windowFocusOrder map to determine which workspace window
+ * was focused most recently. Falls back to BrowserWindow.getFocusedWindow()
+ * if it's a workspace window.
+ */
+export function getMostRecentlyFocusedWorkspaceWindow(): BrowserWindow | null {
+    let bestWindowId: number | null = null;
+    let bestFocusOrder = -1;
+
+    for (const [windowId, state] of windowStates) {
+        if (state?.mode === 'workspace' || state?.mode === 'agentic-coding') {
+            const focusOrder = windowFocusOrder.get(windowId) || 0;
+            if (focusOrder > bestFocusOrder) {
+                bestFocusOrder = focusOrder;
+                bestWindowId = windowId;
+            }
+        }
+    }
+
+    if (bestWindowId !== null) {
+        const win = windows.get(bestWindowId);
+        if (win && !win.isDestroyed()) {
+            return win;
+        }
+    }
+
+    return null;
+}
+
 // Find custom window ID from BrowserWindow
 export function getWindowId(browserWindow: BrowserWindow): number | null {
     for (const [windowId, window] of windows) {
