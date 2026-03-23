@@ -56,12 +56,13 @@ export class ElectronDocumentService implements DocumentService {
         const { bytesRead } = await fh.read(buffer, 0, 4096, 0);
         const content = buffer.toString('utf-8', 0, bytesRead);
 
-        // Check for YAML frontmatter with plan/bug/tracker content
-        // Look for patterns like planStatus:, or inline tracker items like #bug[, #task[, etc.
-        const hasPlanStatus = /^---[\s\S]*?planStatus:/m.test(content);
+        // Check for YAML frontmatter with tracker content
+        // Look for planStatus:, decisionStatus:, automationStatus:, trackerStatus:,
+        // or inline tracker items like #bug[, #task[, etc.
+        const hasTrackerFrontmatter = /^---[\s\S]*?(planStatus|decisionStatus|automationStatus|trackerStatus):/m.test(content);
         const hasInlineTracker = /#([a-z][\w-]*)\[/.test(content);
 
-        return hasPlanStatus || hasInlineTracker;
+        return hasTrackerFrontmatter || hasInlineTracker;
       } finally {
         await fh.close();
       }
@@ -1190,7 +1191,7 @@ export class ElectronDocumentService implements DocumentService {
     let trackerData: Record<string, any> | null = null;
     let trackerType = 'plan'; // default
 
-    const typeKeys = ['plan', 'decision', 'bug', 'task', 'idea'];
+    const typeKeys = ['plan', 'decision', 'bug', 'task', 'idea', 'automation'];
     for (const type of typeKeys) {
       const specificKey = `${type}Status`;
       if (frontmatter[specificKey] && typeof frontmatter[specificKey] === 'object') {

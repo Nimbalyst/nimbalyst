@@ -282,6 +282,33 @@ describe('WorkspaceEventBus gitignore bypass', () => {
 
       unsubscribe(WORKSPACE, 'test-sub');
     });
+
+    it('retries rename events before treating a delayed file as unlink', async () => {
+      vi.useFakeTimers();
+
+      const listener = createListener();
+      await subscribe(WORKSPACE, 'test-sub', listener);
+
+      addGitignoreBypass(WORKSPACE, `${WORKSPACE}/build/output.js`);
+
+      mockFsAccess
+        .mockRejectedValueOnce(new Error('not yet visible'))
+        .mockRejectedValueOnce(new Error('still not visible'))
+        .mockResolvedValueOnce(undefined);
+
+      fireWatchEvent('rename', 'build/output.js');
+
+      await vi.advanceTimersByTimeAsync(125);
+
+      expect(listener.onAdd).toHaveBeenCalledWith(
+        `${WORKSPACE}/build/output.js`,
+        true,
+      );
+      expect(listener.onUnlink).not.toHaveBeenCalled();
+
+      unsubscribe(WORKSPACE, 'test-sub');
+      vi.useRealTimers();
+    });
   });
 
   describe('replay buffer', () => {

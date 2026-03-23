@@ -716,17 +716,15 @@ function startRecursiveWatch(
       if (eventType === 'change') {
         for (const l of entry.listeners.values()) l.onChange(absolutePath, bypassed || undefined);
       } else {
-        // 'rename' — could be add or delete. Use fs.access to determine.
-        fsPromises.access(absolutePath).then(
-          () => {
-            // File exists — treat as add
+        // 'rename' — could be add or delete. Retry existence checks because
+        // atomic writers may create the final path slightly after the event.
+        void pathExistsAfterRename(absolutePath).then((exists) => {
+          if (exists) {
             for (const l of entry.listeners.values()) l.onAdd(absolutePath, bypassed || undefined);
-          },
-          () => {
-            // File does not exist — treat as unlink
+          } else {
             for (const l of entry.listeners.values()) l.onUnlink(absolutePath, bypassed || undefined);
-          },
-        );
+          }
+        });
       }
     });
 
@@ -774,6 +772,30 @@ function startRecursiveWatch(
  * a single kernel call regardless of tree depth.
  */
 const CHOKIDAR_MAX_DEPTH = 10;
+
+/**
+ * fs.watch reports creates/deletes as `rename`, but atomic writers can leave
+ * a brief gap where the final path doesn't exist yet. Retry before emitting
+ * `unlink` so newly-created files don't get misclassified as deletions.
+ */
+const RENAME_EXISTS_RETRY_DELAYS_MS = [0, 25, 100];
+
+async function pathExistsAfterRename(absolutePath: string): Promise<boolean> {
+  for (const delayMs of RENAME_EXISTS_RETRY_DELAYS_MS) {
+    if (delayMs > 0) {
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+
+    try {
+      await fsPromises.access(absolutePath);
+      return true;
+    } catch {
+      // Keep retrying within the configured backoff window.
+    }
+  }
+
+  return false;
+}
 
 function startChokidarWatch(
   key: string,
