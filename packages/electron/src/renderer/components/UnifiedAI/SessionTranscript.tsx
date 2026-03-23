@@ -163,7 +163,9 @@ function serializeDocumentContext(
     textSelection: documentContext.textSelection,
     textSelectionTimestamp: documentContext.textSelectionTimestamp,
     mockupSelection: documentContext.mockupSelection,
-    mockupDrawing: documentContext.mockupDrawing
+    mockupDrawing: documentContext.mockupDrawing,
+    editorContext: documentContext.editorContext,
+    editorContextTimestamp: documentContext.editorContextTimestamp,
   };
 }
 

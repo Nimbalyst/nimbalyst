@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import type { TabData } from '../contexts/TabsContext';
 import { getTextSelection } from '../components/UnifiedAI/TextSelectionIndicator';
-import type { MockupSelection } from '@nimbalyst/runtime';
+import type { MockupSelection, EditorContext } from '@nimbalyst/runtime';
+import { getEditorContext } from '../stores/editorContextStore';
 
 export interface DocumentContext {
   filePath: string;
@@ -23,6 +24,9 @@ export interface DocumentContext {
     timestamp: number;
   };
   textSelectionTimestamp?: number | null; // Timestamp when text was selected
+  /** Extension-provided editor context (e.g., selected screen in a mockup project) */
+  editorContext?: EditorContext;
+  editorContextTimestamp?: number;
 }
 
 /**
@@ -41,6 +45,8 @@ export interface SerializableDocumentContext {
   textSelectionTimestamp?: number;
   mockupSelection?: MockupSelection;
   mockupDrawing?: string;
+  editorContext?: EditorContext;
+  editorContextTimestamp?: number;
 }
 
 interface UseDocumentContextProps {
@@ -138,6 +144,15 @@ export function useDocumentContext({ activeTab, getContentRef }: UseDocumentCont
       ? textSelectionData
       : undefined;
 
+    // Get extension-provided editor context
+    const editorContextEntry = getEditorContext();
+    const editorContext = editorContextEntry?.filePath === (activeTab.filePath || '')
+      ? editorContextEntry.context
+      : undefined;
+    const editorContextTimestamp = editorContextEntry?.filePath === (activeTab.filePath || '')
+      ? editorContextEntry.timestamp
+      : undefined;
+
     return {
       filePath: activeTab.filePath || '',
       fileType,
@@ -149,7 +164,9 @@ export function useDocumentContext({ activeTab, getContentRef }: UseDocumentCont
       mockupDrawing,
       mockupAnnotationTimestamp,
       textSelection,
-      textSelectionTimestamp: textSelection?.timestamp ?? undefined
+      textSelectionTimestamp: textSelection?.timestamp ?? undefined,
+      editorContext,
+      editorContextTimestamp,
     };
   }, [activeTab, activeTab?.filePath, getContentRef.current]);
 }

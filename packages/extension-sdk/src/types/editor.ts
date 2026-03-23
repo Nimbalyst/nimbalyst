@@ -20,6 +20,22 @@ import type { ExtensionStorage } from './panel.js';
 // ============================================================================
 
 /**
+ * Context that an editor pushes to the chat panel.
+ * When set, the chat UI shows an indicator and includes this context
+ * in the AI prompt when the user sends a message.
+ */
+export interface EditorContext {
+  /** Short label shown in the chat indicator (e.g., "Screen: Login Page") */
+  label: string;
+
+  /**
+   * Descriptive context included in the AI prompt.
+   * Should describe what's selected and any relevant details.
+   */
+  description: string;
+}
+
+/**
  * Menu item that can be added to the editor's "..." actions menu.
  * Extensions can register these to add custom actions to the header bar.
  */
@@ -264,6 +280,29 @@ export interface EditorHost {
    * Use for preferences, history, cached data, etc.
    */
   readonly storage: ExtensionStorage;
+
+  // ============ EDITOR CONTEXT ============
+
+  /**
+   * Push context to the chat panel.
+   * When set, the chat UI shows an indicator (e.g., "+ Screen: Login Page")
+   * and includes the description in the AI prompt on the next message.
+   *
+   * Call with null to clear the context (e.g., when selection is deselected).
+   *
+   * @example
+   * ```tsx
+   * // Report selected screen in a project editor
+   * host.setEditorContext({
+   *   label: 'Screen: Login Page',
+   *   description: 'Selected screen "Login Page" (login.mockup.html) in the mockup project.'
+   * });
+   *
+   * // Clear when nothing is selected
+   * host.setEditorContext(null);
+   * ```
+   */
+  setEditorContext(context: EditorContext | null): void;
 
   // ============ MENU ITEMS ============
 

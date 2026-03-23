@@ -11,16 +11,26 @@
  */
 
 import { MockupEditor } from './components/MockupEditor';
+import { MockupProjectEditor } from './components/MockupProjectEditor';
+import type { ExtensionFileSystemService } from '@nimbalyst/extension-sdk';
 
-// Export types for consumers
-export type { } from './components/MockupEditor';
+// Module-level filesystem service, set during activation
+let _filesystem: ExtensionFileSystemService | null = null;
+
+export function getFilesystem(): ExtensionFileSystemService {
+  if (!_filesystem) throw new Error('[MockupLM] Filesystem not available - extension not activated');
+  return _filesystem;
+}
 
 /**
  * Extension activation
  * Called when the extension is loaded
  */
-export async function activate(context: unknown) {
+export async function activate(context: any) {
   console.log('[MockupLM] Extension activated');
+  if (context?.services?.filesystem) {
+    _filesystem = context.services.filesystem;
+  }
 }
 
 /**
@@ -29,6 +39,7 @@ export async function activate(context: unknown) {
  */
 export async function deactivate() {
   console.log('[MockupLM] Extension deactivated');
+  _filesystem = null;
 }
 
 /**
@@ -37,6 +48,7 @@ export async function deactivate() {
  */
 export const components = {
   MockupEditor,
+  MockupProjectEditor,
 };
 
 /**

@@ -5,7 +5,7 @@
  * This bridges the EditorHost interface (from runtime) to TabEditor's machinery.
  */
 
-import type { EditorHost, DiffConfig, DiffResult, ExtensionStorage, EditorMenuItem } from '@nimbalyst/runtime';
+import type { EditorHost, EditorContext, DiffConfig, DiffResult, ExtensionStorage, EditorMenuItem } from '@nimbalyst/runtime';
 
 export interface EditorHostOptions {
   /** Absolute path to the file being edited */
@@ -88,6 +88,11 @@ export interface EditorHostOptions {
 
   /** Extension storage instance for persisting state */
   storage: ExtensionStorage;
+
+  // ============ EDITOR CONTEXT ============
+
+  /** Callback when extension pushes context to the chat */
+  onEditorContextChanged?: (context: EditorContext | null) => void;
 
   // ============ MENU ITEMS ============
 
@@ -184,6 +189,11 @@ export function createEditorHost(options: EditorHostOptions): EditorHost {
 
     // ============ STORAGE ============
     storage: options.storage,
+
+    // ============ EDITOR CONTEXT ============
+    setEditorContext(context: EditorContext | null): void {
+      options.onEditorContextChanged?.(context);
+    },
 
     // ============ MENU ITEMS ============
     registerMenuItems(items: EditorMenuItem[]): void {

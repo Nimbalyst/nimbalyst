@@ -15,6 +15,7 @@ import { pendingVoiceCommandAtom, voiceActiveSessionIdAtom, type PendingVoiceCom
 import { ContextUsageDisplay } from './ContextUsageDisplay';
 import { MockupAnnotationIndicator } from './MockupAnnotationIndicator';
 import { TextSelectionIndicator } from './TextSelectionIndicator';
+import { EditorContextIndicator } from './EditorContextIndicator';
 import {
   MemoryPromptIndicator,
   MemorySaveButton,
@@ -1192,6 +1193,12 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
 
         {/* Text selection indicator - shown when text is selected in the editor */}
         <TextSelectionIndicator
+          currentFilePath={currentFilePath}
+          lastUserMessageTimestamp={lastUserMessageTimestamp ?? null}
+        />
+
+        {/* Editor context indicator - shown when extension pushes context */}
+        <EditorContextIndicator
           currentFilePath={currentFilePath}
           lastUserMessageTimestamp={lastUserMessageTimestamp ?? null}
         />

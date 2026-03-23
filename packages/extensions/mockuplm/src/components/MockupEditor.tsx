@@ -80,9 +80,13 @@ export const MockupEditor = forwardRef<any, EditorHostProps>(function MockupEdit
     },
   });
 
+  // Check if this mockup was opened from a project (for back-link)
+  const projectOrigin = (window.__mockupProjectOrigin || {})[filePath] as string | undefined;
+
   // Additional UI state
   const [isCapturing, setIsCapturing] = useState(false);
   const [isDrawingMode, setIsDrawingMode] = useState(false);
+  const [isInteractive, setIsInteractive] = useState(false);
   const [drawingColor, setDrawingColor] = useState('#FF0000');
   const [scrollOffset, setScrollOffset] = useState({ x: 0, y: 0 });
 
@@ -185,17 +189,22 @@ export const MockupEditor = forwardRef<any, EditorHostProps>(function MockupEdit
           }
         `;
         iframeDoc.head.appendChild(style);
-        iframeDoc.addEventListener('click', handleElementClick as any);
       },
     });
+  }, [contentVersion, diffState]);
 
+  // Separate effect for click handler -- toggling interactive mode shouldn't re-render iframe
+  useEffect(() => {
+    if (diffState || isInteractive) return;
+
+    const iframeDoc = iframeRef.current?.contentDocument;
+    if (!iframeDoc) return;
+
+    iframeDoc.addEventListener('click', handleElementClick as any);
     return () => {
-      const iframeDoc = iframeRef.current?.contentDocument;
-      if (iframeDoc) {
-        iframeDoc.removeEventListener('click', handleElementClick as any);
-      }
+      iframeDoc.removeEventListener('click', handleElementClick as any);
     };
-  }, [contentVersion, handleElementClick, diffState]);
+  }, [contentVersion, handleElementClick, diffState, isInteractive]);
 
   // Store annotations in per-file map so they persist when tab becomes inactive.
   // This is critical for screenshot capture which may happen when tab is not focused.
@@ -629,9 +638,47 @@ export const MockupEditor = forwardRef<any, EditorHostProps>(function MockupEdit
       {/* Toolbar */}
       <div className="px-4 py-2 border-b border-nim bg-nim-secondary flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="text-sm text-nim-muted">
-            {fileName}
-          </span>
+          {projectOrigin ? (
+            <span className="text-sm flex items-center gap-1">
+              <button
+                onClick={() => {
+                  const workspacePath = window.__workspacePath;
+                  if (workspacePath && projectOrigin) {
+                    window.electronAPI?.invoke('workspace:open-file', {
+                      workspacePath,
+                      filePath: projectOrigin,
+                    });
+                  }
+                }}
+                className="text-nim-primary bg-transparent border-none cursor-pointer text-sm font-medium p-0 hover:underline"
+                title={`Back to project: ${projectOrigin.split('/').pop()}`}
+              >
+                {projectOrigin.split('/').pop()?.replace('.mockupproject', '')}
+              </button>
+              <span className="text-nim-faint text-xs">/</span>
+              <span className="text-nim-muted">{fileName}</span>
+            </span>
+          ) : (
+            <span className="text-sm text-nim-muted">
+              {fileName}
+            </span>
+          )}
+          <button
+            onClick={() => {
+              setIsInteractive((prev) => !prev);
+              if (!isInteractive) {
+                handleDeselectElement();
+              }
+            }}
+            className={`px-3 py-1 text-xs border rounded cursor-pointer ${
+              isInteractive
+                ? 'bg-nim-primary text-white border-nim-primary font-bold'
+                : 'bg-nim border-nim text-nim font-normal'
+            }`}
+            title={isInteractive ? 'Switch to Select mode (click to select elements)' : 'Switch to Interactive mode (click to interact with mockup)'}
+          >
+            {isInteractive ? 'Interactive' : 'Select'}
+          </button>
           {selectedElement && (
             <div className="flex items-center gap-2 px-2 py-1 bg-[rgba(0,122,255,0.1)] rounded border border-[rgba(0,122,255,0.3)]">
               <span className="text-xs text-nim">
