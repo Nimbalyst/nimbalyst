@@ -2197,6 +2197,17 @@ export class AIService {
 
       // NOTE: No longer tracking provider per-window - each session has its own provider instance
 
+      // Resolve the selected model's context window from the model registry.
+      // This is the authoritative source for context window size. We cannot use the SDK's modelUsage
+      // because it contains entries for both the parent model AND subagent models (e.g., Haiku 200k),
+      // and iteration order is not guaranteed, so we'd intermittently pick up a subagent's smaller window.
+      let selectedModelContextWindow: number | undefined;
+      const sessionModelId = session.model || session.providerConfig?.model;
+      if (sessionModelId) {
+        const models = await ModelRegistry.getModelsForProvider(session.provider as AIProviderType);
+        selectedModelContextWindow = models.find(m => m.id === sessionModelId)?.contextWindow;
+      }
+
       // Re-register tool handler with the CURRENT document context from this message
       // This ensures applyDiff targets the correct file even when switching tabs
       //   filePath: documentContext?.filePath,
@@ -3261,38 +3272,38 @@ export class AIService {
                   totalTokens: 0
                 };
 
-                // Sum up tokens from all models in modelUsage and extract contextWindow
+                // Sum up tokens from all models in modelUsage.
                 // Note: modelUsage tokens are CUMULATIVE across all steps (for billing).
                 // For context window display, use contextFillTokens from last assistant message.
                 let newInputTokens = 0;
                 let newOutputTokens = 0;
                 let newCostUSD = 0;
-                let contextWindowFromResult: number | undefined;
                 for (const modelName of Object.keys(modelUsage)) {
                   const modelStats = modelUsage[modelName];
                   newInputTokens += modelStats.inputTokens || 0;
                   newOutputTokens += modelStats.outputTokens || 0;
                   newCostUSD += modelStats.costUSD || 0;
-                  // The SDK provides contextWindow per-model in modelUsage
-                  if (modelStats.contextWindow) {
-                    contextWindowFromResult = modelStats.contextWindow;
-                  }
                 }
+
+                // Use the selected model's context window (resolved from model registry at session start).
+                // modelUsage from the SDK contains entries for both the parent model AND subagent models
+                // (e.g., Haiku 200k), and iteration order is not guaranteed, so extracting contextWindow
+                // from modelUsage would intermittently pick up a subagent's smaller window.
+                const contextWindowForDisplay = selectedModelContextWindow || currentUsage.contextWindow;
 
                 const updatedUsage: NonNullable<SessionData['tokenUsage']> = {
                   inputTokens: currentUsage.inputTokens + newInputTokens,
                   outputTokens: currentUsage.outputTokens + newOutputTokens,
                   totalTokens: currentUsage.totalTokens + newInputTokens + newOutputTokens,
                   costUSD: (currentUsage.costUSD || 0) + newCostUSD,
-                  // Use contextWindow from modelUsage (replaces broken /context command)
-                  contextWindow: contextWindowFromResult || currentUsage.contextWindow,
+                  contextWindow: contextWindowForDisplay,
                   // contextFillTokens = input + cacheRead + cacheCreation from last assistant message
                   // This is the actual context fill, not cumulative - updates correctly after compaction
                   // After compaction, clear stale currentContext (next real turn will set accurate value)
                   currentContext: contextCompacted
                     ? undefined
-                    : (contextFillTokens !== undefined && contextWindowFromResult)
-                      ? { tokens: contextFillTokens, contextWindow: contextWindowFromResult }
+                    : (contextFillTokens !== undefined && contextWindowForDisplay)
+                      ? { tokens: contextFillTokens, contextWindow: contextWindowForDisplay }
                       : currentUsage.currentContext,
                 };
 
@@ -3305,7 +3316,7 @@ export class AIService {
                 });
 
                 // Push context usage to mobile sync
-                if (contextFillTokens !== undefined && contextWindowFromResult) {
+                if (contextFillTokens !== undefined && contextWindowForDisplay) {
                   const syncProvider = getSyncProvider();
                   if (syncProvider) {
                     syncProvider.pushChange(session.id, {
@@ -3313,7 +3324,7 @@ export class AIService {
                       metadata: {
                         currentContext: {
                           tokens: contextFillTokens,
-                          contextWindow: contextWindowFromResult,
+                          contextWindow: contextWindowForDisplay,
                         },
                         updatedAt: Date.now(),
                       } as any,
