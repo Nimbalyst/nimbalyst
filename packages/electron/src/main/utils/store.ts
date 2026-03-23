@@ -1959,6 +1959,17 @@ export function runMigrations(currentVersion: string): void {
     setEnableAllAlphaFeatures(true);
   }
 
+  // Migration: Auto-switch users from claude-code:opus to claude-code:opus-1m (1M context)
+  // Only runs once — on first upgrade to a version with this migration.
+  // New users get opus-1m by default; this migrates existing users who had opus selected.
+  if (isUpgradingFromOldVersion || versionLessThanOrEqual(lastKnownVersion, '0.56.7')) {
+    const currentDefault = getAppStore().get('defaultAIModel');
+    if (currentDefault === 'claude-code:opus') {
+      logger.store.info('[Migrations] Migrating default model from claude-code:opus to claude-code:opus-1m');
+      getAppStore().set('defaultAIModel', 'claude-code:opus-1m');
+    }
+  }
+
   // Update last known version
   getAppStore().set('lastKnownVersion', currentVersion);
   logger.store.info('[Migrations] Migrations complete, version updated to:', currentVersion);

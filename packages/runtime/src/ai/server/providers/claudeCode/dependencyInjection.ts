@@ -108,7 +108,7 @@ export const ClaudeCodeDeps = {
 
   // ---- Default Model ----
 
-  DEFAULT_MODEL: 'claude-code:sonnet' as const,
+  DEFAULT_MODEL: 'claude-code:opus-1m' as const,
 
   // ---- Setters ----
   // Called from electron main process at startup

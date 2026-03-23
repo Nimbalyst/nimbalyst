@@ -159,7 +159,7 @@ export const OPENAI_MODELS: ModelDefinition[] = [
 export const DEFAULT_MODELS = {
   claude: 'claude:claude-sonnet-4-6',
   openai: 'openai:gpt-5.4',
-  'claude-code': 'claude-code:sonnet',
+  'claude-code': 'claude-code:opus-1m',
   'openai-codex': 'openai-codex:gpt-5.4',
   lmstudio: 'lmstudio:local-model',
 };

@@ -525,7 +525,7 @@ export class SuperLoopService {
 
     // Create the session in the database
     const phaseLabel = phase === 'planning' ? 'Plan' : 'Build';
-    const model = runner.loop.modelId || 'claude-code:opus';
+    const model = runner.loop.modelId || 'claude-code:opus-1m';
     // Extract provider from model ID (format is "provider:model")
     const provider = model.includes(':') ? model.split(':')[0] : 'claude-code';
     await AISessionsRepository.create({

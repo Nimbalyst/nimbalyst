@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { resolveClaudeCodeModelVariant } from '../../types';
 
-const DEFAULT_MODEL = 'claude-code:sonnet';
+const DEFAULT_MODEL = 'claude-code:opus-1m';
 
 describe('resolveClaudeCodeModelVariant', () => {
   describe('standard variants (no extended context)', () => {
@@ -18,11 +18,11 @@ describe('resolveClaudeCodeModelVariant', () => {
     });
 
     it('uses default model when config model is undefined', () => {
-      expect(resolveClaudeCodeModelVariant(undefined, DEFAULT_MODEL)).toBe('sonnet');
+      expect(resolveClaudeCodeModelVariant(undefined, DEFAULT_MODEL)).toBe('opus[1m]');
     });
 
     it('uses default model when config model is empty string', () => {
-      expect(resolveClaudeCodeModelVariant('', DEFAULT_MODEL)).toBe('sonnet');
+      expect(resolveClaudeCodeModelVariant('', DEFAULT_MODEL)).toBe('opus[1m]');
     });
   });
 
@@ -73,10 +73,12 @@ describe('resolveClaudeCodeModelVariant', () => {
 
   describe('fallback behavior', () => {
     it('falls back to sonnet for unrecognized provider', () => {
+      // Hardcoded last-resort fallback is always sonnet, regardless of DEFAULT_MODEL
       expect(resolveClaudeCodeModelVariant('openai:gpt-4', DEFAULT_MODEL)).toBe('sonnet');
     });
 
     it('falls back to sonnet for unrecognized variant', () => {
+      // Hardcoded last-resort fallback is always sonnet, regardless of DEFAULT_MODEL
       expect(resolveClaudeCodeModelVariant('claude-code:unknown', DEFAULT_MODEL)).toBe('sonnet');
     });
 

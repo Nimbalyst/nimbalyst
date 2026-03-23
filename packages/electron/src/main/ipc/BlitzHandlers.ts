@@ -532,8 +532,8 @@ export function registerBlitzHandlers(): void {
       const blitzMetadata = (blitzSession?.metadata ?? {}) as any;
       const originalPrompt = blitzMetadata.prompt ?? '';
 
-      // Use configured analysis model, falling back to claude-code:opus
-      const analysisModelId = blitzMetadata.analysisModel || 'claude-code:opus';
+      // Use configured analysis model, falling back to claude-code:opus-1m
+      const analysisModelId = blitzMetadata.analysisModel || 'claude-code:opus-1m';
       const parsedModel = ModelIdentifier.tryParse(analysisModelId);
       const analysisProvider = parsedModel?.provider || 'claude-code';
 

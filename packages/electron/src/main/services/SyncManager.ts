@@ -1089,7 +1089,7 @@ async function getAvailableModelsForMobile(): Promise<{ models: Array<{ id: stri
     });
 
     const models = enabledModels.map(m => ({ id: m.id, name: m.name, provider: m.provider }));
-    const defaultModel = getDefaultAIModel() || 'claude-code:opus';
+    const defaultModel = getDefaultAIModel() || 'claude-code:opus-1m';
     return { models, defaultModel };
   } catch (err) {
     logger.main.warn('[SyncManager] Failed to fetch models for mobile sync:', err);
