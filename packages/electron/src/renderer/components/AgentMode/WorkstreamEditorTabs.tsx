@@ -52,7 +52,7 @@ async function doPersist(workstreamId: string): Promise<void> {
         },
       },
     });
-    console.log('[WorkstreamEditorTabs] Persisted to workspace state:', workstreamId, data.tabs.length, 'tabs');
+    // console.log('[WorkstreamEditorTabs] Persisted to workspace state:', workstreamId, data.tabs.length, 'tabs');
   } catch (err) {
     console.error('[WorkstreamEditorTabs] Failed to persist tabs:', err);
   }
@@ -96,7 +96,7 @@ function flushToSessionStorage(workstreamId: string): void {
 
   const data = currentTabState.get(workstreamId);
   if (!data || data.tabs.length === 0) {
-    console.log('[WorkstreamEditorTabs] Nothing to flush for:', workstreamId);
+    // console.log('[WorkstreamEditorTabs] Nothing to flush for:', workstreamId);
     return;
   }
 
@@ -109,7 +109,7 @@ function flushToSessionStorage(workstreamId: string): void {
     })),
   });
   sessionStorage.setItem(key, value);
-  console.log('[WorkstreamEditorTabs] Flushed to sessionStorage:', workstreamId, data.tabs.length, 'tabs');
+  // console.log('[WorkstreamEditorTabs] Flushed to sessionStorage:', workstreamId, data.tabs.length, 'tabs');
 
   // Fire async persist with the data BEFORE deleting from currentTabState
   // This ensures workspace state also gets updated
@@ -133,7 +133,7 @@ function flushToSessionStorage(workstreamId: string): void {
           },
         },
       });
-      console.log('[WorkstreamEditorTabs] Async persisted on unmount:', workstreamId);
+      // console.log('[WorkstreamEditorTabs] Async persisted on unmount:', workstreamId);
     } catch (err) {
       console.error('[WorkstreamEditorTabs] Failed to persist on unmount:', err);
     }
@@ -155,7 +155,7 @@ async function loadWorkstreamTabs(
     try {
       const parsed = JSON.parse(sessionData);
       if (parsed?.openTabs?.length > 0) {
-        console.log('[WorkstreamEditorTabs] Loaded from sessionStorage:', workstreamId);
+        // console.log('[WorkstreamEditorTabs] Loaded from sessionStorage:', workstreamId);
         // Clear it after loading so workspace state takes over next time
         sessionStorage.removeItem(sessionKey);
         return parsed.openTabs;
@@ -170,7 +170,7 @@ async function loadWorkstreamTabs(
     const workspaceState = await window.electronAPI.invoke('workspace:get-state', workspacePath);
     const saved = workspaceState?.workstreamEditorStates?.[workstreamId];
     if (saved?.openTabs) {
-      console.log('[WorkstreamEditorTabs] Loaded from workspace state:', workstreamId);
+      // console.log('[WorkstreamEditorTabs] Loaded from workspace state:', workstreamId);
       return saved.openTabs;
     }
   } catch (err) {
@@ -224,20 +224,20 @@ const WorkstreamEditorTabsInner = forwardRef<WorkstreamEditorTabsRef, Workstream
     // Restore tabs from workstream state on mount
     useEffect(() => {
       if (restoreStateRef.current !== 'pending') {
-        console.log('[WorkstreamEditorTabs] Skipping restore, state:', restoreStateRef.current);
+        // console.log('[WorkstreamEditorTabs] Skipping restore, state:', restoreStateRef.current);
         return;
       }
       restoreStateRef.current = 'restoring';
-      console.log('[WorkstreamEditorTabs] Starting restore for workstream:', workstreamId);
+      // console.log('[WorkstreamEditorTabs] Starting restore for workstream:', workstreamId);
 
       // Restore from workstream state (unified source of truth)
       const { openFilePaths, activeFilePath } = workstreamState;
-      console.log('[WorkstreamEditorTabs] Restoring from workstream state:', openFilePaths.length, 'files, active:', activeFilePath);
+      // console.log('[WorkstreamEditorTabs] Restoring from workstream state:', openFilePaths.length, 'files, active:', activeFilePath);
 
       if (openFilePaths.length > 0) {
         // Add all tabs
         for (const filePath of openFilePaths) {
-          console.log('[WorkstreamEditorTabs] Adding tab:', filePath);
+          // console.log('[WorkstreamEditorTabs] Adding tab:', filePath);
           tabsActions.addTab(filePath);
         }
 
@@ -252,12 +252,12 @@ const WorkstreamEditorTabsInner = forwardRef<WorkstreamEditorTabsRef, Workstream
 
       // Mark restore complete - now we can persist changes
       restoreStateRef.current = 'done';
-      console.log('[WorkstreamEditorTabs] Restore complete');
+      // console.log('[WorkstreamEditorTabs] Restore complete');
     }, [workstreamId, workstreamState, tabsActions]);
 
     // Sync tab count to Jotai atom and persist tabs when they change
     useEffect(() => {
-      console.log('[WorkstreamEditorTabs] Persist effect running, tabs:', tabs.length, 'restoreState:', restoreStateRef.current);
+      // console.log('[WorkstreamEditorTabs] Persist effect running, tabs:', tabs.length, 'restoreState:', restoreStateRef.current);
 
       if (tabs.length !== prevTabCountRef.current) {
         prevTabCountRef.current = tabs.length;
@@ -270,21 +270,21 @@ const WorkstreamEditorTabsInner = forwardRef<WorkstreamEditorTabsRef, Workstream
         openFilePaths: tabs.map(t => t.filePath),
         activeFilePath,
       });
-      console.log('[WorkstreamEditorTabs] Synced workstream state:', tabs.length, 'tabs');
+      // console.log('[WorkstreamEditorTabs] Synced workstream state:', tabs.length, 'tabs');
 
       // Only persist to IPC after restore is complete to avoid overwriting saved state
       if (restoreStateRef.current === 'done') {
-        console.log('[WorkstreamEditorTabs] Persisting tabs to workspace state:', tabs.map(t => t.filePath), 'active:', activeTabId);
+        // console.log('[WorkstreamEditorTabs] Persisting tabs to workspace state:', tabs.map(t => t.filePath), 'active:', activeTabId);
         updateTabState(workstreamId, workspacePath, tabs, activeTabId);
       } else {
-        console.log('[WorkstreamEditorTabs] Skipping IPC persist (still restoring), state:', restoreStateRef.current);
+        // console.log('[WorkstreamEditorTabs] Skipping IPC persist (still restoring), state:', restoreStateRef.current);
       }
     }, [tabs, tabs.length, activeTabId, workstreamId, workspacePath, setTabCount, setWorkstreamState]);
 
     // Flush pending persist on unmount to ensure tabs are saved before switching workstreams
     useEffect(() => {
       return () => {
-        console.log('[WorkstreamEditorTabs] Unmounting, flushing persist for:', workstreamId);
+        // console.log('[WorkstreamEditorTabs] Unmounting, flushing persist for:', workstreamId);
         flushToSessionStorage(workstreamId);
       };
     }, [workstreamId]);

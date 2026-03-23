@@ -446,7 +446,7 @@ class AIApi {
     if (event === 'streamResponse') {
       // Only log brief status for streaming, not the full content
       if (data.isComplete) {
-        logger.api.info(`✓ Stream complete (${this.streamChunkCount} chunks, ${this.lastStreamLength} chars)`);
+        // logger.api.info(`✓ Stream complete (${this.streamChunkCount} chunks, ${this.lastStreamLength} chars)`);
         this.streamChunkCount = 0;
         this.lastStreamLength = 0;
       } else if (data.partial && !data.content) {

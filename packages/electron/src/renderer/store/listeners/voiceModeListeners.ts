@@ -74,12 +74,12 @@ function clearListenWindowTimer(): void {
 function startListenWindowTimer(): void {
   clearListenWindowTimer();
   const ms = getListenWindowMs();
-  console.log(`[voiceModeListeners] startListenWindowTimer: ${ms}ms from now`);
+  // console.log(`[voiceModeListeners] startListenWindowTimer: ${ms}ms from now`);
   _listenWindowTimer = setTimeout(() => {
     _listenWindowTimer = null;
     // Only sleep if still in listening state
     if (store.get(voiceListenStateAtom) === 'listening') {
-      console.log('[voiceModeListeners] Listen window expired -> sleeping');
+      // console.log('[voiceModeListeners] Listen window expired -> sleeping');
       sleepVoiceListening();
     }
   }, ms);
@@ -115,7 +115,7 @@ export function wakeVoiceListening(startTimer = true): void {
  */
 export function sleepVoiceListening(): void {
   if (store.get(voiceListenStateAtom) !== 'listening') return;
-  console.log('[voiceModeListeners] sleepVoiceListening: transitioning to sleeping');
+  // console.log('[voiceModeListeners] sleepVoiceListening: transitioning to sleeping');
   clearListenWindowTimer();
   store.set(voiceListenStateAtom, 'sleeping');
   // Tell main process to suspend the inactivity disconnect timer
@@ -291,7 +291,7 @@ export function initVoiceModeListeners(): () => void {
       // speech_started fires once at the beginning of an utterance.
       // We don't get any more events until speech_stopped, so a simple
       // reset would still expire mid-speech. Clear it instead.
-      console.log('[voiceModeListeners] speech_started -> pausing listen window timer');
+      // console.log('[voiceModeListeners] speech_started -> pausing listen window timer');
       clearListenWindowTimer();
 
       // Stop audio playback (user is interrupting the assistant)
@@ -312,7 +312,7 @@ export function initVoiceModeListeners(): () => void {
 
       // User stopped speaking. Start the idle timer from NOW.
       // If the assistant responds, text-received will pause it again.
-      console.log('[voiceModeListeners] speech_stopped -> starting listen window timer');
+      // console.log('[voiceModeListeners] speech_stopped -> starting listen window timer');
       startListenWindowTimer();
     })
   );
@@ -359,7 +359,7 @@ export function initVoiceModeListeners(): () => void {
 
       // Transcript arrived = speech is definitely done. Start the idle timer
       // in case speech_stopped was missed or never fired.
-      console.log('[voiceModeListeners] transcript-complete -> starting listen window timer');
+      // console.log('[voiceModeListeners] transcript-complete -> starting listen window timer');
       startListenWindowTimer();
 
       // Clear partial text
@@ -471,7 +471,7 @@ export function initVoiceModeListeners(): () => void {
       }
 
       // Assistant finished responding. Start the idle countdown from NOW.
-      console.log('[voiceModeListeners] token-usage -> starting listen window timer');
+      // console.log('[voiceModeListeners] token-usage -> starting listen window timer');
       startListenWindowTimer();
 
       // Notify VoiceModeButton to unmute mic (assistant done speaking)
@@ -552,7 +552,7 @@ export function initVoiceModeListeners(): () => void {
     }) => {
       if (!isVoiceActive()) return;
 
-      console.log('[voiceModeListeners] Responding to interactive prompt via voice:', payload.promptId);
+      // console.log('[voiceModeListeners] Responding to interactive prompt via voice:', payload.promptId);
 
       let response = payload.response;
 
@@ -570,7 +570,7 @@ export function initVoiceModeListeners(): () => void {
           // For multi-question prompts, the voice answer applies to the first unanswered question
           rebuiltAnswers[questions[0].question] = voiceAnswer;
           response = { ...response, answers: rebuiltAnswers };
-          console.log('[voiceModeListeners] Rebuilt voice answer with question key:', questions[0].question);
+          // console.log('[voiceModeListeners] Rebuilt voice answer with question key:', questions[0].question);
         }
       }
 
@@ -704,19 +704,19 @@ export function initVoiceModeListeners(): () => void {
 
       // Wake voice from sleeping so user can respond
       if (store.get(voiceListenStateAtom) === 'sleeping') {
-        console.log('[voiceModeListeners] Interactive prompt detected -> waking voice');
+        // console.log('[voiceModeListeners] Interactive prompt detected -> waking voice');
         wakeVoiceListening(true);
       }
 
       // Forward the prompt content to the voice agent so it can speak it
       lastForwardedPromptId = latestPrompt.promptId;
       const description = formatPromptForVoice(latestPrompt);
-      console.log('[voiceModeListeners] Sending interactive-prompt IPC:', {
-        sessionId: voiceSessionId,
-        promptId: latestPrompt.promptId,
-        promptType: latestPrompt.promptType,
-        descriptionLength: description.length,
-      });
+      // console.log('[voiceModeListeners] Sending interactive-prompt IPC:', {
+      //   sessionId: voiceSessionId,
+      //   promptId: latestPrompt.promptId,
+      //   promptType: latestPrompt.promptType,
+      //   descriptionLength: description.length,
+      // });
       window.electronAPI.send('voice-mode:interactive-prompt', {
         sessionId: voiceSessionId,
         promptId: latestPrompt.promptId,
@@ -812,7 +812,7 @@ export async function setVoiceActiveSession(sessionId: string, workspacePath?: s
       }).catch(error => {
         console.error('[voiceModeListeners] Failed to resume voice session:', error);
       });
-      console.log('[voiceModeListeners] Resumed voice session:', result.sessionId);
+      // console.log('[voiceModeListeners] Resumed voice session:', result.sessionId);
       writeDiagnosticEntry(`Resumed voice session (linked to ${sessionId.slice(0, 8)}...)`);
       return;
     }
@@ -831,7 +831,7 @@ export async function setVoiceActiveSession(sessionId: string, workspacePath?: s
   }).catch(error => {
     console.error('[voiceModeListeners] Failed to create voice session in DB:', error);
   });
-  console.log('[voiceModeListeners] Created new voice session:', dbSessionId);
+  // console.log('[voiceModeListeners] Created new voice session:', dbSessionId);
   writeDiagnosticEntry(`New voice session created (linked to ${sessionId.slice(0, 8)}...)`);
 }
 

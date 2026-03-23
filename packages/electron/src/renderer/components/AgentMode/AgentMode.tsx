@@ -291,7 +291,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
       // Parse provider from defaultModel using ModelIdentifier
       const parsedModel = defaultModel ? ModelIdentifier.tryParse(defaultModel) : null;
       const provider = parsedModel?.provider || 'claude-code';
-      console.log('[AgentMode] Creating new session with defaultModel:', defaultModel, 'provider:', provider);
+      // console.log('[AgentMode] Creating new session with defaultModel:', defaultModel, 'provider:', provider);
       const result = await window.electronAPI.invoke('sessions:create', {
         session: {
           id: sessionId,
@@ -654,7 +654,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
 
   // Open session by ID
   const openSessionInTab = useCallback(async (sessionId: string) => {
-    console.log('[AgentMode] openSessionInTab called with:', sessionId);
+    // console.log('[AgentMode] openSessionInTab called with:', sessionId);
 
     // Check session list for parentSessionId (more reliable than aiLoadSession)
     try {
@@ -664,13 +664,13 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
       }
 
       const sessionListItem = result.sessions.find((s: any) => s.id === sessionId);
-      console.log('[AgentMode] Session list item:', sessionListItem?.id, 'parentSessionId:', sessionListItem?.parentSessionId);
+      // console.log('[AgentMode] Session list item:', sessionListItem?.id, 'parentSessionId:', sessionListItem?.parentSessionId);
 
       // Check if session is in the registry - if not, add it
       // This handles cases where a session was just created (e.g., via rebase conflict resolution)
       const registry = store.get(sessionRegistryAtom);
       if (sessionListItem && !registry.has(sessionId)) {
-        console.log('[AgentMode] Session not in registry, adding it');
+        // console.log('[AgentMode] Session not in registry, adding it');
         addSession({
           id: sessionListItem.id,
           title: sessionListItem.title || 'Untitled Session',
@@ -691,7 +691,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
 
         // If it's a worktree session, initialize workstream state
         if (sessionListItem.worktreeId) {
-          console.log('[AgentMode] Initializing worktree state for session');
+          // console.log('[AgentMode] Initializing worktree state for session');
           store.set(workstreamStateAtom(sessionId), {
             type: 'worktree',
             worktreeId: sessionListItem.worktreeId,
@@ -701,7 +701,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
 
       if (sessionListItem?.parentSessionId) {
         // This is a child session in a workstream
-        console.log('[AgentMode] Child session detected, parent:', sessionListItem.parentSessionId);
+        // console.log('[AgentMode] Child session detected, parent:', sessionListItem.parentSessionId);
 
         // CRITICAL: Load the parent's children first to populate the workstream state
         // This ensures the child session IDs are in the state before we set active child
@@ -709,14 +709,14 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
           parentSessionId: sessionListItem.parentSessionId,
           workspacePath,
         });
-        console.log('[AgentMode] Parent children loaded');
+        // console.log('[AgentMode] Parent children loaded');
 
         // Now set the active child in the workstream state (and mark as read)
         store.set(setActiveSessionInWorkstreamAtom, {
           workstreamId: sessionListItem.parentSessionId,
           sessionId,
         });
-        console.log('[AgentMode] Active child set to:', sessionId);
+        // console.log('[AgentMode] Active child set to:', sessionId);
 
         // Finally, select the parent workstream
         const parentState = store.get(workstreamStateAtom(sessionListItem.parentSessionId));
@@ -724,7 +724,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
           : parentState.type === 'workstream' ? 'workstream'
           : 'session';
 
-        console.log('[AgentMode] Selecting parent workstream:', sessionListItem.parentSessionId, 'type:', parentType);
+        // console.log('[AgentMode] Selecting parent workstream:', sessionListItem.parentSessionId, 'type:', parentType);
         setSelectedWorkstream({
           workspacePath,
           selection: { type: parentType, id: sessionListItem.parentSessionId },
@@ -860,7 +860,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   // Branch a session - creates a fork at the current message
   const handleSessionBranch = useCallback(async (sessionId: string) => {
     try {
-      console.log('[AgentMode] Branching session:', sessionId);
+      // console.log('[AgentMode] Branching session:', sessionId);
 
       // Call IPC to create a branch
       const result = await window.electronAPI.invoke('sessions:branch', {
@@ -869,7 +869,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
       });
 
       if (result.success && result.session) {
-        console.log('[AgentMode] Branch created:', result.session.id);
+        // console.log('[AgentMode] Branch created:', result.session.id);
 
         // Refresh session list to show the new branch
         refreshSessions();
@@ -965,7 +965,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
 
   // Handle worktree archived - refresh the session list to show updated state
   const handleWorktreeArchived = useCallback(() => {
-    console.log('[AgentMode] Worktree archived, refreshing sessions');
+    // console.log('[AgentMode] Worktree archived, refreshing sessions');
     refreshSessions();
   }, [refreshSessions]);
 

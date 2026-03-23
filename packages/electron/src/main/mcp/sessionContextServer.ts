@@ -242,7 +242,7 @@ function formatDate(timestamp: number): string {
 
 /**
  * Strip workspace path prefix from file paths to save context window space.
- * "/Users/ghinkle/sources/stravu-editor/packages/foo.ts" -> "packages/foo.ts"
+ * "/Users/person/sources/nimbalyst/packages/foo.ts" -> "packages/foo.ts"
  */
 function stripWorkspacePath(filePath: string, workspacePath: string): string {
   if (workspacePath && filePath.startsWith(workspacePath)) {

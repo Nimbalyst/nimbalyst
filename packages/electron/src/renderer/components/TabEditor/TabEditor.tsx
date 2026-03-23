@@ -112,7 +112,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const { theme, themeId } = useTheme();
 
   // Debug: log every render to verify isDirty changes don't cause re-renders
-  console.log('[TabEditor] render', fileName);
+  // console.log('[TabEditor] render', fileName);
 
   const posthog = usePostHog();
 
@@ -1000,7 +1000,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       // If already processing a change or applying a diff, mark as pending and return
       // We'll re-check for changes after the current processing completes
       if (processingFileChangeRef.current || isApplyingDiffRef.current) {
-        console.log('[TabEditor] File change during processing - marking as pending');
+        // console.log('[TabEditor] File change during processing - marking as pending');
         pendingFileChangeRef.current = true;
         return;
       }
@@ -1072,18 +1072,12 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           const baseline = await window.electronAPI.invoke('history:get-diff-baseline', data.path);
           const oldContent = baseline ? baseline.content : pendingTags[0].content;
 
-          console.log('[TabEditor] FILE WATCHER - Applying diff mode:', {
-            fileName,
-            baselineType: baseline?.tagType,
-            oldContentLength: oldContent.length,
-            newContentLength: newContent.length,
-            oldHasFirstAI: oldContent.includes('FIRST AI EDIT'),
-            oldHasSecondOriginal: oldContent.includes('Second paragraph'),
-            oldHasThirdOriginal: oldContent.includes('Third paragraph'),
-            oldHasThirdAI: oldContent.includes('THIRD AI EDIT'),
-            newHasFirstAI: newContent.includes('FIRST AI EDIT'),
-            newHasThirdAI: newContent.includes('THIRD AI EDIT')
-          });
+          // console.log('[TabEditor] FILE WATCHER - Applying diff mode:', {
+          //   fileName,
+          //   baselineType: baseline?.tagType,
+          //   oldContentLength: oldContent.length,
+          //   newContentLength: newContent.length,
+          // });
 
           // Check if we're ALREADY in diff mode for this tag
           const alreadyInDiffMode = pendingAIEditTagRef.current?.tagId === pendingTags[0].id;
@@ -1126,7 +1120,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             // If the new content matches what we're already showing, skip the reload
             // This prevents flashing when switching tabs or during saves
             if (newContent === lastSavedContentRef.current) {
-              console.log('[TabEditor] Diff already showing correct content, skipping reload');
+              // console.log('[TabEditor] Diff already showing correct content, skipping reload');
               processingFileChangeRef.current = false;
               return;
             }
@@ -1413,7 +1407,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         // If another file change arrived while we were processing, re-process
         // This ensures we don't miss updates (e.g., second AI edit while processing first)
         if (pendingFileChangeRef.current) {
-          console.log('[TabEditor] Re-processing pending file change');
+          // console.log('[TabEditor] Re-processing pending file change');
           pendingFileChangeRef.current = false;
           // Use setTimeout to avoid deep recursion and allow React to process
           setTimeout(() => {
@@ -1806,10 +1800,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
   // Monaco diff mode accept/reject handlers
   const handleMonacoDiffAccept = useCallback(async () => {
-    console.log('[TabEditor] !!!!! handleMonacoDiffAccept CALLED !!!!!');
-    console.log('[TabEditor] editorRef.current:', !!editorRef.current);
-    console.log('[TabEditor] editorRef.current.acceptDiff:', !!editorRef.current?.acceptDiff);
-    console.log('[TabEditor] pendingAIEditTagRef.current:', !!pendingAIEditTagRef.current);
+    // console.log('[TabEditor] !!!!! handleMonacoDiffAccept CALLED !!!!!');
+    // console.log('[TabEditor] editorRef.current:', !!editorRef.current);
+    // console.log('[TabEditor] editorRef.current.acceptDiff:', !!editorRef.current?.acceptDiff);
+    // console.log('[TabEditor] pendingAIEditTagRef.current:', !!pendingAIEditTagRef.current);
 
     if (!editorRef.current?.acceptDiff || !pendingAIEditTagRef.current) {
       logger.ui.warn('[TabEditor] Cannot accept Monaco diff - no editor or pending tag', {
@@ -1820,25 +1814,25 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       return;
     }
 
-    console.log('[TabEditor] PASSED THE CHECK, ABOUT TO ENTER TRY BLOCK');
+    // console.log('[TabEditor] PASSED THE CHECK, ABOUT TO ENTER TRY BLOCK');
 
     try {
-      console.log('[TabEditor] INSIDE TRY BLOCK');
+      // console.log('[TabEditor] INSIDE TRY BLOCK');
       logger.ui.info('[TabEditor] Accepting Monaco diff', {
         tagId: pendingAIEditTagRef.current.tagId,
         filePath
       });
 
-      console.log('[TabEditor] ABOUT TO CALL acceptDiff');
+      // console.log('[TabEditor] ABOUT TO CALL acceptDiff');
       // Get the new content from Monaco diff editor
       const newContent = editorRef.current.acceptDiff();
-      console.log('[TabEditor] acceptDiff RETURNED:', newContent.length);
+      // console.log('[TabEditor] acceptDiff RETURNED:', newContent.length);
 
-      console.log('[TabEditor] ABOUT TO WRITE TO DISK');
+      // console.log('[TabEditor] ABOUT TO WRITE TO DISK');
       // Write to disk - use saveFile with (content, filePath) parameter order
       try {
         await window.electronAPI.saveFile(newContent, filePath);
-        console.log('[TabEditor] WROTE TO DISK SUCCESSFULLY');
+        // console.log('[TabEditor] WROTE TO DISK SUCCESSFULLY');
       } catch (writeError) {
         console.error('[TabEditor] ERROR WRITING TO DISK:', writeError);
         throw writeError;
@@ -1846,12 +1840,12 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
       // Mark tag as reviewed (must pass filePath, tagId, status, workspacePath)
       if (window.electronAPI.history) {
-        console.log('[TabEditor] About to call updateTagStatus', {
-          filePath,
-          tagId: pendingAIEditTagRef.current.tagId,
-          status: 'reviewed',
-          workspaceId
-        });
+        // console.log('[TabEditor] About to call updateTagStatus', {
+        //   filePath,
+        //   tagId: pendingAIEditTagRef.current.tagId,
+        //   status: 'reviewed',
+        //   workspaceId
+        // });
 
         await window.electronAPI.history.updateTagStatus(
           filePath,
@@ -1860,7 +1854,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           workspaceId
         );
 
-        console.log('[TabEditor] Successfully marked tag as reviewed');
+        // console.log('[TabEditor] Successfully marked tag as reviewed');
       } else {
         console.warn('[TabEditor] No history API available');
       }
@@ -1876,9 +1870,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       }
 
       // Exit diff mode
-      console.log('[TabEditor] ABOUT TO EXIT DIFF MODE');
+      // console.log('[TabEditor] ABOUT TO EXIT DIFF MODE');
       editorRef.current.exitDiffMode();
-      console.log('[TabEditor] EXIT DIFF MODE CALLED');
+      // console.log('[TabEditor] EXIT DIFF MODE CALLED');
 
       // Clear pending tag ref
       setPendingAIEditTag(null);
@@ -1897,7 +1891,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       // Without this, Monaco will revert to the old content when it switches back to normal mode
       // Use force: true because Monaco's disk tracker already has this content from acceptDiff()
       if (editorRef.current.setContent) {
-        console.log('[TabEditor] Updating Monaco editor content after diff acceptance');
+        // console.log('[TabEditor] Updating Monaco editor content after diff acceptance');
         editorRef.current.setContent(newContent, { force: true });
       }
 

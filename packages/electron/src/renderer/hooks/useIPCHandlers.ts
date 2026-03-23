@@ -605,7 +605,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
 
           // If the file isn't registered (not open), open it in the background
           if (!editorRegistry.has(filePath)) {
-            console.log('[MCP] File not open, opening in background:', filePath);
+            // console.log('[MCP] File not open, opening in background:', filePath);
 
             // Read the file content
             const result = await window.electronAPI.readFileContent(filePath);
@@ -661,15 +661,15 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     if (window.electronAPI.onMcpStreamContent) {
       // console.log('[MCP] Registering onMcpStreamContent handler');
       cleanupFns.push(window.electronAPI.onMcpStreamContent(async ({ streamId, content, position, insertAfter, mode, targetFilePath, resultChannel }) => {
-        console.log('[MCP] ==========================================');
-        console.log('[MCP] streamContent IPC RECEIVED');
-        console.log('[MCP] streamId:', streamId);
-        console.log('[MCP] position:', position);
-        console.log('[MCP] mode:', mode);
-        console.log('[MCP] targetFilePath:', targetFilePath);
-        console.log('[MCP] content preview:', content?.substring(0, 100));
-        console.log('[MCP] resultChannel:', resultChannel);
-        console.log('[MCP] ==========================================');
+        // console.log('[MCP] ==========================================');
+        // console.log('[MCP] streamContent IPC RECEIVED');
+        // console.log('[MCP] streamId:', streamId);
+        // console.log('[MCP] position:', position);
+        // console.log('[MCP] mode:', mode);
+        // console.log('[MCP] targetFilePath:', targetFilePath);
+        // console.log('[MCP] content preview:', content?.substring(0, 100));
+        // console.log('[MCP] resultChannel:', resultChannel);
+        // console.log('[MCP] ==========================================');
 
         try {
           // Use the explicit targetFilePath from the IPC message, or fall back to first registered editor
@@ -687,11 +687,11 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
             return;
           }
 
-          console.log('[MCP] Using filePath:', filePath);
-          console.log('[MCP] Registered editors:', editorRegistry.getFilePaths());
+          // console.log('[MCP] Using filePath:', filePath);
+          // console.log('[MCP] Registered editors:', editorRegistry.getFilePaths());
 
           // Start streaming
-          console.log('[MCP] Calling startStreaming...');
+          // console.log('[MCP] Calling startStreaming...');
           editorRegistry.startStreaming(filePath, {
             id: streamId,
             position: position || 'cursor',
@@ -705,14 +705,14 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
           await new Promise(resolve => setTimeout(resolve, 50));
 
           // Stream the content
-          console.log('[MCP] Calling streamContent...');
+          // console.log('[MCP] Calling streamContent...');
           editorRegistry.streamContent(filePath, streamId, content);
 
           // End streaming
-          console.log('[MCP] Calling endStreaming...');
+          // console.log('[MCP] Calling endStreaming...');
           editorRegistry.endStreaming(filePath, streamId);
 
-          console.log('[MCP] Streaming complete, sending success result');
+          // console.log('[MCP] Streaming complete, sending success result');
 
           // Send success result
           if (window.electronAPI.sendMcpStreamContentResult) {
@@ -721,7 +721,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
             });
           }
 
-          console.log('[MCP] Success result sent');
+          // console.log('[MCP] Success result sent');
         } catch (error) {
           console.error('[MCP] streamContent error:', error);
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';

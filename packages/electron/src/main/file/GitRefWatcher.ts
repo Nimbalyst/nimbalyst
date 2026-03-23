@@ -357,11 +357,11 @@ export class GitRefWatcher {
     try {
       const { historyManager } = await import('../HistoryManager');
 
-      logger.main.info('[GitRefWatcher] Auto-approving pending reviews for committed files:', {
-        workspace: path.basename(workspacePath),
-        fileCount: committedFiles.length,
-        files: committedFiles.map(f => path.basename(f)),
-      });
+      // logger.main.info('[GitRefWatcher] Auto-approving pending reviews for committed files:', {
+      //   workspace: path.basename(workspacePath),
+      //   fileCount: committedFiles.length,
+      //   files: committedFiles.map(f => path.basename(f)),
+      // });
 
       let approvedCount = 0;
       for (const filePath of committedFiles) {
@@ -374,11 +374,11 @@ export class GitRefWatcher {
         });
 
         if (pendingTags.length > 0) {
-          logger.main.info('[GitRefWatcher] Auto-approving pending review:', {
-            file: path.basename(filePath),
-            tags: pendingTags.length,
-            tagIds: pendingTags.map(t => t.id),
-          });
+          // logger.main.info('[GitRefWatcher] Auto-approving pending review:', {
+          //   file: path.basename(filePath),
+          //   tags: pendingTags.length,
+          //   tagIds: pendingTags.map(t => t.id),
+          // });
 
           for (const tag of pendingTags) {
             await historyManager.updateTagStatus(filePath, tag.id, 'reviewed', workspacePath);
