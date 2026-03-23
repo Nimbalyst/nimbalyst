@@ -30,6 +30,36 @@ export interface ClaudeCodeExecutableResult {
   method: ClaudeHelperMethod;
 }
 
+function getCandidateNodePaths(isPackaged: boolean): string[] {
+  const candidates = new Set<string>();
+  const existingNodePath = process.env.NODE_PATH;
+
+  if (existingNodePath) {
+    for (const entry of existingNodePath.split(path.delimiter)) {
+      if (entry) {
+        candidates.add(entry);
+      }
+    }
+  }
+
+  const appPath = app.getAppPath();
+  const unpackedPath = appPath.includes('app.asar')
+    ? appPath.replace(/app\.asar(?=[\/\\]|$)/, 'app.asar.unpacked')
+    : appPath;
+
+  if (isPackaged) {
+    candidates.add(path.join(unpackedPath, 'node_modules'));
+  } else {
+    candidates.add(path.join(appPath, 'node_modules'));
+    // In dev, the Electron app lives under packages/electron while optional SDK
+    // image binaries are often hoisted to the repo root node_modules directory.
+    candidates.add(path.resolve(appPath, '../../node_modules'));
+    candidates.add(path.resolve(appPath, '../runtime/node_modules'));
+  }
+
+  return Array.from(candidates).filter((candidate) => fs.existsSync(candidate));
+}
+
 /**
  * Setup environment for Claude Agent SDK in packaged builds
  * This is used by both ClaudeCodeHandlers and ClaudeCodeProvider
@@ -40,14 +70,20 @@ export interface ClaudeCodeExecutableResult {
  */
 export function setupClaudeCodeEnvironment(): NodeJS.ProcessEnv {
   const isPackaged = app.isPackaged;
+  const env = { ...process.env };
+
+  const nodePaths = getCandidateNodePaths(isPackaged);
+  if (nodePaths.length > 0) {
+    env.NODE_PATH = nodePaths.join(path.delimiter);
+  }
 
   if (!isPackaged) {
-    // Development mode - use current environment
-    return { ...process.env };
+    // The SDK may execute its extracted CLI from a temp location, so provide
+    // explicit module roots in dev mode instead of relying on relative lookup.
+    return env;
   }
 
   // Packaged mode - set up enhanced environment
-  const env = { ...process.env };
   const platform = process.platform;
   const homedir = os.homedir();
   const username = os.userInfo().username;
@@ -100,17 +136,8 @@ export function setupClaudeCodeEnvironment(): NodeJS.ProcessEnv {
     env.PATH = commonPaths.join(pathSeparator);
   }
 
-  // CRITICAL: Set NODE_PATH to unpacked modules
-  const appPath = app.getAppPath();
-  const unpackedPath = appPath.includes('app.asar')
-    ? appPath.replace(/app\.asar(?=[\/\\]|$)/, 'app.asar.unpacked')
-    : appPath;
-
-  env.NODE_PATH = path.join(unpackedPath, 'node_modules');
-
-  // Verify the unpacked node_modules directory exists
-  if (!fs.existsSync(env.NODE_PATH)) {
-    const error = `Unpacked node_modules directory not found at: ${env.NODE_PATH}. ` +
+  if (nodePaths.length === 0) {
+    const error = `Unable to resolve any unpacked node_modules directories for Claude Code. ` +
                  `This indicates a build configuration issue. The Claude Agent SDK must be unpacked during the build process.`;
     throw new Error(error);
   }

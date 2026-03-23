@@ -90,7 +90,7 @@ import { codexUsageService } from './services/CodexUsageService';
 import { registerExtensionHandlers, getClaudePluginPaths, initializeExtensionFileTypes } from './ipc/ExtensionHandlers';
 import { registerExtensionMarketplaceHandlers } from './ipc/ExtensionMarketplaceHandlers';
 import { getRegisteredExtensions } from './extensions/RegisteredFileTypes';
-import { ClaudeCodeProvider, OpenAICodexProvider } from '@nimbalyst/runtime/ai/server';
+import { ClaudeCodeProvider, OpenAICodexProvider, OpenCodeProvider } from '@nimbalyst/runtime/ai/server';
 import { isMCPServerEnabledForProvider, MCP_PROVIDER_IDS } from '@nimbalyst/runtime/types/MCPServerConfig';
 import type { MCPServerConfig } from '@nimbalyst/runtime/types/MCPServerConfig';
 import { logger, overrideConsole } from './utils/logger';
@@ -1042,10 +1042,12 @@ app.whenReady().then(async () => {
     // Without this, Dock/Finder-launched Nimbalyst has a minimal environment.
     ClaudeCodeProvider.setShellEnvironmentLoader(() => getShellEnvironment());
     OpenAICodexProvider.setShellEnvironmentLoader(() => getShellEnvironment());
+    OpenCodeProvider.setShellEnvironmentLoader(() => getShellEnvironment());
 
-    // Inject enhanced PATH loader so Codex can access system tools
+    // Inject enhanced PATH loader so agents can access system tools
     // (docker, homebrew, nvm, etc.) that are missing from Electron's GUI PATH
     OpenAICodexProvider.setEnhancedPathLoader(() => getEnhancedPath());
+    OpenCodeProvider.setEnhancedPathLoader(() => getEnhancedPath());
 
     // Inject SDK module loader for packaged builds where dynamic import('@openai/codex-sdk')
     // can't resolve the package from within app.asar.
@@ -1214,6 +1216,7 @@ app.whenReady().then(async () => {
         // Inject the port into ClaudeCodeProvider so it can configure the MCP server
         ClaudeCodeProvider.setMcpServerPort(result.port);
         OpenAICodexProvider.setMcpServerPort(result.port);
+        OpenCodeProvider.setMcpServerPort(result.port);
     } catch (error) {
             logger.mcp.error('Failed to start MCP SSE server:', error);
     }
@@ -1244,6 +1247,7 @@ app.whenReady().then(async () => {
         const result = await startSessionContextServer();
         ClaudeCodeProvider.setSessionContextServerPort(result.port);
         OpenAICodexProvider.setSessionContextServerPort(result.port);
+        OpenCodeProvider.setSessionContextServerPort(result.port);
     } catch (error) {
         logger.mcp.error('Failed to start session context MCP server:', error);
     }
@@ -1929,6 +1933,7 @@ app.on('before-quit', async (event) => {
         await Promise.race([shutdownPromise, timeoutPromise]);
         ClaudeCodeProvider.setSessionContextServerPort(null);
         OpenAICodexProvider.setSessionContextServerPort(null);
+        OpenCodeProvider.setSessionContextServerPort(null);
         console.log('[QUIT] Session context MCP server shutdown complete');
     } catch (error) {
         console.error('[QUIT] Error closing session context MCP server:', error);
