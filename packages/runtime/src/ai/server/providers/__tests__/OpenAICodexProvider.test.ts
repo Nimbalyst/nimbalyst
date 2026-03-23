@@ -120,6 +120,121 @@ describe('OpenAICodexProvider', () => {
     expect(models).toHaveLength(6);
   });
 
+  it('preserves CLI auth when initialized without an API key', async () => {
+    const originalApiKey = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+
+    let codexConstructorOptions: Record<string, unknown> | undefined;
+    const runStreamed = vi.fn(async () => ({
+      events: createAsyncEventStream([
+        {
+          type: 'item.completed',
+          item: {
+            type: 'agent_message',
+            text: 'cli auth response',
+          },
+        },
+      ]),
+    }));
+
+    try {
+      const provider = new OpenAICodexProvider(
+        undefined,
+        {
+          loadSdkModule: async () =>
+            ({
+              Codex: class {
+                constructor(options?: Record<string, unknown>) {
+                  codexConstructorOptions = options;
+                }
+
+                startThread = vi.fn(() => ({
+                  id: 'thread-cli-auth',
+                  runStreamed,
+                }));
+
+                resumeThread = vi.fn();
+              },
+            }) as any,
+        }
+      );
+
+      await provider.initialize({
+        model: 'openai-codex:gpt-5.4',
+      });
+
+      for await (const _chunk of provider.sendMessage('use cli auth', undefined, 'session-cli-auth', [], process.cwd())) {
+        // drain
+      }
+    } finally {
+      if (originalApiKey === undefined) {
+        delete process.env.OPENAI_API_KEY;
+      } else {
+        process.env.OPENAI_API_KEY = originalApiKey;
+      }
+    }
+
+    expect(codexConstructorOptions?.apiKey).toBeUndefined();
+  });
+
+  it('applies an API key provided during initialize', async () => {
+    const originalApiKey = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+
+    let codexConstructorOptions: Record<string, unknown> | undefined;
+    const runStreamed = vi.fn(async () => ({
+      events: createAsyncEventStream([
+        {
+          type: 'item.completed',
+          item: {
+            type: 'agent_message',
+            text: 'api key response',
+          },
+        },
+      ]),
+    }));
+
+    try {
+      const provider = new OpenAICodexProvider(
+        undefined,
+        {
+          loadSdkModule: async () =>
+            ({
+              Codex: class {
+                constructor(options?: Record<string, unknown>) {
+                  codexConstructorOptions = options;
+                }
+
+                startThread = vi.fn(() => ({
+                  id: 'thread-api-key',
+                  runStreamed,
+                }));
+
+                resumeThread = vi.fn();
+              },
+            }) as any,
+        }
+      );
+
+      await provider.initialize({
+        apiKey: 'test-key',
+        model: 'openai-codex:gpt-5.4',
+      });
+
+      for await (const _chunk of provider.sendMessage('use api key', undefined, 'session-api-key', [], process.cwd())) {
+        // drain
+      }
+    } finally {
+      if (originalApiKey === undefined) {
+        delete process.env.OPENAI_API_KEY;
+      } else {
+        process.env.OPENAI_API_KEY = originalApiKey;
+      }
+    }
+
+    expect(codexConstructorOptions).toMatchObject({ apiKey: 'test-key' });
+  });
+
   it('streams text and completion usage from Codex SDK events', async () => {
     const runStreamed = vi.fn(async () => ({
       threadId: 'thread-123',

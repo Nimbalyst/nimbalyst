@@ -65,6 +65,16 @@ export class CodexSDKProtocol implements AgentProtocol {
     this.resolveCodexPathOverride = resolveCodexPathOverride || (() => undefined);
   }
 
+  setApiKey(apiKey: string): void {
+    if (this.apiKey === apiKey) {
+      return;
+    }
+
+    this.apiKey = apiKey;
+    this.codexClient = null;
+    this.codexClientOptionsKey = null;
+  }
+
   /**
    * Create a new session (thread)
    *
@@ -325,7 +335,7 @@ export class CodexSDKProtocol implements AgentProtocol {
     const codexConfigOverrides = this.getCodexConfigOverrides(options);
     const codexEnv = this.getCodexEnv(options);
     const codexClientOptions: Record<string, unknown> = {
-      apiKey: this.apiKey,
+      ...(this.apiKey ? { apiKey: this.apiKey } : {}),
       ...(codexPathOverride ? { codexPathOverride } : {}),
       ...(codexConfigOverrides ? { config: codexConfigOverrides } : {}),
       ...(codexEnv ? { env: codexEnv } : {}),

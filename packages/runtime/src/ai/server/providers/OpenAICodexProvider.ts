@@ -84,7 +84,6 @@ export class OpenAICodexProvider extends BaseAgentProvider {
   private static readonly MODEL_ID_CACHE_MAX_SIZE = 100;
   private static readonly MODEL_ID_CACHE = new Map<string, { fetchedAt: number; ids: Set<string> }>();
 
-  private readonly apiKey: string;
   private readonly protocol: CodexSDKProtocol;
   private readonly permissionService: ToolPermissionService;
   private readonly mcpConfigService: McpConfigService;
@@ -140,7 +139,6 @@ export class OpenAICodexProvider extends BaseAgentProvider {
   constructor(config?: { apiKey?: string }, deps?: OpenAICodexProviderDeps) {
     super();
     const apiKey = config?.apiKey || process.env.OPENAI_API_KEY || '';
-    this.apiKey = apiKey;
 
     // Initialize protocol (or use injected for testing)
     // Support legacy loadSdkModule and resolveCodexPathOverride for existing tests
@@ -258,7 +256,10 @@ export class OpenAICodexProvider extends BaseAgentProvider {
 
   async initialize(config: ProviderConfig): Promise<void> {
     this.config = config;
-    // Note: API key is set during construction and managed by the protocol
+    const apiKey = config.apiKey || process.env.OPENAI_API_KEY || '';
+    if (typeof (this.protocol as Partial<CodexSDKProtocol>).setApiKey === 'function') {
+      this.protocol.setApiKey(apiKey);
+    }
   }
 
   private static readonly LEGACY_MODEL_ALIASES = new Set([
