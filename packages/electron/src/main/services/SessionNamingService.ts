@@ -1,5 +1,5 @@
 import { BrowserWindow } from 'electron';
-import { SessionManager, ClaudeCodeProvider, OpenAICodexProvider } from '@nimbalyst/runtime/ai/server';
+import { SessionManager, ClaudeCodeProvider, OpenAICodexProvider, OpenCodeProvider } from '@nimbalyst/runtime/ai/server';
 import { AISessionsRepository } from '@nimbalyst/runtime';
 import {
   startSessionNamingServer,
@@ -213,6 +213,7 @@ export class SessionNamingService {
         // Inject the port into agent providers so they can configure the MCP server
         ClaudeCodeProvider.setSessionNamingServerPort(port);
         OpenAICodexProvider.setSessionNamingServerPort(port);
+        OpenCodeProvider.setSessionNamingServerPort(port);
 
         this.started = true;
       } catch (error) {
@@ -238,6 +239,7 @@ export class SessionNamingService {
       await shutdownSessionNamingHttpServer();
       ClaudeCodeProvider.setSessionNamingServerPort(null);
       OpenAICodexProvider.setSessionNamingServerPort(null);
+      OpenCodeProvider.setSessionNamingServerPort(null);
       this.serverPort = null;
       this.started = false;
       console.log('[SessionNamingService] Shutdown complete');

@@ -9,4 +9,5 @@ export * from './providers/OpenAIProvider';
 export * from './providers/OpenAICodexProvider';
 export * from './providers/ProviderPermissionMixin';
 export * from './providers/LMStudioProvider';
+export * from './providers/OpenCodeProvider';
 export * from './utils/errorDetection';

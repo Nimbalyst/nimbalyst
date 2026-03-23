@@ -119,16 +119,32 @@ export interface Message {
   isComplete?: boolean; // Internal flag used during transcript assembly to mark finalized messages
 }
 
-export type AIProviderType = 'claude' | 'claude-code' | 'openai' | 'openai-codex' | 'lmstudio';
+/**
+ * Single source of truth for all AI provider types.
+ * Add new providers here -- the type, runtime array, and exhaustiveness
+ * checks all derive from this one definition.
+ */
+export const AI_PROVIDER_TYPES = ['claude', 'claude-code', 'openai', 'openai-codex', 'lmstudio', 'opencode'] as const;
+
+export type AIProviderType = typeof AI_PROVIDER_TYPES[number];
 
 /**
- * List of all valid AI provider types as a runtime array.
- * Keep in sync with AIProviderType.
+ * Exhaustive switch helper. Use in default cases to get a compile error
+ * when a new provider is added but not handled:
+ *
+ *   switch (provider) {
+ *     case 'claude': ...
+ *     case 'claude-code': ...
+ *     // If you miss a case, TypeScript errors here:
+ *     default: assertExhaustiveProvider(provider);
+ *   }
  */
-export const AI_PROVIDER_TYPES: readonly AIProviderType[] = ['claude', 'claude-code', 'openai', 'openai-codex', 'lmstudio'] as const;
+export function assertExhaustiveProvider(provider: never): never {
+  throw new Error(`Unhandled provider: ${provider}`);
+}
 
-export function isAgentProvider(provider: string | null | undefined): provider is 'claude-code' | 'openai-codex' {
-  return provider === 'claude-code' || provider === 'openai-codex';
+export function isAgentProvider(provider: string | null | undefined): provider is 'claude-code' | 'openai-codex' | 'opencode' {
+  return provider === 'claude-code' || provider === 'openai-codex' || provider === 'opencode';
 }
 
 /**

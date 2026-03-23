@@ -11,6 +11,7 @@ export type SettingsCategory =
   | 'claude'
   | 'openai'
   | 'openai-codex'
+  | 'opencode'
   | 'lmstudio'
   | 'notifications'
   | 'voice-mode'
@@ -59,7 +60,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
 }) => {
   // Get release channel and alpha/beta feature flags from Jotai atoms
   const releaseChannel = useAtomValue(releaseChannelAtom);
-  const alphaFeatures = useAlphaFeatures(['voice-mode', 'claude-plugins', 'collaboration', 'marketplace']);
+  const alphaFeatures = useAlphaFeatures(['voice-mode', 'claude-plugins', 'collaboration', 'marketplace', 'opencode']);
   const getStatusDot = (providerId: string): 'success' | 'warning' | 'error' | undefined => {
     const status = providerStatus[providerId];
     if (!status) return undefined;
@@ -130,6 +131,13 @@ Best for complex coding tasks.`,
           name: 'OpenAI Codex',
           icon: getProviderIcon('openai', { size: 16 }),
           statusDot: getStatusDot('openai-codex'),
+        },
+        {
+          id: 'opencode',
+          name: 'OpenCode',
+          icon: getProviderIcon('opencode', { size: 16 }),
+          statusDot: getStatusDot('opencode'),
+          hidden: !alphaFeatures['opencode'],
         },
       ],
     },

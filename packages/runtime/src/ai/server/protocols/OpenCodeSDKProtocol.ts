@@ -1,0 +1,646 @@
+/**
+ * OpenCode SDK Protocol Adapter
+ *
+ * Wraps the @opencode-ai/sdk to provide a normalized protocol interface
+ * for the OpenCodeProvider.
+ *
+ * OpenCode uses a client/server architecture:
+ * - The server runs as a subprocess (HTTP + SSE)
+ * - The SDK provides a type-safe client
+ * - Events are streamed via Server-Sent Events
+ *
+ * This adapter handles:
+ * - Server subprocess lifecycle (spawn, reference counting, shutdown)
+ * - Session creation/resumption via the SDK
+ * - SSE event parsing and conversion to protocol events
+ * - Custom Nimbalyst plugin integration for file edit tracking
+ */
+
+import { ChildProcess, spawn } from 'child_process';
+import {
+  AgentProtocol,
+  ProtocolSession,
+  SessionOptions,
+  ProtocolMessage,
+  ProtocolEvent,
+  ToolResult,
+} from './ProtocolInterface';
+
+/**
+ * Minimal interface for the OpenCode SDK client.
+ * Matches the actual @opencode-ai/sdk API surface.
+ */
+export interface OpenCodeClientLike {
+  session: {
+    create: (options?: Record<string, unknown>) => Promise<{ data: { id: string; [key: string]: unknown } }>;
+    list: (options?: Record<string, unknown>) => Promise<{ data: Array<{ id: string; [key: string]: unknown }> }>;
+    prompt: (options: Record<string, unknown>) => Promise<unknown>;
+    abort: (options: Record<string, unknown>) => Promise<unknown>;
+  };
+  global: {
+    event: (options?: Record<string, unknown>) => Promise<{
+      stream: AsyncIterable<OpenCodeSSEEvent>;
+    }>;
+  };
+  event: {
+    subscribe: (options?: Record<string, unknown>) => Promise<{
+      stream: AsyncIterable<OpenCodeSSEEvent>;
+    }>;
+  };
+}
+
+/**
+ * SSE event from the OpenCode server.
+ * The real SDK wraps events in a GlobalEvent: { directory, payload: Event }
+ * but we normalize to just the event for simplicity.
+ */
+export interface OpenCodeSSEEvent {
+  type: string;
+  properties?: Record<string, unknown>;
+}
+
+/**
+ * Factory function type for creating OpenCode SDK clients.
+ * Allows dependency injection for testing.
+ */
+export type OpenCodeClientFactory = (options: { baseUrl: string }) => OpenCodeClientLike;
+
+/**
+ * Singleton manager for the OpenCode server subprocess.
+ * Reference-counted: starts on first session, stops when last session ends.
+ */
+class OpenCodeServerManager {
+  private static instance: OpenCodeServerManager | null = null;
+
+  private serverProcess: ChildProcess | null = null;
+  private port: number = 0;
+  private sessionCount = 0;
+  private ready = false;
+  private readyPromise: Promise<void> | null = null;
+  private workspacePath: string = '';
+
+  static getInstance(): OpenCodeServerManager {
+    if (!OpenCodeServerManager.instance) {
+      OpenCodeServerManager.instance = new OpenCodeServerManager();
+    }
+    return OpenCodeServerManager.instance;
+  }
+
+  get baseUrl(): string {
+    return `http://127.0.0.1:${this.port}`;
+  }
+
+  get isRunning(): boolean {
+    return this.serverProcess !== null && this.ready;
+  }
+
+  /**
+   * Ensure the server is running. Spawns it if not already started.
+   * Returns when the server is ready to accept connections.
+   */
+  async ensureRunning(workspacePath: string, env?: Record<string, string>): Promise<void> {
+    this.sessionCount++;
+
+    if (this.ready && this.serverProcess) {
+      return;
+    }
+
+    if (this.readyPromise) {
+      return this.readyPromise;
+    }
+
+    this.workspacePath = workspacePath;
+    this.readyPromise = this.startServer(env);
+    return this.readyPromise;
+  }
+
+  /**
+   * Release a session's reference. Shuts down the server when
+   * all sessions have been released.
+   */
+  release(): void {
+    this.sessionCount = Math.max(0, this.sessionCount - 1);
+    if (this.sessionCount === 0) {
+      this.stopServer();
+    }
+  }
+
+  private async startServer(env?: Record<string, string>): Promise<void> {
+    // Find an available port
+    this.port = await this.findAvailablePort();
+
+    console.log(`[OPENCODE-PROTOCOL] Starting OpenCode server on port ${this.port}`);
+
+    const serverEnv: Record<string, string> = {
+      ...process.env as Record<string, string>,
+      ...(env || {}),
+    };
+
+    this.serverProcess = spawn('opencode', [
+      'serve',
+      '--port', String(this.port),
+      '--hostname', '127.0.0.1',
+    ], {
+      cwd: this.workspacePath,
+      env: serverEnv,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    this.serverProcess.on('error', (error) => {
+      console.error('[OPENCODE-PROTOCOL] Server process error:', error.message);
+      this.ready = false;
+      this.readyPromise = null;
+    });
+
+    this.serverProcess.on('exit', (code, signal) => {
+      console.log(`[OPENCODE-PROTOCOL] Server exited: code=${code}, signal=${signal}`);
+      this.serverProcess = null;
+      this.ready = false;
+      this.readyPromise = null;
+    });
+
+    // Capture stderr for debugging
+    this.serverProcess.stderr?.on('data', (data: Buffer) => {
+      const text = data.toString().trim();
+      if (text) {
+        // console.log('[OPENCODE-PROTOCOL] Server stderr:', text);
+      }
+    });
+
+    // Wait for the server to be ready by polling the health endpoint
+    await this.waitForReady();
+    this.ready = true;
+    this.readyPromise = null;
+  }
+
+  private async waitForReady(timeoutMs = 30000): Promise<void> {
+    const startTime = Date.now();
+    const pollIntervalMs = 200;
+
+    while (Date.now() - startTime < timeoutMs) {
+      try {
+        const response = await fetch(`${this.baseUrl}/global/health`);
+        if (response.ok) {
+          console.log(`[OPENCODE-PROTOCOL] Server ready on port ${this.port}`);
+          return;
+        }
+      } catch {
+        // Server not ready yet
+      }
+      await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+    }
+
+    throw new Error(`OpenCode server failed to start within ${timeoutMs}ms`);
+  }
+
+  private stopServer(): void {
+    if (this.serverProcess) {
+      console.log('[OPENCODE-PROTOCOL] Stopping OpenCode server');
+      this.serverProcess.kill('SIGTERM');
+
+      // Force kill after 5 seconds if still running
+      const forceKillTimeout = setTimeout(() => {
+        if (this.serverProcess) {
+          this.serverProcess.kill('SIGKILL');
+        }
+      }, 5000);
+
+      this.serverProcess.on('exit', () => {
+        clearTimeout(forceKillTimeout);
+      });
+
+      this.serverProcess = null;
+      this.ready = false;
+    }
+  }
+
+  private async findAvailablePort(): Promise<number> {
+    // Use Node.js net module to find a free port
+    const { createServer } = await import('net');
+    return new Promise((resolve, reject) => {
+      const server = createServer();
+      server.listen(0, '127.0.0.1', () => {
+        const address = server.address();
+        if (address && typeof address !== 'string') {
+          const port = address.port;
+          server.close(() => resolve(port));
+        } else {
+          server.close(() => reject(new Error('Failed to get port')));
+        }
+      });
+      server.on('error', reject);
+    });
+  }
+}
+
+/**
+ * Load the @opencode-ai/sdk module dynamically.
+ */
+async function loadOpenCodeSdkModule(): Promise<{ createOpencodeClient: OpenCodeClientFactory }> {
+  try {
+    // Dynamic import -- the SDK is ESM-only so we use the /client subpath
+    const moduleName = '@opencode-ai/sdk/client';
+    const sdkModule = await import(/* webpackIgnore: true */ moduleName);
+    return sdkModule;
+  } catch (error) {
+    throw new Error(
+      'Failed to load @opencode-ai/sdk. Install it with: npm install @opencode-ai/sdk\n' +
+      `Error: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+/**
+ * OpenCode SDK Protocol Adapter
+ *
+ * Provides a normalized interface to the OpenCode SDK, handling:
+ * - Server subprocess lifecycle (singleton, reference-counted)
+ * - Session creation and resumption
+ * - SSE event streaming and parsing
+ * - Custom plugin integration for file edit tracking
+ *
+ * Note: OpenCode does not support session forking. Calling forkSession
+ * will create a new session instead.
+ */
+export class OpenCodeSDKProtocol implements AgentProtocol {
+  readonly platform = 'opencode-sdk';
+
+  private client: OpenCodeClientLike | null = null;
+  private aborted = new Set<string>();
+  private readonly loadSdkModule: () => Promise<{ createOpencodeClient: OpenCodeClientFactory }>;
+
+  /**
+   * @param loadSdkModule - Optional SDK loader for testing
+   */
+  constructor(
+    loadSdkModule?: () => Promise<{ createOpencodeClient: OpenCodeClientFactory }>
+  ) {
+    this.loadSdkModule = loadSdkModule || loadOpenCodeSdkModule;
+  }
+
+  /**
+   * Create a new session
+   */
+  async createSession(options: SessionOptions): Promise<ProtocolSession> {
+    const serverManager = OpenCodeServerManager.getInstance();
+    await serverManager.ensureRunning(options.workspacePath, options.env);
+
+    const client = await this.getClient(serverManager.baseUrl);
+    const result = await client.session.create({
+      body: {},
+      query: { directory: options.workspacePath },
+    });
+
+    const sessionId = result.data?.id ?? (result as any).id;
+    console.log('[OPENCODE-PROTOCOL] Session created:', sessionId);
+
+    return {
+      id: sessionId,
+      platform: this.platform,
+      raw: {
+        options,
+        baseUrl: serverManager.baseUrl,
+      },
+    };
+  }
+
+  /**
+   * Resume an existing session
+   */
+  async resumeSession(sessionId: string, options: SessionOptions): Promise<ProtocolSession> {
+    const serverManager = OpenCodeServerManager.getInstance();
+    await serverManager.ensureRunning(options.workspacePath, options.env);
+
+    console.log('[OPENCODE-PROTOCOL] Resuming session:', sessionId);
+
+    return {
+      id: sessionId,
+      platform: this.platform,
+      raw: {
+        options,
+        baseUrl: serverManager.baseUrl,
+        resume: true,
+      },
+    };
+  }
+
+  /**
+   * Fork an existing session
+   *
+   * OpenCode does not support session forking.
+   * Creates a new session instead.
+   */
+  async forkSession(sessionId: string, options: SessionOptions): Promise<ProtocolSession> {
+    console.warn('[OPENCODE-PROTOCOL] OpenCode does not support session forking. Creating new session instead.');
+    return this.createSession(options);
+  }
+
+  /**
+   * Send a message and receive streaming events
+   *
+   * This method:
+   * 1. Subscribes to SSE events
+   * 2. Sends the prompt via the SDK
+   * 3. Parses SSE events into protocol events
+   * 4. Yields events as they arrive
+   * 5. Completes when the session goes idle
+   */
+  async *sendMessage(
+    session: ProtocolSession,
+    message: ProtocolMessage
+  ): AsyncIterable<ProtocolEvent> {
+    const baseUrl = session.raw?.baseUrl as string;
+    if (!baseUrl) {
+      throw new Error('Invalid session: missing baseUrl');
+    }
+
+    const client = await this.getClient(baseUrl);
+    const sessionId = session.id;
+
+    // Subscribe to SSE events
+    const subscription = await client.event.subscribe({
+      query: { directory: (session.raw?.options as SessionOptions)?.workspacePath },
+    });
+
+    let fullText = '';
+    let usage: { input_tokens: number; output_tokens: number; total_tokens: number } | undefined;
+
+    try {
+      // Send the prompt (non-blocking -- events arrive via SSE)
+      const promptPromise = client.session.prompt({
+        path: { id: sessionId },
+        query: { directory: (session.raw?.options as SessionOptions)?.workspacePath },
+        body: {
+          parts: [{ type: 'text', text: message.content }],
+        },
+      });
+
+      // Process SSE events
+      for await (const rawEvent of subscription.stream) {
+        // The SDK may wrap events in a GlobalEvent: { directory, payload }
+        const event: OpenCodeSSEEvent = (rawEvent as any).payload ?? rawEvent;
+
+        // Check abort
+        if (this.aborted.has(sessionId)) {
+          this.aborted.delete(sessionId);
+          throw new Error('Operation cancelled');
+        }
+
+        // Emit raw event for persistence
+        yield {
+          type: 'raw_event',
+          metadata: { rawEvent: event },
+        };
+
+        // Parse and yield protocol events
+        const protocolEvents = this.parseSSEEvent(event, sessionId);
+        for (const protocolEvent of protocolEvents) {
+          if (protocolEvent.type === 'text' && protocolEvent.content) {
+            fullText += protocolEvent.content;
+          }
+          if (protocolEvent.type === 'usage' && protocolEvent.usage) {
+            usage = protocolEvent.usage;
+          }
+          yield protocolEvent;
+
+          // Session idle means the agent is done
+          if (protocolEvent.type === 'complete') {
+            return;
+          }
+        }
+      }
+
+      // Wait for prompt to complete if it hasn't already
+      await promptPromise;
+
+      // Emit completion event
+      yield {
+        type: 'complete',
+        content: fullText,
+        usage: usage ?? { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isAbort = this.aborted.has(sessionId) || /abort|cancel/i.test(errorMessage);
+
+      if (!isAbort) {
+        yield {
+          type: 'error',
+          error: errorMessage,
+        };
+      }
+    }
+  }
+
+  /**
+   * Abort an active session
+   */
+  abortSession(session: ProtocolSession): void {
+    this.aborted.add(session.id);
+    // Also call the server abort endpoint
+    this.getClientIfReady()?.session.abort({
+      path: { id: session.id },
+      query: { directory: (session.raw?.options as SessionOptions)?.workspacePath },
+    }).catch(() => {});
+  }
+
+  /**
+   * Clean up session resources
+   */
+  cleanupSession(session: ProtocolSession): void {
+    this.aborted.delete(session.id);
+    // Release server reference
+    OpenCodeServerManager.getInstance().release();
+  }
+
+  /**
+   * Parse an OpenCode SSE event into protocol events.
+   * Filters events to only the target session.
+   */
+  private parseSSEEvent(event: OpenCodeSSEEvent, targetSessionId: string): ProtocolEvent[] {
+    const events: ProtocolEvent[] = [];
+    const props = event.properties || {};
+
+    // Filter events by session ID if present
+    // sessionID may be at top level (session.idle, session.error) or inside part (message.part.updated)
+    const eventSessionId = (props.sessionID as string | undefined)
+      || ((props.part as Record<string, unknown> | undefined)?.sessionID as string | undefined);
+    if (eventSessionId && eventSessionId !== targetSessionId) {
+      return events;
+    }
+
+    switch (event.type) {
+      // Text/reasoning content updates
+      case 'message.part.updated': {
+        const part = props.part as Record<string, unknown> | undefined;
+        const delta = props.delta as string | undefined;
+        if (!part) break;
+
+        const partType = part.type as string;
+
+        if (partType === 'text') {
+          // Use delta for incremental text, fall back to full text
+          const content = delta ?? (part.text as string);
+          if (content) {
+            events.push({ type: 'text', content });
+          }
+        } else if (partType === 'reasoning') {
+          const content = delta ?? (part.text as string);
+          if (content) {
+            events.push({ type: 'reasoning', content });
+          }
+        } else if (partType === 'tool') {
+          // Tool part -- represents a tool call with state transitions
+          // Real SDK uses `status` field: pending -> running -> completed | error
+          const toolName = part.tool as string || 'unknown';
+          const callId = part.callID as string || part.id as string;
+          const state = part.state as Record<string, unknown> | undefined;
+          const stateStatus = (state?.status as string) || (state?.type as string);
+
+          if (stateStatus === 'running') {
+            // Emit tool_call -- this is the pre-edit signal.
+            // The provider/file tracker should snapshot the target file NOW
+            // before the tool modifies it.
+            events.push({
+              type: 'tool_call',
+              toolCall: {
+                ...(callId ? { id: callId } : {}),
+                name: toolName,
+                arguments: (state as any)?.input as Record<string, unknown> || {},
+              },
+              metadata: {
+                preEdit: true,
+              },
+            });
+          } else if (stateStatus === 'completed' || stateStatus === 'error') {
+            const result: ToolResult = {
+              success: stateStatus === 'completed',
+              result: (state as any)?.output,
+              ...(stateStatus === 'error' ? { error: (state as any)?.error || 'Tool execution failed' } : {}),
+            };
+            events.push({
+              type: 'tool_result',
+              toolResult: {
+                ...(callId ? { id: callId } : {}),
+                name: toolName,
+                result,
+              },
+              metadata: {
+                postEdit: true,
+              },
+            });
+          }
+        }
+        break;
+      }
+
+      // Incremental text/reasoning updates (delta streaming)
+      case 'message.part.delta': {
+        const delta = props.delta as string | undefined;
+        const field = props.field as string | undefined;
+        if (delta && field === 'text') {
+          // Could be text or reasoning -- we need the part type to know.
+          // Default to text since that's most common; reasoning parts are
+          // typically delivered through message.part.updated with full text.
+          events.push({ type: 'text', content: delta });
+        }
+        break;
+      }
+
+      // File edited notification
+      case 'file.edited': {
+        const filePath = props.file as string;
+        if (filePath) {
+          events.push({
+            type: 'tool_call',
+            toolCall: {
+              name: 'file_edit',
+              arguments: { file_path: filePath },
+            },
+            metadata: {
+              isFileEditNotification: true,
+            },
+          });
+        }
+        break;
+      }
+
+      // Session completed/idle
+      case 'session.idle': {
+        events.push({
+          type: 'complete',
+          content: '',
+        });
+        break;
+      }
+
+      // Session error
+      case 'session.error': {
+        const errorObj = props.error as Record<string, unknown> | string | undefined;
+        let errorMsg: string;
+        if (typeof errorObj === 'string') {
+          errorMsg = errorObj;
+        } else if (errorObj && typeof errorObj === 'object') {
+          errorMsg = (errorObj as any).message || (errorObj as any).type || 'Unknown error';
+        } else {
+          errorMsg = 'Unknown error';
+        }
+        events.push({
+          type: 'error',
+          error: errorMsg,
+        });
+        break;
+      }
+
+      // Permission request
+      case 'permission.updated': {
+        // Permission requests are handled by the provider layer
+        // Pass through as raw event
+        break;
+      }
+
+      // Session status transitions
+      case 'session.status': {
+        const status = props.status as Record<string, unknown> | string | undefined;
+        const statusType = typeof status === 'object' ? (status?.type as string) : status;
+        if (statusType === 'busy') {
+          // Session is actively processing -- could emit planning_mode_entered
+          // but OpenCode doesn't distinguish planning vs execution
+        }
+        break;
+      }
+
+      // Todo/planning updates
+      case 'todo.updated': {
+        // Pass through as raw event - the provider layer can use this
+        break;
+      }
+
+      default:
+        // Unknown event types are captured via the raw_event yield above
+        break;
+    }
+
+    return events;
+  }
+
+  /**
+   * Get or create the SDK client
+   */
+  private async getClient(baseUrl: string): Promise<OpenCodeClientLike> {
+    if (this.client) {
+      return this.client;
+    }
+
+    const sdkModule = await this.loadSdkModule();
+    this.client = sdkModule.createOpencodeClient({ baseUrl });
+    return this.client;
+  }
+
+  /**
+   * Get the client if already initialized (non-async, for abort)
+   */
+  private getClientIfReady(): OpenCodeClientLike | null {
+    return this.client;
+  }
+}

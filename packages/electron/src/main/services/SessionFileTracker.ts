@@ -43,8 +43,18 @@ function extractFileMentions(message: string): string[] {
  * Determine link type based on tool name
  */
 function getLinkTypeForTool(toolName: string): FileLinkType | null {
-  const editTools = ['Write', 'Edit', 'NotebookEdit', 'writeFile', 'editFile', 'applyDiff', 'streamContent', 'Bash', 'file_change'];
-  const readTools = ['Read', 'Glob', 'Grep', 'readFile', 'searchFiles', 'listFiles', 'getDocumentContent'];
+  const editTools = [
+    'Write', 'Edit', 'NotebookEdit', 'writeFile', 'editFile', 'applyDiff', 'streamContent', 'Bash', 'file_change',
+    // OpenCode tool names (short names from real SDK: edit, write, patch, shell)
+    'file_write', 'file_edit', 'file_create', 'shell', 'patch',
+    'edit', 'write', 'create',
+  ];
+  const readTools = [
+    'Read', 'Glob', 'Grep', 'readFile', 'searchFiles', 'listFiles', 'getDocumentContent',
+    // OpenCode tool names (short names from real SDK: read, list, search)
+    'file_read', 'file_list', 'file_search',
+    'read', 'list', 'search',
+  ];
 
   if (editTools.includes(toolName)) {
     return 'edited';
@@ -68,12 +78,12 @@ function extractEditMetadata(toolName: string, args: any, result: any): EditedFi
   };
 
   // Determine operation type
-  if (toolName === 'Write' || toolName === 'writeFile') {
+  if (toolName === 'Write' || toolName === 'writeFile' || toolName === 'file_write' || toolName === 'file_create') {
     metadata.operation = 'create';
-  } else if (toolName === 'Edit' || toolName === 'editFile' || toolName === 'applyDiff') {
+  } else if (toolName === 'Edit' || toolName === 'editFile' || toolName === 'applyDiff' || toolName === 'file_edit' || toolName === 'patch') {
     metadata.operation = 'edit';
-  } else if (toolName === 'Bash') {
-    // For Bash, store the command for reference
+  } else if (toolName === 'Bash' || toolName === 'shell') {
+    // For Bash/shell, store the command for reference
     metadata.operation = 'bash';
     if (args?.command) {
       metadata.bashCommand = args.command.slice(0, 200); // Store first 200 chars
@@ -199,10 +209,10 @@ export class SessionFileTracker {
         return;
       }
 
-      // Bash commands are intentionally not parsed for file operations.
+      // Bash/shell commands are intentionally not parsed for file operations.
       // Watcher-based attribution is responsible for detecting and attributing
       // file edits caused by shell commands.
-      if (toolName === 'Bash') {
+      if (toolName === 'Bash' || toolName === 'shell') {
         const rawCommand = args?.command;
         if (!rawCommand || typeof rawCommand !== 'string') {
           logger.main.debug('[SessionFileTracker] No command found in Bash args');

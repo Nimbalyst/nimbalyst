@@ -73,6 +73,12 @@ export const ALPHA_FEATURES: readonly AlphaFeatureDefinition[] = [
     description: 'Browse, install, and manage extensions from the marketplace.',
     icon: 'storefront',
   },
+  {
+    tag: 'opencode',
+    name: 'OpenCode Agent',
+    description: 'Enable the open source OpenCode coding agent with multi-model support.',
+    icon: 'code',
+  },
 ] as const;
 
 /**

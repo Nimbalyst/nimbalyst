@@ -43,6 +43,13 @@ const CUSTOM_ICONS: Record<string, (size: number, className: string) => React.Re
     </svg>
   ),
 
+  // OpenCode logo (pixel-art style from opencode wordmark)
+  'opencode': (size, className) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className}>
+      <path d="M4 4h16v16H4V4zm3 3v10h10V7H7z"/>
+    </svg>
+  ),
+
   // LMStudio logo
   'lmstudio': (size, className) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" fillRule="evenodd" className={className}>

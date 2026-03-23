@@ -124,6 +124,7 @@ export function ModelSelector({
       case 'claude-code':
       case 'openai':
       case 'openai-codex':
+      case 'opencode':
       case 'lmstudio':
         return provider;
       default:
@@ -163,6 +164,7 @@ export function ModelSelector({
       case 'claude-code': return 'Claude Agent (Claude Code Based)';
       case 'openai': return 'OpenAI';
       case 'openai-codex': return 'OpenAI Codex';
+      case 'opencode': return 'OpenCode';
       case 'lmstudio': return 'LMStudio';
       default: return provider;
     }
@@ -184,7 +186,7 @@ export function ModelSelector({
 
   // Group providers by type (agents vs models)
   const groupedProviders = Object.entries(models).reduce((acc, [provider, providerModels]) => {
-    const isAgent = provider === 'claude-code' || provider === 'openai-codex';
+    const isAgent = isAgentProvider(provider);
     const type = isAgent ? 'agents' : 'models';
     if (!acc[type]) acc[type] = {};
     acc[type][provider] = providerModels;

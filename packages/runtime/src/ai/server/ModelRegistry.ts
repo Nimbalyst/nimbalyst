@@ -2,7 +2,7 @@
  * Registry of available AI models with dynamic fetching
  */
 
-import { AIModel, AIProviderType, ModelIdentifier } from './types';
+import { AIModel, AIProviderType, ModelIdentifier, assertExhaustiveProvider } from './types';
 
 export class ModelRegistry {
   private static cachedModels: Map<AIProviderType, AIModel[]> = new Map();
@@ -56,12 +56,18 @@ export class ModelRegistry {
           const { OpenAICodexProvider } = await import('./providers/OpenAICodexProvider');
           models = await OpenAICodexProvider.getModels(apiKey);
           break;
+        case 'opencode':
+          const { OpenCodeProvider } = await import('./providers/OpenCodeProvider');
+          models = await OpenCodeProvider.getModels();
+          break;
         case 'lmstudio':
           // Try to fetch models from LMStudio
           // The provider will return empty array if LMStudio is not running
           const { LMStudioProvider } = await import('./providers/LMStudioProvider');
           models = await LMStudioProvider.getModels(baseUrl || 'http://127.0.0.1:1234');
           break;
+        default:
+          assertExhaustiveProvider(provider);
       }
 
       // Update cache
@@ -94,6 +100,7 @@ export class ModelRegistry {
     if (shouldFetch('claude-code')) promises.push(this.getModelsForProvider('claude-code'));
     if (shouldFetch('openai')) promises.push(this.getModelsForProvider('openai', apiKeys['openai']));
     if (shouldFetch('openai-codex')) promises.push(this.getModelsForProvider('openai-codex', apiKeys['openai']));
+    if (shouldFetch('opencode')) promises.push(this.getModelsForProvider('opencode'));
     if (shouldFetch('lmstudio')) promises.push(this.getModelsForProvider('lmstudio', undefined, apiKeys['lmstudio_url']));
 
     const results = await Promise.allSettled(promises);
@@ -124,11 +131,14 @@ export class ModelRegistry {
       case 'openai-codex':
         const { OpenAICodexProvider } = await import('./providers/OpenAICodexProvider');
         return OpenAICodexProvider.getDefaultModel();
+      case 'opencode':
+        const { OpenCodeProvider: OCP } = await import('./providers/OpenCodeProvider');
+        return OCP.DEFAULT_MODEL;
       case 'lmstudio':
         const { LMStudioProvider } = await import('./providers/LMStudioProvider');
         return LMStudioProvider.getDefaultModel();
       default:
-        return '';
+        assertExhaustiveProvider(provider);
     }
   }
 

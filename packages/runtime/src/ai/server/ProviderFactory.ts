@@ -8,7 +8,8 @@ import { ClaudeCodeProvider } from './providers/ClaudeCodeProvider';
 import { OpenAIProvider } from './providers/OpenAIProvider';
 import { OpenAICodexProvider } from './providers/OpenAICodexProvider';
 import { LMStudioProvider } from './providers/LMStudioProvider';
-import { ProviderConfig, AIProviderType } from './types';
+import { OpenCodeProvider } from './providers/OpenCodeProvider';
+import { ProviderConfig, AIProviderType, assertExhaustiveProvider } from './types';
 
 export class ProviderFactory {
   private static providers: Map<string, AIProvider> = new Map();
@@ -60,11 +61,14 @@ export class ProviderFactory {
       case 'openai-codex':
         provider = new OpenAICodexProvider();
         break;
+      case 'opencode':
+        provider = new OpenCodeProvider();
+        break;
       case 'lmstudio':
         provider = new LMStudioProvider();
         break;
       default:
-        throw new Error(`Unknown provider type: ${type}`);
+        assertExhaustiveProvider(type);
     }
     
     // Cache the provider

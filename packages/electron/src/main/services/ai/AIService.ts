@@ -7,7 +7,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { safeHandle } from '../../utils/ipcRegistry';
 import Store from 'electron-store';
-import { SessionManager, ProviderFactory, ModelRegistry, AIProvider, isAskUserQuestionProvider, ClaudeCodeProvider, OpenAICodexProvider } from '@nimbalyst/runtime/ai/server';
+import { SessionManager, ProviderFactory, ModelRegistry, AIProvider, isAskUserQuestionProvider, isAgentProvider, ClaudeCodeProvider, OpenAICodexProvider } from '@nimbalyst/runtime/ai/server';
 import { getSessionStateManager } from '@nimbalyst/runtime/ai/server/SessionStateManager';
 import { parseContextUsageMessage } from '@nimbalyst/runtime/ai/server/utils/contextUsage';
 import { isBedrockToolSearchError } from '@nimbalyst/runtime/ai/server/utils/errorDetection';
@@ -38,6 +38,7 @@ import { TrayManager } from '../../tray/TrayManager';
 import { logger } from '../../utils/logger';
 import { windowStates, findWindowByWorkspace, getWindowId } from '../../window/WindowManager';
 import { sessionFileTracker } from '../SessionFileTracker';
+import { extractFilePath } from './tools/extractFilePath';
 import { toolCallMatcher, unwrapShellCommand } from '../ToolCallMatcher';
 import { workspaceFileEditAttributionService } from '../WorkspaceFileEditAttributionService';
 import {AnalyticsService} from "../analytics/AnalyticsService.ts";
@@ -1709,6 +1710,9 @@ export class AIService {
         case 'openai-codex':
           // Codex SDK uses its own auth (codex auth login), API key is optional
           break;
+        case 'opencode':
+          // OpenCode uses its own config, API key is optional
+          break;
         case 'lmstudio':
           // LMStudio doesn't need an API key, just the base URL
           break;
@@ -1977,7 +1981,7 @@ export class AIService {
       // For worktree sessions, use the parent project path for permission lookups
       // This is passed through documentContext to avoid changing sendMessage signature
       let permissionsPath = session.worktreeProjectPath || effectiveWorkspacePath;
-      if (session.provider === 'openai-codex') {
+      if (isAgentProvider(session.provider)) {
         await this.ensureCodexSessionWatcher(session.id, effectiveWorkspacePath, event);
       }
 
@@ -2069,6 +2073,10 @@ export class AIService {
             break;
           case 'openai-codex':
             // Codex SDK uses its own auth (codex auth login), API key is optional
+            requiresApiKey = false;
+            break;
+          case 'opencode':
+            // OpenCode uses its own config, API key is optional
             requiresApiKey = false;
             break;
           case 'lmstudio':
@@ -2675,7 +2683,7 @@ export class AIService {
 
         // Start file snapshot cache + watcher for agentic sessions (diff support)
         // Only start once per session; persists across turns
-        if ((session.provider === 'openai-codex' || session.provider === 'claude-code')
+        if (isAgentProvider(session.provider)
           && effectiveWorkspacePath
         ) {
           try {
@@ -2779,6 +2787,40 @@ export class AIService {
                       toolUseId,
                       window  // Pass window to enable file watcher attachment for edited files
                     );
+
+                    // Create pre-edit tags for OpenCode file-editing tools.
+                    // OpenCode emits tool_call with status='running' BEFORE the file is modified,
+                    // so we can snapshot the current disk content as the before-state.
+                    // Tool names: edit, write, create (with filePath in arguments)
+                    const OPENCODE_EDIT_TOOLS = ['edit', 'write', 'create'];
+                    if (OPENCODE_EDIT_TOOLS.includes(trackToolName) && session.provider === 'opencode') {
+                      const editFilePath = extractFilePath(trackArgs);
+                      const watcherEntry = this.codexSessionWatchers.get(session.id);
+                      if (editFilePath && watcherEntry) {
+                        try {
+                          let beforeContent = await watcherEntry.cache.getBeforeState(editFilePath);
+                          if (beforeContent === null) {
+                            // File not in cache -- read from disk (file hasn't been modified yet
+                            // because OpenCode sends running state before executing the tool)
+                            beforeContent = await readFileContentOrNull(editFilePath) ?? '';
+                          }
+                          const editToolUseId = toolUseId || `opencode-edit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                          const tagId = `ai-edit-pending-${session.id}-${editToolUseId}`;
+                          await historyManager.createTag(
+                            editFilePath,
+                            tagId,
+                            beforeContent,
+                            session.id,
+                            editToolUseId
+                          );
+                        } catch (preEditError) {
+                          const errorStr = String(preEditError);
+                          if (!errorStr.includes('unique') && !errorStr.includes('UNIQUE') && !errorStr.includes('duplicate')) {
+                            logger.ai.error('[AIService] Failed to create pre-edit tag for OpenCode edit:', preEditError);
+                          }
+                        }
+                      }
+                    }
 
                     // Fallback for Bash edits in ignored/unwatched paths.
                     // Codex emits both item.started and item.completed for command_execution;
@@ -4902,9 +4944,10 @@ export class AIService {
           break;
         case 'openai-codex':
           apiKey = apiKeys['openai-codex'];
-          if (!apiKey) {
-            return { success: false, error: 'OpenAI API key not configured' };
-          }
+          break;
+        case 'opencode':
+          // OpenCode: API key is optional, uses its own config
+          apiKey = apiKeys['opencode'] || 'not-required';
           break;
         case 'lmstudio':
           // LMStudio doesn't need an API key, just test the connection
@@ -4924,7 +4967,7 @@ export class AIService {
         // For OpenAI Codex, run a real SDK request to validate credentials and connectivity
         if (provider === 'openai-codex') {
           const defaultModel = await ModelRegistry.getDefaultModel('openai-codex');
-          const testProvider = new OpenAICodexProvider();
+          const testProvider = new OpenAICodexProvider(apiKey ? { apiKey } : undefined);
           const windowState = windowStates.get(event.sender.id);
           const effectiveWorkspacePath =
             workspacePath || windowState?.workspacePath;
@@ -4937,9 +4980,9 @@ export class AIService {
           }
 
           await testProvider.initialize({
-            apiKey,
             model: defaultModel,
             maxTokens: 256,
+            ...(apiKey ? { apiKey } : {}),
           });
 
           let sawResponse = false;
@@ -4970,6 +5013,25 @@ export class AIService {
           }
 
           return { success: true, provider };
+        }
+
+        // For OpenCode, verify the CLI is installed
+        if (provider === 'opencode') {
+          try {
+            const { execSync } = await import('child_process');
+            const version = execSync('opencode --version', {
+              encoding: 'utf8',
+              timeout: 5000,
+              env: process.env as Record<string, string>,
+              stdio: ['pipe', 'pipe', 'pipe'],
+            }).trim();
+            return { success: true, provider, version };
+          } catch {
+            return {
+              success: false,
+              error: 'OpenCode CLI not found. Install it with: npm i -g opencode',
+            };
+          }
         }
 
         // For Claude providers, test the API connection
@@ -5058,6 +5120,7 @@ export class AIService {
       if (providerSettings['claude-code']?.enabled !== false) enabledSet.add('claude-code');
       if (providerSettings['openai']?.enabled === true && !!(apiKeys['openai'] || process.env.OPENAI_API_KEY)) enabledSet.add('openai');
       if (providerSettings['openai-codex']?.enabled === true) enabledSet.add('openai-codex');
+      if (providerSettings['opencode']?.enabled === true) enabledSet.add('opencode');
       if (providerSettings['lmstudio']?.enabled === true) enabledSet.add('lmstudio');
 
       const modelsConfig = {

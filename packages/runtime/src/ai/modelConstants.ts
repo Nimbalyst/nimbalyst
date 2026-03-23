@@ -162,4 +162,5 @@ export const DEFAULT_MODELS = {
   'claude-code': 'claude-code:opus-1m',
   'openai-codex': 'openai-codex:gpt-5.4',
   lmstudio: 'lmstudio:local-model',
+  opencode: 'opencode:default',
 };

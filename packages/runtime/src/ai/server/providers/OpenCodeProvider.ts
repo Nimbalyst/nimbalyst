@@ -1,0 +1,399 @@
+/**
+ * OpenCode Agent Provider
+ *
+ * Integrates the open source OpenCode coding agent into Nimbalyst.
+ * OpenCode runs as a local HTTP+SSE server, and we communicate
+ * via the @opencode-ai/sdk client library.
+ *
+ * Key features:
+ * - Server subprocess lifecycle management (via OpenCodeSDKProtocol)
+ * - SSE event streaming with protocol event normalization
+ * - File edit tracking via custom OpenCode plugin hooks
+ * - MCP server passthrough to OpenCode's configuration
+ * - Multi-model support (Claude, OpenAI, Gemini, local models)
+ */
+
+import { BaseAgentProvider } from './BaseAgentProvider';
+import { buildUserMessageAddition } from './documentContextUtils';
+import { buildClaudeCodeSystemPrompt } from '../../prompt';
+import { DEFAULT_MODELS } from '../../modelConstants';
+import {
+  ProviderConfig,
+  DocumentContext,
+  StreamChunk,
+  Message,
+  ProviderCapabilities,
+  AIModel,
+  AIProviderType,
+  ChatAttachment,
+} from '../types';
+import { OpenCodeSDKProtocol } from '../protocols/OpenCodeSDKProtocol';
+import { McpConfigService } from '../services/McpConfigService';
+import { MCPServerConfig } from '../../../types/MCPServerConfig';
+import { safeJSONSerialize } from '../../../utils/serialization';
+
+interface OpenCodeProviderDeps {
+  protocol?: OpenCodeSDKProtocol;
+}
+
+export class OpenCodeProvider extends BaseAgentProvider {
+  static readonly DEFAULT_MODEL = DEFAULT_MODELS['opencode'];
+
+  private readonly protocol: OpenCodeSDKProtocol;
+  private readonly mcpConfigService: McpConfigService;
+
+  // Analytics initialization data, captured during first sendMessage call
+  private _initData: {
+    model: string;
+    mcpServerCount: number;
+    isResumedSession: boolean;
+  } | null = null;
+
+  // Shared MCP server ports (injected from electron main process)
+  private static mcpServerPort: number | null = null;
+  private static sessionNamingServerPort: number | null = null;
+  private static extensionDevServerPort: number | null = null;
+  private static superLoopProgressServerPort: number | null = null;
+  private static sessionContextServerPort: number | null = null;
+
+  // MCP config loader (injected from electron main process)
+  private static mcpConfigLoader: ((workspacePath?: string) => Promise<Record<string, MCPServerConfig>>) | null = null;
+
+  // Shell environment loader (injected from electron main process)
+  private static shellEnvironmentLoader: (() => Record<string, string> | null) | null = null;
+
+  // Enhanced PATH loader (injected from electron main process)
+  private static enhancedPathLoader: (() => string) | null = null;
+
+  constructor(deps?: OpenCodeProviderDeps) {
+    super();
+
+    // Initialize protocol (or use injected for testing)
+    this.protocol = deps?.protocol || new OpenCodeSDKProtocol();
+
+    // Initialize MCP config service
+    this.mcpConfigService = new McpConfigService({
+      mcpServerPort: OpenCodeProvider.mcpServerPort,
+      sessionNamingServerPort: OpenCodeProvider.sessionNamingServerPort,
+      extensionDevServerPort: OpenCodeProvider.extensionDevServerPort,
+      superLoopProgressServerPort: OpenCodeProvider.superLoopProgressServerPort,
+      sessionContextServerPort: OpenCodeProvider.sessionContextServerPort,
+      mcpConfigLoader: OpenCodeProvider.mcpConfigLoader,
+      extensionPluginsLoader: null,
+      claudeSettingsEnvLoader: null,
+      shellEnvironmentLoader: OpenCodeProvider.shellEnvironmentLoader,
+    });
+  }
+
+  async initialize(config: ProviderConfig): Promise<void> {
+    this.config = config;
+  }
+
+  getProviderName(): string {
+    return 'opencode';
+  }
+
+  // Static injection setters (called from electron main process at startup)
+  public static setMcpServerPort(port: number | null): void {
+    OpenCodeProvider.mcpServerPort = port;
+  }
+
+  public static setSessionNamingServerPort(port: number | null): void {
+    OpenCodeProvider.sessionNamingServerPort = port;
+  }
+
+  public static setExtensionDevServerPort(port: number | null): void {
+    OpenCodeProvider.extensionDevServerPort = port;
+  }
+
+  public static setSuperLoopProgressServerPort(port: number | null): void {
+    OpenCodeProvider.superLoopProgressServerPort = port;
+  }
+
+  public static setSessionContextServerPort(port: number | null): void {
+    OpenCodeProvider.sessionContextServerPort = port;
+  }
+
+  public static setMcpConfigLoader(loader: ((workspacePath?: string) => Promise<Record<string, MCPServerConfig>>) | null): void {
+    OpenCodeProvider.mcpConfigLoader = loader;
+  }
+
+  public static setShellEnvironmentLoader(loader: (() => Record<string, string> | null) | null): void {
+    OpenCodeProvider.shellEnvironmentLoader = loader;
+  }
+
+  public static setEnhancedPathLoader(loader: (() => string) | null): void {
+    OpenCodeProvider.enhancedPathLoader = loader;
+  }
+
+  getDisplayName(): string {
+    return 'OpenCode';
+  }
+
+  getDescription(): string {
+    return 'OpenCode open source coding agent with multi-model support';
+  }
+
+  getProviderSessionData(sessionId: string): any {
+    const { providerSessionId } = this.sessions.getProviderSessionData(sessionId);
+    return {
+      providerSessionId,
+      openCodeSessionId: providerSessionId,
+    };
+  }
+
+  /**
+   * Get initialization data for analytics tracking.
+   */
+  getInitData(): typeof this._initData {
+    return this._initData;
+  }
+
+  getCapabilities(): ProviderCapabilities {
+    return {
+      streaming: true,
+      tools: true,
+      mcpSupport: true,
+      edits: true,
+      resumeSession: true,
+      supportsFileTools: true,
+    };
+  }
+
+  /**
+   * Get available models from OpenCode.
+   * OpenCode supports multiple providers (Claude, OpenAI, Gemini, local),
+   * so models depend on user configuration.
+   */
+  static async getModels(): Promise<AIModel[]> {
+    return [
+      {
+        id: 'opencode:default',
+        name: 'Default (OpenCode configured)',
+        provider: 'opencode' as AIProviderType,
+      },
+      {
+        id: 'opencode:claude-sonnet',
+        name: 'Claude Sonnet (via OpenCode)',
+        provider: 'opencode' as AIProviderType,
+      },
+      {
+        id: 'opencode:gpt-5',
+        name: 'GPT-5 (via OpenCode)',
+        provider: 'opencode' as AIProviderType,
+      },
+      {
+        id: 'opencode:gemini-pro',
+        name: 'Gemini Pro (via OpenCode)',
+        provider: 'opencode' as AIProviderType,
+      },
+    ];
+  }
+
+  /**
+   * Build environment variables for the OpenCode server subprocess.
+   */
+  private static buildOpenCodeEnvironment(): Record<string, string> | undefined {
+    const shellEnv = OpenCodeProvider.shellEnvironmentLoader?.();
+    const enhancedPath = OpenCodeProvider.enhancedPathLoader?.();
+
+    if (!shellEnv && !enhancedPath) {
+      return undefined;
+    }
+
+    const env: Record<string, string> = {};
+
+    if (shellEnv) {
+      Object.assign(env, shellEnv);
+    }
+
+    if (enhancedPath) {
+      env.PATH = enhancedPath;
+    }
+
+    return env;
+  }
+
+  /**
+   * Build system prompt for the OpenCode session.
+   */
+  protected buildSystemPrompt(_documentContext?: DocumentContext): string {
+    return buildClaudeCodeSystemPrompt({
+      hasSessionNaming: !!OpenCodeProvider.sessionNamingServerPort,
+      toolReferenceStyle: 'opencode' as any,
+    });
+  }
+
+  async *sendMessage(
+    message: string,
+    documentContext?: DocumentContext,
+    sessionId?: string,
+    messages?: Message[],
+    workspacePath?: string,
+    attachments?: ChatAttachment[]
+  ): AsyncIterableIterator<StreamChunk> {
+    if (!workspacePath) {
+      yield { type: 'error', error: '[OpenCodeProvider] workspacePath is required but was not provided' };
+      return;
+    }
+
+    const systemPrompt = this.buildSystemPrompt(documentContext);
+    const { userMessageAddition, messageWithContext } = buildUserMessageAddition(message, documentContext);
+
+    // Emit prompt additions for UI
+    if (sessionId && (systemPrompt || userMessageAddition)) {
+      this.emit('promptAdditions', {
+        sessionId,
+        systemPromptAddition: systemPrompt || null,
+        userMessageAddition,
+        attachments: [],
+        timestamp: Date.now(),
+      });
+    }
+
+    if (sessionId) {
+      await this.logAgentMessageBestEffort(sessionId, 'input', messageWithContext);
+    }
+
+    const abortController = new AbortController();
+    this.abortController = abortController;
+
+    let fullText = '';
+
+    try {
+      // Get or create protocol session
+      const existingSessionId = this.sessions.getSessionId(sessionId || '');
+      console.log('[OPENCODE] Session lookup:', {
+        sessionId,
+        existingSessionId,
+        action: existingSessionId ? 'RESUME' : 'CREATE'
+      });
+
+      const mcpServers = await this.mcpConfigService.getMcpServersConfig({ sessionId, workspacePath });
+      const env = OpenCodeProvider.buildOpenCodeEnvironment();
+
+      const sessionOptions = {
+        workspacePath,
+        model: this.config?.model || 'default',
+        mcpServers,
+        env,
+        raw: {
+          systemPrompt,
+          abortSignal: abortController.signal,
+        },
+      };
+
+      const isResumedSession = !!existingSessionId;
+      const session = isResumedSession
+        ? await this.protocol.resumeSession(existingSessionId, sessionOptions)
+        : await this.protocol.createSession(sessionOptions);
+
+      // Store initialization data for analytics
+      this._initData = {
+        model: this.config?.model || 'default',
+        mcpServerCount: Object.keys(mcpServers).length,
+        isResumedSession,
+      };
+
+      console.log('[OPENCODE] Session after create/resume:', {
+        sessionId,
+        protocolSessionId: session.id,
+        existingSessionId
+      });
+
+      // Send message using protocol
+      for await (const event of this.protocol.sendMessage(session, {
+        content: messageWithContext,
+        attachments,
+        sessionId,
+        mode: documentContext?.mode || 'agent',
+      })) {
+        if (abortController.signal.aborted) {
+          throw new Error('Operation cancelled');
+        }
+
+        // Store raw events for persistence
+        if (sessionId && event.type === 'raw_event') {
+          const serialized = safeJSONSerialize(event.metadata);
+          const serializedStr = typeof serialized === 'string' ? serialized : JSON.stringify(serialized);
+          await this.logAgentMessageBestEffort(sessionId, 'output', serializedStr, {
+            metadata: { eventType: 'raw_event', openCodeProvider: true },
+            hidden: true,
+            searchable: false,
+          });
+        }
+
+        // Convert protocol events to stream chunks
+        if (event.type === 'error') {
+          yield { type: 'error', error: event.error };
+        } else if (event.type === 'raw_event') {
+          // Persisted above, not rendered
+        } else if (event.type === 'reasoning') {
+          // Stored but not part of visible stream
+        } else if (event.type === 'text') {
+          fullText += event.content;
+          yield { type: 'text', content: event.content };
+        } else if (event.type === 'tool_call') {
+          if (event.toolCall) {
+            yield { type: 'tool_call', toolCall: event.toolCall };
+          }
+        } else if (event.type === 'tool_result') {
+          if (event.toolResult) {
+            yield {
+              type: 'tool_call',
+              toolCall: {
+                id: event.toolResult.id,
+                name: event.toolResult.name,
+                result: event.toolResult.result,
+              },
+            };
+          }
+        } else if (event.type === 'planning_mode_entered') {
+          yield { type: 'text', content: '\n[Entering planning mode]\n' };
+        } else if (event.type === 'planning_mode_exited') {
+          yield { type: 'text', content: '\n[Exiting planning mode]\n' };
+        } else if (event.type === 'complete') {
+          yield {
+            type: 'complete',
+            content: event.content,
+            isComplete: true,
+            usage: event.usage,
+            ...(event.contextFillTokens !== undefined ? { contextFillTokens: event.contextFillTokens } : {}),
+            ...(event.contextWindow !== undefined ? { contextWindow: event.contextWindow } : {}),
+          };
+        }
+      }
+
+      // Capture session ID after stream completes
+      if (sessionId && session.id) {
+        if (session.id !== existingSessionId) {
+          console.log('[OPENCODE] Saving provider session ID:', {
+            nimbalystSessionId: sessionId,
+            openCodeSessionId: session.id,
+          });
+          this.sessions.setProviderSessionData(sessionId, {
+            providerSessionId: session.id,
+          });
+        }
+      }
+
+      // Log output
+      if (sessionId && fullText) {
+        await this.logAgentMessageBestEffort(sessionId, 'output', fullText);
+      }
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isAbort = abortController.signal.aborted || /abort|cancel/i.test(errorMessage);
+
+      if (!isAbort) {
+        console.error('[OPENCODE] Error in sendMessage:', errorMessage);
+        yield { type: 'error', error: errorMessage };
+      }
+    } finally {
+      if (this.abortController === abortController) {
+        this.abortController = null;
+      }
+    }
+  }
+}

@@ -10,6 +10,7 @@ import { ClaudePanel } from '../GlobalSettings/panels/ClaudePanel';
 import { ClaudeCodePanel } from '../GlobalSettings/panels/ClaudeCodePanel';
 import { OpenAIPanel } from '../GlobalSettings/panels/OpenAIPanel';
 import { OpenAICodexPanel } from '../GlobalSettings/panels/OpenAICodexPanel';
+import { OpenCodePanel } from '../GlobalSettings/panels/OpenCodePanel';
 import { LMStudioPanel } from '../GlobalSettings/panels/LMStudioPanel';
 import { AdvancedPanel } from '../GlobalSettings/panels/AdvancedPanel';
 import { BetaFeaturesPanel } from '../GlobalSettings/panels/BetaFeaturesPanel';
@@ -127,8 +128,8 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
   const [workspaceMcpServerCount, setWorkspaceMcpServerCount] = useState(0);
 
   // Valid categories for each scope
-  const projectCategories: SettingsCategory[] = ['agent-permissions', 'team', 'tracker-config', 'installed-extensions', 'claude-plugins', 'mcp-servers', 'claude-code', 'claude', 'openai', 'openai-codex', 'lmstudio'];
-  const userCategories: SettingsCategory[] = ['claude-code', 'claude', 'openai', 'openai-codex', 'lmstudio', 'sync', 'notifications', 'voice-mode', 'advanced', 'marketplace', 'installed-extensions', 'claude-plugins', 'mcp-servers'];
+  const projectCategories: SettingsCategory[] = ['agent-permissions', 'team', 'tracker-config', 'installed-extensions', 'claude-plugins', 'mcp-servers', 'claude-code', 'claude', 'openai', 'openai-codex', 'opencode', 'lmstudio'];
+  const userCategories: SettingsCategory[] = ['claude-code', 'claude', 'openai', 'openai-codex', 'opencode', 'lmstudio', 'sync', 'notifications', 'voice-mode', 'advanced', 'marketplace', 'installed-extensions', 'claude-plugins', 'mcp-servers'];
 
   // When initialCategory/initialScope props change, update state (for deep linking)
   useEffect(() => {
@@ -226,7 +227,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
   };
 
   const handleProviderToggle = async (provider: string, enabled: boolean) => {
-    if (enabled && (provider === 'claude-code' || provider === 'openai-codex')) {
+    if (enabled && (provider === 'claude-code' || provider === 'openai-codex' || provider === 'opencode')) {
       await fetchModels(provider);
     }
 
@@ -242,12 +243,12 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
 
       posthog?.capture('ai_provider_configured', {
         provider,
-        modelCount: provider === 'openai-codex' ? 0 : models.length,
+        modelCount: (provider === 'openai-codex' || provider === 'opencode') ? 0 : models.length,
         action: enabled ? 'enabled' : 'disabled'
       });
 
-      // OpenAI Codex uses dynamic model discovery from the API, not user selection
-      if (provider === 'openai-codex') {
+      // OpenAI Codex and OpenCode use dynamic model discovery, not user selection
+      if (provider === 'openai-codex' || provider === 'opencode') {
         const currentProvider = prev[provider] || { enabled: false };
         return {
           ...prev,
@@ -269,7 +270,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
     });
     debouncedSave();
 
-    if (enabled && provider !== 'claude-code' && provider !== 'openai-codex') {
+    if (enabled && provider !== 'claude-code' && provider !== 'openai-codex' && provider !== 'opencode') {
       fetchModels(provider);
     }
   };
@@ -392,8 +393,8 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
       onToggle: (enabled: boolean) => handleProviderToggle(selectedCategory, enabled),
       onApiKeyChange: handleApiKeyChange,
       onModelToggle: (modelId: string, enabled: boolean) => {
-        // OpenAI Codex doesn't support user model selection - models are discovered dynamically
-        if (selectedCategory === 'openai-codex') {
+        // OpenAI Codex and OpenCode don't support user model selection - models are discovered dynamically
+        if (selectedCategory === 'openai-codex' || selectedCategory === 'opencode') {
           return;
         }
 
@@ -419,8 +420,8 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
         debouncedSave();
       },
       onSelectAllModels: (selectAll: boolean) => {
-        // OpenAI Codex doesn't support user model selection - models are discovered dynamically
-        if (selectedCategory === 'openai-codex') {
+        // OpenAI Codex and OpenCode don't support user model selection - models are discovered dynamically
+        if (selectedCategory === 'openai-codex' || selectedCategory === 'opencode') {
           return;
         }
 
@@ -517,6 +518,8 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
         return wrapWithOverride('openai', 'OpenAI', <OpenAIPanel {...commonProps} />);
       case 'openai-codex':
         return wrapWithOverride('openai-codex', 'OpenAI Codex', <OpenAICodexPanel {...commonProps} />);
+      case 'opencode':
+        return wrapWithOverride('opencode', 'OpenCode', <OpenCodePanel {...commonProps} />);
       case 'lmstudio':
         return wrapWithOverride('lmstudio', 'LM Studio', <LMStudioPanel {...commonProps} />);
       case 'advanced':
