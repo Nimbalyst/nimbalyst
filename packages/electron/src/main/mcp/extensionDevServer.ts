@@ -2241,26 +2241,34 @@ function createExtensionDevMcpServer(
               .toString(36)
               .slice(2)}.spec.ts`
           );
+          const escapedWorkspacePath = (workspacePath || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
           const wrappedScript = `import { test as base, expect } from '@playwright/test';
 import { chromium } from 'playwright';
+
+const WORKSPACE_PATH = '${escapedWorkspacePath}';
 
 const test = base.extend<{ page: import('playwright').Page }>({
   page: async ({}, use) => {
     const browser = await chromium.connectOverCDP('http://localhost:${cdpPort}');
-    const contexts = browser.contexts();
-    // Find the main editor page (skip offscreen capture windows and DevTools)
+    // Find the page whose workspace matches this MCP server's workspace
     let mainPage: import('playwright').Page | undefined;
-    for (const ctx of contexts) {
+    for (const ctx of browser.contexts()) {
       for (const p of ctx.pages()) {
         const url = p.url();
-        if (url.includes('theme=') && !url.includes('mode=capture') && !url.startsWith('devtools://')) {
-          mainPage = p;
-          break;
-        }
+        if (url.startsWith('devtools://') || url.includes('mode=capture')) continue;
+        try {
+          const ws = await p.evaluate(async () =>
+            (await (window as any).electronAPI.getInitialState?.())?.workspacePath
+          );
+          if (ws === WORKSPACE_PATH) {
+            mainPage = p;
+            break;
+          }
+        } catch {}
       }
       if (mainPage) break;
     }
-    if (!mainPage) throw new Error('No Nimbalyst editor window found via CDP');
+    if (!mainPage) throw new Error('No Nimbalyst window found for workspace: ' + WORKSPACE_PATH);
     await use(mainPage);
     browser.close();
   },
