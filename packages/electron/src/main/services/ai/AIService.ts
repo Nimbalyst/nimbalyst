@@ -531,6 +531,37 @@ async function tagFileBeforeEdit(
   }
 }
 
+// Translate raw Codex CLI/SDK errors into user-friendly messages for the test connection UI.
+function formatCodexTestError(raw: string, hasApiKey: boolean): string {
+  const lower = raw.toLowerCase();
+
+  // Authentication / invalid key errors
+  if (lower.includes('unauthorized') || lower.includes('401') || lower.includes('invalid api key') || lower.includes('incorrect api key')) {
+    return hasApiKey
+      ? 'Invalid API key. Check that your OpenAI API key is correct.'
+      : 'Authentication failed. Try logging in with the Codex CLI or providing an API key.';
+  }
+
+  // Generic CLI crash with exit code (e.g. "Codex Exec exited with code 1: Reading prompt from stdin...")
+  if (/exited with code \d+/i.test(raw)) {
+    return hasApiKey
+      ? 'Connection failed. The API key may be invalid or the Codex CLI encountered an error.'
+      : 'Connection failed. Try logging in with the Codex CLI or providing a valid API key.';
+  }
+
+  // Network errors
+  if (lower.includes('econnrefused') || lower.includes('network') || lower.includes('fetch failed')) {
+    return 'Network error. Check your internet connection and try again.';
+  }
+
+  // Rate limiting
+  if (lower.includes('rate limit') || lower.includes('429') || lower.includes('too many requests')) {
+    return 'Rate limited. Wait a moment and try again.';
+  }
+
+  return raw;
+}
+
 // Helper function to categorize AI errors
 function categorizeAIError(error: any): string {
   const message = error?.message?.toLowerCase() || String(error).toLowerCase();
@@ -5008,7 +5039,8 @@ export class AIService {
           for await (const chunk of response) {
             if (!chunk) continue;
             if (chunk.type === 'error') {
-              throw new Error(chunk.error || 'Unknown Codex error');
+              const raw = chunk.error || 'Unknown Codex error';
+              throw new Error(formatCodexTestError(raw, !!apiKey));
             }
             if (chunk.type === 'text' && (chunk.content || '').trim().length > 0) {
               sawResponse = true;
