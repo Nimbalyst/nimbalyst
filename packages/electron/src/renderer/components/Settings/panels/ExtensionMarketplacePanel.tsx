@@ -165,9 +165,15 @@ export function ExtensionMarketplacePanel() {
         });
 
         // Refresh installed list
-        const installedResult = await window.electronAPI.invoke('extension-marketplace:get-installed');
+        const [installedResult, allExtensionsResult] = await Promise.all([
+          window.electronAPI.invoke('extension-marketplace:get-installed'),
+          window.electronAPI.invoke('extensions:list-installed'),
+        ]);
         if (installedResult.success) {
           setInstalledExtensions(installedResult.data || {});
+        }
+        if (Array.isArray(allExtensionsResult)) {
+          setAllInstalledIds(new Set(allExtensionsResult.map((e: { id: string }) => e.id)));
         }
       } else {
         setInstallStatus(prev => ({ ...prev, [extension.id]: 'error' }));
@@ -197,9 +203,15 @@ export function ExtensionMarketplacePanel() {
 
         posthog?.capture('extension_marketplace_uninstalled', { extensionId });
 
-        const installedResult = await window.electronAPI.invoke('extension-marketplace:get-installed');
+        const [installedResult, allExtensionsResult] = await Promise.all([
+          window.electronAPI.invoke('extension-marketplace:get-installed'),
+          window.electronAPI.invoke('extensions:list-installed'),
+        ]);
         if (installedResult.success) {
           setInstalledExtensions(installedResult.data || {});
+        }
+        if (Array.isArray(allExtensionsResult)) {
+          setAllInstalledIds(new Set(allExtensionsResult.map((e: { id: string }) => e.id)));
         }
       } else {
         setStatusMessage(result.error || 'Uninstall failed');

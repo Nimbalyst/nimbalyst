@@ -281,9 +281,9 @@ async function installFromUrl(
       source: 'marketplace',
     });
 
-    // 7. Re-register file types and notify renderer
+    // 7. Re-register file types and notify renderer (with hot-reload)
     await initializeExtensionFileTypes();
-    notifyExtensionsChanged();
+    notifyExtensionsChanged(extensionId, installPath);
 
     logger.main.info(`[ExtMarketplace] Successfully installed ${extensionId} v${version}`);
     return { success: true, extensionId };
@@ -406,11 +406,9 @@ async function installFromGitHub(githubUrl: string): Promise<InstallResult> {
       githubUrl,
     });
 
-    // Re-register file types
+    // Re-register file types and notify renderer (with hot-reload)
     await initializeExtensionFileTypes();
-
-    // Notify renderer to reload extensions
-    notifyExtensionsChanged();
+    notifyExtensionsChanged(extensionId, installPath);
 
     logger.main.info(`[ExtMarketplace] Successfully installed ${extensionId} from GitHub`);
     return { success: true, extensionId };
@@ -455,11 +453,9 @@ async function uninstallExtension(extensionId: string): Promise<InstallResult> {
     // Remove from tracking
     removeMarketplaceInstall(extensionId);
 
-    // Re-register file types
+    // Re-register file types and notify renderer (with unload)
     await initializeExtensionFileTypes();
-
-    // Notify renderer
-    notifyExtensionsChanged();
+    notifyExtensionUnloaded(extensionId);
 
     logger.main.info(`[ExtMarketplace] Successfully uninstalled ${extensionId}`);
     return { success: true, extensionId };
@@ -496,11 +492,29 @@ async function checkForUpdates(): Promise<Array<{ extensionId: string; currentVe
 
 /**
  * Send IPC event to all renderer windows that extensions have changed.
+ * If extensionId and extensionPath are provided, also triggers a hot-reload
+ * so the renderer loads the new extension without requiring a page refresh.
  */
-function notifyExtensionsChanged(): void {
+function notifyExtensionsChanged(extensionId?: string, extensionPath?: string): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
       win.webContents.send('extensions:list-changed');
+      // Trigger renderer-side extension loading via the existing dev-reload mechanism
+      if (extensionId && extensionPath) {
+        win.webContents.send('extension:dev-reload', { extensionId, extensionPath });
+      }
+    }
+  }
+}
+
+/**
+ * Send IPC event to all renderer windows to unload an extension.
+ */
+function notifyExtensionUnloaded(extensionId: string): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send('extensions:list-changed');
+      win.webContents.send('extension:dev-unload', { extensionId });
     }
   }
 }
