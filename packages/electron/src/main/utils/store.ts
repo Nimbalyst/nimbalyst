@@ -125,6 +125,8 @@ interface AppStoreSchema {
     spreadsheet?: boolean;
     datamodel?: boolean;
   };
+  // System spellchecker (enabled by default, applies to all editors and text inputs)
+  spellcheckEnabled?: boolean;
   // System tray icon
   showTrayIcon?: boolean;
   // Advanced: V8 heap memory limit in MB (default: 4096 = 4GB)

@@ -370,6 +370,8 @@ export interface AdvancedSettings {
   enableAllBetaFeatures: boolean;
   // Custom directories to add to PATH (colon-separated on Unix, semicolon-separated on Windows)
   customPathDirs: string;
+  // System spellchecker (applies to all editors and text inputs)
+  spellcheckEnabled: boolean;
   // Document history settings
   historyMaxAgeDays: number; // Max age in days before snapshots are cleaned up (default: 30)
   historyMaxSnapshots: number; // Max snapshots per file (default: 250)
@@ -399,6 +401,7 @@ const defaultAdvancedSettings: AdvancedSettings = {
     codex: false,
   } as Record<BetaFeatureTag, boolean>,
   enableAllBetaFeatures: false,
+  spellcheckEnabled: true,
   customPathDirs: '',
   historyMaxAgeDays: 30,
   historyMaxSnapshots: 250,
@@ -470,6 +473,9 @@ function scheduleAdvancedPersist(
           break;
         case 'historyMaxSnapshots':
           await window.electronAPI.invoke('app-settings:set', 'historyMaxSnapshots', settings.historyMaxSnapshots);
+          break;
+        case 'spellcheckEnabled':
+          await window.electronAPI.invoke('spellcheck:set-enabled', settings.spellcheckEnabled);
           break;
         // walkthroughsViewedCount and walkthroughsTotalCount are read-only from main process
       }
@@ -599,6 +605,13 @@ export const maxHeapSizeMBAtom = atom(
 );
 
 /**
+ * System spellchecker enabled.
+ */
+export const spellcheckEnabledAtom = atom(
+  (get) => get(advancedSettingsAtom).spellcheckEnabled
+);
+
+/**
  * Custom PATH directories.
  */
 export const customPathDirsAtom = atom(
@@ -649,7 +662,7 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
   }
 
   try {
-    const [channel, analyticsEnabled, extensionDevToolsEnabled, walkthroughState, maxHeapSizeMB, alphaFeatures, enableAllAlphaFeatures, betaFeatures, enableAllBetaFeatures, customPathDirs, historyMaxAgeDays, historyMaxSnapshots] =
+    const [channel, analyticsEnabled, extensionDevToolsEnabled, walkthroughState, maxHeapSizeMB, alphaFeatures, enableAllAlphaFeatures, betaFeatures, enableAllBetaFeatures, customPathDirs, spellcheckEnabled, historyMaxAgeDays, historyMaxSnapshots] =
       await Promise.all([
         window.electronAPI.invoke('release-channel:get'),
         window.electronAPI.invoke('analytics:is-enabled'),
@@ -661,6 +674,7 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
         window.electronAPI.invoke('beta-features:get'),
         window.electronAPI.invoke('beta-features:get-enable-all'),
         window.electronAPI.invoke('app-settings:get', 'customPathDirs'),
+        window.electronAPI.invoke('app-settings:get', 'spellcheckEnabled'),
         window.electronAPI.invoke('app-settings:get', 'historyMaxAgeDays'),
         window.electronAPI.invoke('app-settings:get', 'historyMaxSnapshots'),
       ]);
@@ -682,6 +696,7 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
       enableAllAlphaFeatures: enableAllAlphaFeatures ?? false,
       betaFeatures: betaFeatures ?? defaultAdvancedSettings.betaFeatures,
       enableAllBetaFeatures: enableAllBetaFeatures ?? false,
+      spellcheckEnabled: spellcheckEnabled ?? true,
       customPathDirs: customPathDirs ?? '',
       historyMaxAgeDays: historyMaxAgeDays ?? 30,
       historyMaxSnapshots: historyMaxSnapshots ?? 250,

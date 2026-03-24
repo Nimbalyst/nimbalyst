@@ -1,4 +1,4 @@
-import { BrowserWindow, safeStorage } from 'electron';
+import { BrowserWindow, safeStorage, session } from 'electron';
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import * as os from 'os';
 import * as fs from 'fs';
@@ -70,6 +70,12 @@ export function registerSettingsHandlers() {
 
     safeHandle('app-settings:set', (_event, key: string, value: unknown) => {
         setAppSetting(key, value);
+    });
+
+    // Spellcheck toggle - controls Chromium's built-in spellchecker for all windows
+    safeHandle('spellcheck:set-enabled', (_event, enabled: boolean) => {
+        session.defaultSession.setSpellCheckerEnabled(enabled);
+        setAppSetting('spellcheckEnabled', enabled);
     });
 
     // Get the enhanced PATH that Nimbalyst uses for spawning processes

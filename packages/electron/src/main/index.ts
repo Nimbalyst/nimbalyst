@@ -60,7 +60,8 @@ import {
     markClaudeCodeInstallationChecked,
     setTheme,
     updateWorkspaceState,
-    runMigrations
+    runMigrations,
+    getAppSetting
 } from './utils/store';
 import { registerMCPConfigHandlers } from './ipc/MCPConfigHandlers';
 import { registerClaudeCodePluginHandlers } from './ipc/ClaudeCodePluginHandlers';
@@ -921,6 +922,12 @@ app.whenReady().then(async () => {
         } catch {
             // setFdLimit may fail if the hard limit is lower — not fatal
         }
+    }
+
+    // Apply saved spellcheck preference (enabled by default)
+    const spellcheckEnabled = getAppSetting<boolean>('spellcheckEnabled');
+    if (spellcheckEnabled === false) {
+        session.defaultSession.setSpellCheckerEnabled(false);
     }
 
     // Show splash screen immediately so the user sees something while we initialize
