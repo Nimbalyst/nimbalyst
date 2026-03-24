@@ -72,7 +72,7 @@ function getNimbalystIconSvg(): string {
 // HTML document builder
 // ---------------------------------------------------------------------------
 
-function buildFileHtml(fileName: string, contentHtml: string): string {
+function buildFileHtml(fileName: string, contentHtml: string, rawMarkdownB64: string): string {
   return `<!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
@@ -89,10 +89,16 @@ ${getStylesheet()}
       ${getNimbalystIconSvg()}
       <span class="brand-text">Shared from <strong>Nimbalyst</strong></span>
     </a>
-    <button onclick="toggleTheme()" class="theme-toggle" title="Toggle light/dark theme">
-      <span class="theme-icon-dark">&#9789;</span>
-      <span class="theme-icon-light">&#9788;</span>
-    </button>
+    <div class="brand-actions">
+      <button onclick="downloadMarkdown()" class="download-btn" title="Download as Markdown">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v9m0 0L4.5 7.5M8 11l3.5-3.5M2 13h12"/></svg>
+        <span>.md</span>
+      </button>
+      <button onclick="toggleTheme()" class="theme-toggle" title="Toggle light/dark theme">
+        <span class="theme-icon-dark">&#9789;</span>
+        <span class="theme-icon-light">&#9788;</span>
+      </button>
+    </div>
   </div>
 
   <article class="document">
@@ -108,6 +114,17 @@ ${getStylesheet()}
 
 </div>
 <script>
+var _mdData = "${rawMarkdownB64}";
+var _mdName = "${escapeHtml(fileName)}";
+function downloadMarkdown() {
+  var bytes = Uint8Array.from(atob(_mdData), function(c) { return c.charCodeAt(0); });
+  var blob = new Blob([bytes], { type: 'text/markdown;charset=utf-8' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = _mdName;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
 function toggleTheme() {
   var root = document.documentElement;
   if (root.classList.contains('dark')) {
@@ -182,12 +199,15 @@ body {
 .brand-text strong { color: var(--text); font-weight: 600; }
 .brand-link:hover .brand-text strong { color: var(--primary); }
 .nimbalyst-icon { width: 24px; height: 24px; flex-shrink: 0; }
-.theme-toggle {
+.brand-actions { display: flex; align-items: center; gap: 0.375rem; }
+.theme-toggle, .download-btn {
   background: var(--bg-secondary); border: 1px solid var(--border);
   border-radius: 0.375rem; padding: 0.25rem 0.5rem; font-size: 0.875rem;
   color: var(--text-muted); cursor: pointer; transition: background 0.15s, color 0.15s;
 }
-.theme-toggle:hover { background: var(--bg-hover); color: var(--text); }
+.theme-toggle:hover, .download-btn:hover { background: var(--bg-hover); color: var(--text); }
+.download-btn { display: flex; align-items: center; gap: 0.25rem; font-family: inherit; font-size: 0.75rem; font-weight: 500; }
+.download-btn svg { flex-shrink: 0; }
 .dark .theme-icon-light { display: none; }
 .light .theme-icon-dark { display: none; }
 
@@ -260,5 +280,6 @@ export function exportFileToHtml(filePath: string, content: string): string {
   const fileName = path.basename(filePath);
   const { body } = stripFrontmatter(content);
   const contentHtml = fileMarked.parse(body) as string;
-  return buildFileHtml(fileName, contentHtml);
+  const rawMarkdownB64 = Buffer.from(content).toString('base64');
+  return buildFileHtml(fileName, contentHtml, rawMarkdownB64);
 }

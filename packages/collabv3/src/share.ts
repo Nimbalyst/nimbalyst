@@ -465,7 +465,7 @@ iframe{border:0;width:100%;height:100vh;display:block}
 <div style="color:#a1a1aa;font-size:14px">Decrypting session...</div>
 </div>
 <div id="error" class="error" style="display:none"></div>
-<iframe id="viewer" style="display:none" sandbox="allow-scripts allow-same-origin allow-popups"></iframe>
+<iframe id="viewer" style="display:none" sandbox="allow-scripts allow-same-origin allow-popups allow-downloads"></iframe>
 <div class="brand">Shared via <a href="https://nimbalyst.com" target="_blank">Nimbalyst</a></div>
 <script>
 (async()=>{
