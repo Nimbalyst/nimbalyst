@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.56.10] - 2026-03-24
+
+
+### Fixed
+- Removing Codex API key now takes effect immediately instead of persisting until restart
+- All AI providers now refresh credentials every turn so settings changes apply to existing sessions
+
 ## [0.56.9] - 2026-03-24
 
 
