@@ -303,7 +303,7 @@ export function ClaudeCodePanel({
 
       <div className="provider-enable flex items-center justify-between gap-4 py-4 mb-4 border-b border-[var(--nim-border)]">
         <span className="provider-enable-label text-sm font-medium text-[var(--nim-text)]">Enable Claude Agent</span>
-        <label className="provider-toggle relative inline-block w-11 h-6 cursor-pointer">
+        <label className="provider-toggle relative inline-block w-11 h-6 shrink-0 cursor-pointer">
           <input
             type="checkbox"
             checked={config.enabled || false}
@@ -326,7 +326,7 @@ export function ClaudeCodePanel({
               Display API usage limits in the navigation gutter
             </p>
           </div>
-          <label className="provider-toggle relative inline-block w-11 h-6 cursor-pointer">
+          <label className="provider-toggle relative inline-block w-11 h-6 shrink-0 cursor-pointer">
             <input
               type="checkbox"
               checked={usageIndicatorEnabled}
@@ -348,7 +348,7 @@ export function ClaudeCodePanel({
               {isMacOS && ' (prevents dock icon)'}
             </p>
           </div>
-          <label className="provider-toggle relative inline-block w-11 h-6 cursor-pointer">
+          <label className="provider-toggle relative inline-block w-11 h-6 shrink-0 cursor-pointer">
             <input
               type="checkbox"
               checked={useStandaloneBinary}
@@ -404,7 +404,7 @@ export function ClaudeCodePanel({
       </div>
 
       {/* Plan Tracking Toggle */}
-      <div className="provider-enable flex items-center justify-between gap-4 py-4 mb-4 border-b border-[var(--nim-border)]">
+      <div className="provider-enable flex items-start justify-between gap-4 py-4 mb-4 border-b border-[var(--nim-border)]">
         <div>
           <span className="provider-enable-label text-sm font-medium text-[var(--nim-text)]">Plan Tracking</span>
           <p className="text-xs text-[var(--nim-text-muted)] mt-1">
@@ -413,7 +413,7 @@ export function ClaudeCodePanel({
             When disabled, plans use Claude Code's default behavior and are saved in your home directory instead of the project.
           </p>
         </div>
-        <label className="provider-toggle relative inline-block w-11 h-6 cursor-pointer">
+        <label className="provider-toggle relative inline-block w-11 h-6 shrink-0 self-start cursor-pointer mt-0.5">
           <input
             data-testid="plan-tracking-toggle"
             type="checkbox"
@@ -434,7 +434,7 @@ export function ClaudeCodePanel({
             Uses more tokens but enables parallel work on complex tasks.
           </p>
         </div>
-        <label className="provider-toggle relative inline-block w-11 h-6 cursor-pointer">
+        <label className="provider-toggle relative inline-block w-11 h-6 shrink-0 cursor-pointer">
           <input
             type="checkbox"
             checked={agentTeamsEnabled}
