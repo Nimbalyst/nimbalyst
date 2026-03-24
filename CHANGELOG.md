@@ -20,6 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.56.9] - 2026-03-24
+
+
+### Added
+- Setting to disable system spellchecker
+- Double-click tracker rows with a file to open it in the editor
+- Browser extension web clipper with local HTTP clip endpoint
+
+### Fixed
+- Resolve EditorContext typecheck errors
+- New worktrees no longer show false rebase count
+- Keep Claude Agent setting toggles from collapsing
+- Update @anthropic-ai/claude-agent-sdk to version 0.2.81
+- Extension test infrastructure for multi-window and external projects
+- extension_test_run MCP tool now targets the correct CDP window
+- Marketplace-installed extensions load immediately without refresh
+- Restore Windows auto-update publisherName in signtoolOptions
+
 ## [0.56.8] - 2026-03-23
 
 
