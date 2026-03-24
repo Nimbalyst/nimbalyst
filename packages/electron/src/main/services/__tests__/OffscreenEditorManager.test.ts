@@ -5,18 +5,31 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 
 // Mock Electron
-vi.mock('electron', () => ({
-  BrowserWindow: {
-    getAllWindows: vi.fn(() => [
-      {
-        isDestroyed: () => false,
-        webContents: {
-          send: vi.fn(),
-        },
-      },
-    ]),
-  },
-}));
+vi.mock('electron', () => {
+  const MockBrowserWindow = vi.fn().mockImplementation(() => ({
+    isDestroyed: () => false,
+    on: vi.fn(),
+    close: vi.fn(),
+    loadURL: vi.fn().mockResolvedValue(undefined),
+    loadFile: vi.fn().mockResolvedValue(undefined),
+    webContents: {
+      send: vi.fn(),
+      executeJavaScript: vi.fn().mockResolvedValue(undefined),
+    },
+  }));
+  (MockBrowserWindow as any).getAllWindows = vi.fn(() => []);
+
+  const app = {
+    getAppPath: vi.fn(() => '/mock/app'),
+    isPackaged: false,
+  };
+
+  return {
+    default: { app },
+    app,
+    BrowserWindow: MockBrowserWindow,
+  };
+});
 
 // Mock window routing to keep this as a pure unit test.
 vi.mock('../../window/WindowManager', () => ({
@@ -70,10 +83,14 @@ describe('OffscreenEditorManager', () => {
     expect(cacheEntry?.refCount).toBe(2);
   });
 
-  it('should schedule unmount when ref count reaches 0', () => {
+  it('should schedule unmount when ref count reaches 0', async () => {
     vi.useFakeTimers();
 
-    manager.mountOffscreen('/test/file.excalidraw', '/test');
+    // mountOffscreen has internal setTimeout waits (1000ms captureWindow + 3000ms mount)
+    const mountPromise = manager.mountOffscreen('/test/file.excalidraw', '/test');
+    await vi.advanceTimersByTimeAsync(5000);
+    await mountPromise;
+
     manager.unmountOffscreen('/test/file.excalidraw');
 
     // Should still be available (waiting for TTL)
@@ -88,11 +105,14 @@ describe('OffscreenEditorManager', () => {
     vi.useRealTimers();
   });
 
-  it('should not unmount if ref count > 0', () => {
+  it('should not unmount if ref count > 0', async () => {
     vi.useFakeTimers();
 
-    manager.mountOffscreen('/test/file.excalidraw', '/test');
-    manager.mountOffscreen('/test/file.excalidraw', '/test'); // ref count = 2
+    const mountPromise = manager.mountOffscreen('/test/file.excalidraw', '/test');
+    await vi.advanceTimersByTimeAsync(5000);
+    await mountPromise;
+
+    await manager.mountOffscreen('/test/file.excalidraw', '/test'); // ref count = 2 (no wait, already mounted)
     manager.unmountOffscreen('/test/file.excalidraw'); // ref count = 1
 
     // Fast-forward past TTL
@@ -108,9 +128,11 @@ describe('OffscreenEditorManager', () => {
     vi.useFakeTimers();
 
     // Mount 5 editors (cache limit)
+    // First mount needs 5000ms (1000ms captureWindow + 3000ms mount + margin)
+    // Subsequent mounts reuse captureWindow, only need 3000ms
     for (let i = 0; i < 5; i++) {
       const mountPromise = manager.mountOffscreen(`/test/file${i}.excalidraw`, '/test');
-      await vi.advanceTimersByTimeAsync(3000);
+      await vi.advanceTimersByTimeAsync(5000);
       await mountPromise;
     }
 
@@ -118,7 +140,7 @@ describe('OffscreenEditorManager', () => {
 
     // Mount 6th editor - should evict LRU
     const mountPromise = manager.mountOffscreen('/test/file5.excalidraw', '/test');
-    await vi.advanceTimersByTimeAsync(3000);
+    await vi.advanceTimersByTimeAsync(5000);
     await mountPromise;
 
     expect(manager.getStats().mounted).toBe(5);
@@ -132,7 +154,7 @@ describe('OffscreenEditorManager', () => {
     vi.useFakeTimers();
 
     const mountPromise = manager.mountOffscreen('/test/file1.excalidraw', '/test');
-    await vi.advanceTimersByTimeAsync(3000);
+    await vi.advanceTimersByTimeAsync(5000);
     await mountPromise;
     const stats1 = manager.getStats();
     const entry1 = stats1.cache.get('/test/file1.excalidraw');
@@ -141,7 +163,7 @@ describe('OffscreenEditorManager', () => {
     // Advance time
     vi.advanceTimersByTime(5000);
 
-    // Mount again (should update lastUsed)
+    // Mount again (should update lastUsed) - no wait needed, already mounted
     await manager.mountOffscreen('/test/file1.excalidraw', '/test');
     const stats2 = manager.getStats();
     const entry2 = stats2.cache.get('/test/file1.excalidraw');
