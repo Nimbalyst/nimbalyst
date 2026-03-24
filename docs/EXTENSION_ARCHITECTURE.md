@@ -221,16 +221,29 @@ test('editor loads data', async ({ page }) => {
 
 1. Nimbalyst dev mode enables `--remote-debugging-port=9222`
 2. The `@nimbalyst/extension-sdk/testing` fixture connects to the running app via `chromium.connectOverCDP()`
-3. Tests get the real `page` object -- full Playwright API (locators, assertions, interactions, screenshots)
-4. Tests are NOT sandboxed -- they can interact with the entire Nimbalyst UI, not just the extension
+3. The fixture uses `testInfo.file` to find the window whose `workspacePath` is an ancestor of the test file — this correctly targets the right window even when multiple projects are open
+4. Tests get the real `page` object — full Playwright API (locators, assertions, interactions, screenshots)
+5. Tests are NOT sandboxed — they can interact with the entire Nimbalyst UI, not just the extension
+
+### Multi-Window Support
+
+When multiple Nimbalyst windows are open (e.g. different projects), the test fixture automatically finds the correct one by matching the test file's path against each window's workspace path. This means:
+
+- **Always use `@nimbalyst/extension-sdk/testing`** — never write your own CDP connection boilerplate
+- **Never hardcode workspace paths** — the fixture handles window matching automatically
+- **External extensions work too** — a test file at `/my-project/tests/foo.spec.ts` will match the Nimbalyst window open on `/my-project/`
+
+For test files that live outside any workspace (e.g. inline scripts created by `extension_test_run`), the fixture falls back to the first available Nimbalyst window. The `extension_test_run` MCP tool handles this by baking the workspace path into the generated test.
 
 ### MCP Tools for Agent-Driven Testing
 
 | Tool | Description |
 | --- | --- |
-| `extension_test_run` | Run inline Playwright scripts or `.spec.ts` files |
+| `extension_test_run` | Run inline Playwright scripts or `.spec.ts` files. Inline scripts get a `page` already connected to the correct window. Test files should import from `@nimbalyst/extension-sdk/testing`. |
 | `extension_test_open_file` | Open a file and wait for extension editor to mount |
 | `extension_test_ai_tool` | Call extension tool handlers directly |
+
+**For agents writing test files**: import from `@nimbalyst/extension-sdk/testing` — `NODE_PATH` is set automatically so imports resolve even for external extension projects.
 
 ### Data Attributes for Targeting
 
@@ -258,6 +271,10 @@ import { callExtensionTool } from '@nimbalyst/extension-sdk/testing';
 const result = await callExtensionTool(page, 'excalidraw.get_elements', {});
 expect(result.success).toBe(true);
 ```
+
+### Playwright Extension Panel
+
+The Playwright extension panel in Nimbalyst supports multiple test configs. It auto-detects extension tests by scanning `packages/extensions/*/tests/*.spec.ts` and creates separate config profiles for each extension. The panel shows all discovered tests in a merged tree, grouped by config when multiple configs are active. A dropdown in the toolbar lets you select which config to run.
 
 ### Design Document
 

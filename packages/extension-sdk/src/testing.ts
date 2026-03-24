@@ -21,6 +21,12 @@
  *
  * Requires Nimbalyst running in dev mode (`npm run dev`), which enables CDP on port 9222.
  *
+ * ## Multi-Window Support
+ *
+ * When multiple Nimbalyst windows are open, the fixture finds the correct window
+ * by checking which window's workspacePath is an ancestor of the test file's directory.
+ * This works automatically — no configuration needed.
+ *
  * @packageDocumentation
  */
 
@@ -35,19 +41,20 @@ const CDP_ENDPOINT = `http://localhost:${CDP_PORT}`;
  * Playwright test fixture that connects to the running Nimbalyst instance via CDP.
  *
  * Unlike standard Playwright tests that launch a browser, this fixture attaches
- * to the already-running Electron app. Tests run against the live app state.
+ * to the already-running Electron app. When multiple windows are open, the fixture
+ * finds the window whose workspace contains the test file (via __dirname matching).
  *
  * ```ts
  * import { test, expect } from '@nimbalyst/extension-sdk/testing';
  *
  * test('my test', async ({ page }) => {
- *   // page is the running Nimbalyst window
+ *   // page is the Nimbalyst window whose workspace contains this test file
  *   await page.locator('.my-element').click();
  * });
  * ```
  */
 export const test = base.extend<{ page: Page }>({
-  page: async ({}, use) => {
+  page: async ({}, use, testInfo) => {
     let browser;
     try {
       browser = await chromium.connectOverCDP(CDP_ENDPOINT);
@@ -59,18 +66,58 @@ export const test = base.extend<{ page: Page }>({
       );
     }
 
-    const contexts = browser.contexts();
-    if (contexts.length === 0) {
-      throw new Error('No browser contexts found. Is a Nimbalyst window open?');
+    // Use the test file's directory to find the matching workspace window.
+    // The test file lives inside the workspace, so the window whose
+    // workspacePath is a prefix of the test file path is the correct one.
+    const testFileDir = testInfo.file
+      ? testInfo.file.substring(0, testInfo.file.lastIndexOf('/'))
+      : undefined;
+
+    let target: Page | undefined;
+    for (const ctx of browser.contexts()) {
+      for (const p of ctx.pages()) {
+        const url = p.url();
+        if (url.startsWith('devtools://') || url.includes('mode=capture')) continue;
+        try {
+          const ws = await p.evaluate(async () =>
+            (await (window as any).electronAPI.getInitialState?.())?.workspacePath
+          );
+          if (ws && testFileDir && testFileDir.startsWith(ws)) {
+            target = p;
+            break;
+          }
+        } catch {}
+      }
+      if (target) break;
     }
 
-    const pages = contexts[0].pages();
-    const page = pages[0];
-    if (!page) {
-      throw new Error('No pages found in Nimbalyst browser context.');
+    // Fallback: if no workspace match (e.g. inline scripts in temp dirs),
+    // find the first non-devtools, non-capture page
+    if (!target) {
+      for (const ctx of browser.contexts()) {
+        for (const p of ctx.pages()) {
+          const url = p.url();
+          if (url.startsWith('devtools://') || url.includes('mode=capture')) continue;
+          if (url.includes('theme=')) {
+            target = p;
+            break;
+          }
+        }
+        if (target) break;
+      }
     }
 
-    await use(page);
+    if (!target) {
+      throw new Error(
+        `No Nimbalyst window found via CDP.\n` +
+        (testFileDir
+          ? `Looking for a window whose workspace contains: ${testFileDir}\n`
+          : '') +
+        `Make sure a Nimbalyst window is open with the correct project.`
+      );
+    }
+
+    await use(target);
 
     // Don't close the browser -- it's the user's running app
     browser.close();
@@ -101,8 +148,10 @@ export function extensionEditor(
   filePath?: string
 ): Locator {
   if (filePath) {
+    // Escape special CSS selector characters in file paths
+    const escapedPath = filePath.replace(/([\\/"'[\](){}|^$*+?.])/g, '\\$1');
     return page.locator(
-      `[data-extension-id="${extensionId}"][data-file-path="${CSS.escape(filePath)}"]`
+      `[data-extension-id="${extensionId}"][data-file-path="${escapedPath}"]`
     );
   }
   return page.locator(`[data-extension-id="${extensionId}"]`).first();

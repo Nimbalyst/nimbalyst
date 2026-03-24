@@ -112,6 +112,66 @@ npx playwright test --reporter=line
 - **Dev server required**: Tests expect the Vite dev server running on port 5273. Start it with `npm run dev` in `packages/electron/`.
 - **No parallel execution**: Never use `--workers=N` with N > 1.
 
+## Extension Tests (CDP-based)
+
+Extension tests are separate from E2E tests. They connect to a **running** Nimbalyst instance via CDP rather than launching a fresh Electron process. This is used for testing custom editors, panels, and AI tools provided by extensions.
+
+### Key Differences from E2E Tests
+
+| | E2E Tests | Extension Tests |
+| --- | --- | --- |
+| **Config** | `playwright.config.ts` | `packages/electron/playwright-extension.config.ts` |
+| **How it runs** | Launches fresh Electron | Connects to running Nimbalyst via CDP |
+| **Location** | `packages/electron/e2e/` | `packages/extensions/*/tests/` |
+| **Prerequisite** | Dev server on port 5273 | Full `npm run dev` with CDP on port 9222 |
+
+### Writing Extension Tests
+
+Always import from `@nimbalyst/extension-sdk/testing`:
+
+```typescript
+import { test, expect, extensionEditor } from '@nimbalyst/extension-sdk/testing';
+import * as path from 'path';
+
+const SAMPLE_FILE = path.resolve(__dirname, '../samples/demo.csv');
+
+test.describe('My Extension', () => {
+  test.describe.configure({ mode: 'serial' });
+
+  test('loads and renders', async ({ page }) => {
+    // page is already connected to the correct Nimbalyst window
+    const editor = extensionEditor(page, 'com.my.extension');
+    await expect(editor).toBeVisible();
+  });
+});
+```
+
+### Multi-Window: How the Correct Window is Found
+
+The `test` fixture from `@nimbalyst/extension-sdk/testing` automatically finds the Nimbalyst window whose workspace contains the test file. It does this by comparing `testInfo.file` against each window's `workspacePath` via CDP. This means:
+
+- **Never hardcode workspace paths** in test files
+- **Never grab the first CDP page** — always use the SDK fixture
+- Tests in external extension projects work automatically as long as the project is open in Nimbalyst
+- Use `path.resolve(__dirname, '../samples/...')` for sample file paths — never absolute paths
+
+### Running Extension Tests
+
+```bash
+# Run all extension tests
+npm run test:extensions
+
+# Run tests for a specific extension (substring match)
+npm run test:extensions -- csv
+
+# List available extension test suites
+npm run test:extensions -- --list
+```
+
+### Playwright Extension Panel
+
+The Playwright panel in Nimbalyst auto-detects extension tests and shows them alongside E2E tests. A config dropdown lets you switch between E2E and extension test configs. Clicking "Run" on an extension test automatically uses the correct config and environment.
+
 > **Build first:** make sure `npm run build --workspace @nimbalyst/electron` has been executed so `packages/electron/out/main/index.js` exists before launching the Electron project.
 
 Artifacts (traces, screenshots, videos) are captured on the first retry or failure and saved under `playwright-report/`.

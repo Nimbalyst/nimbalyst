@@ -1050,19 +1050,19 @@ function createExtensionDevMcpServer(
               {
                 name: "extension_test_run",
                 description:
-                  "Run a Playwright test script against the running Nimbalyst instance via CDP. The agent writes real Playwright code (locators, assertions, interactions) and this tool executes it. Supports inline scripts or test file paths. Tests run against the live app -- full Playwright API available.",
+                  "Run a Playwright test script against the running Nimbalyst instance via CDP. The agent writes real Playwright code (locators, assertions, interactions) and this tool executes it. Supports inline scripts or test file paths. Tests run against the live app -- full Playwright API available. The `page` fixture automatically connects to the correct Nimbalyst window for this workspace, even when multiple windows are open.",
                 inputSchema: {
                   type: "object",
                   properties: {
                     script: {
                       type: "string",
                       description:
-                        "Inline Playwright script to execute. Write code as if inside an async test function with `page` already connected to Nimbalyst. Example: `await page.locator('.my-btn').click(); await expect(page.locator('.result')).toHaveText('Done');`",
+                        "Inline Playwright script to execute. Write code as if inside an async test function with `page` already connected to the correct Nimbalyst window for this workspace. Example: `await page.locator('.my-btn').click(); await expect(page.locator('.result')).toHaveText('Done');`",
                     },
                     testFile: {
                       type: "string",
                       description:
-                        "Absolute path to a .spec.ts test file to run. The file should import from the extension-test-fixture for CDP connection.",
+                        "Absolute path to a .spec.ts test file to run. The file should import { test, expect } from '@nimbalyst/extension-sdk/testing' for CDP connection and window matching. NODE_PATH is set automatically so @playwright/test and the SDK resolve even for external projects.",
                     },
                     timeout: {
                       type: "number",
@@ -2311,6 +2311,9 @@ ${script}
                       packageRoot,
                       "../../e2e_test_output/extension-tests-tmp"
                     ),
+                // Allow external test files to resolve @playwright/test
+                // from Nimbalyst's node_modules
+                NODE_PATH: path.resolve(packageRoot, "../../node_modules"),
               },
             }
           );
