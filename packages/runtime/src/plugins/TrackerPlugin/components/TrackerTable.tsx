@@ -1267,7 +1267,7 @@ export function TrackerTable({
                 data-item-title={item.title}
                 onClick={(e) => handleRowClick(item, index, e)}
                 onDoubleClick={() => {
-                  if (item.source === 'inline' || item.source === 'frontmatter' || item.source === 'import') {
+                  if (item.module) {
                     openItemInEditor(item);
                   }
                 }}
