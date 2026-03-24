@@ -8,6 +8,12 @@ import {
 import { createServer, IncomingMessage, ServerResponse } from "http";
 import { parse as parseUrl } from "url";
 import { randomUUID } from "crypto";
+import * as fs from "fs";
+import * as path from "path";
+import { BrowserWindow } from "electron";
+import { getMostRecentlyFocusedWorkspaceWindow, windowStates, windowFocusOrder } from "../window/WindowManager";
+import { windows } from "../window/windowState";
+import { workspaceToWindowMap } from "./mcpWorkspaceResolver";
 
 // Extracted modules
 import {
@@ -720,6 +726,88 @@ async function tryCreateServer(port: number): Promise<any> {
               res.end("Internal server error");
             }
           }
+        } else if (pathname === "/clip" && req.method === "POST") {
+          // Handle web clip from browser extension
+          res.setHeader("Access-Control-Allow-Origin", "*");
+          const body = await readJsonBody(req) as any;
+          if (!body || !body.content) {
+            res.writeHead(400);
+            res.end("Missing content");
+            return;
+          }
+
+          // Find the most recently focused workspace window.
+          // windowStates and windows Maps are keyed by custom windowId (not BrowserWindow.id).
+          // Pick the workspace window with the highest focus order.
+          let targetWindowId: number | null = null;
+          let targetWindow: BrowserWindow | null = null;
+          let workspacePath: string | null = null;
+          let bestFocusOrder = -1;
+
+          for (const [wid, state] of windowStates) {
+            if (state?.workspacePath && (state.mode === 'workspace' || state.mode === 'agentic-coding')) {
+              const fo = windowFocusOrder.get(wid) || 0;
+              if (fo > bestFocusOrder) {
+                const win = windows.get(wid);
+                if (win && !win.isDestroyed()) {
+                  bestFocusOrder = fo;
+                  targetWindowId = wid;
+                  targetWindow = win;
+                  workspacePath = state.workspacePath;
+                }
+              }
+            }
+          }
+
+          if (!workspacePath || !targetWindow) {
+            res.writeHead(400);
+            res.end(JSON.stringify({ error: "No workspace window open" }));
+            return;
+          }
+
+          const clipTitle = body.title || "Untitled Clip";
+          const clipUrl = body.url || "";
+          const content = body.selection || body.content;
+
+          // Build filename from title
+          const sanitized = clipTitle
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "")
+            .slice(0, 80);
+          const dateStr = new Date().toISOString().slice(0, 10);
+
+          const clipsDir = path.join(workspacePath, "nimbalyst-local", "clips");
+          if (!fs.existsSync(clipsDir)) {
+            fs.mkdirSync(clipsDir, { recursive: true });
+          }
+
+          const frontmatter = [
+            "---",
+            `title: "${clipTitle.replace(/"/g, '\\"')}"`,
+            `url: "${clipUrl}"`,
+            `clipped: ${new Date().toISOString()}`,
+            body.selection ? "type: selection" : "type: page",
+            "---",
+          ].join("\n");
+
+          let finalPath = path.join(clipsDir, `${dateStr}-${sanitized}.md`);
+          if (fs.existsSync(finalPath)) {
+            let counter = 2;
+            while (fs.existsSync(path.join(clipsDir, `${dateStr}-${sanitized}-${counter}.md`))) {
+              counter++;
+            }
+            finalPath = path.join(clipsDir, `${dateStr}-${sanitized}-${counter}.md`);
+          }
+
+          fs.writeFileSync(finalPath, `${frontmatter}\n\n${content}`, "utf-8");
+          console.log(`[Clip] Saved: ${finalPath}`);
+
+          // Open the file in the target window
+          targetWindow!.webContents.send("open-document", { path: finalPath });
+
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ success: true, path: finalPath }));
         } else {
           res.writeHead(404);
           res.end("Not found");

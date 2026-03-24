@@ -13,26 +13,29 @@ if (fs.existsSync(distDir)) {
 }
 fs.mkdirSync(distDir, { recursive: true });
 
-// Copy static files
+// Copy static files: [source, dest] pairs (dest relative to dist/)
+// esbuild strips the 'src/' prefix from entryPoints, so static files must match
 const staticFiles = [
-  'manifest.json',
-  'src/popup/popup.html',
-  'src/popup/popup.css',
-  'icons/icon16.png',
-  'icons/icon32.png',
-  'icons/icon48.png',
-  'icons/icon128.png',
+  ['manifest.json', 'manifest.json'],
+  ['src/popup/popup.html', 'popup/popup.html'],
+  ['src/popup/popup.css', 'popup/popup.css'],
+  ['src/redirect.html', 'redirect.html'],
+  ['src/redirect.js', 'redirect.js'],
+  ['icons/icon16.png', 'icons/icon16.png'],
+  ['icons/icon32.png', 'icons/icon32.png'],
+  ['icons/icon48.png', 'icons/icon48.png'],
+  ['icons/icon128.png', 'icons/icon128.png'],
 ];
 
-for (const file of staticFiles) {
-  const srcPath = path.join(__dirname, file);
-  const destPath = path.join(distDir, file);
+for (const [src, dest] of staticFiles) {
+  const srcPath = path.join(__dirname, src);
+  const destPath = path.join(distDir, dest);
 
   if (fs.existsSync(srcPath)) {
     const destDir = path.dirname(destPath);
     fs.mkdirSync(destDir, { recursive: true });
     fs.copyFileSync(srcPath, destPath);
-    console.log(`Copied: ${file}`);
+    console.log(`Copied: ${src} -> ${dest}`);
   }
 }
 

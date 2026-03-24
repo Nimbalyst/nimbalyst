@@ -80,27 +80,46 @@ function generateClipURL({ title, url, content, selection, aiPrompt }) {
 }
 
 /**
- * Send clip to Nimbalyst by opening protocol URL
+ * Send clip to Nimbalyst via its local HTTP server.
+ * Tries ports 3456-3465 to find the running MCP server.
  */
 async function sendClipToNimbalyst(clipData) {
-  const url = generateClipURL(clipData);
+  const startPort = 3456;
+  const maxAttempts = 10;
 
-  try {
-    // Open the protocol URL (this will launch/activate Nimbalyst)
-    await chrome.tabs.create({ url, active: false });
+  for (let i = 0; i < maxAttempts; i++) {
+    const port = startPort + i;
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 1000);
 
-    // Close the tab immediately (it just triggers the protocol handler)
-    const tabs = await chrome.tabs.query({ url });
-    if (tabs.length > 0) {
-      await chrome.tabs.remove(tabs[0].id);
+      const response = await fetch(`http://127.0.0.1:${port}/clip`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(clipData),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      // Any JSON response from /clip means we found Nimbalyst
+      const result = await response.json().catch(() => null);
+
+      if (response.ok) {
+        console.log(`Clip sent to Nimbalyst on port ${port}:`, result?.path);
+        return { success: true };
+      } else {
+        // Server responded but with an error
+        console.error(`Nimbalyst responded with error on port ${port}:`, result);
+        return { success: false, error: result?.error || `Server error: ${response.status}` };
+      }
+    } catch {
+      // Port not available or timeout, try next
     }
-
-    console.log('Clip sent to Nimbalyst');
-    return { success: true };
-  } catch (error) {
-    console.error('Error sending clip:', error);
-    return { success: false, error: error.message };
   }
+
+  console.error('Could not connect to Nimbalyst. Is it running?');
+  return { success: false, error: 'Could not connect to Nimbalyst. Is it running?' };
 }
 
 /**

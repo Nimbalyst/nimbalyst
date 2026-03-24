@@ -8,7 +8,7 @@ import * as path from 'path';
 import { join } from 'path';
 import * as fs from 'fs';
 import { appendFileSync, existsSync, renameSync, unlinkSync, writeFileSync } from 'fs';
-import { createWindow, findWindowByFilePath, findWindowByWorkspace, getMostRecentlyFocusedWorkspaceWindow } from './window/WindowManager';
+import { createWindow, findWindowByFilePath, findWindowByWorkspace, getMostRecentlyFocusedWorkspaceWindow, windowStates } from './window/WindowManager';
 import { loadFileIntoWindow } from './file/FileOperations';
 import { createApplicationMenu } from './menu/ApplicationMenu';
 import { updateNativeTheme, updateWindowTitleBars } from './theme/ThemeManager';
@@ -439,23 +439,63 @@ if (process.defaultApp) {
     app.setAsDefaultProtocolClient('nimbalyst');
 }
 
-// Single-instance lock (Windows deep link support)
-// On Windows, protocol handler launches a new process with the URL in argv.
-// Without this, OAuth callbacks open a second app instance instead of routing
-// to the existing one. Skip for multi-instance dev mode and Playwright tests.
+// Single-instance lock
+// Ensures only one instance runs at a time. When a second instance launches
+// (e.g., from a file double-click), it forwards its context to the primary instance.
+// Skip for multi-instance dev mode and Playwright tests.
 const allowMultipleInstances = !!process.env.NIMBALYST_USER_DATA_DIR || !!process.env.PLAYWRIGHT;
 
 if (!allowMultipleInstances) {
     const gotTheLock = app.requestSingleInstanceLock();
 
     if (!gotTheLock) {
-        // Another instance is already running -- it will receive our argv via
-        // the 'second-instance' event. Quit immediately.
-        logger.main.info('[SingleInstance] Another instance is running, forwarding args and quitting');
-        app.quit();
+        // Another instance holds the lock. On macOS, when the OS launches the
+        // packaged app to open a file, the path comes via Apple Events which
+        // Electron delivers as the open-file event. But open-file only fires
+        // once the event loop is running. We must NOT quit synchronously or the
+        // event is lost. Instead, stay alive, wait for open-file, relay the
+        // path via a signal file, then exit.
+        const pendingOpenFilePath = path.join(app.getPath('userData'), '.pending-open-file');
+
+        logger.main.info(`[SingleInstance] Second instance launched, waiting for open-file. argv=${JSON.stringify(process.argv)}`);
+
+        // Also check argv for file paths (Windows/Linux, or CLI open --args)
+        const fileArg = process.argv.find(arg =>
+            !arg.startsWith('-') &&
+            arg !== process.argv[0] &&
+            path.isAbsolute(arg)
+        );
+        if (fileArg) {
+            logger.main.info(`[SingleInstance] Found file in argv: ${fileArg}`);
+            try { writeFileSync(pendingOpenFilePath, fileArg, 'utf-8'); } catch (_) {}
+            app.quit();
+        } else {
+            // No file in argv -- wait for open-file Apple Event
+            let gotFile = false;
+            app.on('open-file', (event, filePath) => {
+                event.preventDefault();
+                gotFile = true;
+                logger.main.info(`[SingleInstance] Second instance received open-file: ${filePath}`);
+                try {
+                    writeFileSync(pendingOpenFilePath, filePath, 'utf-8');
+                    logger.main.info(`[SingleInstance] Wrote signal file: ${pendingOpenFilePath}`);
+                } catch (err) {
+                    logger.main.error('[SingleInstance] Failed to write signal file:', err);
+                }
+                app.quit();
+            });
+
+            // Fallback timeout -- if open-file never fires, quit anyway
+            setTimeout(() => {
+                if (!gotFile) {
+                    logger.main.info('[SingleInstance] No open-file after timeout, quitting');
+                    app.quit();
+                }
+            }, 5000);
+        }
     } else {
         // We are the primary instance. When a second instance tries to launch,
-        // extract any deep link URL from its argv and handle it here.
+        // extract any deep link URL or file path and handle it here.
         app.on('second-instance', (_event, argv, _workingDirectory) => {
             logger.main.info('[SingleInstance] second-instance event, argv:', argv);
 
@@ -466,6 +506,20 @@ if (!allowMultipleInstances) {
                 handleDeepLink(deepLinkUrl);
             }
 
+            // Check argv for file paths (Windows/Linux pass files as args)
+            const fileArg = argv.find(arg =>
+                !arg.startsWith('-') &&
+                !arg.startsWith('nimbalyst://') &&
+                arg !== argv[0] &&
+                path.isAbsolute(arg) &&
+                existsSync(arg) &&
+                fs.statSync(arg).isFile()
+            );
+            if (fileArg) {
+                logger.main.info(`[SingleInstance] Opening file from argv: ${fileArg}`);
+                openFileWithWorkspaceDetection(fileArg);
+            }
+
             // Focus an existing window so the user sees the result
             const windows = BrowserWindow.getAllWindows();
             if (windows.length > 0) {
@@ -474,6 +528,55 @@ if (!allowMultipleInstances) {
                 win.focus();
             }
         });
+    }
+}
+
+// Watch for pending open-file signals from other instances.
+// On macOS, when the packaged app is launched to open a file but a dev instance
+// holds the single-instance lock, the file path is lost because macOS delivers
+// file paths via Apple Events (not argv), and the second instance quits before
+// its event loop processes the Apple Event. In production this isn't an issue
+// because the packaged app IS the primary instance.
+//
+// Workaround for dev mode: watch a signal file that the second instance writes.
+// Currently only works for CLI invocations where the path is in argv.
+// For Finder double-click during dev, quit the packaged app first.
+{
+    const pendingOpenFilePath = path.join(app.getPath('userData'), '.pending-open-file');
+
+    // Check for a stale signal file on startup (second instance may have written
+    // it before we started watching)
+    const checkPendingFile = () => {
+        try {
+            if (existsSync(pendingOpenFilePath)) {
+                const filePath = fs.readFileSync(pendingOpenFilePath, 'utf-8').trim();
+                unlinkSync(pendingOpenFilePath);
+                if (filePath && existsSync(filePath)) {
+                    logger.main.info(`[SingleInstance] Opening file from signal: ${filePath}`);
+                    if (app.isReady()) {
+                        openFileWithWorkspaceDetection(filePath);
+                    } else {
+                        pendingFilePath = filePath;
+                    }
+                }
+            }
+        } catch (_) {}
+    };
+
+    // Check immediately
+    checkPendingFile();
+
+    // Watch the userData directory for the signal file
+    try {
+        const userDataPath = app.getPath('userData');
+        fs.watch(userDataPath, (eventType, filename) => {
+            if (filename === '.pending-open-file') {
+                // Small delay to ensure the file is fully written
+                setTimeout(checkPendingFile, 50);
+            }
+        });
+    } catch (err) {
+        logger.main.warn('[SingleInstance] Failed to watch for open-file signals:', err);
     }
 }
 
@@ -544,6 +647,81 @@ async function handleDeepLink(url: string): Promise<void> {
             } else {
                 logger.main.error('[DeepLink] Auth callback missing session_token');
             }
+        } else if (parsed.host === 'clip') {
+            // Handle web clip: nimbalyst://clip?url=...&title=...&content=<base64>&selection=<base64>
+            const clipUrl = parsed.searchParams.get('url') || '';
+            const clipTitle = parsed.searchParams.get('title') || 'Untitled Clip';
+            const contentB64 = parsed.searchParams.get('content');
+            const selectionB64 = parsed.searchParams.get('selection');
+
+            // Decode base64 content (UTF-8 safe)
+            const decodeB64 = (b64: string): string => {
+                const binString = atob(b64);
+                const bytes = Uint8Array.from(binString, (c) => c.codePointAt(0)!);
+                return new TextDecoder().decode(bytes);
+            };
+
+            const content = contentB64 ? decodeB64(contentB64) : null;
+            const selection = selectionB64 ? decodeB64(selectionB64) : null;
+            const body = selection || content;
+
+            if (!body) {
+                logger.main.warn('[DeepLink] Clip has no content or selection');
+                return;
+            }
+
+            // Find the frontmost workspace window
+            const targetWindow = getMostRecentlyFocusedWorkspaceWindow();
+            const targetState = targetWindow ? windowStates.get(targetWindow.id) : null;
+            const workspacePath = targetState?.workspacePath;
+
+            if (!workspacePath) {
+                logger.main.warn('[DeepLink] No workspace window open to receive clip');
+                return;
+            }
+
+            // Build filename from title: lowercase, replace non-alphanum with hyphens, truncate
+            const sanitized = clipTitle
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-+|-+$/g, '')
+                .slice(0, 80);
+            const dateStr = new Date().toISOString().slice(0, 10);
+            const fileName = `${dateStr}-${sanitized}.md`;
+
+            // Write to nimbalyst-local/clips/
+            const clipsDir = path.join(workspacePath, 'nimbalyst-local', 'clips');
+            if (!fs.existsSync(clipsDir)) {
+                fs.mkdirSync(clipsDir, { recursive: true });
+            }
+
+            // Build markdown with frontmatter
+            const frontmatter = [
+                '---',
+                `title: "${clipTitle.replace(/"/g, '\\"')}"`,
+                `url: "${clipUrl}"`,
+                `clipped: ${new Date().toISOString()}`,
+                selection ? 'type: selection' : 'type: page',
+                '---',
+            ].join('\n');
+
+            const filePath = path.join(clipsDir, fileName);
+            // If file already exists, append a counter
+            let finalPath = filePath;
+            if (fs.existsSync(filePath)) {
+                let counter = 2;
+                while (fs.existsSync(path.join(clipsDir, `${dateStr}-${sanitized}-${counter}.md`))) {
+                    counter++;
+                }
+                finalPath = path.join(clipsDir, `${dateStr}-${sanitized}-${counter}.md`);
+            }
+
+            fs.writeFileSync(finalPath, `${frontmatter}\n\n${body}`, 'utf-8');
+            logger.main.info(`[DeepLink] Clip saved: ${finalPath}`);
+
+            // Open the clipped file in the target window
+            targetWindow!.webContents.send('open-document', { path: finalPath });
+
         } else if (parsed.host === 'install' || parsed.pathname?.startsWith('/install/')) {
             // Handle extension install: nimbalyst://install/com.nimbalyst.excalidraw
             const extensionId = parsed.host === 'install'
