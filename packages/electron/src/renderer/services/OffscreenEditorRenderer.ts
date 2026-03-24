@@ -354,6 +354,10 @@ class OffscreenEditorRendererImpl {
         },
       },
 
+      setEditorContext(): void {
+        // No editor context for offscreen editors
+      },
+
       registerMenuItems(): void {
         // No menu items for offscreen editors
       },

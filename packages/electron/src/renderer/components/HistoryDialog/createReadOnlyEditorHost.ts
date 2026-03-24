@@ -115,6 +115,11 @@ export function createReadOnlyEditorHost(options: ReadOnlyEditorHostOptions): Ed
     // ============ STORAGE ============
     storage: noopStorage,
 
+    // ============ EDITOR CONTEXT ============
+    setEditorContext(): void {
+      // Read-only - ignore editor context
+    },
+
     // ============ MENU ITEMS ============
     registerMenuItems(_items: EditorMenuItem[]): void {
       // Read-only - ignore menu registration

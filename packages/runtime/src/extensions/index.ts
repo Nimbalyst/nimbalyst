@@ -92,6 +92,7 @@ export type {
   EditorHost,
   EditorHostProps,
   EditorMenuItem,
+  EditorContext,
   DiffConfig,
   DiffResult,
 } from './editorHost';

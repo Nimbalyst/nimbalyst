@@ -358,6 +358,8 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
 
       storage,
 
+      setEditorContext(): void {},
+
       registerMenuItems(): void {},
     };
   }, [filePath, fileName, isActive, onDirtyChange]);
