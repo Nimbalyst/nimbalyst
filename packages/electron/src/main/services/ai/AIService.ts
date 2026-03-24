@@ -2591,6 +2591,17 @@ export class AIService {
 
           // Session naming is now handled automatically via MCP URL parameters
           // No need to configure per-session context
+        } else {
+          // Refresh credentials every turn for all providers so key changes in settings apply immediately.
+          const freshApiKey = this.getApiKeyForProvider(session.provider, effectiveWorkspacePath);
+          await provider.initialize({
+            apiKey: freshApiKey,
+            maxTokens: (session.providerConfig as any)?.maxTokens,
+            temperature: (session.providerConfig as any)?.temperature,
+            ...((session.metadata as any)?.effortLevel && {
+              effortLevel: parseEffortLevel((session.metadata as any).effortLevel),
+            }),
+          });
         }
 
         // Attach @ mentioned files for non-agent providers

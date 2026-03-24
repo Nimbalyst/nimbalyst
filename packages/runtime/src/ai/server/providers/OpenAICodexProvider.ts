@@ -138,7 +138,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
 
   constructor(config?: { apiKey?: string }, deps?: OpenAICodexProviderDeps) {
     super();
-    const apiKey = config?.apiKey || process.env.OPENAI_API_KEY || '';
+    const apiKey = config?.apiKey || '';
 
     // Initialize protocol (or use injected for testing)
     // Support legacy loadSdkModule and resolveCodexPathOverride for existing tests
@@ -256,7 +256,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
 
   async initialize(config: ProviderConfig): Promise<void> {
     this.config = config;
-    const apiKey = config.apiKey || process.env.OPENAI_API_KEY || '';
+    const apiKey = config.apiKey || '';
     if (typeof (this.protocol as Partial<CodexSDKProtocol>).setApiKey === 'function') {
       this.protocol.setApiKey(apiKey);
     }
