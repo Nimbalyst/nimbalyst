@@ -78,6 +78,11 @@ bucket_name = "nimbalyst-session-shares"
 binding = "DOCUMENT_ASSETS"
 bucket_name = "nimbalyst-document-assets"
 
+# Analytics Engine for product usage metrics
+[[analytics_engine_datasets]]
+binding = "ANALYTICS"
+dataset = "nimbalyst_sync"
+
 # Observability - enables logs, traces, and metrics in Cloudflare dashboard
 [observability]
 enabled = true
@@ -134,6 +139,11 @@ class_name = "TeamTrackerRoom"
 [[env.production.durable_objects.bindings]]
 name = "TEAM_ROOM"
 class_name = "TeamRoom"
+
+# Production Analytics Engine
+[[env.production.analytics_engine_datasets]]
+binding = "ANALYTICS"
+dataset = "nimbalyst_sync"
 
 # Production R2 for session shares
 [[env.production.r2_buckets]]

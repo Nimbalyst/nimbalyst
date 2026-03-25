@@ -1233,6 +1233,8 @@ export interface Env {
   FCM_PROJECT_ID?: string;   // Firebase project ID
   FCM_CLIENT_EMAIL?: string; // Service account client email
   FCM_PRIVATE_KEY?: string;  // Base64-encoded service account private key PEM
+  // Analytics Engine for product usage metrics (optional - not available in dev/test)
+  ANALYTICS?: AnalyticsEngineDataset;
   // Test-only: bypass JWT auth in dev mode (parse user_id/org_id from query params)
   TEST_AUTH_BYPASS?: string;
 }

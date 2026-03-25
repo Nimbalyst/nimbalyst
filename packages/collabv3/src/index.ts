@@ -49,6 +49,7 @@ import {
 import { teamRoomPost, teamRoomGet } from './teamRoomHelpers';
 import { NIMBALYST_ORG_TYPE_KEY, getExplicitOrgType, resolveDiscoveredOrgType, selectPreferredPersonalOrg } from './personalOrg';
 import { setLogEnvironment, createLogger } from './logger';
+import { track } from './analytics';
 
 const log = createLogger('sync');
 
@@ -352,6 +353,11 @@ export default {
         return new Response('Invalid room type', { status: 400 });
       }
 
+      // Analytics: track WebSocket connection by room type
+      if (request.headers.get('Upgrade') === 'websocket') {
+        track(env, 'ws_connected', [parsed.type, auth.userId], [1]);
+      }
+
       // Forward request to DO with user_id and org_id in query params
       const forwardUrl = new URL(request.url);
       forwardUrl.searchParams.set('user_id', auth.userId);
@@ -511,7 +517,11 @@ async function handleApiRequest(
 
   // POST /api/teams - Create a new team
   if (url.pathname === '/api/teams' && request.method === 'POST') {
-    return handleCreateTeam(request, auth, env, corsHeaders);
+    const response = await handleCreateTeam(request, auth, env, corsHeaders);
+    if (response.ok) {
+      track(env, 'team_created', [auth.userId, auth.orgId], [1]);
+    }
+    return response;
   }
 
   // GET /api/teams - List teams the caller belongs to
@@ -537,7 +547,11 @@ async function handleApiRequest(
 
     // POST /api/teams/{orgId}/invite - Invite member
     if (subPath === '/invite' && request.method === 'POST') {
-      return handleInviteMember(teamOrgId, request, auth, env, corsHeaders);
+      const response = await handleInviteMember(teamOrgId, request, auth, env, corsHeaders);
+      if (response.ok) {
+        track(env, 'team_member_joined', [teamOrgId, ''], [1]);
+      }
+      return response;
     }
 
     // POST /api/teams/{orgId}/switch - Switch org session
@@ -589,7 +603,11 @@ async function handleApiRequest(
 
       // DELETE /api/teams/{orgId}/members/{memberId} - Remove member
       if (request.method === 'DELETE') {
-        return handleRemoveMember(teamOrgId, memberId, auth, env, corsHeaders);
+        const response = await handleRemoveMember(teamOrgId, memberId, auth, env, corsHeaders);
+        if (response.ok) {
+          track(env, 'team_member_left', [teamOrgId, memberId], [1]);
+        }
+        return response;
       }
 
       // PUT /api/teams/{orgId}/members/{memberId} - Update role
@@ -963,6 +981,10 @@ async function handleAuthRoutes(
           { status: 401, headers: { 'Content-Type': 'text/html' } }
         );
       }
+
+      // Analytics: track successful auth
+      const method = tokenType === 'oauth' ? 'google_oauth' : 'magic_link';
+      track(env, 'auth_event', [method], [1]);
 
       const deepLinkParams = new URLSearchParams({
         session_token: result.sessionToken,

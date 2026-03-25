@@ -29,6 +29,7 @@ import type {
   AuthContext,
 } from './types';
 import { createLogger } from './logger';
+import { track } from './analytics';
 
 const log = createLogger('PersonalProjectSyncRoom');
 
@@ -506,6 +507,9 @@ export class PersonalProjectSyncRoom implements DurableObject {
     );
 
     this.setMetadataValue('updated_at', String(now));
+
+    // Analytics: track file sync
+    track(this.env, 'file_sync', [connState.auth.userId, msg.syncId], [1, msg.encryptedContent.length]);
 
     // Broadcast to other connections
     this.broadcast(

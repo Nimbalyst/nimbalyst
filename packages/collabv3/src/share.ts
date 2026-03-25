@@ -12,6 +12,7 @@
 import type { Env } from './types';
 import type { AuthResult } from './auth';
 import { createLogger } from './logger';
+import { track } from './analytics';
 
 const log = createLogger('share');
 
@@ -176,6 +177,10 @@ export async function handleShareUpload(
 
     log.debug('Share', isUpdate ? 'updated' : 'created', ':', shareId, 'size:', bodySize, 'user:', auth.userId);
 
+    // Analytics: track share creation
+    const ttlDays = parsedTtlDays ?? Math.round(DEFAULT_TTL_MS / (24 * 60 * 60 * 1000));
+    track(env, 'share_created', [auth.userId, shareId, sessionId, viewerType ?? 'session'], [bodySize, ttlDays]);
+
     return new Response(
       JSON.stringify({ shareId, url: shareUrl, isUpdate }),
       { status: 200, headers: jsonHeaders }
@@ -228,6 +233,9 @@ export async function handleShareView(
       log.warn('Failed to increment share view count:', shareId, err);
     }
 
+    // Analytics: track share view
+    track(env, 'share_viewed', [shareId], [1]);
+
     // Branch on viewer_type: extension viewers get a different shell page
     const viewerType = record.viewer_type;
     const viewerHtml = (viewerType && EXTENSION_VIEWER_ALLOWLIST.has(viewerType))
@@ -278,6 +286,9 @@ export async function handleShareContent(
     if (!object) {
       return new Response('Not found', { status: 404 });
     }
+
+    // Analytics: track share content download
+    track(env, 'share_downloaded', [shareId], [object.size]);
 
     return new Response(object.body, {
       headers: {

@@ -15,6 +15,7 @@ import type {
   AuthContext,
 } from './types';
 import { createLogger } from './logger';
+import { track } from './analytics';
 
 const log = createLogger('PersonalSessionRoom');
 
@@ -351,6 +352,9 @@ export class PersonalSessionRoom implements DurableObject {
 
     ws.send(JSON.stringify(response));
     connState.synced = true;
+
+    // Analytics: track session sync activity
+    track(this.env, 'session_sync', [connState.auth.userId, '', metadata?.provider ?? ''], [messages.length]);
   }
 
   /**
@@ -403,6 +407,9 @@ export class PersonalSessionRoom implements DurableObject {
 
     // Update metadata timestamp
     this.setMetadataValue('updated_at', String(Date.now()));
+
+    // Analytics: track message appended
+    track(this.env, 'message_append', [connState.auth.userId, storedMessage.id], [storedMessage.encryptedContent.length]);
 
     // Broadcast to other connections
     this.broadcast(

@@ -16,6 +16,7 @@ import type {
   AuthContext,
 } from './types';
 import { createLogger } from './logger';
+import { track } from './analytics';
 
 const log = createLogger('TeamTrackerRoom');
 
@@ -391,6 +392,9 @@ export class TeamTrackerRoom implements DurableObject {
     // Update activity timestamp
     this.setMetadataValue('updated_at', String(now));
 
+    // Analytics: track tracker mutation
+    track(this.env, 'tracker_mutation', [connState.auth.orgId, itemId, 'upsert'], [1]);
+
     // Broadcast to other connections
     const item: EncryptedTrackerItem = {
       itemId,
@@ -441,6 +445,9 @@ export class TeamTrackerRoom implements DurableObject {
 
     // Update activity timestamp
     this.setMetadataValue('updated_at', String(now));
+
+    // Analytics: track tracker deletion
+    track(this.env, 'tracker_mutation', [connState.auth.orgId, itemId, 'delete'], [1]);
 
     // Broadcast to other connections
     this.broadcast(

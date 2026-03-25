@@ -17,6 +17,7 @@ import type {
   AuthContext,
 } from './types';
 import { createLogger } from './logger';
+import { track } from './analytics';
 import { validateP256PublicKey } from './validatePublicKey';
 
 const log = createLogger('TeamDocumentRoom');
@@ -534,6 +535,9 @@ export class TeamDocumentRoom implements DurableObject {
 
     // Update activity timestamp
     this.setMetadataValue('updated_at', String(now));
+
+    // Analytics: track document edit
+    track(this.env, 'doc_edit', [connState.auth.orgId, '', connState.auth.userId], [encryptedUpdate.length]);
 
     // Broadcast to other connections
     this.broadcast(
