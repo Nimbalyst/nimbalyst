@@ -153,6 +153,7 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
 
     try {
       const tracker = trackerTypes.find(t => t.type === quickAddType);
+      if (tracker?.creatable === false) return;
       const prefix = tracker?.idPrefix || quickAddType.substring(0, 3);
       const timestamp = Date.now().toString(36);
       const random = Math.random().toString(36).substring(2, 8);
@@ -323,14 +324,21 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
           </span>
         )}
 
-        <button
-          className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-white bg-[var(--nim-primary)] rounded hover:opacity-90 transition-opacity"
-          onClick={() => handleNewItem(filterType !== 'all' ? filterType : 'task')}
-          data-testid="tracker-toolbar-new-button"
-        >
-          <MaterialSymbol icon="add" size={14} />
-          New
-        </button>
+        {/* Hide New button for non-creatable types (e.g. automations) */}
+        {(() => {
+          const targetType = filterType !== 'all' ? filterType : 'task';
+          const model = trackerTypes.find(t => t.type === targetType);
+          return model?.creatable !== false;
+        })() && (
+          <button
+            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-white bg-[var(--nim-primary)] rounded hover:opacity-90 transition-opacity"
+            onClick={() => handleNewItem(filterType !== 'all' ? filterType : 'task')}
+            data-testid="tracker-toolbar-new-button"
+          >
+            <MaterialSymbol icon="add" size={14} />
+            New
+          </button>
+        )}
       </div>
 
       {/* Content area: table/kanban + optional detail panel */}

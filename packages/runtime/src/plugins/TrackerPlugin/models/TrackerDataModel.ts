@@ -94,6 +94,8 @@ export interface TrackerDataModel {
   tableView?: TableViewConfig;
   /** Sync policy for collaborative tracking. Defaults to local if omitted. */
   sync?: TrackerSyncPolicy;
+  /** If false, items of this type cannot be created via tracker_create. Defaults to true. */
+  creatable?: boolean;
 }
 
 /**

@@ -379,6 +379,21 @@ export async function handleTrackerCreate(
       };
     }
 
+    // Check if this type allows creation
+    const { globalRegistry } = await import("@nimbalyst/runtime/plugins/TrackerPlugin/models/TrackerDataModel");
+    const model = globalRegistry.get(args.type);
+    if (model && model.creatable === false) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Cannot create items of type '${args.type}' via tracker_create. ${args.type === 'automation' ? 'Use the automations.create tool instead.' : 'This type is read-only.'}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
     const id = `${args.type}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const data: Record<string, any> = {
       title: args.title,

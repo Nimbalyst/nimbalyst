@@ -6,6 +6,26 @@ import jsyaml from 'js-yaml';
 import { globalRegistry } from '../models/TrackerDataModel';
 import { parseDate, formatLocalDateOnly } from '../models/dateUtils';
 
+/**
+ * Format an automation schedule object into a human-readable string.
+ * Handles interval, daily, and weekly schedule types.
+ */
+function formatAutomationSchedule(schedule: any): string {
+  if (!schedule || typeof schedule !== 'object') return schedule ?? '';
+  switch (schedule.type) {
+    case 'interval':
+      return `Every ${schedule.intervalMinutes} min`;
+    case 'daily':
+      return `Daily at ${schedule.time ?? ''}`;
+    case 'weekly': {
+      const days = (schedule.days as string[]) ?? [];
+      return `${days.map((d: string) => d.charAt(0).toUpperCase() + d.slice(1)).join(', ')} at ${schedule.time ?? ''}`;
+    }
+    default:
+      return String(schedule.type ?? schedule);
+  }
+}
+
 export interface TrackerFrontmatter {
   type: string; // Tracker type (plan, decision, bug, etc.)
   data: Record<string, any>; // All tracker field data
@@ -100,7 +120,7 @@ export function detectTrackerFromFrontmatter(content: string): TrackerFrontmatte
       data: resolveFieldData('automation', {
         title: auto.title,
         status,
-        schedule: auto.schedule?.type,
+        schedule: formatAutomationSchedule(auto.schedule),
         lastRun: auto.lastRun,
         runCount: auto.runCount ?? 0,
       }),

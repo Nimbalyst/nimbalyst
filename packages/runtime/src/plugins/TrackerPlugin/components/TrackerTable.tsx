@@ -267,6 +267,27 @@ function formatDate(date: Date): string {
  * Works for any tracker type that supports fullDocument mode (plan, decision, etc.)
  */
 /**
+ * Format a complex object for display in a string field.
+ * Handles known patterns like automation schedules, otherwise falls back to JSON.
+ */
+function formatObjectForStringField(value: Record<string, any>): string {
+  // Automation schedule objects
+  if (value.type && (value.type === 'interval' || value.type === 'daily' || value.type === 'weekly')) {
+    switch (value.type) {
+      case 'interval':
+        return `Every ${value.intervalMinutes} min`;
+      case 'daily':
+        return `Daily at ${value.time ?? ''}`;
+      case 'weekly': {
+        const days = (value.days as string[]) ?? [];
+        return `${days.map((d: string) => d.charAt(0).toUpperCase() + d.slice(1)).join(', ')} at ${value.time ?? ''}`;
+      }
+    }
+  }
+  return JSON.stringify(value);
+}
+
+/**
  * Resolve the tracker frontmatter data for a given document and tracker type.
  * Returns merged data with top-level fields as canonical and embedded fields as fallback.
  * Returns null if the document doesn't match this tracker type.
@@ -344,6 +365,9 @@ export function convertFullDocumentToTrackerItems(metadata: any[], trackerType: 
             // Parse dates into Date objects at the data layer
             if (field.type === 'date' || field.type === 'datetime') {
               customFields[field.name] = parseDate(value) ?? value;
+            } else if (field.type === 'string' && typeof value === 'object' && value !== null) {
+              // Format objects for string fields (e.g. automation schedule)
+              customFields[field.name] = formatObjectForStringField(value);
             } else {
               customFields[field.name] = value;
             }
@@ -1021,7 +1045,7 @@ export function TrackerTable({
               >
                 <span className="header-content inline-flex items-center gap-1 whitespace-nowrap">
                   {/* Show + New button when a specific type is selected and onNewItem is provided */}
-                  {onNewItem && activeTypeFilter !== 'all' ? (
+                  {onNewItem && activeTypeFilter !== 'all' && globalRegistry.get(activeTypeFilter)?.creatable !== false ? (
                     <button
                       className="tracker-new-button inline-flex items-center gap-0.5 px-1.5 py-px rounded text-[10px] font-semibold border-none cursor-pointer transition-all duration-150 hover:opacity-90"
                       style={{
@@ -1226,8 +1250,8 @@ export function TrackerTable({
                           </p>
                         </div>
 
-                        {/* New button */}
-                        {onNewItem && (
+                        {/* New button - hidden for non-creatable types */}
+                        {onNewItem && globalRegistry.get(activeTypeFilter)?.creatable !== false && (
                           <button
                             className="shrink-0 px-3 py-1.5 rounded-md text-xs font-medium text-white border-none cursor-pointer transition-all duration-150 hover:opacity-90"
                             style={{ backgroundColor: typeColor }}

@@ -245,6 +245,7 @@ const builtinTrackers: TrackerDataModel[] = [
     displayNamePlural: 'Automations',
     icon: 'auto_mode',
     color: '#60a5fa',
+    creatable: false,
     modes: { inline: false, fullDocument: true },
     sync: { mode: 'local', scope: 'project' },
     idPrefix: 'aut',

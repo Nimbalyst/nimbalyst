@@ -602,6 +602,9 @@ const ReadOnlyField: React.FC<{ field: FieldDefinition; value: any }> = ({ field
     displayValue = value.toLocaleDateString();
   } else if (typeof value === 'boolean') {
     displayValue = value ? 'Yes' : 'No';
+  } else if (typeof value === 'object') {
+    // Safety: format objects as JSON rather than [object Object]
+    displayValue = JSON.stringify(value);
   } else {
     displayValue = String(value);
   }

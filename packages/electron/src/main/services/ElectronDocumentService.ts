@@ -1370,6 +1370,13 @@ export class ElectronDocumentService implements DocumentService {
     source?: string;
     sourceRef?: string;
   }): Promise<TrackerItem> {
+    // Check if this type allows creation
+    const { globalRegistry } = await import('@nimbalyst/runtime/plugins/TrackerPlugin/models/TrackerDataModel');
+    const model = globalRegistry.get(payload.type);
+    if (model && model.creatable === false) {
+      throw new Error(`Cannot create items of type '${payload.type}': type is not creatable`);
+    }
+
     const data: Record<string, any> = {
       title: payload.title,
       status: payload.status,
