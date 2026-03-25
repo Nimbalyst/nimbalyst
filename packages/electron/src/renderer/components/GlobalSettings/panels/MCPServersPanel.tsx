@@ -100,7 +100,8 @@ const TEMPLATE_ICON_CONFIG: Record<string, IconConfig> = {
   fetch: { type: 'material-symbol', icon: 'cloud_download' },
   'sequential-thinking': { type: 'material-symbol', icon: 'psychology' },
   'knowledge-graph-memory': { type: 'material-symbol', icon: 'hub' },
-  serena: { type: 'material-symbol', icon: 'code' }
+  serena: { type: 'material-symbol', icon: 'code' },
+  figma: { type: 'simple-icons', slug: 'figma' }
 };
 
 // Component to render MCP server icon
@@ -173,6 +174,7 @@ const TEMPLATE_CATEGORIES: Record<string, TemplateCategory> = {
   serena: 'development',
   sentry: 'development',
   corridor: 'development',
+  figma: 'development',
   linear: 'productivity',
   asana: 'productivity',
   atlassian: 'productivity',
@@ -267,6 +269,11 @@ const ENV_VAR_HELP: Record<string, { label: string; help: string; link?: string 
   FILESYSTEM_ALLOWED_DIR: {
     label: 'Allowed Directory',
     help: 'Directory path the server is allowed to access (e.g., /Users/you/projects)'
+  },
+  FIGMA_API_KEY: {
+    label: 'Figma Personal Access Token',
+    help: 'Create a personal access token in Figma account settings',
+    link: 'https://help.figma.com/hc/en-us/articles/8085703771159-Manage-personal-access-tokens'
   }
 };
 
@@ -566,6 +573,20 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
       command: 'uvx',
       args: ['--from', 'git+https://github.com/oraios/serena', 'serena', 'start-mcp-server'],
       env: {}
+    }
+  },
+  {
+    id: 'figma',
+    name: 'Figma',
+    description: 'Design file access and inspection',
+    docsUrl: 'https://help.figma.com/hc/en-us/articles/32132100833559-Guide-to-the-Figma-MCP-server',
+    authType: 'api-key',
+    config: {
+      command: 'npx',
+      args: ['-y', 'figma-developer-mcp', '--stdio'],
+      env: {
+        FIGMA_API_KEY: '${FIGMA_API_KEY}'
+      }
     }
   }
 ];
