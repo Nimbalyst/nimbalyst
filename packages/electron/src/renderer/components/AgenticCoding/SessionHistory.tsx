@@ -2177,10 +2177,11 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         return true;
       }
 
-      // Compare against the childCount that was current when we last fetched.
-      // If IPC returns fewer children than childCount (e.g., filtered server-side),
-      // we accept the result and don't re-fetch until childCount changes.
-      // The cache stores { children, fetchedForChildCount } to track this.
+      // If the parent's childCount changed since we last fetched, refresh.
+      // This catches newly added or removed children.
+      if (cachedChildren.length !== (session.childCount ?? 0)) {
+        return true;
+      }
 
       for (const child of cachedChildren) {
         const registryChild = sessionRegistry.get(child.id);
