@@ -11,6 +11,17 @@ interface Query extends AsyncGenerator<SDKMessage, void> {
   setPermissionMode(mode: string): Promise<void>;
   setModel(model?: string): Promise<void>;
   streamInput(stream: AsyncIterable<any>): Promise<void>;
+  mcpServerStatus(): Promise<McpServerStatusInfo[]>;
+  reconnectMcpServer(serverName: string): Promise<void>;
+}
+
+/** MCP server status as reported by the SDK */
+export interface McpServerStatusInfo {
+  name: string;
+  status: 'connected' | 'failed' | 'needs-auth' | 'pending' | 'disabled';
+  error?: string;
+  serverInfo?: { name: string; version: string };
+  tools?: { name: string; description?: string }[];
 }
 import { parse as parseShellCommand } from 'shell-quote';
 
@@ -172,6 +183,17 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     lastToolName?: string;
     summary?: string;
   }>();
+
+  // MCP server status tracking: last known statuses for change detection
+  private mcpServerStatuses: Map<string, McpServerStatusInfo> = new Map();
+  // Interval handle for periodic MCP health checks during active sessions
+  private mcpHealthCheckInterval: ReturnType<typeof setInterval> | null = null;
+  // Session ID for the current streaming session (needed for health check emissions)
+  private currentSessionId: string | undefined;
+  // Persistent query reference for MCP operations (survives between turns).
+  // Unlike leadQuery which is nulled after each turn, this stays set as long as
+  // the SDK subprocess is alive (i.e. the session has MCP servers).
+  private mcpQuery: Query | null = null;
 
   // Permission service for tool permission handling
   private permissionService: ToolPermissionService | null = null;
@@ -1179,6 +1201,15 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
               // Warn if API key source is "none" - this means Claude Code didn't find credentials
               if (chunk.apiKeySource === 'none') {
               }
+
+              // Start MCP server health checks after init
+              if (mcpServerCount > 0) {
+                this.currentSessionId = sessionId;
+                this.mcpQuery = this.leadQuery;
+                // Do an initial status check, then start periodic polling
+                this.checkMcpServerStatuses().catch(() => {});
+                this.startMcpHealthChecks();
+              }
             } else if (chunk.subtype === 'task_started') {
               // SDK-native sub-agent started
               const taskChunk = chunk as any;
@@ -1778,6 +1809,10 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         };
       }
     } finally {
+      // Don't stop MCP health checks or clear mcpQuery between turns -
+      // the SDK subprocess stays alive for session resume, so MCP operations
+      // (health checks, reconnect) should keep working between turns.
+      // They are cleaned up in abort() and when the provider is destroyed.
       this.leadQuery = null;
       this.abortController = null;
       this.wasInterrupted = false;
@@ -1809,6 +1844,11 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
 
     // Abort all managed teammates
     this.teammateManager.killAll();
+
+    // Clean up MCP health checks and persistent query reference
+    this.stopMcpHealthChecks();
+    this.mcpQuery = null;
+    this.currentSessionId = undefined;
   }
 
   /**
@@ -2104,6 +2144,83 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     } catch (error) {
       console.error('[CLAUDE-CODE] Failed to update session metadata with tasks:', error);
     }
+  }
+
+  /**
+   * Start periodic MCP server health checks during an active session.
+   * Polls the SDK for server status and emits events when servers disconnect.
+   */
+  private startMcpHealthChecks(): void {
+    this.stopMcpHealthChecks();
+    // Poll every 30 seconds
+    this.mcpHealthCheckInterval = setInterval(() => {
+      this.checkMcpServerStatuses().catch(() => {});
+    }, 30_000);
+  }
+
+  private stopMcpHealthChecks(): void {
+    if (this.mcpHealthCheckInterval) {
+      clearInterval(this.mcpHealthCheckInterval);
+      this.mcpHealthCheckInterval = null;
+    }
+  }
+
+  /**
+   * Query MCP server status from the SDK and emit events for any changes.
+   * Uses mcpQuery (persistent across turns) rather than leadQuery (per-turn).
+   */
+  private async checkMcpServerStatuses(): Promise<void> {
+    const q = this.mcpQuery;
+    if (!q) return;
+
+    try {
+      const statuses: McpServerStatusInfo[] = await q.mcpServerStatus();
+      const changes: McpServerStatusInfo[] = [];
+
+      for (const server of statuses) {
+        const prev = this.mcpServerStatuses.get(server.name);
+        if (!prev || prev.status !== server.status) {
+          changes.push(server);
+          if (prev && prev.status === 'connected' && server.status === 'failed') {
+            console.warn(`[CLAUDE-CODE] MCP server "${server.name}" disconnected: ${server.error || 'unknown reason'}`);
+          }
+        }
+        this.mcpServerStatuses.set(server.name, server);
+      }
+
+      if (changes.length > 0) {
+        this.emit('mcpServerStatus:changed', {
+          sessionId: this.currentSessionId,
+          servers: Array.from(this.mcpServerStatuses.values()),
+          changes,
+        });
+      }
+    } catch {
+      // Query may be closing, ignore
+    }
+  }
+
+  /**
+   * Reconnect a disconnected MCP server by name.
+   * Can be called from the UI via IPC.
+   * Uses mcpQuery (persistent across turns) so reconnect works between turns.
+   */
+  async reconnectMcpServer(serverName: string): Promise<void> {
+    const q = this.mcpQuery;
+    if (!q) {
+      throw new Error('No active session to reconnect MCP server');
+    }
+    console.log(`[CLAUDE-CODE] Reconnecting MCP server: ${serverName}`);
+    await q.reconnectMcpServer(serverName);
+    // Re-check statuses immediately after reconnect attempt
+    await this.checkMcpServerStatuses();
+  }
+
+  /**
+   * Get current MCP server statuses (cached from last health check).
+   */
+  getMcpServerStatuses(): McpServerStatusInfo[] {
+    return Array.from(this.mcpServerStatuses.values());
   }
 
   getCapabilities(): ProviderCapabilities {
