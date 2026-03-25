@@ -20,6 +20,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.56.11] - 2026-03-25
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Update errors now direct users to manual download instead of showing a broken auto-update flow
+- Codex test connection now shows clear error messages instead of failing silently
+- Resolve TypeScript variance error in atomFamilyRegistry
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.56.10] - 2026-03-24
 
 
