@@ -173,7 +173,9 @@ In your `manifest.json`:
       {
         "filePatterns": ["*.mytype", "*.myt"],
         "displayName": "My Type Editor",
-        "component": "MyEditor"
+        "component": "MyEditor",
+        "supportsDiffMode": false,
+        "showDocumentHeader": false
       }
     ]
   }

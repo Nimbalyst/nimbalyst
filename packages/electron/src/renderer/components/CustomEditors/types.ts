@@ -35,6 +35,12 @@ export interface CustomEditorRegistration {
   // Optional: Whether this editor supports source mode (viewing/editing raw content in Monaco)
   supportsSourceMode?: boolean;
 
+  // Optional: Whether this editor supports the host AI diff review UI
+  supportsDiffMode?: boolean;
+
+  // Optional: Whether to show the host-provided document header above the editor
+  showDocumentHeader?: boolean;
+
   // Optional: Extension ID for error attribution (added automatically for extension-provided editors)
   extensionId?: string;
 

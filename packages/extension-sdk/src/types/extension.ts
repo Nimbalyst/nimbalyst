@@ -349,6 +349,18 @@ export interface CustomEditorContribution {
    * When true, the host will provide a source-mode toggle.
    */
   supportsSourceMode?: boolean;
+
+  /**
+   * Whether this editor supports the host's AI diff review mode.
+   * Defaults to true when omitted for backward compatibility.
+   */
+  supportsDiffMode?: boolean;
+
+  /**
+   * Whether to show the host-provided document header above the editor.
+   * Defaults to true when omitted for backward compatibility.
+   */
+  showDocumentHeader?: boolean;
 }
 
 export interface DocumentHeaderContribution {

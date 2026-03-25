@@ -56,6 +56,8 @@ function registerExtensionEditors(extensionId: string): string[] {
         name: contribution.displayName,
         supportsAI: extension.manifest.permissions?.ai || false,
         supportsSourceMode: contribution.supportsSourceMode || false,
+        supportsDiffMode: contribution.supportsDiffMode,
+        showDocumentHeader: contribution.showDocumentHeader,
         extensionId: extensionId,
         componentName: contribution.component,
       });

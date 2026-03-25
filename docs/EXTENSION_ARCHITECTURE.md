@@ -100,6 +100,79 @@ useEditorLifecycle(host, {
 });
 ```
 
+## Shared Editor Components
+
+Extensions can use the host's built-in editors instead of bundling their own. These are provided through the `@nimbalyst/runtime` externals system with zero bundle size impact.
+
+### Available Components
+
+| Component | Import | Use Case |
+| --- | --- | --- |
+| `MonacoEditor` | `import { MonacoEditor } from '@nimbalyst/runtime'` | Syntax-highlighted code editing with EditorHost integration |
+| `MarkdownEditor` | `import { MarkdownEditor } from '@nimbalyst/runtime'` | Rich text markdown editing (Lexical-based) with EditorHost integration |
+
+Both components accept an `EditorHost` as their primary prop and handle all lifecycle integration (loading, saving, dirty state, file changes) automatically.
+
+### Usage: Full File Editor
+
+Use when your extension registers a custom editor that delegates to Monaco or Markdown:
+
+```tsx
+import { MonacoEditor } from '@nimbalyst/runtime';
+import type { EditorHostProps } from '@nimbalyst/extension-sdk';
+
+export const ConfigEditor = ({ host }: EditorHostProps) => {
+  return <MonacoEditor host={host} fileName={host.fileName} />;
+};
+```
+
+### Usage: Embedded Read-Only Panel
+
+Use `createReadOnlyHost` from the SDK to embed an editor within a larger custom editor:
+
+```tsx
+import { MonacoEditor } from '@nimbalyst/runtime';
+import { createReadOnlyHost } from '@nimbalyst/extension-sdk';
+
+export const MyEditor = ({ host }: EditorHostProps) => {
+  const [code, setCode] = useState('');
+
+  const previewHost = useMemo(() => createReadOnlyHost(code, {
+    fileName: 'preview.tsx',
+    theme: host.theme,
+  }), [code, host.theme]);
+
+  return (
+    <div style={{ display: 'flex', height: '100%' }}>
+      <div style={{ flex: 1 }}>{/* Custom editor UI */}</div>
+      <div style={{ flex: 1 }}>
+        <MonacoEditor host={previewHost} fileName="preview.tsx" />
+      </div>
+    </div>
+  );
+};
+```
+
+### Type Imports
+
+For type checking, import prop types from the extension SDK:
+
+```typescript
+import type {
+  MonacoEditorProps,
+  MonacoEditorConfig,
+  MarkdownEditorProps,
+  MarkdownEditorConfig,
+} from '@nimbalyst/extension-sdk';
+```
+
+### Notes
+
+- These components are already loaded by the host -- extensions get a reference to the same instance, not a copy
+- Theme changes propagate automatically through `EditorHost.onThemeChanged`
+- Diff mode is not available when using these editors in extensions (it's coupled to the host's TabEditor)
+- For the `MarkdownEditor`, the `collaborationConfig` prop is not available to extensions
+
 ## Extension Contract
 
 Extensions receive `EditorHost` and must:

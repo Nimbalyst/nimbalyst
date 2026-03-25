@@ -187,6 +187,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
   // Check if the custom editor supports source mode (from registry)
   const customEditorSupportsSourceMode = customEditorRegistration?.supportsSourceMode || false;
+  const customEditorSupportsDiffMode = customEditorRegistration?.supportsDiffMode !== false;
+  const customEditorShowsDocumentHeader = customEditorRegistration?.showDocumentHeader !== false;
 
   // Source mode state - unified for both markdown and custom editors
   // When true, shows Monaco with raw content; when false, shows rich editor (Lexical or custom)
@@ -1064,8 +1066,12 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         }
 
         // If there are unreviewed pending AI edit tags, apply diff mode (skip conflict dialog)
-        // Custom editors that subscribe to onDiffRequested can also handle diff mode
-        const customEditorSupportsDiff = isCustom && diffRequestCallbackRef.current !== null;
+        // Custom editors only participate when diff mode is enabled and they
+        // have actually subscribed to onDiffRequested.
+        const customEditorSupportsDiff =
+          isCustom &&
+          customEditorSupportsDiffMode &&
+          diffRequestCallbackRef.current !== null;
         if (pendingTags && pendingTags.length > 0 && (!isCustom || customEditorSupportsDiff)) {
           // Get the baseline for diff comparison
           // This will be the latest incremental-approval tag if it exists, otherwise the pre-edit tag
@@ -2201,52 +2207,60 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       },
 
       // Subscribe to diff requests (optional - for editors that support diff mode)
-      subscribeToDiffRequests: (callback: (config: DiffConfig) => void): (() => void) => {
-        diffRequestCallbackRef.current = callback;
-        return () => {
-          diffRequestCallbackRef.current = null;
-        };
-      },
+      subscribeToDiffRequests: customEditorSupportsDiffMode
+        ? (callback: (config: DiffConfig) => void): (() => void) => {
+            diffRequestCallbackRef.current = callback;
+            return () => {
+              diffRequestCallbackRef.current = null;
+            };
+          }
+        : undefined,
 
       // Report diff result
-      reportDiffResult: async (result): Promise<void> => {
-        if (!pendingAIEditTagRef.current) return;
+      reportDiffResult: customEditorSupportsDiffMode
+        ? async (result): Promise<void> => {
+            if (!pendingAIEditTagRef.current) return;
 
-        // Save the resulting content
-        await window.electronAPI.saveFile(result.content, filePath);
+            // Save the resulting content
+            await window.electronAPI.saveFile(result.content, filePath);
 
-        // Update tag status
-        if (window.electronAPI.history) {
-          await window.electronAPI.history.updateTagStatus(
-            filePath,
-            pendingAIEditTagRef.current.tagId,
-            'reviewed',
-            workspaceId
-          );
-        }
+            // Update tag status
+            if (window.electronAPI.history) {
+              await window.electronAPI.history.updateTagStatus(
+                filePath,
+                pendingAIEditTagRef.current.tagId,
+                'reviewed',
+                workspaceId
+              );
+            }
 
-        // Clear pending tag
-        setPendingAIEditTag(null);
+            // Clear pending tag
+            setPendingAIEditTag(null);
 
-        // Update state
-        contentRef.current = result.content;
-        lastSavedContentRef.current = result.content;
-        isDirtyRef.current = false;
-        onDirtyChange?.(false);
-      },
+            // Update state
+            contentRef.current = result.content;
+            lastSavedContentRef.current = result.content;
+            isDirtyRef.current = false;
+            onDirtyChange?.(false);
+          }
+        : undefined,
 
       // Check if diff mode is active
-      isDiffModeActive: () => {
-        return pendingAIEditTagRef.current !== null;
-      },
+      isDiffModeActive: customEditorSupportsDiffMode
+        ? () => {
+            return pendingAIEditTagRef.current !== null;
+          }
+        : undefined,
 
       // Subscribe to diff being cleared externally (accept/reject from unified header)
-      subscribeToDiffCleared: (callback: () => void): (() => void) => {
-        diffClearedCallbackRef.current = callback;
-        return () => {
-          diffClearedCallbackRef.current = null;
-        };
-      },
+      subscribeToDiffCleared: customEditorSupportsDiffMode
+        ? (callback: () => void): (() => void) => {
+            diffClearedCallbackRef.current = callback;
+            return () => {
+              diffClearedCallbackRef.current = null;
+            };
+          }
+        : undefined,
 
       // ============ SOURCE MODE ============
       // Unified source mode handling for both markdown and custom editors
@@ -2351,7 +2365,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       },
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filePath, fileName, workspaceId, extensionStorage]); // Recreate when file, workspace, or storage changes (theme accessed via themeRef)
+  }, [filePath, fileName, workspaceId, extensionStorage, customEditorSupportsDiffMode]); // Recreate when file, workspace, storage, or diff support changes (theme accessed via themeRef)
 
   // Clean up editor context when tab unmounts
   useEffect(() => {
@@ -2486,14 +2500,16 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               if (registration.extensionId) {
                 return (
                   <div className="custom-editor-container flex flex-col flex-1 min-h-0 overflow-hidden" data-extension-id={registration.extensionId} data-file-path={filePath}>
-                    <DocumentHeaderContainer
-                      filePath={filePath}
-                      fileName={fileName}
-                      getContent={getDocumentHeaderContent}
-                      contentVersion={reloadVersion}
-                      onContentChange={handleDocumentHeaderContentChange}
-                    />
-                    {showCustomEditorDiffBar && (
+                    {customEditorShowsDocumentHeader && (
+                      <DocumentHeaderContainer
+                        filePath={filePath}
+                        fileName={fileName}
+                        getContent={getDocumentHeaderContent}
+                        contentVersion={reloadVersion}
+                        onContentChange={handleDocumentHeaderContentChange}
+                      />
+                    )}
+                    {customEditorSupportsDiffMode && showCustomEditorDiffBar && (
                       <UnifiedDiffHeader
                         filePath={filePath}
                         fileName={fileName}
@@ -2521,14 +2537,16 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               const CustomEditor = registration.component;
               return (
                 <div className="custom-editor-container flex flex-col flex-1 min-h-0 overflow-hidden">
-                  <DocumentHeaderContainer
-                    filePath={filePath}
-                    fileName={fileName}
-                    getContent={getDocumentHeaderContent}
-                    contentVersion={reloadVersion}
-                    onContentChange={handleDocumentHeaderContentChange}
-                  />
-                  {showCustomEditorDiffBar && (
+                  {customEditorShowsDocumentHeader && (
+                    <DocumentHeaderContainer
+                      filePath={filePath}
+                      fileName={fileName}
+                      getContent={getDocumentHeaderContent}
+                      contentVersion={reloadVersion}
+                      onContentChange={handleDocumentHeaderContentChange}
+                    />
+                  )}
+                  {customEditorSupportsDiffMode && showCustomEditorDiffBar && (
                     <UnifiedDiffHeader
                       filePath={filePath}
                       fileName={fileName}

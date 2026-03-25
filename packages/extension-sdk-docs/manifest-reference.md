@@ -150,7 +150,9 @@ Register custom editors for matching file types.
       "filePatterns": ["*.csv", "*.tsv"],
       "displayName": "Spreadsheet Editor",
       "component": "SpreadsheetEditor",
-      "supportsSourceMode": true
+      "supportsSourceMode": true,
+      "supportsDiffMode": true,
+      "showDocumentHeader": true
     }
   ]
 }
@@ -162,6 +164,8 @@ Register custom editors for matching file types.
 | `displayName` | `string` | Name shown in the editor selector |
 | `component` | `string` | Key in your exported `components` object |
 | `supportsSourceMode` | `boolean` | Enables the host's source-mode toggle |
+| `supportsDiffMode` | `boolean` | Enables the host's AI diff review mode. Defaults to `true` when omitted |
+| `showDocumentHeader` | `boolean` | Shows the host-provided document header above the editor. Defaults to `true` when omitted |
 
 ### `documentHeaders`
 

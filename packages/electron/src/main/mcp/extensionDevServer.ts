@@ -236,6 +236,26 @@ function validateManifest(manifestPath: string): {
                 severity: "error",
               });
             }
+            if (
+              editor.supportsDiffMode !== undefined &&
+              typeof editor.supportsDiffMode !== "boolean"
+            ) {
+              warnings.push({
+                field: `contributions.customEditors[${idx}].supportsDiffMode`,
+                message: '"supportsDiffMode" must be a boolean',
+                severity: "error",
+              });
+            }
+            if (
+              editor.showDocumentHeader !== undefined &&
+              typeof editor.showDocumentHeader !== "boolean"
+            ) {
+              warnings.push({
+                field: `contributions.customEditors[${idx}].showDocumentHeader`,
+                message: '"showDocumentHeader" must be a boolean',
+                severity: "error",
+              });
+            }
           }
         );
       }

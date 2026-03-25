@@ -229,6 +229,26 @@ function validateManifest(
                 suggestion: 'Use "supportsSourceMode": true or false',
               });
             }
+            if (
+              editorRecord.supportsDiffMode !== undefined &&
+              typeof editorRecord.supportsDiffMode !== 'boolean'
+            ) {
+              errors.push({
+                error: `customEditors[${index}] has invalid 'supportsDiffMode'`,
+                field: `contributions.customEditors[${index}].supportsDiffMode`,
+                suggestion: 'Use "supportsDiffMode": true or false',
+              });
+            }
+            if (
+              editorRecord.showDocumentHeader !== undefined &&
+              typeof editorRecord.showDocumentHeader !== 'boolean'
+            ) {
+              errors.push({
+                error: `customEditors[${index}] has invalid 'showDocumentHeader'`,
+                field: `contributions.customEditors[${index}].showDocumentHeader`,
+                suggestion: 'Use "showDocumentHeader": true or false',
+              });
+            }
           });
         }
       }
