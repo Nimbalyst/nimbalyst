@@ -1353,6 +1353,15 @@ export async function createApplicationMenu() {
                             }
                         },
                         {
+                            label: 'Show Figma MCP Migration Toast',
+                            click: async () => {
+                                const focused = getFocusedWindow();
+                                if (focused) {
+                                    focused.webContents.send('show-figma-mcp-migration');
+                                }
+                            }
+                        },
+                        {
                             label: 'Show Session Import Dialog',
                             click: async () => {
                                 const focused = getFocusedWindow();

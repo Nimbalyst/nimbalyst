@@ -37,6 +37,7 @@ import { ConfirmDialog } from './components/ConfirmDialog/ConfirmDialog';
 // NOTE: WindowsClaudeCodeWarning now managed by DialogProvider
 // NOTE: ErrorDialog now managed by DialogProvider
 import { ErrorToastContainer } from './components/ErrorToast/ErrorToast';
+import { errorNotificationService } from './services/ErrorNotificationService';
 // NOTE: ProjectSelectionDialog now managed by DialogProvider
 // NOTE: UnifiedOnboarding now managed by DialogProvider
 import { WorkspaceManager } from './components/WorkspaceManager/WorkspaceManager.tsx';
@@ -1130,6 +1131,60 @@ export default function App() {
   }, []);
 
   // NOTE: Commands toast check removed - commands now via extension-based plugins
+
+  // Show Figma MCP migration warning toast.
+  // Figma restricts OAuth client registration to approved clients, so mcp-remote gets 403.
+  // Users need to reconfigure using the PAT-based template instead.
+  const showFigmaMcpMigrationToast = useCallback((force = false) => {
+    const show = () => {
+      errorNotificationService.showWarning(
+        'Figma MCP Server Needs Reconfiguration',
+        'It is recommended that you remove your current Figma MCP configuration and re-add it in Nimbalyst, which will use a personal access token instead. Figma restricts OAuth to approved clients, so the current config will not connect.',
+        {
+          duration: 0,
+          action: {
+            label: 'Open MCP Settings',
+            onClick: () => {
+              store.set(openSettingsCommandAtom, { category: 'mcp-servers', timestamp: Date.now() });
+            },
+          },
+        }
+      );
+    };
+
+    if (force) {
+      show();
+      return;
+    }
+
+    // On startup, only show if user has a broken Figma OAuth config
+    window.electronAPI.invoke('mcp-config:read-user').then((config: any) => {
+      const servers = config?.mcpServers || {};
+      const hasBrokenFigma = Object.values(servers).some((server: any) => {
+        const args: string[] = server.args || [];
+        return args.some((arg: string) => arg.includes('mcp.figma.com'));
+      });
+      if (hasBrokenFigma) show();
+    }).catch(() => {
+      // Silently ignore - not critical
+    });
+  }, []);
+
+  // Check on startup
+  useEffect(() => {
+    if (!window.electronAPI?.invoke) return;
+    showFigmaMcpMigrationToast();
+  }, [showFigmaMcpMigrationToast]);
+
+  // Listen for Developer menu trigger (force show)
+  useEffect(() => {
+    if (!window.electronAPI?.on) return;
+    const handler = () => showFigmaMcpMigrationToast(true);
+    window.electronAPI.on('show-figma-mcp-migration', handler);
+    return () => {
+      window.electronAPI.off?.('show-figma-mcp-migration', handler);
+    };
+  }, [showFigmaMcpMigrationToast]);
 
   // Update window title for files mode - agent mode sets title directly from AgenticPanel
   useEffect(() => {
