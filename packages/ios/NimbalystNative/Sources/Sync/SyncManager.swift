@@ -117,6 +117,15 @@ public final class SyncManager: ObservableObject {
         let roomId = "org:\(orgId):user:\(effectiveUserId):index"
         logger.info("[Connect] IndexRoom roomId=\(roomId), orgId=\(orgId), effectiveUserId=\(self.effectiveUserId), authUserId=\(authUserId ?? "nil"), pairingUserId=\(self.userId)")
         indexClient.connect(serverUrl: serverUrl, roomId: roomId, authToken: authToken)
+
+        // If a session room is active, reconnect it with the fresh token.
+        // Without this, the session client keeps the old JWT and the server
+        // rejects reconnect attempts after the JWT expires.
+        if let sessionId = activeSessionId {
+            let sessionRoomId = "org:\(orgId):user:\(effectiveUserId):session:\(sessionId)"
+            logger.info("[Connect] Reconnecting session room with fresh token: \(sessionRoomId)")
+            sessionClient.connect(serverUrl: serverUrl, roomId: sessionRoomId, authToken: authToken)
+        }
     }
 
     /// The user ID to use for room routing. Prefers authUserId (from JWT) over pairing userId.
