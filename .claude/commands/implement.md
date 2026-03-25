@@ -128,5 +128,5 @@ User types: `/implement user-authentication.md`
 
 ## Related Commands
 
-- `/plan [description]` - Create a new plan
+- `/design [description]` - Create a new plan
 - `/track [type] [description]` - Track bugs, tasks, ideas, decisions
