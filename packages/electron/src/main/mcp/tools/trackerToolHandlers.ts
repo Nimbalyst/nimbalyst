@@ -3,6 +3,83 @@ type McpToolResult = {
   isError: boolean;
 };
 
+/**
+ * Create a bidirectional link between a tracker item and an AI session.
+ * - Adds sessionId to tracker item's data.linkedSessions[]
+ * - Adds trackerId to session's metadata.linkedTrackerItemIds[]
+ * Returns true if any link was actually created (vs already existing).
+ */
+export async function createBidirectionalLink(
+  trackerId: string,
+  sessionId: string,
+): Promise<boolean> {
+  const { getDatabase } = await import("../../database/initialize");
+  const db = getDatabase();
+  let changed = false;
+
+  // 1. Add session to tracker item's linkedSessions
+  const trackerResult = await db.query<any>(
+    `SELECT data FROM tracker_items WHERE id = $1`,
+    [trackerId]
+  );
+  if (trackerResult.rows.length > 0) {
+    const row = trackerResult.rows[0];
+    const data = typeof row.data === "string" ? JSON.parse(row.data) : row.data || {};
+    const linkedSessions: string[] = data.linkedSessions || [];
+    if (!linkedSessions.includes(sessionId)) {
+      linkedSessions.push(sessionId);
+      data.linkedSessions = linkedSessions;
+      await db.query(
+        `UPDATE tracker_items SET data = $1, updated = NOW() WHERE id = $2`,
+        [JSON.stringify(data), trackerId]
+      );
+      changed = true;
+    }
+  }
+
+  // 2. Add tracker item ID to session's metadata.linkedTrackerItemIds
+  const sessionResult = await db.query<any>(
+    `SELECT metadata FROM ai_sessions WHERE id = $1`,
+    [sessionId]
+  );
+  if (sessionResult.rows.length > 0) {
+    const metadata = sessionResult.rows[0].metadata ?? {};
+    const linkedTrackerItemIds: string[] = metadata.linkedTrackerItemIds || [];
+    if (!linkedTrackerItemIds.includes(trackerId)) {
+      linkedTrackerItemIds.push(trackerId);
+      await db.query(
+        `UPDATE ai_sessions SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb WHERE id = $2`,
+        [JSON.stringify({ linkedTrackerItemIds }), sessionId]
+      );
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
+/** Broadcast tracker-items-changed to all windows */
+async function notifyTrackerChanged(workspacePath: string | undefined): Promise<void> {
+  const { BrowserWindow } = await import("electron");
+  const windows = BrowserWindow.getAllWindows();
+  for (const win of windows) {
+    if (!win.isDestroyed()) {
+      win.webContents.send("tracker-items-changed", { workspacePath });
+    }
+  }
+}
+
+/** Broadcast session metadata update to all windows */
+async function notifySessionLinkedTrackerChanged(sessionId: string, linkedTrackerItemIds: string[]): Promise<void> {
+  const { BrowserWindow } = await import("electron");
+  const windows = BrowserWindow.getAllWindows();
+  for (const win of windows) {
+    if (!win.isDestroyed()) {
+      win.webContents.send("session-linked-tracker-changed", { sessionId, linkedTrackerItemIds });
+    }
+  }
+}
+
 export const trackerToolSchemas = [
   {
     name: "tracker_list",
@@ -148,6 +225,21 @@ export const trackerToolSchemas = [
         },
       },
       required: ["trackerId"],
+    },
+  },
+  {
+    name: "tracker_link_file",
+    description:
+      "Link a file (plan, doc, etc.) to the current AI session. Use this when working on a plan file or any document that isn't a database tracker item. The file path is stored on the session for bidirectional navigation.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        filePath: {
+          type: "string",
+          description: "The file path (relative to workspace) to link to this session",
+        },
+      },
+      required: ["filePath"],
     },
   },
 ];
@@ -361,7 +453,8 @@ export async function handleTrackerGet(args: any): Promise<McpToolResult> {
 
 export async function handleTrackerCreate(
   args: any,
-  workspacePath: string | undefined
+  workspacePath: string | undefined,
+  sessionId?: string | undefined
 ): Promise<McpToolResult> {
   try {
     const { getDatabase } = await import("../../database/initialize");
@@ -417,16 +510,20 @@ export async function handleTrackerCreate(
       [id, args.type, JSON.stringify(data), workspacePath, contentJson]
     );
 
-    // Notify renderer of the new item
-    const { BrowserWindow } = await import("electron");
-    const windows = BrowserWindow.getAllWindows();
-    for (const win of windows) {
-      if (!win.isDestroyed()) {
-        win.webContents.send("tracker-items-changed", {
-          workspacePath,
-        });
-      }
+    // Auto-link session to the newly created tracker item
+    if (sessionId) {
+      await createBidirectionalLink(id, sessionId);
+      // Notify session linked tracker changed
+      const sessionResult = await db.query<any>(
+        `SELECT metadata FROM ai_sessions WHERE id = $1`,
+        [sessionId]
+      );
+      const linkedIds = sessionResult.rows[0]?.metadata?.linkedTrackerItemIds || [];
+      await notifySessionLinkedTrackerChanged(sessionId, linkedIds);
     }
+
+    // Notify renderer of the new item
+    await notifyTrackerChanged(workspacePath);
 
     return {
       content: [
@@ -453,7 +550,8 @@ export async function handleTrackerCreate(
 
 export async function handleTrackerUpdate(
   args: any,
-  workspacePath: string | undefined
+  workspacePath: string | undefined,
+  sessionId?: string | undefined
 ): Promise<McpToolResult> {
   try {
     const { getDatabase } = await import("../../database/initialize");
@@ -517,16 +615,21 @@ export async function handleTrackerUpdate(
       );
     }
 
-    // Notify renderer
-    const { BrowserWindow } = await import("electron");
-    const windows = BrowserWindow.getAllWindows();
-    for (const win of windows) {
-      if (!win.isDestroyed()) {
-        win.webContents.send("tracker-items-changed", {
-          workspacePath,
-        });
+    // Auto-link session to the updated tracker item
+    if (sessionId) {
+      const linked = await createBidirectionalLink(args.id, sessionId);
+      if (linked) {
+        const sessionResult = await db.query<any>(
+          `SELECT metadata FROM ai_sessions WHERE id = $1`,
+          [sessionId]
+        );
+        const linkedIds = sessionResult.rows[0]?.metadata?.linkedTrackerItemIds || [];
+        await notifySessionLinkedTrackerChanged(sessionId, linkedIds);
       }
     }
+
+    // Notify renderer
+    await notifyTrackerChanged(workspacePath);
 
     return {
       content: [
@@ -575,9 +678,6 @@ export async function handleTrackerLinkSession(
   workspacePath: string | undefined
 ): Promise<McpToolResult> {
   try {
-    const { getDatabase } = await import("../../database/initialize");
-    const db = getDatabase();
-
     if (!sessionId) {
       return {
         content: [
@@ -590,9 +690,12 @@ export async function handleTrackerLinkSession(
       };
     }
 
-    // Read existing item
+    const { getDatabase } = await import("../../database/initialize");
+    const db = getDatabase();
+
+    // Verify tracker item exists
     const existing = await db.query<any>(
-      `SELECT * FROM tracker_items WHERE id = $1`,
+      `SELECT id FROM tracker_items WHERE id = $1`,
       [args.trackerId]
     );
     if (existing.rows.length === 0) {
@@ -607,34 +710,27 @@ export async function handleTrackerLinkSession(
       };
     }
 
-    const row = existing.rows[0];
-    const data =
-      typeof row.data === "string"
-        ? JSON.parse(row.data)
-        : row.data || {};
+    // Create bidirectional link
+    await createBidirectionalLink(args.trackerId, sessionId);
 
-    // Add session to linkedSessions array
-    const linkedSessions: string[] = data.linkedSessions || [];
-    if (!linkedSessions.includes(sessionId)) {
-      linkedSessions.push(sessionId);
-      data.linkedSessions = linkedSessions;
+    // Get updated counts for the response
+    const trackerResult = await db.query<any>(
+      `SELECT data FROM tracker_items WHERE id = $1`,
+      [args.trackerId]
+    );
+    const trackerData = typeof trackerResult.rows[0]?.data === "string"
+      ? JSON.parse(trackerResult.rows[0].data)
+      : trackerResult.rows[0]?.data || {};
+    const linkedSessions: string[] = trackerData.linkedSessions || [];
 
-      await db.query(
-        `UPDATE tracker_items SET data = $1, updated = NOW() WHERE id = $2`,
-        [JSON.stringify(data), args.trackerId]
-      );
-    }
-
-    // Notify renderer
-    const { BrowserWindow } = await import("electron");
-    const windows = BrowserWindow.getAllWindows();
-    for (const win of windows) {
-      if (!win.isDestroyed()) {
-        win.webContents.send("tracker-items-changed", {
-          workspacePath,
-        });
-      }
-    }
+    // Notify renderer of both changes
+    await notifyTrackerChanged(workspacePath);
+    const sessionResult = await db.query<any>(
+      `SELECT metadata FROM ai_sessions WHERE id = $1`,
+      [sessionId]
+    );
+    const linkedIds = sessionResult.rows[0]?.metadata?.linkedTrackerItemIds || [];
+    await notifySessionLinkedTrackerChanged(sessionId, linkedIds);
 
     return {
       content: [
@@ -655,6 +751,83 @@ export async function handleTrackerLinkSession(
         {
           type: "text",
           text: `Error linking session: ${error instanceof Error ? error.message : String(error)}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+export async function handleTrackerLinkFile(
+  args: any,
+  sessionId: string | undefined,
+  workspacePath: string | undefined
+): Promise<McpToolResult> {
+  try {
+    if (!sessionId) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "Error: No session ID available. This tool is only available during an active AI session.",
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const { getDatabase } = await import("../../database/initialize");
+    const db = getDatabase();
+
+    // Use "file:" prefix to distinguish from tracker item IDs
+    const fileRef = `file:${args.filePath}`;
+
+    // Add file reference to session's metadata.linkedTrackerItemIds
+    const sessionResult = await db.query<any>(
+      `SELECT metadata FROM ai_sessions WHERE id = $1`,
+      [sessionId]
+    );
+    if (sessionResult.rows.length === 0) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Session not found: ${sessionId}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const metadata = sessionResult.rows[0].metadata ?? {};
+    const linkedTrackerItemIds: string[] = metadata.linkedTrackerItemIds || [];
+    if (!linkedTrackerItemIds.includes(fileRef)) {
+      linkedTrackerItemIds.push(fileRef);
+      await db.query(
+        `UPDATE ai_sessions SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb WHERE id = $2`,
+        [JSON.stringify({ linkedTrackerItemIds }), sessionId]
+      );
+    }
+
+    // Notify renderer
+    await notifySessionLinkedTrackerChanged(sessionId, linkedTrackerItemIds);
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Linked file "${args.filePath}" to this session. Total linked items: ${linkedTrackerItemIds.length}`,
+        },
+      ],
+      isError: false,
+    };
+  } catch (error) {
+    console.error("[MCP Server] tracker_link_file failed:", error);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Error linking file: ${error instanceof Error ? error.message : String(error)}`,
         },
       ],
       isError: true,

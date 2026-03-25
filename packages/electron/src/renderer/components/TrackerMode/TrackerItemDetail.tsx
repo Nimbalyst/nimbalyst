@@ -9,18 +9,22 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
-import { StravuEditor, MaterialSymbol } from '@nimbalyst/runtime';
+import { StravuEditor, MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
 import type { EditorConfig } from '@nimbalyst/runtime/editor';
 import type { TrackerItem, TrackerItemType } from '@nimbalyst/runtime';
 import { globalRegistry } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
 import type { FieldDefinition } from '@nimbalyst/runtime/plugins/TrackerPlugin/models/TrackerDataModel';
 import { TrackerFieldEditor } from '@nimbalyst/runtime/plugins/TrackerPlugin/components/TrackerFieldEditor';
 import { trackerItemByIdAtom } from '@nimbalyst/runtime/plugins/TrackerPlugin/trackerDataAtoms';
+import { sessionRegistryAtom, type SessionMeta } from '../../store/atoms/sessions';
+import { getRelativeTimeString } from '../../utils/dateFormatting';
 
 interface TrackerItemDetailProps {
   itemId: string;
   onClose: () => void;
   onSwitchToFilesMode?: () => void;
+  onSwitchToAgentMode?: (sessionId: string) => void;
+  onLaunchSession?: (trackerItemId: string) => void;
   onArchive?: (itemId: string, archive: boolean) => void;
   onDelete?: (itemId: string) => void;
 }
@@ -95,16 +99,50 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
   itemId,
   onClose,
   onSwitchToFilesMode,
+  onSwitchToAgentMode,
+  onLaunchSession,
   onArchive,
   onDelete,
 }) => {
   // Read directly from per-item atom -- only re-renders when THIS item changes,
   // not when any other item in the workspace updates.
   const item = useAtomValue(trackerItemByIdAtom(itemId));
+  const sessionRegistry = useAtomValue(sessionRegistryAtom);
 
   const model = useMemo(() => globalRegistry.get(item?.type ?? ''), [item?.type]);
   const typeColor = TYPE_COLORS[item?.type ?? ''] || '#6b7280';
   const icon = model?.icon || getTypeIcon(item?.type ?? '');
+
+  // Resolve linked sessions from registry (silently filter deleted ones)
+  // Two sources: 1) tracker item's linkedSessions[] (forward link from DB items)
+  //              2) sessions whose linkedTrackerItemIds contains this item's ID or file path (reverse link)
+  const linkedSessions = useMemo(() => {
+    const sessionSet = new Set<string>();
+
+    // Forward: tracker item stores session IDs
+    const forwardIds: string[] = item?.linkedSessions || [];
+    for (const id of forwardIds) sessionSet.add(id);
+
+    // Reverse: sessions that link to this item by ID or by file path
+    const trackerItemId = item?.id;
+    const filePath = item?.module;
+    const fileRef = filePath ? `file:${filePath}` : null;
+
+    // console.log('[TrackerItemDetail] reverse lookup:', { trackerItemId, filePath, fileRef });
+
+    sessionRegistry.forEach((session, sessionId) => {
+      const linked = session.linkedTrackerItemIds;
+      if (!linked) return;
+      if (trackerItemId && linked.includes(trackerItemId)) sessionSet.add(sessionId);
+      if (fileRef && linked.includes(fileRef)) sessionSet.add(sessionId);
+    });
+
+    if (sessionSet.size === 0) return [];
+    return Array.from(sessionSet)
+      .map(id => sessionRegistry.get(id))
+      .filter((s): s is SessionMeta => s != null)
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+  }, [item, sessionRegistry]);
 
   // Local state for text fields (debounced save)
   const [localTitle, setLocalTitle] = useState(item?.title ?? '');
@@ -539,6 +577,49 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
             <p className="text-sm text-nim-faint m-0">No content</p>
           )}
         </div>
+
+        {/* Linked Sessions */}
+        {(linkedSessions.length > 0 || onLaunchSession) && (
+          <div className="pt-1 border-t border-nim">
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[11px] font-medium text-nim-muted uppercase tracking-[0.5px]">
+                Sessions{linkedSessions.length > 0 ? ` (${linkedSessions.length})` : ''}
+              </label>
+              {onLaunchSession && (
+                <button
+                  className="flex items-center gap-1 px-1.5 py-0.5 text-[11px] font-medium rounded text-nim-muted hover:text-nim hover:bg-nim-tertiary transition-colors"
+                  onClick={() => onLaunchSession(item.id)}
+                  title="Launch a new AI session for this item"
+                >
+                  <MaterialSymbol icon="add" size={14} />
+                  Launch Session
+                </button>
+              )}
+            </div>
+            {linkedSessions.length > 0 ? (
+              <div className="space-y-1">
+                {linkedSessions.map((session) => (
+                  <button
+                    key={session.id}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-left hover:bg-nim-tertiary transition-colors group"
+                    onClick={() => onSwitchToAgentMode?.(session.id)}
+                    title={`Open session: ${session.title}`}
+                  >
+                    <ProviderIcon provider={session.provider || 'claude'} size={14} />
+                    <span className="flex-1 text-xs text-nim truncate">
+                      {session.title || 'Untitled session'}
+                    </span>
+                    <span className="text-[10px] text-nim-faint shrink-0">
+                      {getRelativeTimeString(session.updatedAt)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[11px] text-nim-faint m-0">No linked sessions</p>
+            )}
+          </div>
+        )}
 
         {/* Metadata footer */}
         <div className="pt-1 border-t border-nim">

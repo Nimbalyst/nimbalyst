@@ -40,6 +40,7 @@ import {
   handleTrackerCreate,
   handleTrackerUpdate,
   handleTrackerLinkSession,
+  handleTrackerLinkFile,
   trackerToolSchemas,
 } from "./tools/trackerToolHandlers";
 import {
@@ -362,13 +363,16 @@ function createSharedMcpServer(
         return handleTrackerGet(args);
 
       case "tracker_create":
-        return handleTrackerCreate(args, workspacePath);
+        return handleTrackerCreate(args, workspacePath, sessionId);
 
       case "tracker_update":
-        return handleTrackerUpdate(args, workspacePath);
+        return handleTrackerUpdate(args, workspacePath, sessionId);
 
       case "tracker_link_session":
         return handleTrackerLinkSession(args, sessionId, workspacePath);
+
+      case "tracker_link_file":
+        return handleTrackerLinkFile(args, sessionId, workspacePath);
 
       default:
         return handleExtensionTool(toolName, name, args, sessionId, workspacePath);

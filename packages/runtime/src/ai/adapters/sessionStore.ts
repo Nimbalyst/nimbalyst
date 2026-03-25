@@ -29,6 +29,8 @@ export interface SessionMeta {
   // Kanban board phase and tags (from metadata JSONB)
   phase?: string;
   tags?: string[];
+  // Linked tracker item IDs (from metadata JSONB)
+  linkedTrackerItemIds?: string[];
   // Branch tracking - SEPARATE from hierarchical parentSessionId
   branchedFromSessionId?: string;
   branchPointMessageId?: number;

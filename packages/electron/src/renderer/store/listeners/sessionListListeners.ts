@@ -81,6 +81,23 @@ export function initSessionListListeners(): () => void {
     window.electronAPI.on('sessions:session-updated', handleSessionUpdated)
   );
 
+  // Handle linked tracker item changes (from tracker_link_session, tracker_link_file, auto-linking)
+  const handleLinkedTrackerChanged = (data: { sessionId: string; linkedTrackerItemIds: string[] }) => {
+    const registry = new Map(store.get(sessionRegistryAtom));
+    const meta = registry.get(data.sessionId);
+    if (meta) {
+      registry.set(data.sessionId, {
+        ...meta,
+        linkedTrackerItemIds: data.linkedTrackerItemIds,
+      });
+      store.set(sessionRegistryAtom, registry);
+    }
+  };
+
+  cleanups.push(
+    window.electronAPI.on('session-linked-tracker-changed', handleLinkedTrackerChanged)
+  );
+
   // Handle worktree session creation from mobile - set workstream state so desktop groups it
   const handleWorktreeSessionCreated = (data: { sessionId: string; worktreeId: string }) => {
     store.set(workstreamStateAtom(data.sessionId), {

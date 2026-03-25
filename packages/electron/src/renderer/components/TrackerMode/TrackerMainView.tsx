@@ -21,6 +21,11 @@ import {
   type TrackerFilterChip,
 } from '../../store/atoms/trackers';
 import { useAlphaFeature } from '../../hooks/useAlphaFeature';
+import { setSelectedWorkstreamAtom, sessionRegistryAtom, refreshSessionListAtom } from '../../store/atoms/sessions';
+import { trackerItemsMapAtom } from '@nimbalyst/runtime/plugins/TrackerPlugin/trackerDataAtoms';
+import { workstreamStateAtom } from '../../store/atoms/workstreamState';
+import { setWindowModeAtom } from '../../store/atoms/windowMode';
+import { store } from '../../store';
 
 export type ViewMode = 'table' | 'kanban';
 
@@ -53,6 +58,85 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
   const modeLayout = useAtomValue(trackerModeLayoutAtom);
   const setModeLayout = useSetAtom(setTrackerModeLayoutAtom);
   const selectedItemId = modeLayout.selectedItemId;
+
+  // Navigation atoms for tracker-session linking
+  const setSelectedWorkstream = useSetAtom(setSelectedWorkstreamAtom);
+  const setWindowMode = useSetAtom(setWindowModeAtom);
+  const refreshSessionList = useSetAtom(refreshSessionListAtom);
+
+  /** Navigate to Agent mode and activate a linked session */
+  const handleSwitchToAgentMode = useCallback((sessionId: string) => {
+    // Determine session type for proper workstream selection
+    const registry = store.get(sessionRegistryAtom);
+    const sessionMeta = registry.get(sessionId);
+
+    // If it's a child session, select the parent workstream
+    if (sessionMeta?.parentSessionId) {
+      const parentMeta = registry.get(sessionMeta.parentSessionId);
+      if (parentMeta) {
+        setSelectedWorkstream({
+          workspacePath: workspacePath || '',
+          selection: { type: 'workstream', id: sessionMeta.parentSessionId },
+        });
+        setWindowMode('agent');
+        return;
+      }
+    }
+
+    // Root session -- determine type from workstream state
+    const state = store.get(workstreamStateAtom(sessionId));
+    const type = state.type === 'worktree' ? 'worktree'
+      : state.type === 'workstream' ? 'workstream'
+      : 'session';
+
+    setSelectedWorkstream({
+      workspacePath: workspacePath || '',
+      selection: { type, id: sessionId },
+    });
+    setWindowMode('agent');
+  }, [workspacePath, setSelectedWorkstream, setWindowMode]);
+
+  /** Launch a new AI session linked to a tracker item */
+  const handleLaunchSession = useCallback(async (trackerItemId: string) => {
+    try {
+      const result = await window.electronAPI.aiCreateSession('claude-code', undefined, workspacePath);
+      if (result?.id) {
+        // Look up the tracker item to build a context-aware draft prompt
+        const itemsMap = store.get(trackerItemsMapAtom);
+        const trackerItem = itemsMap.get(trackerItemId);
+
+        if (trackerItem?.module) {
+          // File-backed item: link via file path and pre-fill draft with @file reference
+          await window.electronAPI.invoke('tracker:link-session', {
+            trackerId: `file:${trackerItem.module}`,
+            sessionId: result.id,
+          });
+          // Pre-fill draft input with file reference so the agent can read it
+          await window.electronAPI.invoke('ai:saveDraftInput', result.id,
+            `implement @${trackerItem.module}`, workspacePath);
+        } else {
+          // Native DB item: link by ID
+          await window.electronAPI.invoke('tracker:link-session', {
+            trackerId: trackerItemId,
+            sessionId: result.id,
+          });
+          // Pre-fill draft with item title
+          await window.electronAPI.invoke('ai:saveDraftInput', result.id,
+            `implement tracker item: ${trackerItem?.title || trackerItemId}`, workspacePath);
+        }
+
+        // Refresh session list to pick up the new session, then navigate
+        await refreshSessionList();
+        setSelectedWorkstream({
+          workspacePath: workspacePath || '',
+          selection: { type: 'session', id: result.id },
+        });
+        setWindowMode('agent');
+      }
+    } catch (err) {
+      console.error('[TrackerMainView] Failed to launch session:', err);
+    }
+  }, [workspacePath, refreshSessionList, setSelectedWorkstream, setWindowMode]);
 
   // Base item sets from atoms
   const activeItems = useAtomValue(trackerItemsByTypeAtom(filterType));
@@ -394,6 +478,8 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
               itemId={selectedItemId}
               onClose={handleCloseDetail}
               onSwitchToFilesMode={onSwitchToFilesMode}
+              onSwitchToAgentMode={handleSwitchToAgentMode}
+              onLaunchSession={handleLaunchSession}
               onArchive={handleArchiveItem}
               onDelete={handleDeleteItem}
             />

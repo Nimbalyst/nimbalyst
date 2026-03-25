@@ -589,6 +589,8 @@ export async function registerSessionHandlers() {
                     // Kanban board phase and tags
                     phase: (entry as any).phase || undefined,
                     tags: (entry as any).tags || undefined,
+                    // Linked tracker item IDs
+                    linkedTrackerItemIds: (entry as any).linkedTrackerItemIds || undefined,
                     metadata: {}
                 };
             });
@@ -1645,6 +1647,41 @@ export async function registerSessionHandlers() {
             return { success: true, responseContent };
         } catch (error) {
             console.error('[SessionHandlers] Failed to respond to prompt:', error);
+            return { success: false, error: String(error) };
+        }
+    });
+    // Link a tracker item or file to a session
+    // trackerId can be a DB tracker item ID or "file:path/to/file.md" for file-based items
+    safeHandle('tracker:link-session', async (_event, payload: { trackerId: string; sessionId: string }) => {
+        try {
+            if (payload.trackerId.startsWith('file:')) {
+                // File-based link: only write to session metadata (no tracker_items row to update)
+                const { getDatabase } = await import('../database/initialize');
+                const db = getDatabase();
+                const fileRef = payload.trackerId;
+                const sessionResult = await db.query<any>(
+                    `SELECT metadata FROM ai_sessions WHERE id = $1`,
+                    [payload.sessionId]
+                );
+                if (sessionResult.rows.length > 0) {
+                    const metadata = sessionResult.rows[0].metadata ?? {};
+                    const linkedTrackerItemIds: string[] = metadata.linkedTrackerItemIds || [];
+                    if (!linkedTrackerItemIds.includes(fileRef)) {
+                        linkedTrackerItemIds.push(fileRef);
+                        await db.query(
+                            `UPDATE ai_sessions SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb WHERE id = $2`,
+                            [JSON.stringify({ linkedTrackerItemIds }), payload.sessionId]
+                        );
+                    }
+                }
+            } else {
+                // DB tracker item: bidirectional link
+                const { createBidirectionalLink } = await import('../mcp/tools/trackerToolHandlers');
+                await createBidirectionalLink(payload.trackerId, payload.sessionId);
+            }
+            return { success: true };
+        } catch (error) {
+            console.error('[SessionHandlers] Failed to link tracker item to session:', error);
             return { success: false, error: String(error) };
         }
     });

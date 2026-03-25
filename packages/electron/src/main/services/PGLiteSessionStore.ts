@@ -601,7 +601,9 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           // Kanban board phase and tags from metadata JSONB
           phase: metadata.phase ?? undefined,
           tags: Array.isArray(metadata.tags) ? metadata.tags : undefined,
-        } satisfies SessionMeta & { hasPendingQuestion?: boolean; phase?: string; tags?: string[] };
+          // Linked tracker item IDs from metadata JSONB
+          linkedTrackerItemIds: Array.isArray(metadata.linkedTrackerItemIds) ? metadata.linkedTrackerItemIds : undefined,
+        } satisfies SessionMeta & { hasPendingQuestion?: boolean; phase?: string; tags?: string[]; linkedTrackerItemIds?: string[] };
       });
     },
 
