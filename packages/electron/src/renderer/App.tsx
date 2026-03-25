@@ -1162,7 +1162,9 @@ export default function App() {
       const servers = config?.mcpServers || {};
       const hasBrokenFigma = Object.values(servers).some((server: any) => {
         const args: string[] = server.args || [];
-        return args.some((arg: string) => arg.includes('mcp.figma.com'));
+        const hasInArgs = args.some((arg: string) => arg.includes('mcp.figma.com'));
+        const hasInUrl = typeof server.url === 'string' && server.url.includes('mcp.figma.com');
+        return hasInArgs || hasInUrl;
       });
       if (hasBrokenFigma) show();
     }).catch(() => {
