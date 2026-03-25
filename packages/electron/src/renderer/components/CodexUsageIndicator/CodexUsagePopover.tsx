@@ -210,20 +210,29 @@ export const CodexUsagePopover: React.FC<CodexUsagePopoverProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-2 border-t border-nim flex items-center justify-between">
-          {usage.lastUpdated && (
-            <span className="text-[10px] text-nim-faint">
-              Updated {formatLastUpdated(usage.lastUpdated)}
-            </span>
-          )}
+        <div className="px-4 py-2 border-t border-nim flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
+            {usage.lastUpdated && (
+              <span className="text-[10px] text-nim-faint">
+                Updated {formatLastUpdated(usage.lastUpdated)}
+              </span>
+            )}
+            <button
+              onClick={() => {
+                setUsageIndicatorEnabled(false);
+                onClose();
+              }}
+              className="text-[11px] text-nim-muted hover:text-nim transition-colors"
+            >
+              Disable
+            </button>
+          </div>
           <button
-            onClick={() => {
-              setUsageIndicatorEnabled(false);
-              onClose();
-            }}
-            className="text-[11px] text-nim-muted hover:text-nim transition-colors"
+            onClick={() => window.electronAPI.openExternal('https://status.openai.com')}
+            className="flex items-center gap-1 text-[11px] text-nim-muted hover:text-nim transition-colors"
           >
-            Disable
+            <MaterialSymbol icon="open_in_new" size={12} />
+            <span>OpenAI Status Page</span>
           </button>
         </div>
       </div>
