@@ -95,3 +95,11 @@ The `delete-file` IPC handler in WorkspaceHandlers.ts used `fs.unlink()` for fil
 The fix was twofold: (1) replace all `fs.unlink`/`fs.rm` calls with `shell.trashItem()` so deleted files go to system Trash/Recycle Bin, and (2) add a confirmation dialog to the keyboard delete path. The same permanent-deletion pattern was also found in AttachmentService, ElectronDocumentService (asset GC), ThemeHandlers (theme uninstall), and GitWorktreeService (worktree cleanup) -- all switched to `shell.trashItem()`.
 
 Lesson: Any code that deletes user-facing files should use `shell.trashItem()`, never `fs.unlink`/`fs.rm`. Permanent deletion should be reserved for internal app data (logs, caches, lock files). And destructive keyboard shortcuts must always have a confirmation step.
+
+## Guessed D1 database name instead of checking wrangler.toml
+
+**Date**: 2026-03-24
+
+Told the user to run `npx wrangler d1 migrations apply nimbalyst-collab-db --remote` without checking the actual database name in `packages/collabv3/wrangler.toml`. The real name was `nimbalyst-collabv3`. Wrangler errored with "Couldn't find a D1 DB with the name or binding".
+
+Lesson: Always check configuration files (wrangler.toml, package.json, etc.) for exact names before giving commands. Never guess identifiers.

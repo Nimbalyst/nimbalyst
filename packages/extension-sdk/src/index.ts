@@ -42,6 +42,13 @@ export {
   type DiffState,
 } from './useEditorLifecycle.js';
 
+// Re-export read-only host factory (for web viewers and testing)
+export {
+  createReadOnlyHost,
+  type ReadOnlyHost,
+  type ReadOnlyHostOptions,
+} from './createReadOnlyHost.js';
+
 // Re-export validation
 export {
   validateExtensionBundle,

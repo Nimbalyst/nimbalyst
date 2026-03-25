@@ -16,6 +16,37 @@ const SHARE_SERVER_URL = 'https://sync.nimbalyst.com';
 const DEFAULT_SHARE_EXPIRATION_DAYS = 7;
 const SHARE_METADATA_FILE = 'share-metadata.enc';
 
+/**
+ * Maps file extensions to viewer types for the web extension viewer.
+ * Files with a viewer type are uploaded as raw content (the extension renders them).
+ * Files without a viewer type are rendered to static HTML before upload.
+ *
+ * This must match the server-side EXTENSION_VIEWER_ALLOWLIST in collabv3/src/share.ts.
+ */
+const FILE_EXTENSION_TO_VIEWER_TYPE: Record<string, string> = {
+  '.mindmap': 'mindmap',
+  '.prisma': 'datamodellm',
+  '.excalidraw': 'excalidraw',
+  '.csv': 'csv',
+  '.tsv': 'csv',
+};
+
+/** Compound file extensions that need full suffix matching (e.g. .mockup.html). */
+const COMPOUND_EXTENSION_TO_VIEWER_TYPE: Record<string, string> = {
+  '.mockup.html': 'mockup',
+};
+
+/** Get the viewer type for a file path, or null for the default HTML viewer. */
+function getViewerTypeForFile(filePath: string): string | null {
+  const lower = filePath.toLowerCase();
+  // Check compound extensions first (e.g. .mockup.html)
+  for (const [suffix, viewerType] of Object.entries(COMPOUND_EXTENSION_TO_VIEWER_TYPE)) {
+    if (lower.endsWith(suffix)) return viewerType;
+  }
+  const ext = path.extname(lower);
+  return FILE_EXTENSION_TO_VIEWER_TYPE[ext] ?? null;
+}
+
 // --- Encryption utilities ---
 
 /** Generate a random 256-bit AES key, returned as standard base64. */
@@ -501,15 +532,19 @@ export function registerShareHandlers() {
         // Read file content
         const content = await fs.readFile(filePath, 'utf-8');
 
-        // Render to HTML
-        const html = exportFileToHtml(filePath, content);
+        // Determine if this file type has an extension viewer on the web.
+        // If so, upload raw content (extension renders it). Otherwise, render to HTML.
+        const viewerType = getViewerTypeForFile(filePath);
+        const contentToEncrypt = viewerType
+          ? content                            // Raw content -- extension viewer renders it
+          : exportFileToHtml(filePath, content); // Pre-rendered HTML -- iframe viewer
 
         // Use hashed file path as key identifier (avoids leaking paths in electron-store)
         const keyId = `file:${createHash('sha256').update(filePath).digest('hex').slice(0, 16)}`;
 
-        // Encrypt the HTML content
+        // Encrypt the content
         const shareKey = getStoredShareKey(keyId) ?? generateShareKey();
-        const encrypted = encryptContent(html, shareKey);
+        const encrypted = encryptContent(contentToEncrypt, shareKey);
         const urlSafeKey = keyToUrlSafe(shareKey);
 
         // Build headers for upload (zero-knowledge: no filename sent)
@@ -519,6 +554,10 @@ export function registerShareHandlers() {
           'X-Session-Title': 'Encrypted file',
           'X-Session-Id': keyId,
         };
+
+        if (viewerType) {
+          headers['X-Viewer-Type'] = viewerType;
+        }
 
         // Resolve TTL: explicit param > stored preference > default (7 days)
         const storedPreference = normalizeShareExpirationDays(store.get('shareExpirationDays'));

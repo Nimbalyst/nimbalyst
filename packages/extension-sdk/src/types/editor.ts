@@ -119,6 +119,17 @@ export interface EditorHost {
   /** Whether this editor's tab is active */
   readonly isActive: boolean;
 
+  /**
+   * Whether the editor is in read-only mode.
+   * When true, editors should hide editing UI (toolbars, inline editing,
+   * keyboard shortcuts for mutation) and only allow viewing interactions
+   * (pan, zoom, scroll, select text).
+   *
+   * Defaults to false (undefined treated as false for backwards compatibility).
+   * Set to true by the web share viewer's ReadOnlyEditorHost.
+   */
+  readonly readOnly?: boolean;
+
   // ============ THEME CHANGES ============
 
   /**

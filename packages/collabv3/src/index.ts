@@ -375,6 +375,11 @@ export default {
       return handleShareRoutes(request, env, url);
     }
 
+    // Viewer static assets (extension bundles, React deps, shell)
+    if (url.pathname.startsWith('/viewer/')) {
+      return handleViewerAsset(url.pathname, env);
+    }
+
     return new Response('Not Found', { status: 404 });
   },
 };
@@ -677,6 +682,47 @@ async function handleShareRoutes(
   }
 
   return new Response('Not Found', { status: 404, headers: corsHeaders });
+}
+
+/**
+ * Serve static viewer assets from R2.
+ *
+ * Viewer assets include React dependency bundles, extension viewer bundles,
+ * and the viewer shell. These are deployed to the SESSION_SHARES R2 bucket
+ * under the /viewer/ prefix.
+ *
+ * Assets are immutable once deployed, so we use long cache headers.
+ */
+async function handleViewerAsset(
+  pathname: string,
+  env: Env,
+): Promise<Response> {
+  // Sanitize: strip leading slash, ensure no path traversal
+  const key = pathname.slice(1); // "viewer/deps/react.js"
+  if (key.includes('..') || !key.startsWith('viewer/')) {
+    return new Response('Not Found', { status: 404 });
+  }
+
+  const object = await env.SESSION_SHARES.get(key);
+  if (!object) {
+    return new Response('Not Found', { status: 404 });
+  }
+
+  // Determine content type from extension
+  const ext = key.split('.').pop() || '';
+  const contentTypes: Record<string, string> = {
+    js: 'application/javascript; charset=utf-8',
+    css: 'text/css; charset=utf-8',
+    json: 'application/json; charset=utf-8',
+  };
+
+  return new Response(object.body, {
+    headers: {
+      'Content-Type': contentTypes[ext] || 'application/octet-stream',
+      'Cache-Control': 'public, max-age=86400', // 1 day
+      'Access-Control-Allow-Origin': '*',
+    },
+  });
 }
 
 /**

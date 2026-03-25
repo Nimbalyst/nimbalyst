@@ -16,13 +16,30 @@ import {
 } from '../store/atoms/appSettings';
 import { dialogRef, DIALOG_IDS } from '../dialogs';
 import type { ShareDialogData } from '../dialogs';
+/**
+ * File extensions that support sharing via link.
+ * Markdown files are rendered to static HTML on the desktop before upload.
+ * Extension file types are uploaded as raw content and rendered by the web extension viewer.
+ *
+ * This must stay in sync with FILE_EXTENSION_TO_VIEWER_TYPE in ShareHandlers.ts
+ * and EXTENSION_VIEWER_ALLOWLIST in collabv3/src/share.ts.
+ */
+const SHAREABLE_EXTENSIONS = new Set([
+  '.md', '.markdown',  // Static HTML rendering
+  '.mindmap',          // Extension viewer: Mindmap
+  '.prisma',           // Extension viewer: DataModelLM
+  '.excalidraw',       // Extension viewer: Excalidraw
+  '.csv', '.tsv',      // Extension viewer: CSV Spreadsheet
+]);
 
-/** File extensions that support sharing as rendered HTML links. */
-const SHAREABLE_EXTENSIONS = new Set(['.md', '.markdown']);
+/** Compound suffixes that need full-name matching (e.g. .mockup.html). */
+const SHAREABLE_SUFFIXES = ['.mockup.html'];
 
 function isShareableFile(fileName: string): boolean {
-  const ext = fileName.lastIndexOf('.') >= 0
-    ? fileName.slice(fileName.lastIndexOf('.')).toLowerCase()
+  const lower = fileName.toLowerCase();
+  if (SHAREABLE_SUFFIXES.some(s => lower.endsWith(s))) return true;
+  const ext = lower.lastIndexOf('.') >= 0
+    ? lower.slice(lower.lastIndexOf('.'))
     : '';
   return SHAREABLE_EXTENSIONS.has(ext);
 }

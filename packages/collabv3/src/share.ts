@@ -87,6 +87,7 @@ export async function handleShareUpload(
 
   const title = request.headers.get('X-Session-Title') || 'Encrypted session';
   const sessionId = request.headers.get('X-Session-Id') || '';
+  const viewerType = request.headers.get('X-Viewer-Type') || null;
 
   const body = await request.arrayBuffer();
   const bodySize = body.byteLength;
@@ -150,8 +151,8 @@ export async function handleShareUpload(
       });
 
       await env.DB.prepare(
-        `UPDATE shared_sessions SET title = ?, size_bytes = ?, updated_at = ?, expires_at = ?, r2_key = ? WHERE id = ?`
-      ).bind(title, bodySize, now.toISOString(), expiresAt.toISOString(), r2Key, shareId).run();
+        `UPDATE shared_sessions SET title = ?, size_bytes = ?, updated_at = ?, expires_at = ?, r2_key = ?, viewer_type = ? WHERE id = ?`
+      ).bind(title, bodySize, now.toISOString(), expiresAt.toISOString(), r2Key, viewerType, shareId).run();
     } else {
       // Create new share
       shareId = generateShareId();
@@ -162,9 +163,9 @@ export async function handleShareUpload(
       });
 
       await env.DB.prepare(
-        `INSERT INTO shared_sessions (id, user_id, session_id, title, r2_key, size_bytes, created_at, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      ).bind(shareId, auth.userId, sessionId, title, r2Key, bodySize, now.toISOString(), expiresAt.toISOString()).run();
+        `INSERT INTO shared_sessions (id, user_id, session_id, title, r2_key, size_bytes, created_at, expires_at, viewer_type)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(shareId, auth.userId, sessionId, title, r2Key, bodySize, now.toISOString(), expiresAt.toISOString(), viewerType).run();
     }
 
     // Build share URL - use share.nimbalyst.com in production, request origin otherwise
@@ -206,8 +207,8 @@ export async function handleShareView(
   try {
     // Look up in D1
     const record = await env.DB.prepare(
-      `SELECT expires_at, is_deleted FROM shared_sessions WHERE id = ?`
-    ).bind(shareId).first<{ expires_at: string | null; is_deleted: number }>();
+      `SELECT expires_at, is_deleted, viewer_type FROM shared_sessions WHERE id = ?`
+    ).bind(shareId).first<{ expires_at: string | null; is_deleted: number; viewer_type: string | null }>();
 
     if (!record || record.is_deleted) {
       return new Response('Not found', { status: 404 });
@@ -227,7 +228,13 @@ export async function handleShareView(
       log.warn('Failed to increment share view count:', shareId, err);
     }
 
-    return new Response(getDecryptionViewerHtml(shareId), {
+    // Branch on viewer_type: extension viewers get a different shell page
+    const viewerType = record.viewer_type;
+    const viewerHtml = (viewerType && EXTENSION_VIEWER_ALLOWLIST.has(viewerType))
+      ? getExtensionViewerHtml(shareId, viewerType)
+      : getDecryptionViewerHtml(shareId);
+
+    return new Response(viewerHtml, {
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
         'Cache-Control': 'no-cache',
@@ -511,6 +518,245 @@ iframe{border:0;width:100%;height:100vh;display:block}
     showError('Decryption failed','The decryption key may be incorrect or the content may be corrupted.');
   }
 })();
+</script>
+</body>
+</html>`;
+}
+
+// ============================================================================
+// Extension Viewer System
+// ============================================================================
+
+/**
+ * Server-side allowlist of extension types that have viewer bundles deployed.
+ * Types not in this set fall back to the default static HTML iframe viewer.
+ */
+const EXTENSION_VIEWER_ALLOWLIST = new Set([
+  'mindmap',
+  'datamodellm',
+  'excalidraw',
+  'csv',
+  'mockup',
+]);
+
+/**
+ * Maps viewer_type to extension viewer bundle metadata.
+ * The component name must match what the extension exports in its `components` map.
+ */
+const EXTENSION_VIEWER_REGISTRY: Record<string, {
+  js: string;
+  css: string | null;
+  component: string;
+  displayName: string;
+}> = {
+  mindmap: {
+    js: '/viewer/ext/mindmap-viewer.js',
+    css: '/viewer/ext/mindmap-viewer.css',
+    component: 'MindmapEditor',
+    displayName: 'Mindmap',
+  },
+  datamodellm: {
+    js: '/viewer/ext/datamodellm-viewer.js',
+    css: '/viewer/ext/datamodellm-viewer.css',
+    component: 'DatamodelLMEditor',
+    displayName: 'Data Model',
+  },
+  excalidraw: {
+    js: '/viewer/ext/excalidraw-viewer.js',
+    css: '/viewer/ext/excalidraw-viewer.css',
+    component: 'ExcalidrawEditor',
+    displayName: 'Excalidraw',
+  },
+  csv: {
+    js: '/viewer/ext/csv-viewer.js',
+    css: '/viewer/ext/csv-viewer.css',
+    component: 'SpreadsheetEditor',
+    displayName: 'Spreadsheet',
+  },
+  mockup: {
+    js: '/viewer/ext/mockup-viewer.js',
+    css: '/viewer/ext/mockup-viewer.css',
+    component: 'MockupEditor',
+    displayName: 'Mockup',
+  },
+};
+
+/**
+ * Generate the extension viewer HTML page.
+ *
+ * Like the decryption viewer, this page:
+ * 1. Extracts the AES-256-GCM key from the URL fragment
+ * 2. Fetches and decrypts the content
+ * 3. Loads the extension viewer bundle via import map
+ * 4. Creates a ReadOnlyEditorHost with the decrypted content
+ * 5. Mounts the extension's React component
+ */
+function getExtensionViewerHtml(shareId: string, viewerType: string): string {
+  const viewer = EXTENSION_VIEWER_REGISTRY[viewerType];
+  if (!viewer) {
+    // Shouldn't happen (allowlist checked before calling), but fall back gracefully
+    return getDecryptionViewerHtml(shareId);
+  }
+
+  const cssLink = viewer.css
+    ? `<link rel="stylesheet" href="${viewer.css}">`
+    : '';
+  const cssPreload = viewer.css
+    ? `<link rel="preload" href="${viewer.css}" as="style">`
+    : '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nimbalyst - ${viewer.displayName}</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap">
+${cssPreload}
+<!-- Extension bundle loaded dynamically after import map is ready -->
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--nim-bg:#2d2d2d;--nim-bg-secondary:#1a1a1a;--nim-bg-tertiary:#3a3a3a;--nim-bg-active:#4a4a4a;--nim-bg-hover:rgba(255,255,255,0.05);--nim-bg-selected:rgba(96,165,250,0.15);--nim-text:#ffffff;--nim-text-muted:#b3b3b3;--nim-text-faint:#808080;--nim-text-disabled:#666666;--nim-border:#4a4a4a;--nim-border-focus:#60a5fa;--nim-primary:#60a5fa;--nim-primary-hover:#3b82f6;--nim-primary-rgb:96,165,250;--nim-link:#60a5fa;--nim-link-hover:#93c5fd;--nim-success:#4ade80;--nim-warning:#fbbf24;--nim-error:#ef4444;--nim-info:#60a5fa;--nim-purple:#a78bfa;--nim-code-bg:#1e1e1e;--nim-code-text:#d4d4d4;--nim-code-border:#4a4a4a;--nim-toolbar-bg:#2d2d2d;--nim-toolbar-border:#4a4a4a;--nim-toolbar-hover:#3a3a3a;--nim-toolbar-active:rgba(96,165,250,0.2);--nim-scrollbar-thumb:#4a4a4a;--nim-scrollbar-track:transparent}
+[data-theme="light"]{--nim-bg:#ffffff;--nim-bg-secondary:#f9fafb;--nim-bg-tertiary:#f3f4f6;--nim-bg-active:#e5e7eb;--nim-bg-hover:rgba(0,0,0,0.04);--nim-bg-selected:rgba(59,130,246,0.1);--nim-text:#18181b;--nim-text-muted:#52525b;--nim-text-faint:#a1a1aa;--nim-text-disabled:#d4d4d8;--nim-border:#e4e4e7;--nim-border-focus:#3b82f6;--nim-primary:#3b82f6;--nim-primary-hover:#2563eb;--nim-primary-rgb:59,130,246;--nim-link:#3b82f6;--nim-link-hover:#2563eb;--nim-success:#22c55e;--nim-warning:#f59e0b;--nim-error:#ef4444;--nim-info:#3b82f6;--nim-purple:#8b5cf6;--nim-code-bg:#f5f5f5;--nim-code-text:#1e1e1e;--nim-code-border:#e4e4e7;--nim-toolbar-bg:#ffffff;--nim-toolbar-border:#e4e4e7;--nim-toolbar-hover:#f3f4f6;--nim-toolbar-active:rgba(59,130,246,0.15);--nim-scrollbar-thumb:#d4d4d8;--nim-scrollbar-track:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--nim-bg);color:var(--nim-text)}
+.center{display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:12px}
+.spinner{width:24px;height:24px;border:3px solid #333;border-top-color:#60a5fa;border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.error{max-width:28rem;margin:4rem auto;padding:2rem;text-align:center}
+.error h2{color:#ef4444;margin-bottom:8px;font-size:18px}
+.error p{color:#a1a1aa;font-size:14px;line-height:1.5}
+#viewer-root{width:100%;height:100vh}
+.viewer-chrome{position:fixed;top:0;left:0;right:0;height:40px;background:rgba(26,26,26,0.9);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:space-between;padding:0 16px;z-index:1000;border-bottom:1px solid #333}
+[data-theme="light"] .viewer-chrome{background:rgba(255,255,255,0.9);border-bottom-color:#e4e4e7}
+.viewer-chrome .brand{font-size:13px;color:#a1a1aa;font-weight:500}
+.viewer-chrome .brand a{color:#60a5fa;text-decoration:none}
+.viewer-chrome .actions{display:flex;gap:8px;align-items:center}
+.theme-toggle{background:none;border:1px solid #444;color:#a1a1aa;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px}
+.theme-toggle:hover{border-color:#60a5fa;color:#e4e4e7}
+</style>
+${cssLink}
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.3.1",
+    "react-dom": "https://esm.sh/react-dom@18.3.1?external=react",
+    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client?external=react",
+    "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime",
+    "react/jsx-dev-runtime": "https://esm.sh/react@18.3.1/jsx-dev-runtime",
+    "@nimbalyst/extension-sdk": "/viewer/deps/extension-sdk.js",
+    "@nimbalyst/runtime": "/viewer/deps/nimbalyst-runtime.js",
+    "@nimbalyst/editor-context": "/viewer/deps/nimbalyst-editor-context.js",
+    "lexical": "https://esm.sh/lexical@0.34.0?external=react",
+    "@lexical/utils": "https://esm.sh/@lexical/utils@0.34.0?external=react,lexical",
+    "@lexical/react/LexicalComposerContext": "https://esm.sh/@lexical/react@0.34.0/LexicalComposerContext?external=react,lexical",
+    "@lexical/react/useLexicalEditable": "https://esm.sh/@lexical/react@0.34.0/useLexicalEditable?external=react,lexical",
+    "@lexical/react/useLexicalNodeSelection": "https://esm.sh/@lexical/react@0.34.0/useLexicalNodeSelection?external=react,lexical"
+  }
+}
+</script>
+</head>
+<body data-theme="dark">
+<div class="viewer-chrome">
+  <span class="brand">Shared via <a href="https://nimbalyst.com" target="_blank">Nimbalyst</a></span>
+  <div class="actions">
+    <button class="theme-toggle" id="theme-toggle">Light</button>
+  </div>
+</div>
+<div id="loading" class="center">
+  <div class="spinner"></div>
+  <div style="color:#a1a1aa;font-size:14px">Loading ${viewer.displayName}...</div>
+</div>
+<div id="error" class="error" style="display:none"></div>
+<div id="viewer-root" style="display:none;padding-top:40px"></div>
+<script type="module">
+import { createReadOnlyHost } from '/viewer/deps/extension-sdk.js';
+
+const errEl = document.getElementById('error');
+const loadEl = document.getElementById('loading');
+const rootEl = document.getElementById('viewer-root');
+
+function showError(title, msg) {
+  loadEl.style.display = 'none';
+  errEl.style.display = 'block';
+  errEl.innerHTML = '<h2>' + title + '</h2><p>' + msg + '</p>';
+}
+
+// -- Parse hash params (key=..., theme=dark|light|system) --
+const hashParams = new URLSearchParams(window.location.hash.slice(1));
+const keyB64url = hashParams.get('key');
+const themeParam = hashParams.get('theme');
+const initialTheme = themeParam === 'light' ? 'light'
+  : themeParam === 'dark' ? 'dark'
+  : (window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+document.body.setAttribute('data-theme', initialTheme);
+
+if (!keyB64url) {
+  showError('Missing decryption key', 'The URL is incomplete. Make sure you copied the full link including the part after the # symbol.');
+} else {
+  try {
+    const keyB64 = keyB64url.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = keyB64 + '='.repeat((4 - keyB64.length % 4) % 4);
+
+    const resp = await fetch('/share/${shareId}/content');
+    if (!resp.ok) {
+      if (resp.status === 404) showError('Not found', 'This shared file was not found or has been removed.');
+      else if (resp.status === 410) showError('Expired', 'This shared link has expired.');
+      else showError('Error', 'Failed to load the shared file (HTTP ' + resp.status + ').');
+    } else {
+      const data = await resp.arrayBuffer();
+      if (data.byteLength < 29) {
+        showError('Invalid content', 'The shared content appears to be corrupted.');
+      } else {
+        const iv = new Uint8Array(data, 0, 12);
+        const ciphertext = new Uint8Array(data, 12);
+        const keyBytes = Uint8Array.from(atob(padded), c => c.charCodeAt(0));
+        const cryptoKey = await crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['decrypt']);
+        const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, cryptoKey, ciphertext);
+        const content = new TextDecoder().decode(decrypted);
+
+        // -- Create ReadOnlyEditorHost --
+        const host = createReadOnlyHost(content, {
+          theme: initialTheme,
+          fileName: 'shared.${viewerType}',
+        });
+
+        // -- Load and mount extension component --
+        const mod = await import('${viewer.js}');
+        const Component = mod.components?.['${viewer.component}'];
+        if (!Component) {
+          showError('Extension error', 'Could not find the ${viewer.displayName} editor component.');
+        } else {
+          const React = await import('react');
+          const ReactDOM = await import('react-dom/client');
+
+          loadEl.style.display = 'none';
+          rootEl.style.display = 'block';
+
+          const root = ReactDOM.createRoot(rootEl);
+          root.render(React.createElement(Component, { host }));
+
+          // -- Theme toggle --
+          const toggleBtn = document.getElementById('theme-toggle');
+          let isDark = initialTheme === 'dark';
+          toggleBtn.textContent = isDark ? 'Light' : 'Dark';
+          toggleBtn.addEventListener('click', () => {
+            isDark = !isDark;
+            const theme = isDark ? 'dark' : 'light';
+            document.body.setAttribute('data-theme', theme);
+            host.setTheme(theme);
+            toggleBtn.textContent = isDark ? 'Light' : 'Dark';
+            // Update URL so the theme persists when sharing the link
+            hashParams.set('theme', theme);
+            history.replaceState(null, '', '#' + hashParams.toString());
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Viewer error:', e);
+    showError('Error', e?.message || 'The decryption key may be incorrect or the content may be corrupted.');
+  }
+}
 </script>
 </body>
 </html>`;
