@@ -20,6 +20,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.56.12] - 2026-03-25
+
+
+### Added
+- Figma MCP server available as a built-in template for easy setup
+- Startup warning when Figma MCP OAuth config is broken, with action to open MCP settings
+- MCP server disconnection detection and logging during sessions
+
+### Fixed
+- New workstream sessions now appear in the session list immediately
+- Added missing `action` option to `showWarning` notification type signature
+
 ## [0.56.11] - 2026-03-25
 
 
