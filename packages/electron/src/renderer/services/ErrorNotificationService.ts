@@ -75,6 +75,7 @@ class ErrorNotificationService {
     options?: {
       details?: string;
       duration?: number;
+      action?: NotificationAction;
     }
   ): string {
     return this.notify({
