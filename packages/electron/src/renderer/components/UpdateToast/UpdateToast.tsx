@@ -205,7 +205,16 @@ export function UpdateToast(): React.ReactElement | null {
                 </svg>
               </button>
               <div className="update-toast-title text-sm font-semibold text-[var(--nim-error)] mb-1 pr-7">Update Error</div>
-              <div className="update-toast-subtitle text-xs text-[var(--nim-text-muted)] leading-normal mb-4" data-testid="error-message">{errorMessage}</div>
+              <div className="update-toast-subtitle text-xs text-[var(--nim-text-muted)] leading-normal mb-1" data-testid="error-message">{errorMessage}</div>
+              <div className="text-xs text-[var(--nim-text-muted)] leading-normal mb-4">
+                You can <a
+                  href="https://nimbalyst.com/download"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[var(--nim-primary)] hover:underline cursor-pointer"
+                  data-testid="manual-download-link"
+                >download the latest version manually</a>.
+              </div>
               <div className="update-toast-actions flex gap-2 flex-wrap">
                 <button
                   className="update-toast-btn update-toast-btn-secondary py-2 px-3.5 border border-[var(--nim-border)] rounded-md text-[13px] font-medium cursor-pointer transition-all duration-200 font-[inherit] whitespace-nowrap bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]"

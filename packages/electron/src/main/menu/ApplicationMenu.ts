@@ -1380,6 +1380,18 @@ export async function createApplicationMenu() {
                             click: () => {
                                 showSplashScreen();
                             }
+                        },
+                        { type: 'separator' },
+                        {
+                            label: 'Show Update Error Toast',
+                            click: async () => {
+                                const focused = getFocusedWindow();
+                                if (focused) {
+                                    focused.webContents.send('update-toast:error', {
+                                        message: 'Certificate verification failed: the update signature does not match'
+                                    });
+                                }
+                            }
                         }
                     ]
                 },

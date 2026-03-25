@@ -33,7 +33,7 @@ function classifyUpdateError(error: Error): string {
   if (message.includes('disk') || message.includes('space') || message.includes('enospc')) {
     return 'disk_space';
   }
-  if (message.includes('signature') || message.includes('verify')) {
+  if (message.includes('signature') || message.includes('verify') || message.includes('certificate') || message.includes('cert')) {
     return 'signature';
   }
   return 'unknown';
