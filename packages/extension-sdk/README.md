@@ -65,7 +65,7 @@ See the [custom editors guide](packages/extension-sdk-docs/custom-editors.md) fo
 
 ## Shared Editor Components
 
-Extensions can use the host's built-in `MonacoEditor` (code) and `MarkdownEditor` (rich text) instead of bundling their own. These are provided at runtime via the externals system with zero bundle size impact.
+Extensions can use the host's built-in `MonacoEditor` (code) and `MarkdownEditor` (rich text) instead of bundling their own. These are provided at runtime via the externals system with zero bundle size impact. The `MarkdownEditor` is pre-configured with toolbar, image handling, and other Nimbalyst platform features.
 
 ```tsx
 import { MonacoEditor } from '@nimbalyst/runtime';

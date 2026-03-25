@@ -39,7 +39,10 @@ import { MaterialSymbol } from '@nimbalyst/runtime/ui/icons/MaterialSymbol';
 import { screenshotService, useDocumentPath, useEditorLifecycle } from '@nimbalyst/runtime';
 
 // Import editor components for sharing with extensions
-import { MarkdownEditor, MonacoEditor } from '@nimbalyst/runtime/editors';
+// MonacoEditor is self-contained; MarkdownEditor uses a configured wrapper
+// that wires up platform features (image handling, toolbar)
+import { MonacoEditor } from '@nimbalyst/runtime/editors';
+import { NimbalystMarkdownEditor } from '../components/editors/NimbalystMarkdownEditor';
 
 // Import DataModel platform service for datamodellm extension
 import { DataModelPlatformServiceImpl } from './DataModelPlatformServiceImpl';
@@ -441,7 +444,8 @@ CHECK:
         useDocumentPath,
         useEditorLifecycle,
         // Editor components - extensions can use these instead of bundling their own
-        MarkdownEditor,
+        // MarkdownEditor is the configured wrapper with platform features (image handling, toolbar)
+        MarkdownEditor: NimbalystMarkdownEditor,
         MonacoEditor,
       },
     };

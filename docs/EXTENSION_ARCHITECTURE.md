@@ -109,9 +109,15 @@ Extensions can use the host's built-in editors instead of bundling their own. Th
 | Component | Import | Use Case |
 | --- | --- | --- |
 | `MonacoEditor` | `import { MonacoEditor } from '@nimbalyst/runtime'` | Syntax-highlighted code editing with EditorHost integration |
-| `MarkdownEditor` | `import { MarkdownEditor } from '@nimbalyst/runtime'` | Rich text markdown editing (Lexical-based) with EditorHost integration |
+| `MarkdownEditor` | `import { MarkdownEditor } from '@nimbalyst/runtime'` | Full Nimbalyst rich text markdown editor (Lexical-based) with toolbar, image handling, and EditorHost integration |
 
 Both components accept an `EditorHost` as their primary prop and handle all lifecycle integration (loading, saving, dirty state, file changes) automatically.
+
+The `MarkdownEditor` provided to extensions is pre-configured with Nimbalyst platform features:
+- Toolbar enabled by default
+- Image double-click opens in default app
+- Image drag triggers native drag
+- Respects `host.readOnly` for disabling editing
 
 ### Usage: Full File Editor
 
@@ -170,8 +176,8 @@ import type {
 
 - These components are already loaded by the host -- extensions get a reference to the same instance, not a copy
 - Theme changes propagate automatically through `EditorHost.onThemeChanged`
-- Diff mode is not available when using these editors in extensions (it's coupled to the host's TabEditor)
-- For the `MarkdownEditor`, the `collaborationConfig` prop is not available to extensions
+- The `MarkdownEditor` is a configured wrapper that includes Nimbalyst platform integrations. Extensions can override defaults via the `config` prop
+- Diff mode and collaboration are not available when using these editors in extensions (coupled to TabEditor internals)
 
 ## Extension Contract
 
