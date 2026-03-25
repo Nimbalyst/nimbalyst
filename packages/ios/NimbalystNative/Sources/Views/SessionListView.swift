@@ -937,11 +937,32 @@ struct SessionRow: View {
                 .opacity(session.hasUnread ? 1 : 0)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(session.titleDecrypted ?? "Untitled Session")
-                    .font(isChild ? .callout : .body)
-                    .fontWeight(session.hasUnread ? .semibold : .regular)
-                    .lineLimit(1)
-                    .foregroundStyle(session.isArchived ? .secondary : .primary)
+                HStack(spacing: 6) {
+                    Text(session.titleDecrypted ?? "Untitled Session")
+                        .font(isChild ? .callout : .body)
+                        .fontWeight(session.hasUnread ? .semibold : .regular)
+                        .lineLimit(1)
+                        .foregroundStyle(session.isArchived ? .secondary : .primary)
+
+                    Spacer()
+
+                    // Voice focus indicator
+                    if voiceFocusedSessionId == session.id {
+                        Image(systemName: "mic.fill")
+                            .font(.caption2)
+                            .foregroundStyle(NimbalystColors.primary)
+                    }
+
+                    // Status indicators - pending prompt takes priority (it's actionable)
+                    if session.hasQueuedPrompts {
+                        Image(systemName: "clock.fill")
+                            .foregroundStyle(.orange)
+                            .font(.caption)
+                    } else if session.isExecuting {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                }
 
                 HStack(spacing: 6) {
                     if session.isArchived {
@@ -955,31 +976,12 @@ struct SessionRow: View {
                     if let phase = session.phase, !phase.isEmpty {
                         PhaseBadge(phase: phase)
                     }
-                }
-            }
 
-            Spacer()
+                    Spacer()
 
-            HStack(spacing: 6) {
-                // Voice focus indicator
-                if voiceFocusedSessionId == session.id {
-                    Image(systemName: "mic.fill")
-                        .font(.caption2)
-                        .foregroundStyle(NimbalystColors.primary)
-                }
-
-                Text(RelativeTimestamp.format(epochMs: session.updatedAt))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                // Status indicators - pending prompt takes priority (it's actionable)
-                if session.hasQueuedPrompts {
-                    Image(systemName: "clock.fill")
-                        .foregroundStyle(.orange)
+                    Text(RelativeTimestamp.format(epochMs: session.updatedAt))
                         .font(.caption)
-                } else if session.isExecuting {
-                    ProgressView()
-                        .controlSize(.small)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -1062,9 +1064,7 @@ struct ProviderBadge: View {
         let prov = provider?.lowercased() ?? ""
 
         if prov == "claude-code" {
-            // Format like electron: "Claude Agent (Opus 4.6)"
-            let variantLabel = claudeCodeVariantLabel
-            return "Claude Agent (\(variantLabel))"
+            return claudeCodeVariantLabel
         }
 
         switch prov {
@@ -1079,9 +1079,9 @@ struct ProviderBadge: View {
         }
     }
 
-    /// Extract Claude Code variant from model field and format as "Opus 4.6", "Sonnet 4.6", etc.
+    /// Extract Claude Code variant from model field and format as short label: "Opus", "Sonnet", etc.
     private var claudeCodeVariantLabel: String {
-        guard let model = model?.lowercased() else { return "Sonnet 4.6" }
+        guard let model = model?.lowercased() else { return "Sonnet" }
 
         // Model can be "claude-code:opus", "claude-code:sonnet-1m", "opus", "sonnet", etc.
         let variant: String
@@ -1093,14 +1093,12 @@ struct ProviderBadge: View {
 
         // Strip suffixes like "-1m" for extended context
         let baseVariant = variant.split(separator: "-").first.map(String.init) ?? variant
-        let isExtended = variant.contains("-1m")
-        let suffix = isExtended ? " (1M)" : ""
 
         switch baseVariant {
-        case "opus": return "Opus 4.6\(suffix)"
-        case "sonnet": return "Sonnet 4.6\(suffix)"
-        case "haiku": return "Haiku 3.5\(suffix)"
-        default: return "Sonnet 4.6\(suffix)"
+        case "opus": return "Opus"
+        case "sonnet": return "Sonnet"
+        case "haiku": return "Haiku"
+        default: return "Sonnet"
         }
     }
 
