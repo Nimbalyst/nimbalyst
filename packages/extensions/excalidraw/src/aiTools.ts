@@ -7,7 +7,15 @@
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/types/element/types';
 import { convertToExcalidrawElements } from '@excalidraw/excalidraw';
 import { parseMermaidToExcalidraw } from '@excalidraw/mermaid-to-excalidraw';
-import { getEditorAPI } from './editorRegistry';
+import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types/types';
+
+/**
+ * Get the Excalidraw editor API from the tool context.
+ * Uses the central EditorHost registry (context.editorAPI) populated by the bridge.
+ */
+function getEditorAPI(context: { editorAPI?: unknown }): ExcalidrawImperativeAPI | null {
+  return (context.editorAPI as ExcalidrawImperativeAPI) ?? null;
+}
 import { LayoutEngine } from './layout/LayoutEngine';
 import { createFrame } from './utils/elementFactory';
 
@@ -117,8 +125,8 @@ export const aiTools = [
       type: 'object' as const,
       properties: {},
     },
-    handler: async (_params: Record<string, never>, context: { activeFilePath?: string }) => {
-      const api = getEditorAPI(context.activeFilePath);
+    handler: async (_params: Record<string, never>, context: { activeFilePath?: string; editorAPI?: unknown }) => {
+      const api = getEditorAPI(context);
       if (!api) {
         return {
           success: false,
@@ -210,9 +218,9 @@ export const aiTools = [
         strokeColor?: string;
         rounded?: boolean;
       },
-      context: { activeFilePath?: string }
+      context: { activeFilePath?: string; editorAPI?: unknown }
     ) => {
-      const api = getEditorAPI(context.activeFilePath);
+      const api = getEditorAPI(context);
       if (!api) {
         return {
           success: false,
@@ -301,9 +309,9 @@ export const aiTools = [
         to: string;
         label?: string;
       },
-      context: { activeFilePath?: string }
+      context: { activeFilePath?: string; editorAPI?: unknown }
     ) => {
-      const api = getEditorAPI(context.activeFilePath);
+      const api = getEditorAPI(context);
       if (!api) {
         return {
           success: false,
@@ -454,9 +462,9 @@ export const aiTools = [
         color?: string;
         strokeColor?: string;
       },
-      context: { activeFilePath?: string }
+      context: { activeFilePath?: string; editorAPI?: unknown }
     ) => {
-      const api = getEditorAPI(context.activeFilePath);
+      const api = getEditorAPI(context);
       if (!api) {
         return {
           success: false,
@@ -555,9 +563,9 @@ export const aiTools = [
     },
     handler: async (
       params: { id?: string; label?: string },
-      context: { activeFilePath?: string }
+      context: { activeFilePath?: string; editorAPI?: unknown }
     ) => {
-      const api = getEditorAPI(context.activeFilePath);
+      const api = getEditorAPI(context);
       if (!api) {
         return {
           success: false,
@@ -629,9 +637,9 @@ export const aiTools = [
   //       algorithm?: string;
   //       direction?: string;
   //     },
-  //     context: { activeFilePath?: string }
+  //     context: { activeFilePath?: string; editorAPI?: unknown }
   //   ) => {
-  //     const api = getEditorAPI(context.activeFilePath);
+  //     const api = getEditorAPI(context);
   //     if (!api) {
   //       return {
   //         success: false,
@@ -678,9 +686,9 @@ export const aiTools = [
     },
     handler: async (
       params: { mermaid: string },
-      context: { activeFilePath?: string }
+      context: { activeFilePath?: string; editorAPI?: unknown }
     ) => {
-      const api = getEditorAPI(context.activeFilePath);
+      const api = getEditorAPI(context);
       if (!api) {
         return {
           success: false,
@@ -735,9 +743,9 @@ export const aiTools = [
     },
     handler: async (
       params: Record<string, never>,
-      context: { activeFilePath?: string }
+      context: { activeFilePath?: string; editorAPI?: unknown }
     ) => {
-      const api = getEditorAPI(context.activeFilePath);
+      const api = getEditorAPI(context);
       if (!api) {
         return {
           success: false,
@@ -792,9 +800,9 @@ export const aiTools = [
         width?: number;
         height?: number;
       },
-      context: { activeFilePath?: string }
+      context: { activeFilePath?: string; editorAPI?: unknown }
     ) => {
-      const api = getEditorAPI(context.activeFilePath);
+      const api = getEditorAPI(context);
       if (!api) {
         return {
           success: false,
@@ -884,9 +892,9 @@ export const aiTools = [
         width?: number;
         height?: number;
       },
-      context: { activeFilePath?: string }
+      context: { activeFilePath?: string; editorAPI?: unknown }
     ) => {
-      const api = getEditorAPI(context.activeFilePath);
+      const api = getEditorAPI(context);
       if (!api) {
         return {
           success: false,
@@ -988,9 +996,9 @@ export const aiTools = [
         width?: number;
         height?: number;
       },
-      context: { activeFilePath?: string }
+      context: { activeFilePath?: string; editorAPI?: unknown }
     ) => {
-      const api = getEditorAPI(context.activeFilePath);
+      const api = getEditorAPI(context);
       if (!api) {
         return {
           success: false,
@@ -1068,9 +1076,9 @@ export const aiTools = [
         labels: string[];
         alignment: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';
       },
-      context: { activeFilePath?: string }
+      context: { activeFilePath?: string; editorAPI?: unknown }
     ) => {
-      const api = getEditorAPI(context.activeFilePath);
+      const api = getEditorAPI(context);
       if (!api) {
         return {
           success: false,
@@ -1230,9 +1238,9 @@ export const aiTools = [
         direction: 'horizontal' | 'vertical';
         spacing?: number;
       },
-      context: { activeFilePath?: string }
+      context: { activeFilePath?: string; editorAPI?: unknown }
     ) => {
-      const api = getEditorAPI(context.activeFilePath);
+      const api = getEditorAPI(context);
       if (!api) {
         return {
           success: false,
@@ -1400,9 +1408,9 @@ export const aiTools = [
         dx?: number;
         dy?: number;
       },
-      context: { activeFilePath?: string }
+      context: { activeFilePath?: string; editorAPI?: unknown }
     ) => {
-      const api = getEditorAPI(context.activeFilePath);
+      const api = getEditorAPI(context);
       if (!api) {
         return {
           success: false,
@@ -1494,9 +1502,9 @@ export const aiTools = [
       params: {
         labels: string[];
       },
-      context: { activeFilePath?: string }
+      context: { activeFilePath?: string; editorAPI?: unknown }
     ) => {
-      const api = getEditorAPI(context.activeFilePath);
+      const api = getEditorAPI(context);
       if (!api) {
         return {
           success: false,
@@ -1577,9 +1585,9 @@ export const aiTools = [
         frameLabel: string;
         elementLabels: string[];
       },
-      context: { activeFilePath?: string }
+      context: { activeFilePath?: string; editorAPI?: unknown }
     ) => {
-      const api = getEditorAPI(context.activeFilePath);
+      const api = getEditorAPI(context);
       if (!api) {
         return {
           success: false,
@@ -1675,9 +1683,9 @@ export const aiTools = [
       params: {
         arrows: Array<{ from: string; to: string; label?: string }>;
       },
-      context: { activeFilePath?: string }
+      context: { activeFilePath?: string; editorAPI?: unknown }
     ) => {
-      const api = getEditorAPI(context.activeFilePath);
+      const api = getEditorAPI(context);
       if (!api) {
         return {
           success: false,
@@ -1879,9 +1887,9 @@ export const aiTools = [
           rounded?: boolean;
         }>;
       },
-      context: { activeFilePath?: string }
+      context: { activeFilePath?: string; editorAPI?: unknown }
     ) => {
-      const api = getEditorAPI(context.activeFilePath);
+      const api = getEditorAPI(context);
       if (!api) {
         return {
           success: false,
@@ -1968,9 +1976,9 @@ export const aiTools = [
         labels?: string[];
         ids?: string[];
       },
-      context: { activeFilePath?: string }
+      context: { activeFilePath?: string; editorAPI?: unknown }
     ) => {
-      const api = getEditorAPI(context.activeFilePath);
+      const api = getEditorAPI(context);
       if (!api) {
         return {
           success: false,

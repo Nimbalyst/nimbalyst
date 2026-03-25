@@ -360,35 +360,33 @@ export async function getAvailableExtensionTools(
     return [];
   }
 
-  const filtered = tools.filter((tool) => {
-    // Global tools are always available
-    if (tool.scope === "global") {
-      return true;
+  // Return all tools -- both global and editor-scoped.
+  // Inject a `filePath` parameter so the agent can target any file,
+  // not just the currently active one.
+  const enriched = tools.map((tool) => {
+    // Inject filePath parameter if not already present
+    const hasFilePath = tool.inputSchema.properties?.filePath;
+    if (hasFilePath) {
+      return tool;
     }
 
-    // Editor-scoped tools require a matching file
-    if (!filePath) {
-      return false;
-    }
-
-    // Check if file matches any pattern
-    if (!tool.editorFilePatterns || tool.editorFilePatterns.length === 0) {
-      return false;
-    }
-
-    const fileExtension = filePath.substring(filePath.lastIndexOf("."));
-    return tool.editorFilePatterns.some((pattern) => {
-      // Handle "*.ext" patterns
-      if (pattern.startsWith("*.")) {
-        const patternExt = pattern.substring(1); // ".ext"
-        return fileExtension.toLowerCase() === patternExt.toLowerCase();
-      }
-      // Exact match
-      return filePath.toLowerCase().endsWith(pattern.toLowerCase());
-    });
+    return {
+      ...tool,
+      inputSchema: {
+        ...tool.inputSchema,
+        properties: {
+          ...tool.inputSchema.properties,
+          filePath: {
+            type: "string",
+            description:
+              "Absolute path to the file to operate on. If omitted, uses the currently active file.",
+          },
+        },
+      },
+    };
   });
 
-  return filtered;
+  return enriched;
 }
 
 /**

@@ -360,6 +360,8 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
 
       setEditorContext(): void {},
 
+      registerEditorAPI(): void {},
+
       registerMenuItems(): void {},
     };
   }, [filePath, fileName, isActive, onDirtyChange]);

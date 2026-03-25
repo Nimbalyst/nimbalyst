@@ -6,6 +6,7 @@
  */
 
 import type { EditorHost, EditorContext, DiffConfig, DiffResult, ExtensionStorage, EditorMenuItem } from '@nimbalyst/runtime';
+import { registerEditorAPI, unregisterEditorAPI } from '@nimbalyst/runtime';
 
 export interface EditorHostOptions {
   /** Absolute path to the file being edited */
@@ -45,6 +46,9 @@ export interface EditorHostOptions {
 
   /** Subscribe to save requests from host */
   subscribeToSaveRequests: (callback: () => void | Promise<void>) => () => void;
+
+  /** Trigger an immediate save (bypasses auto-save timer). Used after AI tool execution. */
+  triggerSave?: () => void;
 
   /** Open history dialog */
   openHistory: () => void;
@@ -193,6 +197,15 @@ export function createEditorHost(options: EditorHostOptions): EditorHost {
     // ============ EDITOR CONTEXT ============
     setEditorContext(context: EditorContext | null): void {
       options.onEditorContextChanged?.(context);
+    },
+
+    // ============ EDITOR API REGISTRATION ============
+    registerEditorAPI(api: unknown | null): void {
+      if (api) {
+        registerEditorAPI(options.filePath, api, options.triggerSave);
+      } else {
+        unregisterEditorAPI(options.filePath);
+      }
     },
 
     // ============ MENU ITEMS ============

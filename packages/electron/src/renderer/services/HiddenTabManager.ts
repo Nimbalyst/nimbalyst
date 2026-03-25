@@ -1,0 +1,418 @@
+/**
+ * Hidden Tab Manager
+ *
+ * Manages hidden editor instances in the main renderer window for AI agent
+ * tool execution. When an agent calls an editor-scoped tool (e.g., Excalidraw)
+ * against a file that isn't open in a visible tab, this manager mounts the
+ * editor offscreen so the tool handler can access the editor's imperative API.
+ *
+ * Key differences from OffscreenEditorRenderer:
+ * - Runs in the MAIN renderer window (not a separate hidden BrowserWindow)
+ * - Uses the full createEditorHost() with proper theme, storage, save support
+ * - Reference counting with TTL-based cleanup
+ * - Auto-saves after tool modifications
+ */
+
+import React from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import type { EditorHost, ExtensionStorage } from '@nimbalyst/runtime';
+import { getExtensionLoader, createExtensionStorage, registerEditorAPI, unregisterEditorAPI, hasExtensionEditorAPI } from '@nimbalyst/runtime';
+
+const LOG_PREFIX = '[HiddenTabManager]';
+const TTL_MS = 30_000; // 30 seconds after last release before cleanup
+const MAX_HIDDEN_EDITORS = 5;
+const POLL_INTERVAL_MS = 100;
+const POLL_TIMEOUT_MS = 10_000;
+
+interface HiddenEditorInstance {
+  filePath: string;
+  container: HTMLDivElement;
+  root: Root;
+  host: EditorHost;
+  refCount: number;
+  ttlTimer: ReturnType<typeof setTimeout> | null;
+  extensionId: string;
+}
+
+class HiddenTabManager {
+  private hiddenContainer: HTMLDivElement | null = null;
+  private editors = new Map<string, HiddenEditorInstance>();
+
+  /**
+   * Initialize the hidden container in the DOM.
+   * Call once during app startup.
+   */
+  public initialize(): void {
+    if (this.hiddenContainer) return;
+
+    this.hiddenContainer = document.createElement('div');
+    this.hiddenContainer.id = 'hidden-editors';
+    this.hiddenContainer.style.position = 'absolute';
+    this.hiddenContainer.style.left = '-9999px';
+    this.hiddenContainer.style.top = '-9999px';
+    this.hiddenContainer.style.width = '1280px';
+    this.hiddenContainer.style.height = '800px';
+    this.hiddenContainer.style.overflow = 'hidden';
+    this.hiddenContainer.style.pointerEvents = 'none';
+
+    document.body.appendChild(this.hiddenContainer);
+
+    console.log(`${LOG_PREFIX} Initialized`);
+  }
+
+  /**
+   * Ensure an editor is mounted and its API is available for the given file.
+   * If the editor is already mounted (visible tab or existing hidden editor),
+   * this returns immediately. Otherwise it mounts a hidden editor and waits
+   * for the extension to register its API.
+   */
+  public async ensureEditor(filePath: string, workspacePath: string): Promise<void> {
+    // Already mounted as hidden editor
+    if (this.editors.has(filePath)) {
+      const instance = this.editors.get(filePath)!;
+      instance.refCount++;
+      // Cancel any pending TTL cleanup
+      if (instance.ttlTimer) {
+        clearTimeout(instance.ttlTimer);
+        instance.ttlTimer = null;
+      }
+      console.log(`${LOG_PREFIX} Reusing existing hidden editor for ${filePath} (refCount: ${instance.refCount})`);
+      return;
+    }
+
+    // Check if a visible editor already has this file open
+    if (this.isEditorAPIAvailable(filePath)) {
+      console.log(`${LOG_PREFIX} Visible editor already open for ${filePath}`);
+      return;
+    }
+
+    // Evict oldest if at capacity
+    if (this.editors.size >= MAX_HIDDEN_EDITORS) {
+      this.evictOldest();
+    }
+
+    // Mount a new hidden editor
+    await this.mountEditor(filePath, workspacePath);
+  }
+
+  /**
+   * Release a reference to a hidden editor. When refCount drops to 0,
+   * schedules TTL-based cleanup.
+   */
+  public release(filePath: string): void {
+    const instance = this.editors.get(filePath);
+    if (!instance) return;
+
+    instance.refCount = Math.max(0, instance.refCount - 1);
+
+    if (instance.refCount === 0) {
+      // Schedule cleanup after TTL
+      instance.ttlTimer = setTimeout(() => {
+        this.unmountEditor(filePath);
+      }, TTL_MS);
+      console.log(`${LOG_PREFIX} Released ${filePath}, cleanup in ${TTL_MS / 1000}s`);
+    }
+  }
+
+  /**
+   * Check if any editor (visible or hidden) has registered an API for this file.
+   * Uses the central ExtensionEditorAPIRegistry.
+   */
+  private isEditorAPIAvailable(filePath: string): boolean {
+    return hasExtensionEditorAPI(filePath);
+  }
+
+  /**
+   * Wait for the extension's editor API to become available.
+   */
+  private async waitForEditorAPI(filePath: string): Promise<void> {
+    const start = Date.now();
+
+    return new Promise<void>((resolve, reject) => {
+      const poll = () => {
+        if (this.isEditorAPIAvailable(filePath)) {
+          resolve();
+          return;
+        }
+
+        if (Date.now() - start > POLL_TIMEOUT_MS) {
+          reject(new Error(`${LOG_PREFIX} Timed out waiting for editor API for ${filePath} (${POLL_TIMEOUT_MS}ms)`));
+          return;
+        }
+
+        setTimeout(poll, POLL_INTERVAL_MS);
+      };
+
+      poll();
+    });
+  }
+
+  /**
+   * Mount a hidden editor for a file.
+   */
+  private async mountEditor(filePath: string, workspacePath: string): Promise<void> {
+    console.log(`${LOG_PREFIX} Mounting hidden editor for ${filePath}`);
+
+    if (!this.hiddenContainer) {
+      this.initialize();
+    }
+
+    // Find extension that handles this file
+    const extensionLoader = getExtensionLoader();
+    const fileName = filePath.split('/').pop() || filePath;
+    const firstDotIndex = fileName.indexOf('.');
+    const fileExtension = firstDotIndex >= 0 ? fileName.slice(firstDotIndex) : '';
+
+    if (!fileExtension) {
+      throw new Error(`${LOG_PREFIX} File has no extension: ${filePath}`);
+    }
+
+    const editorInfo = extensionLoader.findEditorForExtension(fileExtension);
+    if (!editorInfo) {
+      throw new Error(`${LOG_PREFIX} No custom editor registered for ${filePath} (extension: ${fileExtension})`);
+    }
+
+    // Create container
+    const container = document.createElement('div');
+    container.style.width = '100%';
+    container.style.height = '100%';
+
+    // Make the container fully visible during initialization.
+    // Canvas-based editors (Excalidraw) require real visibility for WebGL/canvas init.
+    // Position behind the app content with z-index to minimize visual impact.
+    this.hiddenContainer!.style.left = '0px';
+    this.hiddenContainer!.style.top = '0px';
+    this.hiddenContainer!.style.zIndex = '-9999';
+    this.hiddenContainer!.appendChild(container);
+
+    // Create EditorHost
+    const host = this.createEditorHost(filePath, workspacePath, editorInfo.extensionId);
+
+    // Create React root and mount
+    const root = createRoot(container);
+    const EditorComponent = editorInfo.component as React.ComponentType<{ host: EditorHost }>;
+    root.render(React.createElement(EditorComponent, { host }));
+
+    // Store instance
+    this.editors.set(filePath, {
+      filePath,
+      container,
+      root,
+      host,
+      refCount: 1,
+      ttlTimer: null,
+      extensionId: editorInfo.extensionId,
+    });
+
+    // Wait for the editor API to register, then move offscreen
+    try {
+      await this.waitForEditorAPI(filePath);
+      console.log(`${LOG_PREFIX} Hidden editor ready for ${filePath}`);
+    } catch (error) {
+      // Cleanup on failure
+      this.unmountEditor(filePath);
+      throw error;
+    } finally {
+      // Move back offscreen regardless of success/failure
+      this.hiddenContainer!.style.left = '-9999px';
+      this.hiddenContainer!.style.top = '-9999px';
+      this.hiddenContainer!.style.zIndex = '';
+    }
+  }
+
+  /**
+   * Unmount a hidden editor and clean up.
+   */
+  private unmountEditor(filePath: string): void {
+    const instance = this.editors.get(filePath);
+    if (!instance) return;
+
+    console.log(`${LOG_PREFIX} Unmounting hidden editor for ${filePath}`);
+
+    // Clean up the central editor API registry
+    unregisterEditorAPI(filePath);
+
+    if (instance.ttlTimer) {
+      clearTimeout(instance.ttlTimer);
+    }
+
+    instance.root.unmount();
+
+    if (instance.container.parentNode) {
+      instance.container.parentNode.removeChild(instance.container);
+    }
+
+    this.editors.delete(filePath);
+  }
+
+  /**
+   * Evict the oldest hidden editor (lowest refCount, or oldest by insertion).
+   */
+  private evictOldest(): void {
+    // Find an editor with refCount 0 first
+    for (const [filePath, instance] of this.editors) {
+      if (instance.refCount === 0) {
+        console.log(`${LOG_PREFIX} Evicting idle hidden editor: ${filePath}`);
+        this.unmountEditor(filePath);
+        return;
+      }
+    }
+
+    // All editors are in use -- evict the first one
+    const firstKey = this.editors.keys().next().value;
+    if (firstKey) {
+      console.log(`${LOG_PREFIX} Evicting oldest hidden editor: ${firstKey}`);
+      this.unmountEditor(firstKey);
+    }
+  }
+
+  /**
+   * Create an EditorHost for a hidden editor.
+   * This creates a functional host with file I/O and auto-save support.
+   */
+  private createEditorHost(filePath: string, workspacePath: string, extensionId: string): EditorHost {
+    const fileName = filePath.split('/').pop() || filePath;
+    const electronAPI = (window as any).electronAPI;
+
+    // Track dirty state for auto-save
+    let isDirty = false;
+    let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+    // Subscribers
+    const fileChangeCallbacks: Array<(content: string) => void> = [];
+    const saveRequestCallbacks: Array<() => void | Promise<void>> = [];
+    const themeChangeCallbacks: Array<(theme: string) => void> = [];
+
+    // Get current theme from document
+    const getCurrentTheme = (): string => {
+      return document.documentElement.getAttribute('data-theme') || 'dark';
+    };
+
+    // Extension storage
+    let storage: ExtensionStorage;
+    try {
+      storage = createExtensionStorage(extensionId);
+    } catch {
+      // Fallback to stub storage
+      storage = {
+        get: () => undefined,
+        set: async () => {},
+        delete: async () => {},
+        getGlobal: () => undefined,
+        setGlobal: async () => {},
+        deleteGlobal: async () => {},
+        getSecret: async () => undefined,
+        setSecret: async () => {},
+        deleteSecret: async () => {},
+      };
+    }
+
+    // For hidden editors, save immediately when dirty.
+    // Delayed auto-save risks data loss if the editor is evicted before the timer fires.
+    const triggerAutoSave = () => {
+      if (autoSaveTimer) clearTimeout(autoSaveTimer);
+      // Small debounce to batch rapid consecutive changes (e.g., add_elements batches)
+      autoSaveTimer = setTimeout(() => {
+        for (const cb of saveRequestCallbacks) {
+          cb();
+        }
+      }, 100);
+    };
+
+    const host: EditorHost = {
+      filePath,
+      fileName,
+      get theme() { return getCurrentTheme(); },
+      isActive: false,
+      workspaceId: workspacePath,
+
+      async loadContent(): Promise<string> {
+        const result = await electronAPI.readFileContent(filePath);
+        if (!result || !result.success) {
+          throw new Error(result?.error || 'Failed to load file');
+        }
+        return result.content || '';
+      },
+
+      async loadBinaryContent(): Promise<ArrayBuffer> {
+        const result = await electronAPI.readFileContent(filePath, { binary: true });
+        if (!result || !result.success) {
+          throw new Error(result?.error || 'Failed to load binary file');
+        }
+        const binaryString = atob(result.content);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        return bytes.buffer;
+      },
+
+      onFileChanged(callback: (newContent: string) => void): () => void {
+        fileChangeCallbacks.push(callback);
+        return () => {
+          const index = fileChangeCallbacks.indexOf(callback);
+          if (index >= 0) fileChangeCallbacks.splice(index, 1);
+        };
+      },
+
+      setDirty(dirty: boolean): void {
+        isDirty = dirty;
+        if (dirty) {
+          triggerAutoSave();
+        }
+      },
+
+      async saveContent(content: string | ArrayBuffer): Promise<void> {
+        if (typeof content === 'string') {
+          await electronAPI.saveFile(content, filePath);
+        } else {
+          throw new Error('Binary content saving not yet implemented for hidden editors');
+        }
+        isDirty = false;
+      },
+
+      onSaveRequested(callback: () => void | Promise<void>): () => void {
+        saveRequestCallbacks.push(callback);
+        return () => {
+          const index = saveRequestCallbacks.indexOf(callback);
+          if (index >= 0) saveRequestCallbacks.splice(index, 1);
+        };
+      },
+
+      openHistory(): void {
+        // Not applicable for hidden editors
+      },
+
+      onThemeChanged(callback: (theme: string) => void): () => void {
+        themeChangeCallbacks.push(callback);
+        return () => {
+          const index = themeChangeCallbacks.indexOf(callback);
+          if (index >= 0) themeChangeCallbacks.splice(index, 1);
+        };
+      },
+
+      storage,
+
+      setEditorContext(): void {
+        // Hidden editors don't push context to chat
+      },
+
+      registerEditorAPI(api: unknown | null): void {
+        if (api) {
+          registerEditorAPI(filePath, api, triggerAutoSave);
+        } else {
+          unregisterEditorAPI(filePath);
+        }
+      },
+
+      registerMenuItems(): void {
+        // Hidden editors don't register menu items
+      },
+    };
+
+    return host;
+  }
+}
+
+// Singleton instance
+export const hiddenTabManager = new HiddenTabManager();

@@ -6,16 +6,7 @@
  * project file will build on previous generations in the conversation.
  */
 
-import { getEditorAPI } from '../editorRegistry';
-import type { ImageStyle, AspectRatio } from '../types';
-
-/**
- * Reference image that can be passed to guide generation
- */
-export interface ReferenceImage {
-  /** Absolute file path to the image */
-  filePath: string;
-}
+import type { ImageStyle, AspectRatio, ImageProjectEditorAPI, ReferenceImage } from '../types';
 
 /**
  * AI tool definition for generate_image
@@ -104,7 +95,7 @@ for incorporating existing logos, branding, or visual elements into the generate
       referenceImages?: ReferenceImage[];
       projectFile?: string;
     },
-    context: { activeFilePath?: string }
+    context: { activeFilePath?: string; editorAPI?: unknown }
   ) => {
     const {
       prompt,
@@ -115,8 +106,8 @@ for incorporating existing logos, branding, or visual elements into the generate
       projectFile,
     } = params;
 
-    // Get the editor API
-    const api = getEditorAPI(projectFile || context.activeFilePath);
+    // Get the editor API from the central registry
+    const api = context.editorAPI as ImageProjectEditorAPI | undefined;
 
     if (!api) {
       return {

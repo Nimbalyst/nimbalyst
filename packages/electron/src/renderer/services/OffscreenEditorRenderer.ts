@@ -14,7 +14,7 @@
 import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { EditorHost } from '@nimbalyst/runtime';
-import { getExtensionLoader, getBaseThemeColors, type ExtendedThemeColors } from '@nimbalyst/runtime';
+import { getExtensionLoader, getBaseThemeColors, hasExtensionEditorAPI, type ExtendedThemeColors } from '@nimbalyst/runtime';
 // Note: Window globals for mockup annotations are declared in @nimbalyst/runtime
 
 /**
@@ -153,15 +153,10 @@ class OffscreenEditorRendererImpl {
       return;
     }
 
-    // Check if a visible editor already has this file open by checking the extension's registry
-    // Extensions expose their editor API on window for this purpose
-    // For Excalidraw: window.__excalidraw_getEditorAPI(filePath)
-    if (filePath.endsWith('.excalidraw')) {
-      const getAPI = (window as any).__excalidraw_getEditorAPI;
-      if (getAPI && getAPI(filePath)) {
-        console.log('[OffscreenEditorRenderer] Visible editor already open, skipping offscreen mount');
-        return;
-      }
+    // Check if an editor is already registered for this file (visible or hidden tab)
+    if (hasExtensionEditorAPI(filePath)) {
+      console.log('[OffscreenEditorRenderer] Editor already registered, skipping offscreen mount');
+      return;
     }
 
     // Find extension that handles this file
@@ -358,6 +353,10 @@ class OffscreenEditorRendererImpl {
         // No editor context for offscreen editors
       },
 
+      registerEditorAPI(): void {
+        // Offscreen editors don't use the central registry
+      },
+
       registerMenuItems(): void {
         // No menu items for offscreen editors
       },
@@ -529,18 +528,15 @@ class OffscreenEditorRendererImpl {
    * Returns null if no visible editor is found.
    */
   private findVisibleEditorRect(filePath: string, selector?: string): CaptureRect | null {
-    // Check for visible Excalidraw editor
-    if (filePath.endsWith('.excalidraw')) {
-      const getAPI = (window as any).__excalidraw_getEditorAPI;
-      if (getAPI && getAPI(filePath)) {
-        const editors = document.querySelectorAll('.excalidraw-editor');
-        if (editors.length > 0) {
-          const el = (selector ? editors[0].querySelector(selector) : editors[0]) as HTMLElement;
-          if (el) {
-            const rect = el.getBoundingClientRect();
-            if (rect.width > 0 && rect.height > 0) {
-              return { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) };
-            }
+    // Check for visible Excalidraw editor via central registry
+    if (filePath.endsWith('.excalidraw') && hasExtensionEditorAPI(filePath)) {
+      const editors = document.querySelectorAll('.excalidraw-editor');
+      if (editors.length > 0) {
+        const el = (selector ? editors[0].querySelector(selector) : editors[0]) as HTMLElement;
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) {
+            return { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) };
           }
         }
       }

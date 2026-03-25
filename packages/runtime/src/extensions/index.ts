@@ -84,8 +84,18 @@ export {
   getMCPToolDefinitions,
   executeExtensionTool,
   setOffscreenMountCallback,
+  setEnsureEditorCallback,
 } from './ExtensionAIToolsBridge';
 export type { MCPToolDefinition } from './ExtensionAIToolsBridge';
+
+// Extension Editor API Registry
+export {
+  registerEditorAPI,
+  unregisterEditorAPI,
+  getEditorAPI as getExtensionEditorAPI,
+  hasEditorAPI as hasExtensionEditorAPI,
+  flushEditorSave,
+} from './ExtensionEditorAPIRegistry';
 
 // Editor Host
 export type {

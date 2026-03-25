@@ -337,8 +337,19 @@ const TabContentComponent: React.FC<TabContentProps> = ({
     const instance = tabInstancesRef.current.get(tabId);
     if (!instance) return;
 
-    // Clean up Jotai atoms for this tab
+    // Save dirty editors before unmounting to prevent data loss on session switch
     const editorKey = makeEditorKey(instance.tabData.filePath);
+    const isDirty = store.get(editorDirtyAtom(editorKey));
+    if (isDirty) {
+      const saveFn = saveFunctionsRef.current.get(tabId);
+      if (saveFn) {
+        saveFn().catch((err) => {
+          console.error('[TabContent] Failed to save before unmount:', instance.tabData.filePath, err);
+        });
+      }
+    }
+
+    // Clean up Jotai atoms for this tab
     editorDirtyAtom.remove(editorKey);
     editorHasUnacceptedChangesAtom.remove(editorKey);
 
@@ -519,9 +530,23 @@ const TabContentComponent: React.FC<TabContentProps> = ({
     }
   }, [onSaveTabByIdReady, saveTabById]);
 
-  // Cleanup on unmount
+  // Cleanup on unmount -- save dirty editors before destroying them
   useEffect(() => {
     return () => {
+      // Save dirty editors before unmounting to prevent data loss on session switch
+      tabInstancesRef.current.forEach((instance, tabId) => {
+        const editorKey = makeEditorKey(instance.tabData.filePath);
+        const isDirty = store.get(editorDirtyAtom(editorKey));
+        if (isDirty) {
+          const saveFn = saveFunctionsRef.current.get(tabId);
+          if (saveFn) {
+            saveFn().catch((err) => {
+              console.error('[TabContent] Failed to save before unmount:', instance.tabData.filePath, err);
+            });
+          }
+        }
+      });
+
       // Clean up editor instances
       tabInstancesRef.current.forEach((instance) => {
         instance.root.unmount();

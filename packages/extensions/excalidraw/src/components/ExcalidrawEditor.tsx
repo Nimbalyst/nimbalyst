@@ -12,7 +12,6 @@ import type { ExcalidrawElement } from '@excalidraw/excalidraw/types/element/typ
 import type { ExcalidrawImperativeAPI, AppState, BinaryFiles } from '@excalidraw/excalidraw/types/types';
 import { useEditorLifecycle, type EditorHostProps } from '@nimbalyst/extension-sdk';
 import type { ExcalidrawFile } from '../types';
-import { registerEditor, unregisterEditor } from '../editorRegistry';
 
 // Default empty Excalidraw file
 function createEmptyFile(bgColor: string): ExcalidrawFile {
@@ -215,13 +214,13 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
     }
   }, [markDirty]);
 
-  // Register editor API for AI tool access
+  // Register editor API for AI tool access via the central registry
   useEffect(() => {
     const api = excalidrawAPIRef.current;
     if (api) {
-      registerEditor(filePath, api);
+      host.registerEditorAPI(api);
       return () => {
-        unregisterEditor(filePath);
+        host.registerEditorAPI(null);
       };
     }
   }, [filePath, initialData]); // Re-register when initialData changes (means API is set)
@@ -250,7 +249,10 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
       <Excalidraw
         key={theme}
         onChange={onChange}
-        excalidrawAPI={(api: any) => { excalidrawAPIRef.current = api; }}
+        excalidrawAPI={(api: any) => {
+          excalidrawAPIRef.current = api;
+          if (api) host.registerEditorAPI(api);
+        }}
         initialData={initialData ?? undefined}
         theme={theme}
       />

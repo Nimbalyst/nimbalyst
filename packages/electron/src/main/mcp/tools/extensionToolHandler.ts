@@ -59,7 +59,8 @@ export async function handleExtensionTool(
 
   // Create a unique channel for the result
   const resultChannel = `mcp-extension-result-${Date.now()}-${Math.random()}`;
-  const activeFilePath = currentDocState?.filePath;
+  // Prefer filePath from tool args (agent targeting a specific file) over session state
+  const activeFilePath = args?.filePath || currentDocState?.filePath;
 
   return new Promise((resolve) => {
     const TOOL_TIMEOUT_MS = 30000;

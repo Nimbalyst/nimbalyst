@@ -474,3 +474,26 @@ export const AVAILABLE_MODELS: ModelOption[] = [
  * Default model for new projects
  */
 export const DEFAULT_MODEL: GeminiImageModel = 'gemini-2.5-flash-image';
+
+/**
+ * Reference image that can be passed to guide generation
+ */
+export interface ReferenceImage {
+  /** Absolute file path to the image */
+  filePath: string;
+}
+
+/**
+ * API exposed by the editor for AI tool access
+ */
+export interface ImageProjectEditorAPI {
+  getProject: () => ImageProject;
+  updateProject: (updater: (prev: ImageProject) => ImageProject) => void;
+  generate: (
+    prompt: string,
+    style: ImageStyle,
+    aspectRatio: AspectRatio,
+    variations: number,
+    referenceImages?: ReferenceImage[]
+  ) => Promise<void>;
+}

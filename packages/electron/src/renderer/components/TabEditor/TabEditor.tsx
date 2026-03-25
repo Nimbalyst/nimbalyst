@@ -2201,6 +2201,11 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         };
       },
 
+      // Trigger immediate save (called after AI tool execution to prevent data loss)
+      triggerSave: () => {
+        editorHostSaveRequestCallbackRef.current?.();
+      },
+
       // Open history dialog
       openHistory: () => {
         onViewHistoryRef.current?.();

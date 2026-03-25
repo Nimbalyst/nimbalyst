@@ -315,6 +315,35 @@ export interface EditorHost {
    */
   setEditorContext(context: EditorContext | null): void;
 
+  // ============ EDITOR API REGISTRATION ============
+
+  /**
+   * Register an imperative API that AI tools can use to interact with this editor.
+   *
+   * Call this when your editor's library has fully initialized and its API is ready.
+   * The host makes this API available to AI tool handlers via a central registry
+   * keyed by filePath. This enables AI tools to work against files that aren't
+   * open in a visible tab (the system mounts a hidden editor on demand).
+   *
+   * Call with `null` to unregister (e.g., in a cleanup function).
+   *
+   * @example
+   * ```tsx
+   * // In your editor component, register when the library callback fires:
+   * <MyLibrary
+   *   onReady={(api) => {
+   *     host.registerEditorAPI(api);
+   *   }}
+   * />
+   *
+   * // Clean up on unmount:
+   * useEffect(() => {
+   *   return () => host.registerEditorAPI(null);
+   * }, [host]);
+   * ```
+   */
+  registerEditorAPI(api: unknown | null): void;
+
   // ============ MENU ITEMS ============
 
   /**

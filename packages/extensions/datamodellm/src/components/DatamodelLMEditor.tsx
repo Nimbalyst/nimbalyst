@@ -13,7 +13,6 @@ import { DataModelToolbar } from './DataModelToolbar';
 import { createDataModelStore, type DataModelStoreApi } from '../store';
 import { createEmptyDataModel, type DataModelFile } from '../types';
 import { parsePrismaSchema, serializeToPrismaSchema } from '../prismaParser';
-import { registerEditorStore, unregisterEditorStore } from '../aiTools';
 import { captureDataModelCanvas, copyScreenshotToClipboard } from '../utils/screenshotUtils';
 import { useEditorLifecycle, type EditorHostProps } from '@nimbalyst/extension-sdk';
 
@@ -82,11 +81,11 @@ export function DatamodelLMEditor({ host }: EditorHostProps) {
     return unsubscribe;
   }, [store]);
 
-  // Register store for AI tool access
+  // Register store for AI tool access via the central registry
   useEffect(() => {
-    registerEditorStore(filePath, store);
+    host.registerEditorAPI(store);
     return () => {
-      unregisterEditorStore(filePath);
+      host.registerEditorAPI(null);
     };
   }, [filePath, store]);
 

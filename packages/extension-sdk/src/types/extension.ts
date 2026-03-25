@@ -637,6 +637,15 @@ export interface AIToolContext {
 
   /** The extension context for accessing services */
   extensionContext: ExtensionContext;
+
+  /**
+   * The editor's imperative API, if one was registered via host.registerEditorAPI().
+   * This is populated automatically from the central registry when a tool targets
+   * a file that has a mounted editor (visible or hidden).
+   *
+   * Cast to your extension's specific API type before using.
+   */
+  editorAPI?: unknown;
 }
 
 export interface ExtensionConfigurationService {

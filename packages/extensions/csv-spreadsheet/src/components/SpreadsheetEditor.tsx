@@ -26,7 +26,6 @@ import { getColumnTypeName } from '../utils/formatters';
 import { FormulaBar, type FormulaBarHandle } from './FormulaBar';
 import { ContextMenu, type ContextMenuItem } from './ContextMenu';
 import { ColumnFormatDialog } from './ColumnFormatDialog';
-import { registerEditorStore, unregisterEditorStore } from '../aiTools';
 import { SheetsTextEditor } from '../editors/SheetsTextEditor';
 
 // Buffer of extra empty rows/columns to show beyond actual data
@@ -458,8 +457,10 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
       delimiter: spreadsheetMeta.delimiter,
       // Note: AI tools integration would need updates to work with new architecture
     };
-    registerEditorStore(filePath, compatStore as any);
-    return () => unregisterEditorStore(filePath);
+    host.registerEditorAPI(compatStore);
+    return () => {
+      host.registerEditorAPI(null);
+    };
   }, [filePath, spreadsheetMeta]);
 
   /**

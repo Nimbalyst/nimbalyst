@@ -39,8 +39,6 @@ export type {
   DataModelFile,
 } from './types';
 
-// Export store registration for AI tools
-export { registerEditorStore, unregisterEditorStore } from './aiTools';
 
 // Export lexical integration
 export * from './lexical';

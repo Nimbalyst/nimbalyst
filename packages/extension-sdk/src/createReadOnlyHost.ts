@@ -81,6 +81,7 @@ export function createReadOnlyHost(
     onFileChanged: () => () => {},
     openHistory: () => {},
     registerMenuItems: (_items: EditorMenuItem[]) => {},
+    registerEditorAPI: () => {},
     setEditorContext: (_context: EditorContext | null) => {},
 
     // -- Storage (in-memory, non-persistent) --

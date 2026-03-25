@@ -18,12 +18,14 @@ import {
   screenshotService,
   getExtensionLoader,
   setOffscreenMountCallback,
+  setEnsureEditorCallback,
 } from '@nimbalyst/runtime';
 import { ExtensionPlatformServiceImpl } from '../services/ExtensionPlatformServiceImpl';
 import { initializeExtensionEditorBridge } from '../extensions/ExtensionEditorBridge';
 import { initializeExtensionPluginBridge } from '../extensions/ExtensionPluginBridge';
 import { initializeExtensionDocumentHeaderBridge, syncExtensionDocumentHeaders } from '../extensions/ExtensionDocumentHeaderBridge';
 import { syncExtensionEditors } from '../extensions/ExtensionEditorBridge';
+import { hiddenTabManager } from '../services/HiddenTabManager';
 
 // Track workspace path for MCP tool registration
 let currentWorkspacePath: string | null = null;
@@ -687,22 +689,14 @@ export async function registerExtensionSystem(): Promise<void> {
       };
     }
 
-    // Set up offscreen editor mounting callback for AI tools
-    setOffscreenMountCallback(async (filePath: string, workspacePath: string) => {
-      const electronAPI = (window as any).electronAPI;
-      if (!electronAPI) {
-        throw new Error('electronAPI not available');
-      }
-
-      const result = await electronAPI.invoke('offscreen-editor:mount', {
-        filePath,
-        workspacePath,
-      });
-
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to mount offscreen editor');
-      }
-    });
+    // Set up hidden editor mounting for AI tools.
+    // When an agent calls an editor-scoped tool for a file that isn't open,
+    // HiddenTabManager mounts the editor in a hidden container in the main window.
+    hiddenTabManager.initialize();
+    setEnsureEditorCallback(
+      (filePath: string, workspacePath: string) => hiddenTabManager.ensureEditor(filePath, workspacePath),
+      (filePath: string) => hiddenTabManager.release(filePath)
+    );
 
     // Set up callback to notify main process when extension tools change
     setOnToolsChangedCallback((tools) => {

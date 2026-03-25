@@ -10,37 +10,11 @@
 
 import type { DataModelStoreApi } from './store';
 
-// Registry of active editor stores by file path
-const activeStores = new Map<string, DataModelStoreApi>();
-
 /**
- * Register an editor's store for AI tool access
+ * Get the store from the tool context's central editor API registry.
  */
-export function registerEditorStore(filePath: string, store: DataModelStoreApi): void {
-  activeStores.set(filePath, store);
-  console.log('[DatamodelLM] Registered store for:', filePath);
-}
-
-/**
- * Unregister an editor's store
- */
-export function unregisterEditorStore(filePath: string): void {
-  activeStores.delete(filePath);
-  console.log('[DatamodelLM] Unregistered store for:', filePath);
-}
-
-/**
- * Get the store for a file path
- */
-function getStore(filePath?: string): DataModelStoreApi | null {
-  if (filePath && activeStores.has(filePath)) {
-    return activeStores.get(filePath)!;
-  }
-  // If no specific path, try to get the first/only active store
-  if (activeStores.size === 1) {
-    return activeStores.values().next().value ?? null;
-  }
-  return null;
+function getStore(context: { editorAPI?: unknown }): DataModelStoreApi | null {
+  return (context.editorAPI as DataModelStoreApi) ?? null;
 }
 
 /**
@@ -62,8 +36,8 @@ Example usage:
       type: 'object' as const,
       properties: {},
     },
-    handler: async (_params: Record<string, never>, context: { activeFilePath?: string }) => {
-      const store = getStore(context.activeFilePath);
+    handler: async (_params: Record<string, never>, context: { activeFilePath?: string; editorAPI?: unknown }) => {
+      const store = getStore(context);
       if (!store) {
         return {
           success: false,
@@ -116,8 +90,8 @@ Example usage:
       type: 'object' as const,
       properties: {},
     },
-    handler: async (_params: Record<string, never>, context: { activeFilePath?: string }) => {
-      const store = getStore(context.activeFilePath);
+    handler: async (_params: Record<string, never>, context: { activeFilePath?: string; editorAPI?: unknown }) => {
+      const store = getStore(context);
       if (!store) {
         return {
           success: false,

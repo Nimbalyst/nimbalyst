@@ -29,10 +29,9 @@ import {
 } from '../types';
 import { Gallery } from './Gallery';
 import { BottomBar } from './BottomBar';
-import { registerEditor, unregisterEditor, type ReferenceImage } from '../editorRegistry';
 import { nanoBananaProvider } from '../providers/nanoBanana';
 
-import { DEFAULT_MODEL, type GeminiImageModel } from '../types';
+import { DEFAULT_MODEL, type GeminiImageModel, type ReferenceImage } from '../types';
 
 // Storage keys (must match SettingsPanel)
 const GOOGLE_AI_KEY_STORAGE_KEY = 'google_ai_api_key';
@@ -474,16 +473,17 @@ export const ImageProjectEditor = forwardRef<unknown, EditorHostProps>(
       []
     );
 
-    // Register editor API for AI tool access
+    // Register editor API for AI tool access via the central registry
     useEffect(() => {
       if (project) {
-        registerEditor(filePath, {
+        const api = {
           getProject: () => project,
           updateProject: updateProject as any,
           generate: handleGenerate,
-        });
+        };
+        host.registerEditorAPI(api);
         return () => {
-          unregisterEditor(filePath);
+          host.registerEditorAPI(null);
         };
       }
     }, [filePath, project, updateProject, handleGenerate]);

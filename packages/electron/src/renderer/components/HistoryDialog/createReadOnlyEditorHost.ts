@@ -120,6 +120,11 @@ export function createReadOnlyEditorHost(options: ReadOnlyEditorHostOptions): Ed
       // Read-only - ignore editor context
     },
 
+    // ============ EDITOR API REGISTRATION ============
+    registerEditorAPI(): void {
+      // Read-only - ignore API registration
+    },
+
     // ============ MENU ITEMS ============
     registerMenuItems(_items: EditorMenuItem[]): void {
       // Read-only - ignore menu registration

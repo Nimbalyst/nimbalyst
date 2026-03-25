@@ -12,6 +12,7 @@
 import { toolRegistry, type ToolDefinition } from '../ai/tools';
 import { editorRegistry } from '../ai/EditorRegistry';
 import { getExtensionLoader } from './ExtensionLoader';
+import { getEditorAPI as getCentralEditorAPI, flushEditorSave } from './ExtensionEditorAPIRegistry';
 import type { ExtensionAITool, AIToolContext, LoadedExtension, ExtensionToolResult } from './types';
 
 // Track which tools were registered by which extension
@@ -113,15 +114,26 @@ export function getMCPToolDefinitions(): MCPToolDefinition[] {
   return tools;
 }
 
-// Callback for mounting offscreen editors (set by platform service)
-let offscreenMountCallback: ((filePath: string, workspacePath: string) => Promise<void>) | null = null;
+// Callbacks for ensuring editors are available for tool execution (set by platform service)
+let ensureEditorCallback: ((filePath: string, workspacePath: string) => Promise<void>) | null = null;
+let releaseEditorCallback: ((filePath: string) => void) | null = null;
 
 /**
- * Set the callback for mounting offscreen editors.
- * Called by the platform service to provide offscreen mounting capability.
+ * Set the callback for ensuring an editor is available for a file.
+ * Called by the platform service (HiddenTabManager) to provide on-demand editor mounting.
  */
+export function setEnsureEditorCallback(
+  ensureEditor: (filePath: string, workspacePath: string) => Promise<void>,
+  releaseEditor: (filePath: string) => void
+): void {
+  ensureEditorCallback = ensureEditor;
+  releaseEditorCallback = releaseEditor;
+}
+
+// Keep legacy setter for backwards compatibility with existing offscreen system
 export function setOffscreenMountCallback(callback: (filePath: string, workspacePath: string) => Promise<void>): void {
-  offscreenMountCallback = callback;
+  // Wire legacy callback through the new interface
+  ensureEditorCallback = callback;
 }
 
 /**
@@ -159,33 +171,43 @@ export async function executeExtensionTool(
 
   const extensionId = handler.extension.manifest.id;
 
+  // Resolve filePath: prefer explicit arg from agent, fall back to session state
+  const resolvedFilePath = (args.filePath as string) || context.activeFilePath;
+
   try {
-    // Check if tool requires an editor and file is specified
-    const toolScope = handler.tool.scope || 'editor';
-    if (toolScope === 'editor' && context.activeFilePath && context.workspacePath) {
-      // Check if editor is already available (visible or offscreen)
-      // This is determined by whether the editor has registered its API
-      // The registry pattern used by extensions means we can't directly check here,
-      // but the tool will fail if the API is not available.
-      // So we attempt to mount offscreen if we have the callback available.
-      if (offscreenMountCallback) {
-        try {
-          console.log(`[ExtensionAIToolsBridge] Ensuring editor available for ${context.activeFilePath}`);
-          await offscreenMountCallback(context.activeFilePath, context.workspacePath);
-        } catch (mountError) {
-          console.warn(`[ExtensionAIToolsBridge] Failed to mount offscreen editor:`, mountError);
-          // Continue anyway - the tool might work without it or fail with a better error
-        }
+    // Ensure editor is available if a filePath is provided.
+    // This covers both editor-scoped tools AND global tools that operate on files
+    // (e.g., Excalidraw tools are scope:'global' but still need a mounted editor).
+    if (resolvedFilePath && context.workspacePath && ensureEditorCallback) {
+      try {
+        console.log(`[ExtensionAIToolsBridge] Ensuring editor available for ${resolvedFilePath}`);
+        await ensureEditorCallback(resolvedFilePath, context.workspacePath);
+      } catch (mountError) {
+        console.warn(`[ExtensionAIToolsBridge] Failed to ensure editor:`, mountError);
+        // Continue anyway - the tool might work without it or fail with a better error
       }
     }
 
     const aiContext: AIToolContext = {
       workspacePath: context.workspacePath,
-      activeFilePath: context.activeFilePath,
+      activeFilePath: resolvedFilePath,
       extensionContext: handler.extension.context,
+      // Populate from central registry so tools don't need their own registries
+      editorAPI: resolvedFilePath ? getCentralEditorAPI(resolvedFilePath) : undefined,
     };
 
     const result = await handler.tool.handler(args, aiContext);
+
+    // Flush save immediately after tool execution to prevent data loss
+    // when the user closes the tab before the normal auto-save interval fires.
+    if (resolvedFilePath) {
+      flushEditorSave(resolvedFilePath);
+    }
+
+    // Release the hidden editor reference (starts TTL countdown)
+    if (resolvedFilePath && releaseEditorCallback) {
+      releaseEditorCallback(resolvedFilePath);
+    }
 
     // Ensure the result includes extension metadata
     return {
@@ -194,6 +216,11 @@ export async function executeExtensionTool(
       toolName,
     };
   } catch (error) {
+    // Release the hidden editor reference on error too
+    if (resolvedFilePath && releaseEditorCallback) {
+      releaseEditorCallback(resolvedFilePath);
+    }
+
     const errorMessage = error instanceof Error ? error.message : 'Unknown error executing extension tool';
     const stack = error instanceof Error ? error.stack : undefined;
 
