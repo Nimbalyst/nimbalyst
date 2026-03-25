@@ -63,6 +63,36 @@ export const components = {
 
 See the [custom editors guide](packages/extension-sdk-docs/custom-editors.md) for architecture patterns and advanced options.
 
+## Shared Editor Components
+
+Extensions can use the host's built-in `MonacoEditor` (code) and `MarkdownEditor` (rich text) instead of bundling their own. These are provided at runtime via the externals system with zero bundle size impact.
+
+```tsx
+import { MonacoEditor } from '@nimbalyst/runtime';
+import type { EditorHostProps } from '@nimbalyst/extension-sdk';
+
+// Use as a full file editor
+export const MyCodeEditor = ({ host }: EditorHostProps) => {
+  return <MonacoEditor host={host} fileName={host.fileName} />;
+};
+```
+
+For embedded read-only panels, use `createReadOnlyHost`:
+
+```tsx
+import { MonacoEditor } from '@nimbalyst/runtime';
+import { createReadOnlyHost } from '@nimbalyst/extension-sdk';
+
+const previewHost = createReadOnlyHost(code, {
+  fileName: 'preview.tsx',
+  theme: host.theme,
+});
+
+<MonacoEditor host={previewHost} fileName="preview.tsx" />
+```
+
+Type imports for props: `MonacoEditorProps`, `MonacoEditorConfig`, `MarkdownEditorProps`, `MarkdownEditorConfig` from `@nimbalyst/extension-sdk`.
+
 ## AI Tool Example
 
 ```ts
