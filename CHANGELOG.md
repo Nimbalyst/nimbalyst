@@ -20,6 +20,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.56.13] - 2026-03-25
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Error toasts fired before app mount now correctly display on startup
+- Figma MCP migration toast now detects HTTP transport configs in addition to stdio
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.56.12] - 2026-03-25
 
 
