@@ -233,6 +233,10 @@
         "to": "app.asar.unpacked/node_modules/@openai"
       },
       {
+        "from": "../../node_modules/@img",
+        "to": "app.asar.unpacked/node_modules/@img"
+      },
+      {
         "from": "../../node_modules/heic-decode",
         "to": "node_modules/heic-decode"
       },
