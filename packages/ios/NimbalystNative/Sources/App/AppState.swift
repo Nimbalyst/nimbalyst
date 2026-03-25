@@ -24,6 +24,10 @@ public final class AppState: ObservableObject {
     @Published public var availableModels: [SyncedAvailableModel] = ModelPreferences.loadAvailableModels()
     @Published public var desktopDefaultModel: String? = ModelPreferences.loadDefaultModel()
 
+    /// When true, the encryption key doesn't match the desktop's key.
+    /// The user needs to re-pair their device from the desktop QR code.
+    @Published public var needsRepair: Bool = false
+
     /// When true, views should show demo connection indicators (green desktop dot).
     public var screenshotMode: Bool = false
 
@@ -186,12 +190,33 @@ public final class AppState: ObservableObject {
     }
 
     /// Set up managers if they haven't been initialized yet.
+    /// If managers exist but the encryption key may have changed (e.g. after re-login),
+    /// re-derives the CryptoManager key to match the current userId.
     private func setupManagersIfNeeded() {
-        guard databaseManager == nil else {
-            logger.debug("setupManagersIfNeeded: managers already initialized, skipping")
+        if databaseManager != nil {
+            // Managers exist, but re-derive the encryption key in case the userId changed
+            // (e.g. after session expiry + re-login). This is cheap (PBKDF2 once) and
+            // ensures we always decrypt with the correct key.
+            rederiveCryptoKeyIfNeeded()
             return
         }
         setupManagers()
+    }
+
+    /// Re-derive the CryptoManager key using the current best userId.
+    /// Called after re-authentication when managers already exist.
+    private func rederiveCryptoKeyIfNeeded() {
+        guard let seed = KeychainManager.getEncryptionKey() else { return }
+        let keyUserId: String
+        if let pairingUserId = KeychainManager.getPairingPersonalUserId() {
+            keyUserId = pairingUserId
+        } else if let authUserId = authManager.authUserId {
+            keyUserId = authUserId
+        } else {
+            return
+        }
+        logger.info("Re-deriving encryption key (keyUserId=\(keyUserId))")
+        cryptoManager = CryptoManager(seed: seed, userId: keyUserId)
     }
 
     /// Connect to the sync server if both paired and authenticated.
@@ -324,10 +349,23 @@ public final class AppState: ObservableObject {
 
     private func refreshJWT() async {
         guard let serverUrl = KeychainManager.getServerUrl() else { return }
-        let success = await authManager.refreshSession(serverUrl: serverUrl)
-        if success {
+        let result = await authManager.refreshSession(serverUrl: serverUrl)
+        switch result {
+        case .success:
             // Reconnect with fresh JWT
             connectIfReady()
+        case .sessionExpired:
+            // Session is dead -- log the user out so they see the login screen
+            // with an explanation of what happened.
+            logger.warning("Session expired, logging out to prompt re-authentication")
+            jwtRefreshTimer?.invalidate()
+            jwtRefreshTimer = nil
+            syncManager?.disconnect()
+            authManager.logout()
+            authManager.authError = "Your session has expired. Please sign in again."
+        case .failed:
+            // Transient failure (network, server error) -- will retry on next timer tick
+            logger.warning("JWT refresh failed (transient), will retry")
         }
     }
 
@@ -337,15 +375,21 @@ public final class AppState: ObservableObject {
             return
         }
 
-        // Use the Stytch user ID for key derivation (must match desktop's salt).
-        // The desktop derives: PBKDF2(seed, "nimbalyst:<stytchUserId>")
-        // Require the Stytch authUserId -- the QR userId (email) uses a different salt
-        // and would derive a wrong key, causing silent decryption failures.
-        guard let userId = authManager.authUserId else {
-            logger.debug("setupManagers: no Stytch authUserId yet, deferring until auth completes")
+        // Key derivation must use the same userId as the desktop.
+        // The desktop derives: PBKDF2(seed, "nimbalyst:<personalUserId>")
+        // where personalUserId is the Stytch member ID from the personal org.
+        // Prefer the pairing personalUserId (from QR v5+) because that's exactly
+        // what the desktop uses. Fall back to authUserId for older QR versions.
+        let keyUserId: String
+        if let pairingUserId = KeychainManager.getPairingPersonalUserId() {
+            keyUserId = pairingUserId
+        } else if let authUserId = authManager.authUserId {
+            keyUserId = authUserId
+        } else {
+            logger.debug("setupManagers: no userId available for key derivation, deferring until auth completes")
             return
         }
-        logger.info("Initializing managers")
+        logger.info("Initializing managers (keyUserId=\(keyUserId))")
 
         // Set email on analytics profile if available from Stytch auth
         if let email = KeychainManager.getAuthEmail() {
@@ -353,7 +397,7 @@ public final class AppState: ObservableObject {
         }
 
         // Initialize CryptoManager with the correct userId for key derivation
-        cryptoManager = CryptoManager(seed: seed, userId: userId)
+        cryptoManager = CryptoManager(seed: seed, userId: keyUserId)
 
         // Initialize DatabaseManager
         do {
@@ -368,17 +412,22 @@ public final class AppState: ObservableObject {
               let database = databaseManager,
               let serverUrl = KeychainManager.getServerUrl() else { return }
 
-        let sync = SyncManager(crypto: crypto, database: database, serverUrl: serverUrl, userId: userId)
+        let sync = SyncManager(crypto: crypto, database: database, serverUrl: serverUrl, userId: keyUserId)
         syncManager = sync
 
         // Initialize DocumentSyncManager for project file sync
-        let docSync = DocumentSyncManager(crypto: crypto, database: database, serverUrl: serverUrl, userId: userId)
+        let docSync = DocumentSyncManager(crypto: crypto, database: database, serverUrl: serverUrl, userId: keyUserId)
         documentSyncManager = docSync
 
         // Observe sync connection state
         sync.$isConnected
             .receive(on: DispatchQueue.main)
             .assign(to: &$isConnected)
+
+        // Observe encryption key mismatch (wrong pairing / stale key)
+        sync.$encryptionKeyMismatch
+            .receive(on: DispatchQueue.main)
+            .assign(to: &$needsRepair)
 
         #if os(iOS)
         // Initialize voice agent

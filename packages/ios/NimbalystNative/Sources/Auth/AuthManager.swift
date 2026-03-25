@@ -51,6 +51,7 @@ public final class AuthManager: ObservableObject {
     /// Opens a Safari sheet that redirects back to the app via `nimbalyst://` deep link.
     public func login(serverUrl: String) {
         guard !isAuthenticating else { return }
+        authError = nil
 
         // Convert WebSocket URLs to HTTPS (ASWebAuthenticationSession requires HTTP/HTTPS)
         let baseUrl = serverUrl
@@ -111,6 +112,7 @@ public final class AuthManager: ObservableObject {
     /// the server's `/auth/callback` which then issues a `nimbalyst://auth/callback` deep link.
     public func sendMagicLink(email: String, serverUrl: String) {
         guard !isAuthenticating else { return }
+        authError = nil
 
         let baseUrl = serverUrl
             .replacingOccurrences(of: "wss://", with: "https://")
@@ -240,11 +242,19 @@ public final class AuthManager: ObservableObject {
 
     // MARK: - Refresh
 
+    public enum RefreshResult {
+        case success
+        /// Session token is expired or revoked -- user must re-authenticate.
+        case sessionExpired
+        /// Transient failure (network error, server error) -- worth retrying.
+        case failed
+    }
+
     /// Refresh the session JWT using the session token.
-    public func refreshSession(serverUrl: String) async -> Bool {
+    public func refreshSession(serverUrl: String) async -> RefreshResult {
         guard let sessionToken = KeychainManager.getSessionToken() else {
             logger.warning("No session token to refresh")
-            return false
+            return .sessionExpired
         }
 
         let baseUrl = serverUrl
@@ -252,7 +262,7 @@ public final class AuthManager: ObservableObject {
             .replacingOccurrences(of: "ws://", with: "http://")
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let url = URL(string: "\(baseUrl)/auth/refresh") else {
-            return false
+            return .failed
         }
 
         var request = URLRequest(url: url)
@@ -264,16 +274,24 @@ public final class AuthManager: ObservableObject {
 
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse,
-                  httpResponse.statusCode == 200 else {
-                logger.warning("Refresh failed with status: \((response as? HTTPURLResponse)?.statusCode ?? 0)")
-                return false
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+
+            guard statusCode == 200 else {
+                logger.warning("Refresh failed with status: \(statusCode)")
+
+                // Stytch returns 404 for revoked/unknown sessions and 401 for expired.
+                // The server also sets "expired: true" in the JSON body for 401.
+                // Both mean the session is dead and the user must re-authenticate.
+                if statusCode == 401 || statusCode == 404 {
+                    return .sessionExpired
+                }
+                return .failed
             }
 
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let sessionJwt = json["session_jwt"] as? String else {
                 logger.error("Invalid refresh response")
-                return false
+                return .failed
             }
 
             // Update just the JWT in keychain
@@ -293,10 +311,10 @@ public final class AuthManager: ObservableObject {
             )
 
             logger.info("JWT refreshed successfully")
-            return true
+            return .success
         } catch {
             logger.error("Refresh request failed: \(error.localizedDescription)")
-            return false
+            return .failed
         }
     }
 

@@ -36,6 +36,10 @@ public final class SyncManager: ObservableObject {
     /// The desktop's default model ID (e.g., "claude-code:opus").
     @Published public var desktopDefaultModel: String?
 
+    /// When true, most or all encrypted data failed to decrypt, indicating
+    /// the encryption key is wrong and the user needs to re-pair.
+    @Published public var encryptionKeyMismatch = false
+
     /// Called when a session transitions from executing to idle (isExecuting: true -> false).
     /// Parameters: (sessionId, lastAssistantMessageSummary)
     public var onSessionCompleted: ((String, String) -> Void)?
@@ -280,6 +284,19 @@ public final class SyncManager: ObservableObject {
             if failedDecryptCount > 0 || skippedCount > 0 {
                 let logger = Logger(subsystem: "com.nimbalyst.app", category: "SyncManager")
                 logger.info("Session processing: \(processedCount) updated, \(skippedCount) unchanged, \(failedDecryptCount) failed")
+            }
+
+            // If the vast majority of sessions failed to decrypt, the encryption key is wrong.
+            // This happens when the pairing encryption seed or userId salt is out of sync
+            // with the desktop. The user needs to re-pair.
+            let totalAttempted = processedCount + failedDecryptCount
+            let isMismatch = totalAttempted > 5 && failedDecryptCount > (totalAttempted * 80 / 100)
+            if isMismatch {
+                let logger = Logger(subsystem: "com.nimbalyst.app", category: "SyncManager")
+                logger.error("Encryption key mismatch detected: \(failedDecryptCount)/\(totalAttempted) sessions failed to decrypt")
+                await MainActor.run { [weak self] in
+                    self?.encryptionKeyMismatch = true
+                }
             }
 
             // Recalculate project stats from session data (more reliable than server-side stats)

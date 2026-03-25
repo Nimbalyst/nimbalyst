@@ -162,10 +162,18 @@ public struct LoginView: View {
             #endif
 
             if let error = appState.authManager.authError {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(NimbalystColors.error)
-                    .padding(.horizontal, 32)
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(NimbalystColors.warning)
+                    Text(error)
+                        .foregroundStyle(.secondary)
+                }
+                .font(.callout)
+                .padding(12)
+                .frame(maxWidth: .infinity)
+                .background(NimbalystColors.warning.opacity(0.1))
+                .cornerRadius(8)
+                .padding(.horizontal, 32)
             }
 
             Spacer()
@@ -292,6 +300,14 @@ public struct MainNavigationView: View {
             }
         } message: {
             Text("Get notified when your AI sessions complete or need your attention, even when Nimbalyst is in the background.")
+        }
+        .alert("Re-pair Required", isPresented: $appState.needsRepair) {
+            Button("Re-pair Now") {
+                appState.unpair()
+            }
+            Button("Dismiss", role: .cancel) {}
+        } message: {
+            Text("Your sessions could not be decrypted. The encryption key on this device no longer matches your Mac. Please re-pair by scanning the QR code from your Mac's settings.")
         }
     }
 
