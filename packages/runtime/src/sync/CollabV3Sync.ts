@@ -860,6 +860,8 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     // console.log('[CollabV3] Applying pending metadata update for session:', sessionId, pending);
 
     // Merge pending update with cached entry
+    // NOTE: Preserve cached.updatedAt -- pending metadata updates (isExecuting, context, etc.)
+    // should not bump the sort timestamp. Only message appends change updatedAt.
     const updatedCache: CachedSessionIndex = {
       sessionId: sessionId,
       projectId: cached.projectId,
@@ -870,7 +872,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       messageCount: cached.messageCount,
       lastMessageAt: cached.lastMessageAt,
       createdAt: cached.createdAt,
-      updatedAt: Date.now(),
+      updatedAt: pending.updatedAt ?? cached.updatedAt,
       pendingExecution: 'pendingExecution' in pending ? pending.pendingExecution : cached.pendingExecution,
       isExecuting: 'isExecuting' in pending ? pending.isExecuting : cached.isExecuting,
       currentContext: 'currentContext' in pending ? pending.currentContext : cached.currentContext,

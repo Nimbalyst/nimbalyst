@@ -1067,9 +1067,10 @@ public final class SyncManager: ObservableObject {
                         session.tagsJson = String(data: tagData, encoding: .utf8)
                     }
                 }
-                if let updatedAt = broadcast.metadata.updatedAt {
-                    session.updatedAt = updatedAt
-                }
+                // NOTE: Do NOT apply updatedAt from metadata broadcasts.
+                // Metadata updates (read state, isExecuting, context) should not
+                // change the sort timestamp. Only index sync and message appends
+                // set updatedAt, ensuring the session list stays correctly sorted.
                 try database.upsertSession(session)
 
                 // Detect execution completion (isExecuting: true -> false)

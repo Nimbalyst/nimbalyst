@@ -438,13 +438,17 @@ export class PersonalSessionRoom implements DurableObject {
       }
     }
 
-    this.setMetadataValue('updated_at', String(now));
+    // NOTE: Do NOT update 'updated_at' here. Metadata updates (read state, isExecuting,
+    // context usage) should not change the session's sort timestamp. Only message appends
+    // (handleAppendMessage) should bump updated_at, matching the desktop behavior where
+    // updated_at reflects the last message time. Without this, clicking a session on
+    // desktop causes it to jump to the top of the iOS session list.
 
-    // Broadcast to other connections
+    // Broadcast to other connections (without updatedAt to avoid sort disruption)
     this.broadcast(
       {
         type: 'metadataBroadcast',
-        metadata: { ...updates, updatedAt: now },
+        metadata: { ...updates },
         fromConnectionId: this.getConnectionId(ws),
       },
       ws
