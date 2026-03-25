@@ -10,10 +10,8 @@
  */
 import { atomFamily as originalAtomFamily } from 'jotai/utils';
 
-type AnyFamily = ReturnType<typeof originalAtomFamily>;
-
 interface FamilyEntry {
-  family: AnyFamily;
+  family: { getParams(): Iterable<unknown>; debugLabel?: string };
   file: string;
 }
 
@@ -59,7 +57,7 @@ export function getAtomFamilyStats(): { name: string; count: number; file: strin
   return registry
     .map(({ family, file }) => {
       // Prefer jotai's debugLabel if set (via babel/SWC plugin), otherwise use "(unnamed)"
-      const name = (family as any).debugLabel || '(unnamed)';
+      const name = family.debugLabel || '(unnamed)';
       const params = [...family.getParams()].map(String);
       return { name, count: params.length, file, params };
     })
