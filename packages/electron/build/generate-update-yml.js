@@ -10,6 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { execSync } = require('child_process');
+const { getWindowsPublisherNames } = require('./validate-windows-updater-config');
 
 // Read package.json to get version
 const packageJson = require('../package.json');
@@ -182,6 +183,14 @@ function generateWindowsYml() {
     sha512: calculateSHA512(exePath),
     releaseDate: new Date().toISOString()
   };
+  const publisherNames = getWindowsPublisherNames();
+
+  if (publisherNames.length === 0) {
+    throw new Error(
+      'Cannot generate latest.yml without build.win.signtoolOptions.publisherName. ' +
+      'This would break Windows auto-update signature verification.'
+    );
+  }
 
   // Convert to YAML format
   let yamlString = `version: ${yamlContent.version}\n`;
@@ -199,7 +208,9 @@ function generateWindowsYml() {
   // publisher, which breaks when the signing certificate changes (e.g., personal
   // Apple Dev ID -> corporate DigiCert).
   yamlString += `publisherName:\n`;
-  yamlString += `  - "NIMBALYST, INC."\n`;
+  publisherNames.forEach((publisherName) => {
+    yamlString += `  - "${publisherName}"\n`;
+  });
 
   // Write the file
   const outputPath = path.join(releaseDir, 'latest.yml');

@@ -227,6 +227,33 @@ jobs:
           SM_CLIENT_CERT_FILE: ${{ runner.temp }}\digicert_client_cert.p12
           SM_CLIENT_CERT_PASSWORD: ${{ secrets.DIGICERT_CLIENT_CERT_PW }}
 
+      - name: Verify bundled Windows app-update.yml
+        if: matrix.os == 'windows-latest'
+        working-directory: packages/electron
+        run: |
+          APP_UPDATE_YML=$(find release -path '*/resources/app-update.yml' | head -n 1)
+          if [ -z "$APP_UPDATE_YML" ]; then
+            echo "❌ Could not find bundled app-update.yml in release output"
+            find release -maxdepth 4 -type f | sort
+            exit 1
+          fi
+
+          echo "Inspecting $APP_UPDATE_YML"
+          cat "$APP_UPDATE_YML"
+
+          if ! grep -Fq 'publisherName:' "$APP_UPDATE_YML"; then
+            echo "❌ app-update.yml is missing publisherName"
+            exit 1
+          fi
+
+          if ! grep -Fq 'NIMBALYST, INC.' "$APP_UPDATE_YML"; then
+            echo "❌ app-update.yml publisherName does not match expected Authenticode publisher"
+            exit 1
+          fi
+
+          echo "✅ Bundled Windows app-update.yml contains the expected publisherName"
+        shell: bash
+
       # Generate update metadata files
       - name: Generate update metadata
         if: github.ref_type == 'tag' || inputs.release == true || inputs.release == 'true'
