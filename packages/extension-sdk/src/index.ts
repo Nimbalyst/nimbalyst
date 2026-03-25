@@ -42,6 +42,13 @@ export {
   type DiffState,
 } from './useEditorLifecycle.js';
 
+// Re-export host-provided editor context and UI helpers for extensions.
+export {
+  useDocumentPath,
+  type DocumentPathContextValue,
+} from './documentPath.js';
+export { MaterialSymbol } from './MaterialSymbol.js';
+
 // Re-export read-only host factory (for web viewers and testing)
 export {
   createReadOnlyHost,

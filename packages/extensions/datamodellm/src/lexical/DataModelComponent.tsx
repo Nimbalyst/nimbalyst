@@ -30,7 +30,7 @@ import {
   hasDataModelPlatformService,
 } from './DataModelPlatformService';
 import { $isDataModelNode } from './DataModelNode';
-import { useDocumentPath } from '@nimbalyst/runtime';
+import { useDocumentPath } from '@nimbalyst/extension-sdk';
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);

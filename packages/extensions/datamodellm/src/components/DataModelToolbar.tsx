@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { MaterialSymbol } from '@nimbalyst/runtime';
+import { MaterialSymbol } from '@nimbalyst/extension-sdk';
 import type { DataModelStoreApi } from '../store';
 import type { EntityViewMode } from '../types';
 import { exportSchema, getAvailableFormats, type ExportFormat } from '../export-service';
