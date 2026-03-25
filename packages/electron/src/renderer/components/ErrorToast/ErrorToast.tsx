@@ -45,6 +45,13 @@ export function ErrorToastContainer() {
   }, [startDismissTimer]);
 
   useEffect(() => {
+    // Pick up any notifications that were fired before this component mounted
+    const existing = errorNotificationService.getAll();
+    if (existing.length > 0) {
+      setNotifications(existing);
+      existing.forEach(startDismissTimer);
+    }
+
     const unsubscribe = errorNotificationService.addListener((notification) => {
       setNotifications(prev => [...prev, notification]);
       startDismissTimer(notification);
