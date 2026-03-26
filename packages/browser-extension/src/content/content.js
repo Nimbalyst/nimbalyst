@@ -54,30 +54,76 @@ turndown.addRule('links', {
 });
 
 /**
- * Extract the main content from the page
- * Tries to find the main article content, falls back to body
+ * Elements to strip before extracting content.
+ * These add noise and never contain article text.
+ */
+const STRIP_SELECTORS = [
+  'nav', 'header', 'footer', 'aside',
+  '[role="navigation"]', '[role="banner"]', '[role="contentinfo"]',
+  '.sidebar', '.nav', '.menu', '.ad', '.ads', '.advertisement',
+  '.social-share', '.share-buttons', '.related-posts', '.recommended',
+  '.comments', '#comments', '.comment-section',
+  'script', 'style', 'noscript', 'iframe',
+];
+
+/**
+ * Clone an element and strip noise from the clone.
+ */
+function cloneAndStrip(element) {
+  const clone = element.cloneNode(true);
+  for (const sel of STRIP_SELECTORS) {
+    clone.querySelectorAll(sel).forEach(el => el.remove());
+  }
+  return clone;
+}
+
+/**
+ * Score a candidate element by its visible text length.
+ */
+function textScore(element) {
+  const clone = cloneAndStrip(element);
+  return (clone.textContent || '').trim().length;
+}
+
+/**
+ * Extract the main content from the page.
+ * Finds the best content container by scoring candidates on text length.
  */
 function extractMainContent() {
-  // Try to find the main content area
+  // Collect all candidate containers
   const selectors = [
     'article',
     'main',
     '[role="main"]',
-    '.article-content',
-    '.post-content',
-    '.entry-content',
-    '#content',
+    '.article-content', '.article-body', '.article__body',
+    '.post-content', '.post-body',
+    '.entry-content', '.entry-body',
+    '.story-body', '.story-content',
+    '#content', '#article-body',
+    '[itemprop="articleBody"]',
   ];
 
+  const candidates = [];
   for (const selector of selectors) {
-    const element = document.querySelector(selector);
-    if (element) {
-      return element;
+    document.querySelectorAll(selector).forEach(el => candidates.push(el));
+  }
+
+  if (candidates.length === 0) {
+    return cloneAndStrip(document.body);
+  }
+
+  // Pick the candidate with the most text content
+  let best = candidates[0];
+  let bestScore = textScore(best);
+  for (let i = 1; i < candidates.length; i++) {
+    const score = textScore(candidates[i]);
+    if (score > bestScore) {
+      bestScore = score;
+      best = candidates[i];
     }
   }
 
-  // Fall back to body
-  return document.body;
+  return cloneAndStrip(best);
 }
 
 /**
