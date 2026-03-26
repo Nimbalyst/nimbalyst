@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef, memo, useMemo } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
+import { MaterialSymbol, ProviderIcon, copyToClipboard } from '@nimbalyst/runtime';
 import {
   sessionProcessingAtom,
   sessionUnreadAtom,
@@ -416,7 +416,7 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
     e.stopPropagation();
     setShowContextMenu(false);
     if (type !== 'workstream') return;
-    navigator.clipboard.writeText(id);
+    copyToClipboard(id);
   }, [type, id]);
 
   const handleWorkstreamExportHtml = useCallback((e: React.MouseEvent) => {
@@ -449,7 +449,7 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
     setShowContextMenu(false);
     if (type !== 'workstream' || !workstreamShareInfo) return;
     const url = buildShareUrl(workstreamShareInfo.shareId, shareKeys.get(id));
-    navigator.clipboard.writeText(url);
+    copyToClipboard(url);
     errorNotificationService.showInfo('Share link copied', 'The share link has been copied to your clipboard.', { duration: 3000 });
   }, [type, id, workstreamShareInfo, shareKeys]);
 
@@ -1085,7 +1085,7 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
   const handleCopySessionId = (e: React.MouseEvent) => {
     e.stopPropagation();
     setShowContextMenu(false);
-    navigator.clipboard.writeText(session.id);
+    copyToClipboard(session.id);
   };
 
   const handleExportHtml = (e: React.MouseEvent) => {
@@ -1115,7 +1115,7 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
     setShowContextMenu(false);
     if (!shareInfo) return;
     const url = buildShareUrl(shareInfo.shareId, shareKeys.get(session.id));
-    navigator.clipboard.writeText(url);
+    copyToClipboard(url);
     errorNotificationService.showInfo('Share link copied', 'The share link has been copied to your clipboard.', { duration: 3000 });
   };
 

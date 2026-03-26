@@ -318,6 +318,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   moveFile: (sourcePath: string, targetPath: string) => ipcRenderer.invoke('move-file', sourcePath, targetPath),
   copyFile: (sourcePath: string, targetPath: string) => ipcRenderer.invoke('copy-file', sourcePath, targetPath),
   copyToClipboard: (text: string) => ipcRenderer.invoke('copy-to-clipboard', text),
+  readClipboard: () => ipcRenderer.invoke('read-from-clipboard'),
 
   // File change event listeners
   onFileRenamed: (callback: (data: { oldPath: string; newPath: string }) => void) => {

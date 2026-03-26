@@ -131,7 +131,7 @@
     "autoprefixer": "^10.4.20",
     "bufferutil": "^4.1.0",
     "dotenv": "^16.6.1",
-    "electron": "^37.2.6",
+    "electron": "41.0.4",
     "electron-builder": "^26.0.12",
     "electron-vite": "^4.0.0",
     "esbuild": "^0.25.12",
@@ -153,7 +153,7 @@
   "build": {
     "appId": "com.nimbalyst.electron",
     "productName": "Nimbalyst",
-    "electronVersion": "37.2.6",
+    "electronVersion": "41.0.4",
     "nodeGypRebuild": false,
     "buildDependenciesFromSource": false,
     "npmRebuild": true,

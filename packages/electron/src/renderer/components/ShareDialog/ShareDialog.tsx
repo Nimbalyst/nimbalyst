@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { MaterialSymbol } from '@nimbalyst/runtime';
+import { MaterialSymbol, copyToClipboard } from '@nimbalyst/runtime';
 import {
   addSessionShareAtom,
   sessionShareAtom,
@@ -154,7 +154,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
         setShareState('success');
 
         // Copy to clipboard
-        await navigator.clipboard.writeText(result.url);
+        await copyToClipboard(result.url);
 
         // Update share atoms for sessions
         if (contentType === 'session' && sessionId && result.shareId) {
@@ -182,7 +182,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
 
   const handleCopyUrl = useCallback(async () => {
     if (!shareUrl) return;
-    await navigator.clipboard.writeText(shareUrl);
+    await copyToClipboard(shareUrl);
     setUrlCopied(true);
     setTimeout(() => setUrlCopied(false), 2000);
   }, [shareUrl]);

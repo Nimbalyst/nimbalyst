@@ -141,6 +141,7 @@ interface ElectronAPI {
   moveFile: (sourcePath: string, targetPath: string) => Promise<{ success: boolean; newPath?: string; error?: string }>;
   copyFile: (sourcePath: string, targetPath: string) => Promise<{ success: boolean; newPath?: string; error?: string }>;
   copyToClipboard: (text: string) => Promise<{ success: boolean }>;
+  readClipboard: () => Promise<{ success: boolean; text?: string }>;
 
   // Settings operations
   getSidebarWidth: (workspacePath: string) => Promise<number>;

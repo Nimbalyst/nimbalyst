@@ -2,7 +2,7 @@ import React, { useRef, useEffect, KeyboardEvent, useState, useCallback, forward
 import { useAtomValue, useSetAtom } from 'jotai';
 import { GenericTypeahead, TypeaheadOption } from '../Typeahead/GenericTypeahead';
 import { extractTriggerMatch, getSlashTypeaheadScope, insertAtTrigger, type SlashTypeaheadScope, TriggerMatch } from '../Typeahead/typeaheadUtils';
-import type { ChatAttachment } from '@nimbalyst/runtime';
+import { readClipboard, type ChatAttachment } from '@nimbalyst/runtime';
 import type { TokenUsageCategory } from '@nimbalyst/runtime/ai/server/types';
 import type { EffortLevel } from '../../utils/modelUtils';
 import { AttachmentPreviewList } from '../AgenticCoding/AttachmentPreviewList';
@@ -797,7 +797,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       // Handle Cmd+Shift+V for force-paste (bypass large paste → attachment conversion)
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'v') {
         e.preventDefault();
-        navigator.clipboard.readText().then(text => {
+        readClipboard().then(text => {
           if (!text || !textareaRef.current) return;
           const textarea = textareaRef.current;
           const start = textarea.selectionStart;

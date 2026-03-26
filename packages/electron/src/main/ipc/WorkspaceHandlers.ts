@@ -969,6 +969,10 @@ export function registerWorkspaceHandlers() {
         return { success: true };
     });
 
+    safeHandle('read-from-clipboard', async () => {
+        return { success: true, text: clipboard.readText() };
+    });
+
     safeHandle('show-in-finder', async (event, filePath: string) => {
 
         try {

@@ -13,6 +13,7 @@ import {
   LexicalEditor,
 } from 'lexical';
 import {useState} from 'react';
+import {copyToClipboard} from '../../../../../utils/clipboard';
 
 import {useDebounce} from '../../utils';
 
@@ -49,7 +50,7 @@ export function CopyButton({editor, getCodeDOMNode}: Props) {
     });
 
     try {
-      await navigator.clipboard.writeText(content);
+      await copyToClipboard(content);
       setCopyCompleted(true);
       removeSuccessIcon();
     } catch (err) {

@@ -5,6 +5,7 @@ import { $isHeadingNode } from '@lexical/rich-text';
 import { $isCodeNode, CodeNode } from '@lexical/code';
 import { $convertFromEnhancedMarkdownString, $convertToEnhancedMarkdownString, getEditorTransformers } from '../../markdown';
 import { EditorConfig } from '../../EditorConfig';
+import { copyToClipboard } from '../../../utils/clipboard';
 import { useRuntimeSettings } from '../../context/RuntimeSettingsContext';
 import {
   getBuiltInFullDocumentTrackerTypes,
@@ -228,13 +229,11 @@ export default function FloatingDocumentActionsPlugin({
       const markdown = $convertToEnhancedMarkdownString(transformers);
 
       // Copy to clipboard
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(markdown).then(() => {
-          console.log('Markdown copied to clipboard');
-        }).catch((err) => {
-          console.error('Failed to copy markdown:', err);
-        });
-      }
+      copyToClipboard(markdown).then(() => {
+        console.log('Markdown copied to clipboard');
+      }).catch((err) => {
+        console.error('Failed to copy markdown:', err);
+      });
     });
     setShowActionsMenu(false);
   }, [editor]);

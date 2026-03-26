@@ -17,6 +17,7 @@ import {
   KEY_MODIFIER_COMMAND,
 } from 'lexical';
 import { useEffect } from 'react';
+import { copyToClipboard } from '../../../utils/clipboard';
 import { mergeRegister } from '@lexical/utils';
 import { $convertSelectionToEnhancedMarkdownString } from '../../markdown/EnhancedMarkdownExport';
 import { $getFrontmatter, serializeWithFrontmatter } from '../../markdown/FrontmatterUtils';
@@ -118,8 +119,8 @@ export default function MarkdownCopyPlugin({
             });
 
             // Copy markdown to clipboard
-            if (markdown && navigator.clipboard) {
-              navigator.clipboard.writeText(markdown).catch((error) => {
+            if (markdown) {
+              copyToClipboard(markdown).catch((error) => {
                 console.error('[MarkdownCopy] Failed to write to clipboard:', error);
               });
               return true;
