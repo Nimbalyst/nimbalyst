@@ -8,14 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-<!-- New features go here -->
-
-### Changed
-<!-- Changes to existing functionality go here -->
-
 ### Fixed
-<!-- Bug fixes go here -->
+- Fix extension-sdk build failing with TS5055 when dist/ already exists from prior build
 
 ### Removed
 <!-- Removed features go here -->
