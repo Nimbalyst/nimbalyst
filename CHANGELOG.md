@@ -8,17 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-<!-- New features go here -->
-
 ### Changed
-<!-- Changes to existing functionality go here -->
+- Remove alpha flag gate from tracker kanban view
+- Remove alpha limit on automations extension
 
 ### Fixed
-<!-- Bug fixes go here -->
-
-### Removed
-<!-- Removed features go here -->
+- Prevent stale PID lock from blocking app launch after reboot or auto-update
 
 ## [0.56.16] - 2026-03-25
 
