@@ -20,6 +20,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.56.14] - 2026-03-25
+
+
+### Added
+- Hidden editor mounting for agent MCP tool execution
+- Cloudflare Analytics Engine integration in collabv3 for product usage metrics
+- Bidirectional linking between tracker items and AI sessions
+- Read-only web viewer for shared extension files
+- MarkdownEditor and MonacoEditor exposed to extensions via SDK
+- Custom editors can opt out of diff and header chrome
+- Model status page links in usage popovers
+- Download-as-markdown button for shared file viewer
+- MarkdownEditor wrapped with platform features for extensions
+
+### Changed
+- Renamed /plan command to /design to avoid conflict with Claude built-in
+- Updated extension SDK package and version numbers
+
+### Fixed
+- Session sort timestamp no longer bumped by draftInput sync or metadata-only updates
+- Improved iPad session list layout density
+- WebSocket reconnects when JWT is refreshed during session room sync
+- iOS sync failures now detected and surfaced instead of silently failing
+- Bundle Claude SDK image binaries in packaged app
+- Prevent creating automation items via tracker; fix schedule display
+- Extension host helpers routed through the SDK correctly
+- Hardened Windows auto-update signing checks
+- OffscreenEditorManager tests fixed for incomplete electron mock
+
 ## [0.56.13] - 2026-03-25
 
 
