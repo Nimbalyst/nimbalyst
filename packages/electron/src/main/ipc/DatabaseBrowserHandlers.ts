@@ -195,6 +195,64 @@ export function registerDatabaseBrowserHandlers() {
         }
     });
 
+    // Get primary key columns for a table
+    safeHandle('database:getPrimaryKeys', async (event, tableName: string) => {
+        try {
+            const result = await database.query<{ column_name: string }>(
+                `SELECT a.attname AS column_name
+                 FROM pg_index i
+                 JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+                 WHERE i.indrelid = $1::regclass AND i.indisprimary
+                 ORDER BY array_position(i.indkey, a.attnum)`,
+                [tableName]
+            );
+            return { success: true, primaryKeys: result.rows.map(r => r.column_name) };
+        } catch (error) {
+            console.error('[DatabaseBrowserHandlers] Error fetching primary keys:', error);
+            return { success: false, error: String(error) };
+        }
+    });
+
+    // Update a single cell value
+    safeHandle('database:updateCell', async (
+        event,
+        tableName: string,
+        primaryKeys: { column: string; value: any }[],
+        columnName: string,
+        newValue: any
+    ) => {
+        try {
+            if (!primaryKeys || primaryKeys.length === 0) {
+                return { success: false, error: 'Cannot update: table has no primary key' };
+            }
+
+            // Sanitize table and column names (allow only alphanumeric and underscores)
+            const sanitize = (name: string) => name.replace(/[^a-zA-Z0-9_]/g, '');
+            const safeTable = sanitize(tableName);
+            const safeColumn = sanitize(columnName);
+
+            // Build WHERE clause from primary keys
+            const whereConditions: string[] = [];
+            const params: any[] = [newValue];
+            primaryKeys.forEach((pk, idx) => {
+                const safePkCol = sanitize(pk.column);
+                whereConditions.push(`"${safePkCol}" = $${idx + 2}`);
+                params.push(pk.value);
+            });
+
+            const sql = `UPDATE "${safeTable}" SET "${safeColumn}" = $1 WHERE ${whereConditions.join(' AND ')}`;
+            const result = await database.query(sql, params);
+
+            return {
+                success: true,
+                rowsAffected: (result as any).affectedRows ?? 1
+            };
+        } catch (error) {
+            console.error('[DatabaseBrowserHandlers] Error updating cell:', error);
+            return { success: false, error: String(error) };
+        }
+    });
+
     // Startup logging - uncomment if debugging handler registration
     // console.log('[DatabaseBrowserHandlers] Database browser handlers registered');
 }

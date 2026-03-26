@@ -155,12 +155,19 @@ export function DatabaseBrowser() {
   const [tableLoadTimeMs, setTableLoadTimeMs] = useState<number | null>(null);
 
   // Cell detail modal
-  const [expandedCell, setExpandedCell] = useState<{ column: string; value: any } | null>(null);
+  const [expandedCell, setExpandedCell] = useState<{ column: string; value: any; rowIndex?: number } | null>(null);
   const [copiedCell, setCopiedCell] = useState(false);
+  const [modalEditing, setModalEditing] = useState(false);
+  const [modalEditValue, setModalEditValue] = useState('');
+  const [modalEditError, setModalEditError] = useState<string | null>(null);
+  const [modalEditSaving, setModalEditSaving] = useState(false);
 
   // Sorting
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  // Primary keys for the selected table
+  const [primaryKeys, setPrimaryKeys] = useState<string[]>([]);
 
   // Column visibility - persisted in localStorage
   const [hiddenColumns, setHiddenColumns] = useState<Record<string, Set<string>>>(() => {
@@ -267,6 +274,19 @@ export function DatabaseBrowser() {
     }
   };
 
+  const loadPrimaryKeys = async (tableName: string) => {
+    try {
+      const result = await window.electronAPI.invoke('database:getPrimaryKeys', tableName);
+      if (result.success) {
+        setPrimaryKeys(result.primaryKeys);
+      } else {
+        setPrimaryKeys([]);
+      }
+    } catch {
+      setPrimaryKeys([]);
+    }
+  };
+
   const handleTableSelect = useCallback((tableName: string) => {
     setSelectedTable(tableName);
     setCurrentPage(0);
@@ -275,8 +295,11 @@ export function DatabaseBrowser() {
     setActiveTab('data');
     setSortColumn(null);
     setSortDirection('asc');
+    setModalEditing(false);
+    setModalEditError(null);
     loadTableSchema(tableName);
     loadTableData(tableName, 0);
+    loadPrimaryKeys(tableName);
   }, []);
 
   const handlePageChange = (newPage: number) => {
@@ -406,9 +429,96 @@ export function DatabaseBrowser() {
   };
 
   // Handle cell click to expand
-  const handleCellClick = (column: string, value: any) => {
-    setExpandedCell({ column, value });
+  const handleCellClick = (column: string, value: any, rowIndex?: number) => {
+    setExpandedCell({ column, value, rowIndex });
     setCopiedCell(false);
+    setModalEditing(false);
+    setModalEditError(null);
+  };
+
+  // Enter edit mode in the modal
+  const handleModalEditStart = () => {
+    if (!expandedCell) return;
+    if (primaryKeys.length === 0) {
+      setModalEditError('Cannot edit: this table has no primary key');
+      return;
+    }
+    if (expandedCell.rowIndex === undefined) {
+      setModalEditError('Cannot edit cells from query results');
+      return;
+    }
+    setModalEditValue(formatCellValue(expandedCell.value));
+    setModalEditing(true);
+    setModalEditError(null);
+  };
+
+  // Save from modal edit
+  const handleModalEditSave = async () => {
+    if (!expandedCell || expandedCell.rowIndex === undefined || !selectedTable || !tableData) return;
+
+    const row = tableData.rows[expandedCell.rowIndex];
+    if (!row) return;
+
+    const pkValues = primaryKeys.map(pk => ({
+      column: pk,
+      value: row[pk],
+    }));
+
+    // Parse the edited value
+    let newValue: any = modalEditValue;
+    if (modalEditValue === '' || modalEditValue === 'NULL') {
+      newValue = null;
+    } else {
+      // Try parsing as number if the original was numeric
+      const num = Number(modalEditValue);
+      if (!isNaN(num) && modalEditValue.trim() !== '') {
+        const originalValue = row[expandedCell.column];
+        if (typeof originalValue === 'number' || originalValue === null) {
+          newValue = num;
+        }
+      }
+      // Try parsing as JSON
+      if (typeof newValue === 'string') {
+        const trimmed = newValue.trim();
+        if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+          try {
+            newValue = JSON.parse(trimmed);
+          } catch {
+            // Keep as string
+          }
+        }
+        if (trimmed.toLowerCase() === 'true') newValue = true;
+        if (trimmed.toLowerCase() === 'false') newValue = false;
+      }
+    }
+
+    setModalEditSaving(true);
+    setModalEditError(null);
+
+    try {
+      const result = await window.electronAPI.invoke(
+        'database:updateCell',
+        selectedTable,
+        pkValues,
+        expandedCell.column,
+        newValue
+      );
+
+      if (result.success) {
+        setModalEditing(false);
+        setExpandedCell(null);
+        // Reload the current page to show updated data
+        const offset = currentPage * pageSize;
+        const sort = sortColumn ? { column: sortColumn, direction: sortDirection } : undefined;
+        loadTableData(selectedTable, offset, sort);
+      } else {
+        setModalEditError(result.error || 'Failed to update cell');
+      }
+    } catch (err) {
+      setModalEditError(String(err));
+    } finally {
+      setModalEditSaving(false);
+    }
   };
 
   // Close cell modal on Escape key
@@ -624,8 +734,8 @@ export function DatabaseBrowser() {
                                   <div
                                     key={col}
                                     className="virtual-table-cell clickable py-2 px-3 text-[13px] border-r border-[var(--nim-border)] overflow-hidden text-ellipsis whitespace-nowrap last:border-r-0 cursor-pointer hover:bg-[var(--nim-bg-hover)]"
-                                    onClick={() => handleCellClick(col, value)}
-                                    title="Click to expand"
+                                    onClick={() => handleCellClick(col, value, idx)}
+                                    title="Click to view/edit"
                                   >
                                     {value === null ? (
                                       <span className="null-value text-[var(--nim-text-faint)] italic">NULL</span>
@@ -725,33 +835,78 @@ export function DatabaseBrowser() {
 
       {/* Cell Detail Modal */}
       {expandedCell && (
-        <div className="cell-modal-overlay fixed inset-0 flex items-center justify-center z-[2000] bg-black/50" onClick={() => setExpandedCell(null)}>
+        <div className="cell-modal-overlay fixed inset-0 flex items-center justify-center z-[2000] bg-black/50" onClick={() => { setExpandedCell(null); setModalEditing(false); }}>
           <div className="cell-modal flex flex-col w-[90vw] max-w-[800px] max-h-[80vh] overflow-hidden rounded-lg border border-[var(--nim-border)] shadow-[0_8px_32px_rgba(0,0,0,0.3)] bg-nim" onClick={e => e.stopPropagation()}>
             <div className="cell-modal-header flex items-center justify-between py-3 px-4 border-b border-[var(--nim-border)] rounded-t-lg bg-nim-secondary">
               <h3 className="m-0 text-sm font-semibold text-[var(--nim-text)]">{expandedCell.column}</h3>
               <div className="cell-modal-actions flex items-center gap-2">
-                <button
-                  className="cell-modal-copy text-white border-none py-1.5 px-3 rounded text-[13px] cursor-pointer min-w-[70px] bg-[var(--nim-primary)] hover:bg-[var(--nim-primary-hover)]"
-                  onClick={handleCopyCellValue}
-                >
-                  {copiedCell ? 'Copied!' : 'Copy'}
-                </button>
+                {modalEditing ? (
+                  <>
+                    <button
+                      className="border-none py-1.5 px-3 rounded text-[13px] cursor-pointer bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]"
+                      onClick={() => { setModalEditing(false); setModalEditError(null); }}
+                      disabled={modalEditSaving}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="text-white border-none py-1.5 px-3 rounded text-[13px] cursor-pointer min-w-[70px] bg-[var(--nim-primary)] hover:bg-[var(--nim-primary-hover)] disabled:opacity-50"
+                      onClick={handleModalEditSave}
+                      disabled={modalEditSaving}
+                    >
+                      {modalEditSaving ? 'Saving...' : 'Save'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {primaryKeys.length > 0 && expandedCell.rowIndex !== undefined && (
+                      <button
+                        className="border-none py-1.5 px-3 rounded text-[13px] cursor-pointer bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]"
+                        onClick={handleModalEditStart}
+                      >
+                        Edit
+                      </button>
+                    )}
+                    <button
+                      className="text-white border-none py-1.5 px-3 rounded text-[13px] cursor-pointer min-w-[70px] bg-[var(--nim-primary)] hover:bg-[var(--nim-primary-hover)]"
+                      onClick={handleCopyCellValue}
+                    >
+                      {copiedCell ? 'Copied!' : 'Copy'}
+                    </button>
+                  </>
+                )}
                 <button
                   className="cell-modal-close bg-transparent border-none text-2xl cursor-pointer p-0 w-8 h-8 flex items-center justify-center rounded text-[var(--nim-text-muted)] hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
-                  onClick={() => setExpandedCell(null)}
+                  onClick={() => { setExpandedCell(null); setModalEditing(false); }}
                 >
                   ×
                 </button>
               </div>
             </div>
+            {modalEditError && (
+              <div className="text-[#ff6b6b] bg-[rgba(255,107,107,0.1)] py-2 px-4 text-[13px]">{modalEditError}</div>
+            )}
             <div className="cell-modal-content flex-1 overflow-auto p-4 min-h-[100px]">
-              {(() => {
-                const jsonData = tryParseJSON(expandedCell.value);
-                if (jsonData) {
-                  return <SyntaxHighlightedJSON data={jsonData} />;
-                }
-                return <pre className="m-0 whitespace-pre-wrap break-all font-mono text-[13px] leading-relaxed text-[var(--nim-text)]">{formatCellValue(expandedCell.value)}</pre>;
-              })()}
+              {modalEditing ? (
+                <textarea
+                  className="w-full h-full min-h-[200px] border border-[var(--nim-border)] rounded p-3 font-mono text-[13px] leading-relaxed resize-y bg-[var(--nim-bg)] text-[var(--nim-text)] outline-none focus:border-[var(--nim-primary)]"
+                  value={modalEditValue}
+                  onChange={e => setModalEditValue(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Escape') { setModalEditing(false); setModalEditError(null); }
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleModalEditSave();
+                  }}
+                  autoFocus
+                />
+              ) : (
+                (() => {
+                  const jsonData = tryParseJSON(expandedCell.value);
+                  if (jsonData) {
+                    return <SyntaxHighlightedJSON data={jsonData} />;
+                  }
+                  return <pre className="m-0 whitespace-pre-wrap break-all font-mono text-[13px] leading-relaxed text-[var(--nim-text)]">{formatCellValue(expandedCell.value)}</pre>;
+                })()
+              )}
             </div>
           </div>
         </div>
