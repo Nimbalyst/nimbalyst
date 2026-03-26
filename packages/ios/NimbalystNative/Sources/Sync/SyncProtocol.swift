@@ -257,6 +257,11 @@ public struct RegisterPushTokenMessage: Codable {
     public let environment: String
 }
 
+public struct UnregisterPushTokenMessage: Codable {
+    let type = "unregisterPushToken"
+    public let deviceId: String
+}
+
 struct CreateSessionRequestMessage: Codable {
     let type = "createSessionRequest"
     let request: EncryptedCreateSessionRequest

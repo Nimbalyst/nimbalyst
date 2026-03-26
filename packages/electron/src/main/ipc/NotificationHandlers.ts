@@ -78,6 +78,26 @@ export function registerNotificationHandlers(): void {
     }
   });
 
+  safeHandle('notifications:show-test', async () => {
+    try {
+      await notificationService.showTestNotification();
+      return { success: true };
+    } catch (error) {
+      logger.main.error('[NotificationHandlers] Error showing test notification:', error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  safeHandle('notifications:open-system-settings', async () => {
+    try {
+      await notificationService.openSystemNotificationSettings();
+      return { success: true };
+    } catch (error) {
+      logger.main.error('[NotificationHandlers] Error opening notification settings:', error);
+      return { success: false, error: String(error) };
+    }
+  });
+
   // Get notify when focused status
   safeHandle('notifications:get-notify-when-focused', async () => {
     try {

@@ -14,13 +14,18 @@ public final class NotificationManager: NSObject, ObservableObject {
 
     private let logger = Logger(subsystem: "com.nimbalyst.app", category: "NotificationManager")
 
+    private static let pushEnabledKey = "pushNotificationsEnabled"
     @Published public var isAuthorized = false
+    @Published public private(set) var authorizationStatus: UNAuthorizationStatus = .notDetermined
+    @Published public private(set) var isPushEnabledInApp: Bool
     @Published public var deviceToken: String?
     /// Set when the user taps a push notification. Views observe this to deep-link.
     @Published public var pendingSessionId: String?
 
     /// Callback to send the push token to the server. Set by SyncManager.
     public var onTokenReceived: ((String) -> Void)?
+    /// Callback to remove this device from server-side push routing when the app-level toggle is off.
+    public var onPushDisabled: (() -> Void)?
 
     private static let hasPromptedKey = "hasPromptedForNotifications"
 
@@ -30,12 +35,18 @@ public final class NotificationManager: NSObject, ObservableObject {
         !UserDefaults.standard.bool(forKey: Self.hasPromptedKey) && !isAuthorized
     }
 
+    /// Whether the device should currently be registered with the sync server for pushes.
+    public var shouldRegisterForPush: Bool {
+        isPushEnabledInApp && isAuthorized
+    }
+
     /// Mark that we've shown the prompt so it doesn't appear again.
     public func markPromptShown() {
         UserDefaults.standard.set(true, forKey: Self.hasPromptedKey)
     }
 
     private override init() {
+        self.isPushEnabledInApp = UserDefaults.standard.bool(forKey: NotificationManager.pushEnabledKey)
         super.init()
         UNUserNotificationCenter.current().delegate = self
         // If already authorized from a previous launch, re-register for the APNs token
@@ -46,35 +57,67 @@ public final class NotificationManager: NSObject, ObservableObject {
     /// so we get a fresh APNs token on every launch (tokens can rotate).
     private func checkAndReregister() {
         Task {
-            let settings = await UNUserNotificationCenter.current().notificationSettings()
-            isAuthorized = settings.authorizationStatus == .authorized
-            if settings.authorizationStatus == .authorized {
+            await refreshAuthorizationStatus()
+            if shouldRegisterForPush {
                 registerForRemoteNotifications()
             }
         }
     }
 
-    /// Request notification permission from the user.
-    public func requestPermission() {
-        Task {
+    /// Request notification permission from the user or route them to Settings if already denied.
+    @discardableResult
+    public func requestPermission() async -> Bool {
+        return await setPushNotificationsEnabled(true)
+    }
+
+    /// Update the app-level push preference and synchronize registration side effects.
+    @discardableResult
+    public func setPushNotificationsEnabled(_ enabled: Bool) async -> Bool {
+        if !enabled {
+            persistPushEnabled(false)
+            onPushDisabled?()
+            return false
+        }
+
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        applyAuthorizationStatus(settings.authorizationStatus)
+
+        switch settings.authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            persistPushEnabled(true)
+            registerForRemoteNotifications()
+            return true
+        case .notDetermined:
             do {
                 let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound])
-                isAuthorized = granted
-                if granted {
+                await refreshAuthorizationStatus()
+                if granted && isAuthorized {
+                    persistPushEnabled(true)
                     registerForRemoteNotifications()
+                    return true
                 }
             } catch {
                 logger.error("Notification permission error: \(error.localizedDescription)")
             }
+
+            persistPushEnabled(false)
+            onPushDisabled?()
+            return false
+        case .denied:
+            persistPushEnabled(false)
+            onPushDisabled?()
+            openAppNotificationSettings()
+            return false
+        @unknown default:
+            persistPushEnabled(false)
+            onPushDisabled?()
+            return false
         }
     }
 
     /// Check current authorization status without prompting.
-    public func checkAuthorizationStatus() {
-        Task {
-            let settings = await UNUserNotificationCenter.current().notificationSettings()
-            isAuthorized = settings.authorizationStatus == .authorized
-        }
+    public func checkAuthorizationStatus() async {
+        await refreshAuthorizationStatus()
     }
 
     /// Register for remote notifications with APNs.
@@ -82,6 +125,41 @@ public final class NotificationManager: NSObject, ObservableObject {
         #if canImport(UIKit)
         DispatchQueue.main.async {
             UIApplication.shared.registerForRemoteNotifications()
+        }
+        #endif
+    }
+
+    private func persistPushEnabled(_ enabled: Bool) {
+        isPushEnabledInApp = enabled
+        UserDefaults.standard.set(enabled, forKey: Self.pushEnabledKey)
+    }
+
+    private func applyAuthorizationStatus(_ status: UNAuthorizationStatus) {
+        authorizationStatus = status
+        isAuthorized = Self.isAuthorizedStatus(status)
+    }
+
+    private func refreshAuthorizationStatus() async {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        applyAuthorizationStatus(settings.authorizationStatus)
+    }
+
+    private static func isAuthorizedStatus(_ status: UNAuthorizationStatus) -> Bool {
+        switch status {
+        case .authorized, .provisional, .ephemeral:
+            return true
+        case .notDetermined, .denied:
+            return false
+        @unknown default:
+            return false
+        }
+    }
+
+    private func openAppNotificationSettings() {
+        #if canImport(UIKit)
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        DispatchQueue.main.async {
+            UIApplication.shared.open(url)
         }
         #endif
     }
@@ -110,6 +188,10 @@ public final class NotificationManager: NSObject, ObservableObject {
             deviceId: deviceId,
             environment: "production"
         )
+    }
+
+    nonisolated public static func makeUnregisterTokenMessage(deviceId: String) -> UnregisterPushTokenMessage {
+        return UnregisterPushTokenMessage(deviceId: deviceId)
     }
 }
 

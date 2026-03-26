@@ -175,9 +175,11 @@ public final class SyncManager: ObservableObject {
                 self?.isConnected = connected
                 if connected {
                     self?.requestIndexSync()
-                    // Re-register push token on reconnect
-                    if let token = NotificationManager.shared.deviceToken {
+                    if NotificationManager.shared.shouldRegisterForPush,
+                       let token = NotificationManager.shared.deviceToken {
                         self?.registerPushToken(token)
+                    } else {
+                        self?.unregisterPushToken()
                     }
                 }
             }
@@ -1366,16 +1368,30 @@ public final class SyncManager: ObservableObject {
                 self?.registerPushToken(token)
             }
         }
+        NotificationManager.shared.onPushDisabled = { [weak self] in
+            Task { @MainActor in
+                self?.unregisterPushToken()
+            }
+        }
         // If a token was already received before SyncManager was created, use it now.
         // This handles the case where NotificationManager.shared was accessed early
         // (e.g., from SettingsView) and got a token before the callback was set.
         if let existingToken = NotificationManager.shared.deviceToken {
-            registerPushToken(existingToken)
+            if NotificationManager.shared.shouldRegisterForPush {
+                registerPushToken(existingToken)
+            } else {
+                unregisterPushToken()
+            }
         }
     }
 
     /// Send the APNs push token to the sync server.
     public func registerPushToken(_ token: String) {
+        guard NotificationManager.shared.shouldRegisterForPush else {
+            logger.info("Skipping push token registration because push notifications are disabled in app or OS")
+            return
+        }
+
         let message = NotificationManager.makeRegisterTokenMessage(
             token: token,
             deviceId: WebSocketClient.deviceId
@@ -1384,6 +1400,17 @@ public final class SyncManager: ObservableObject {
            let json = String(data: data, encoding: .utf8) {
             indexClient.sendRaw(json)
             logger.info("Registered push token with server")
+        }
+    }
+
+    public func unregisterPushToken() {
+        let message = NotificationManager.makeUnregisterTokenMessage(
+            deviceId: WebSocketClient.deviceId
+        )
+        if let data = try? JSONEncoder().encode(message),
+           let json = String(data: data, encoding: .utf8) {
+            indexClient.sendRaw(json)
+            logger.info("Unregistered push token with server")
         }
     }
 

@@ -127,6 +127,11 @@ if (process.env.ELECTRON_RUN_AS_NODE === '1' && process.platform === 'darwin') {
   }
 }
 
+// Windows notifications require a stable AppUserModelID.
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.nimbalyst.electron');
+}
+
 // NOTE: User data directory configuration is handled in bootstrap.ts
 // which runs BEFORE this file is imported, ensuring electron-store
 // uses the correct path.

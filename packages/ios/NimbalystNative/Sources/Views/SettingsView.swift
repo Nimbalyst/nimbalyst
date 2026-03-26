@@ -3,7 +3,7 @@ import SwiftUI
 /// Native settings screen with connection info, account, notifications, and unpair.
 public struct SettingsView: View {
     @EnvironmentObject var appState: AppState
-    @State private var pushEnabled = UserDefaults.standard.bool(forKey: "pushNotificationsEnabled")
+    @ObservedObject private var notificationManager = NotificationManager.shared
     @State private var analyticsEnabled = AnalyticsManager.shared.isEnabled
     @State private var showUnpairConfirmation = false
     @State private var showDeleteAccountConfirmation = false
@@ -37,6 +37,9 @@ public struct SettingsView: View {
         .navigationTitle("Settings")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.large)
+        .task {
+            await notificationManager.checkAuthorizationStatus()
+        }
         #endif
     }
 
@@ -117,18 +120,34 @@ public struct SettingsView: View {
     #if os(iOS)
     private var notificationsSection: some View {
         Section {
-            Toggle("Push Notifications", isOn: $pushEnabled)
-                .onChange(of: pushEnabled) { newValue in
-                    UserDefaults.standard.set(newValue, forKey: "pushNotificationsEnabled")
-                    if newValue {
-                        NotificationManager.shared.markPromptShown()
-                        NotificationManager.shared.requestPermission()
+            Toggle("Push Notifications", isOn: Binding(
+                get: { notificationManager.isPushEnabledInApp },
+                set: { newValue in
+                    Task {
+                        if newValue {
+                            notificationManager.markPromptShown()
+                        }
+                        _ = await notificationManager.setPushNotificationsEnabled(newValue)
                     }
                 }
+            ))
         } header: {
             Text("Notifications")
         } footer: {
-            Text("Get notified when AI sessions complete or need your attention.")
+            Text(notificationFooterText)
+        }
+    }
+
+    private var notificationFooterText: String {
+        switch notificationManager.authorizationStatus {
+        case .denied:
+            return "Push is denied in iOS Settings. Turning this on opens the app's Settings page so you can allow notifications."
+        case .authorized, .provisional, .ephemeral:
+            return "Get notified when AI sessions complete or need your attention."
+        case .notDetermined:
+            return "Get notified when AI sessions complete or need your attention."
+        @unknown default:
+            return "Get notified when AI sessions complete or need your attention."
         }
     }
     #endif

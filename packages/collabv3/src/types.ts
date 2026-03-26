@@ -45,6 +45,7 @@ export type ClientMessage =
   | CreateWorktreeResponseMessage
   | SessionControlCommandMessage
   | RegisterPushTokenMessage
+  | UnregisterPushTokenMessage
   | RequestMobilePushMessage
   | ProjectConfigUpdateMessage
   | SettingsSyncMessage
@@ -214,6 +215,12 @@ export interface RegisterPushTokenMessage {
   type: 'registerPushToken';
   token: string;
   platform: 'ios' | 'android';
+  deviceId: string;
+}
+
+/** Remove the registered push notification token for this device */
+export interface UnregisterPushTokenMessage {
+  type: 'unregisterPushToken';
   deviceId: string;
 }
 

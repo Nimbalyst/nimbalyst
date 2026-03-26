@@ -292,8 +292,9 @@ public struct MainNavigationView: View {
         .alert("Enable Notifications?", isPresented: $showNotificationPrompt) {
             Button("Enable") {
                 notificationManager.markPromptShown()
-                UserDefaults.standard.set(true, forKey: "pushNotificationsEnabled")
-                notificationManager.requestPermission()
+                Task {
+                    _ = await notificationManager.requestPermission()
+                }
             }
             Button("Not Now", role: .cancel) {
                 notificationManager.markPromptShown()

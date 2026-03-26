@@ -25,6 +25,7 @@ import type {
   SessionControlMessage,
   SessionControlBroadcastMessage,
   RegisterPushTokenMessage,
+  UnregisterPushTokenMessage,
   RequestMobilePushMessage,
   ProjectConfigUpdateMessage,
   EncryptedSettingsPayload,
@@ -457,6 +458,10 @@ export class PersonalIndexRoom implements DurableObject {
 
         case 'registerPushToken':
           await this.handleRegisterPushToken(connState, message);
+          break;
+
+        case 'unregisterPushToken':
+          await this.handleUnregisterPushToken(connState, message);
           break;
 
         case 'requestMobilePush':
@@ -1058,6 +1063,17 @@ export class PersonalIndexRoom implements DurableObject {
 
     await this.state.storage.put(key, value);
     // log.info('Push token stored for device:', message.deviceId);
+  }
+
+  /**
+   * Remove the stored push token for a mobile device when the app-level push toggle is off.
+   */
+  private async handleUnregisterPushToken(
+    connState: ConnectionState,
+    message: UnregisterPushTokenMessage
+  ): Promise<void> {
+    const key = `push_token:${message.deviceId}`;
+    await this.state.storage.delete(key);
   }
 
   /**

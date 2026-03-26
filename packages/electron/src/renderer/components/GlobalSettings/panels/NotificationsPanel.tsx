@@ -17,6 +17,7 @@ export function NotificationsPanel() {
   const [settings] = useAtom(notificationSettingsAtom);
   const [, updateSettings] = useAtom(setNotificationSettingsAtom);
   const [isTestPlaying, setIsTestPlaying] = useState(false);
+  const [notificationHelp, setNotificationHelp] = useState<string | null>(null);
 
   const { completionSoundEnabled, completionSoundType, osNotificationsEnabled, notifyWhenFocused } = settings;
 
@@ -49,6 +50,26 @@ export function NotificationsPanel() {
       console.error('Failed to test sound:', error);
     } finally {
       setTimeout(() => setIsTestPlaying(false), 500);
+    }
+  };
+
+  const handleTestNotification = async () => {
+    if (!window.electronAPI) return;
+
+    const result = await window.electronAPI.invoke('notifications:show-test');
+    if (result?.success) {
+      setNotificationHelp('A test notification was sent. If you do not see it, open your OS notification settings and allow Nimbalyst notifications.');
+    } else {
+      setNotificationHelp(result?.error || 'Failed to show a test notification.');
+    }
+  };
+
+  const handleOpenNotificationSettings = async () => {
+    if (!window.electronAPI) return;
+
+    const result = await window.electronAPI.invoke('notifications:open-system-settings');
+    if (!result?.success) {
+      setNotificationHelp(result?.error || 'Failed to open system notification settings.');
     }
   };
 
@@ -129,7 +150,15 @@ export function NotificationsPanel() {
             <input
               type="checkbox"
               checked={osNotificationsEnabled}
-              onChange={(e) => updateSettings({ osNotificationsEnabled: e.target.checked })}
+              onChange={(e) => {
+                const enabled = e.target.checked;
+                updateSettings({ osNotificationsEnabled: enabled });
+                if (enabled) {
+                  void handleTestNotification();
+                } else {
+                  setNotificationHelp(null);
+                }
+              }}
               className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
             />
             <div className="setting-text flex flex-col gap-0.5">
@@ -143,23 +172,45 @@ export function NotificationsPanel() {
         </div>
 
         {osNotificationsEnabled && (
-          <div className="setting-item py-3">
-            <label className="setting-label flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={notifyWhenFocused}
-                onChange={(e) => updateSettings({ notifyWhenFocused: e.target.checked })}
-                className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
-              />
-              <div className="setting-text flex flex-col gap-0.5">
-                <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Notify Even When Focused</span>
+          <>
+            <div className="setting-item py-3">
+              <label className="setting-label flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={notifyWhenFocused}
+                  onChange={(e) => updateSettings({ notifyWhenFocused: e.target.checked })}
+                  className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
+                />
+                <div className="setting-text flex flex-col gap-0.5">
+                  <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Notify Even When Focused</span>
+                  <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
+                    Show notifications even when the app is focused, unless you are already viewing that session.
+                    Useful when working in one session and waiting for another to complete.
+                  </span>
+                </div>
+              </label>
+            </div>
+
+            <div className="setting-item py-3">
+              <div className="setting-text flex flex-col gap-2">
                 <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
-                  Show notifications even when the app is focused, unless you are already viewing that session.
-                  Useful when working in one session and waiting for another to complete.
+                  Electron does not expose a reliable cross-platform notification permission state here.
+                  Use a test notification to trigger the OS prompt or verify delivery.
                 </span>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={handleTestNotification} className="nim-btn-secondary text-sm">
+                    Send Test Notification
+                  </button>
+                  <button onClick={handleOpenNotificationSettings} className="nim-btn-secondary text-sm">
+                    Open System Notification Settings
+                  </button>
+                </div>
+                {notificationHelp && (
+                  <span className="text-xs leading-relaxed text-[var(--nim-text-muted)]">{notificationHelp}</span>
+                )}
               </div>
-            </label>
-          </div>
+            </div>
+          </>
         )}
       </div>
 

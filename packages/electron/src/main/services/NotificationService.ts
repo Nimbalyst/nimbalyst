@@ -2,17 +2,12 @@
  * NotificationService
  *
  * Handles OS-level notifications for AI/agent completion events.
- * Respects user preferences and system Do Not Disturb settings.
  */
 
-import { Notification, BrowserWindow, app, systemPreferences, ipcMain } from 'electron';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { Notification, BrowserWindow, app, ipcMain, shell } from 'electron';
 import { logger } from '../utils/logger';
 import { isOSNotificationsEnabled, isNotifyWhenFocusedEnabled, isSessionBlockedNotificationsEnabled } from '../utils/store';
 import { findWindowByWorkspace } from '../window/WindowManager';
-
-const execAsync = promisify(exec);
 
 export interface NotificationOptions {
   title: string;
@@ -33,56 +28,6 @@ class NotificationService {
 
   constructor() {
     logger.main.info('[NotificationService] Service initialized');
-    this.requestPermissions();
-  }
-
-  /**
-   * Check if running in development mode
-   */
-  private isDevelopmentMode(): boolean {
-    return !app.isPackaged;
-  }
-
-  /**
-   * Show notification using AppleScript (fallback for development mode)
-   */
-  private async showAppleScriptNotification(title: string, body: string): Promise<void> {
-    if (process.platform !== 'darwin') {
-      return;
-    }
-
-    try {
-      const escapedTitle = title.replace(/"/g, '\\"');
-      const escapedBody = body.replace(/"/g, '\\"');
-      const script = `display notification "${escapedBody}" with title "${escapedTitle}"`;
-
-      await execAsync(`osascript -e '${script}'`);
-      logger.main.info('[NotificationService] AppleScript notification shown (dev mode)');
-    } catch (error) {
-      logger.main.error('[NotificationService] AppleScript notification failed:', error);
-    }
-  }
-
-  /**
-   * Request notification permissions from the OS
-   */
-  private async requestPermissions(): Promise<void> {
-    try {
-      if (process.platform === 'darwin') {
-        // Check current notification permission status
-        const status = systemPreferences.getMediaAccessStatus('screen');
-        logger.main.info('[NotificationService] macOS notification support:', {
-          platform: process.platform,
-          // doNotDisturb property may not exist in all Electron versions
-          doNotDisturbEnabled: (systemPreferences as typeof systemPreferences & { doNotDisturb?: boolean }).doNotDisturb ?? false,
-        });
-
-        // Try to show a test notification to trigger permission request
-        logger.main.info('[NotificationService] Notification support initialized for macOS');
-      }
-    } catch (error) {
-      logger.main.error('[NotificationService] Error checking permissions:', error);
-    }
   }
 
   /**
@@ -164,17 +109,6 @@ class NotificationService {
       }
     }
 
-    // In development mode, use AppleScript for more reliable notifications on macOS
-    // if (this.isDevelopmentMode() && process.platform === 'darwin') {
-    //   logger.main.info('[NotificationService] Using AppleScript notification (development mode)');
-    //   try {
-    //     await this.showAppleScriptNotification(options.title, options.body);
-    //   } catch (error) {
-    //     logger.main.error('[NotificationService] AppleScript notification failed:', error);
-    //   }
-    //   return;
-    // }
-
     try {
       // Create and show the notification using Electron API (production mode)
       const notification = new Notification({
@@ -218,6 +152,50 @@ class NotificationService {
     } catch (error) {
       logger.main.error('[NotificationService] Error showing notification:', error);
     }
+  }
+
+  /**
+   * Show a one-off test notification to trigger OS prompting/verification when the user enables notifications.
+   * This intentionally bypasses the in-app "notifications enabled" preference.
+   */
+  async showTestNotification(): Promise<void> {
+    if (!Notification.isSupported()) {
+      throw new Error('Notifications are not supported on this platform');
+    }
+
+    const notification = new Notification({
+      title: 'Notifications Enabled',
+      body: 'Nimbalyst will notify you when AI responses are ready.',
+      icon: this.getAppIcon(),
+      silent: true,
+      urgency: 'normal',
+      timeoutType: 'default',
+    });
+
+    notification.on('failed', (_event, error) => {
+      logger.main.error('[NotificationService] Test notification failed:', error);
+    });
+
+    notification.show();
+  }
+
+  /**
+   * Open the OS notification settings page when the user needs to recover from a denied prompt.
+   */
+  async openSystemNotificationSettings(): Promise<void> {
+    let target: string | null = null;
+
+    if (process.platform === 'darwin') {
+      target = 'x-apple.systempreferences:com.apple.Notifications-Settings.extension';
+    } else if (process.platform === 'win32') {
+      target = 'ms-settings:notifications';
+    }
+
+    if (!target) {
+      throw new Error('Opening notification settings is not supported on this platform');
+    }
+
+    await shell.openExternal(target);
   }
 
   /**
