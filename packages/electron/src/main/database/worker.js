@@ -58,16 +58,31 @@ class PGLiteWorker {
           console.log('[PGLite Worker] Removing invalid lock file (no valid PID)');
           fs.unlinkSync(this.lockFilePath);
         } else {
+          // First, check if the system has rebooted since the lock was created.
+          // If so, the PID was from a previous boot and is definitely stale --
+          // even if a different process now has that PID (PID reuse after reboot).
+          let isStaleFromReboot = false;
+          if (lockTimestamp && lockTimestamp !== 'unknown') {
+            const lockTime = new Date(lockTimestamp).getTime();
+            const bootTime = Date.now() - (os.uptime() * 1000);
+            if (lockTime < bootTime) {
+              isStaleFromReboot = true;
+              console.log(`[PGLite Worker] Lock file predates last system boot (lock: ${lockTimestamp}, boot: ${new Date(bootTime).toISOString()}) - stale from reboot`);
+            }
+          }
+
           // Check if the process is still running
           let isRunning = false;
-          try {
-            // process.kill with signal 0 tests if process exists without killing it
-            process.kill(lockPid, 0);
-            isRunning = true;
-          } catch (e) {
-            // ESRCH: No such process (stale lock from crash)
-            // EPERM: Process exists but we can't signal it (still running, different user)
-            isRunning = e.code === 'EPERM';
+          if (!isStaleFromReboot) {
+            try {
+              // process.kill with signal 0 tests if process exists without killing it
+              process.kill(lockPid, 0);
+              isRunning = true;
+            } catch (e) {
+              // ESRCH: No such process (stale lock from crash)
+              // EPERM: Process exists but we can't signal it (still running, different user)
+              isRunning = e.code === 'EPERM';
+            }
           }
 
           if (isRunning) {

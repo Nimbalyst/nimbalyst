@@ -1,11 +1,14 @@
 import { autoUpdater } from 'electron-updater';
 import { app, BrowserWindow, dialog } from 'electron';
 import log from 'electron-log/main';
+import * as fs from 'fs';
+import * as path from 'path';
 import { getReleaseChannel, store } from '../utils/store';
 import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import { AnalyticsService } from './analytics/AnalyticsService';
 import { hasActiveStreamingSessions } from '../ipc/SessionStateHandlers';
 import { getSessionStateManager } from '@nimbalyst/runtime/ai/server/SessionStateManager';
+import { getDatabase } from '../database/initialize';
 
 // Reminder suppression duration: 24 hours
 const REMINDER_SUPPRESSION_DURATION_MS = 24 * 60 * 60 * 1000;
@@ -265,13 +268,44 @@ export class AutoUpdaterService {
   }
 
   /**
-   * Perform the actual quit-and-install sequence.
-   * Shared by immediate install and deferred (wait-for-sessions) install.
+   * Close the database and release the PID lock before force-quitting.
+   * quitAndInstall() bypasses the before-quit handler, so the normal
+   * cleanup in index.ts never runs. Without this, a stale lock file
+   * persists and blocks relaunch -- especially after a system reboot
+   * where the old PID gets reused by a different process.
    */
+  private async closeDatabaseBeforeQuit() {
+    try {
+      const db = getDatabase();
+      if (db) {
+        log.info('Closing database before quit-and-install...');
+        const closePromise = db.close();
+        const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 2000));
+        await Promise.race([closePromise, timeoutPromise]);
+        log.info('Database closed before quit-and-install');
+      }
+    } catch (err) {
+      log.warn('Database close failed before quit-and-install:', err);
+    }
+
+    // Fallback: if db.close() didn't release the lock (timeout or error),
+    // delete the PID file directly so the next launch isn't blocked.
+    try {
+      const lockPath = path.join(app.getPath('userData'), 'nimbalyst-db.pid');
+      if (fs.existsSync(lockPath)) {
+        fs.unlinkSync(lockPath);
+        log.info('Removed residual PID lock file');
+      }
+    } catch (lockErr) {
+      log.warn('Failed to remove PID lock file:', lockErr);
+    }
+  }
+
   private performQuitAndInstall() {
-    setImmediate(() => {
+    setImmediate(async () => {
       try {
         log.info('Performing quit and install...');
+        await this.closeDatabaseBeforeQuit();
         AutoUpdaterService.isUpdating = true;
         app.removeAllListeners('before-quit');
         app.removeAllListeners('window-all-closed');
@@ -317,26 +351,8 @@ export class AutoUpdaterService {
     });
 
     safeHandle('quit-and-install', () => {
-      setImmediate(() => {
-        try {
-          log.info('IPC: Attempting to quit and install update...');
-          // Set flag to bypass quit prevention
-          AutoUpdaterService.isUpdating = true;
-          // Force remove all before-quit listeners that might prevent quit
-          app.removeAllListeners('before-quit');
-          app.removeAllListeners('window-all-closed');
-          // Now quit and install
-          autoUpdater.quitAndInstall(false, true);
-        } catch (error) {
-          log.error('Failed to quit and install update:', error);
-          // Fallback to force quit
-          AutoUpdaterService.isUpdating = true;
-          app.removeAllListeners('before-quit');
-          app.removeAllListeners('window-all-closed');
-          app.relaunch();
-          app.exit(0);
-        }
-      });
+      // Reuse the same quit flow as performQuitAndInstall
+      this.performQuitAndInstall();
     });
 
     safeHandle('get-current-version', () => {
