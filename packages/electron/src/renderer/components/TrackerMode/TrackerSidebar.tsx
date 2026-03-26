@@ -5,7 +5,6 @@ import type { TrackerItemType } from '@nimbalyst/runtime';
 import { trackerItemCountByTypeAtom } from '@nimbalyst/runtime/plugins/TrackerPlugin';
 import type { TrackerDataModel } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
 import type { TrackerFilterChip } from '../../store/atoms/trackers';
-import { useAlphaFeature } from '../../hooks/useAlphaFeature';
 import type { ViewMode } from './TrackerMainView';
 import { WorkspaceSummaryHeader } from '../WorkspaceSummaryHeader';
 
@@ -45,8 +44,6 @@ export const TrackerSidebar: React.FC<TrackerSidebarProps> = ({
   onToggleFilter,
   onViewModeChange,
 }) => {
-  const isKanbanEnabled = useAlphaFeature('tracker-kanban');
-
   return (
     <div className="tracker-sidebar w-[220px] min-w-[180px] flex flex-col bg-nim-secondary border-r border-nim overflow-hidden" data-testid="tracker-sidebar">
       {workspacePath && (
@@ -55,8 +52,7 @@ export const TrackerSidebar: React.FC<TrackerSidebarProps> = ({
           workspaceName={workspaceName}
           actions={
             <>
-              {isKanbanEnabled && (
-                <div className="flex items-center rounded border border-nim overflow-hidden">
+              <div className="flex items-center rounded border border-nim overflow-hidden">
                   <button
                     className={`flex items-center justify-center w-7 h-6 transition-colors ${
                       viewMode === 'table'
@@ -80,7 +76,6 @@ export const TrackerSidebar: React.FC<TrackerSidebarProps> = ({
                     <MaterialSymbol icon="view_kanban" size={16} />
                   </button>
                 </div>
-              )}
             </>
           }
         />

@@ -20,7 +20,6 @@ import {
   setTrackerModeLayoutAtom,
   type TrackerFilterChip,
 } from '../../store/atoms/trackers';
-import { useAlphaFeature } from '../../hooks/useAlphaFeature';
 import { setSelectedWorkstreamAtom, sessionRegistryAtom, refreshSessionListAtom } from '../../store/atoms/sessions';
 import { trackerItemsMapAtom } from '@nimbalyst/runtime/plugins/TrackerPlugin/trackerDataAtoms';
 import { workstreamStateAtom } from '../../store/atoms/workstreamState';
@@ -48,7 +47,6 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
   workspacePath,
   trackerTypes,
 }) => {
-  const isKanbanEnabled = useAlphaFeature('tracker-kanban');
   const [sortBy, setSortBy] = useState<TrackerSortColumn>('lastIndexed');
   const [sortDirection, setSortDirection] = useState<TrackerSortDirection>('desc');
   const [searchQuery, setSearchQuery] = useState('');
@@ -429,7 +427,7 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
       <div className="flex-1 flex flex-row overflow-hidden min-h-0">
         {/* Table/Kanban (flex-1, shrinks when detail is open) */}
         <div className="flex-1 overflow-hidden min-h-0 min-w-0 relative">
-          {viewMode === 'table' || !isKanbanEnabled ? (
+          {viewMode === 'table' ? (
             <TrackerTable
               filterType={filterType}
               sortBy={sortBy}
