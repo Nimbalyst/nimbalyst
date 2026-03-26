@@ -1139,7 +1139,7 @@ export default function App() {
     const show = () => {
       errorNotificationService.showWarning(
         'Figma MCP Server Needs Reconfiguration',
-        'It is recommended that you remove your current Figma MCP configuration and re-add it in Nimbalyst, which will use a personal access token instead. Figma restricts OAuth to approved clients, so the current config will not connect.',
+        'Your current Figma MCP configuration will not work in Nimbalyst. Figma does not allow OAuth based MCP in certain apps.\n\nTo fix it, open the MCP settings and do the following:\n\n1. Remove the existing OAuth Figma MCP configuration.\n2. Add a new Figma MCP config from the Nimbalyst MCP template.\n3. Add your Personal Access Token to the MCP config.',
         {
           duration: 0,
           action: {

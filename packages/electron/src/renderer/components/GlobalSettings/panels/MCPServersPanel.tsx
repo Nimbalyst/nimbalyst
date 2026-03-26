@@ -1443,7 +1443,14 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
         });
       } else {
         setTestStatus('error');
-        setTestMessage(result.error || 'Connection failed');
+        // Show a specific message for Figma OAuth configs that fail
+        const isFigmaOAuth = formArgs.some(arg => arg.includes('mcp.figma.com'))
+          || ((formType === 'sse' || formType === 'http') && formUrl.includes('mcp.figma.com'));
+        if (isFigmaOAuth) {
+          setTestMessage('Figma does not allow OAuth based MCP in certain apps. Please use the Figma template from the MCP server list instead, which uses a Personal Access Token.');
+        } else {
+          setTestMessage(result.error || 'Connection failed');
+        }
         setTestHelpUrl(result.helpUrl || null);
         // Track failed test
         posthog?.capture('mcp_server_test_result', {
