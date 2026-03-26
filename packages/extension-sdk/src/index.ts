@@ -56,6 +56,9 @@ export {
   type ReadOnlyHostOptions,
 } from './createReadOnlyHost.js';
 
+// Re-export clipboard utilities
+export { copyToClipboard, readClipboard } from './clipboard.js';
+
 // Re-export validation
 export {
   validateExtensionBundle,

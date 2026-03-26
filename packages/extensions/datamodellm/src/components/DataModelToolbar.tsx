@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { MaterialSymbol } from '@nimbalyst/extension-sdk';
+import { MaterialSymbol, copyToClipboard } from '@nimbalyst/extension-sdk';
 import type { DataModelStoreApi } from '../store';
 import type { EntityViewMode } from '../types';
 import { exportSchema, getAvailableFormats, type ExportFormat } from '../export-service';
@@ -108,7 +108,7 @@ export function DataModelToolbar({ store, onScreenshot, host }: DataModelToolbar
 
   const handleCopyExport = async () => {
     try {
-      await navigator.clipboard.writeText(exportedCode);
+      await copyToClipboard(exportedCode);
       setCopyFeedback(true);
       setTimeout(() => setCopyFeedback(false), 2000);
     } catch (error) {

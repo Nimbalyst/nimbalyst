@@ -15,7 +15,7 @@ import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { RevoGrid, type RevoGridCustomEvent, type ColumnRegular } from '@revolist/react-datagrid';
 import type { RevoGridElement } from '../revogrid-types';
 import type { EditorHostProps, NormalizedSelectionRange, ColumnFormat, DiffState, CellDiff } from '../types';
-import { useEditorLifecycle, type DiffConfig } from '@nimbalyst/extension-sdk';
+import { useEditorLifecycle, readClipboard, type DiffConfig } from '@nimbalyst/extension-sdk';
 import { useSpreadsheetMetadata } from '../hooks/useSpreadsheetMetadata';
 import { createGridOperations, type GridOperations } from '../utils/gridOperations';
 import { UndoRedoPlugin } from '../plugins/UndoRedoPlugin';
@@ -838,7 +838,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
               }
               if (cell) {
                 try {
-                  const text = await navigator.clipboard.readText();
+                  const text = await readClipboard();
                   if (text) {
                     await gridOps.pasteFromText(cell.row, cell.col, text);
                   }
@@ -1324,7 +1324,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
         label: 'Paste',
         action: () => {
           if (cell && gridOps) {
-            navigator.clipboard.readText().then(text => {
+            readClipboard().then(text => {
               if (text) {
                 gridOps.pasteFromText(cell.row, cell.col, text);
               }

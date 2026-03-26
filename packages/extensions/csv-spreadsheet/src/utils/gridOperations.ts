@@ -8,6 +8,7 @@
 import type { DimensionRows } from '@revolist/revogrid';
 import type { RevoGridElement } from '../revogrid-types';
 import type { NormalizedSelectionRange, ColumnFormat, CSVMetadata, FormulaEvalData } from '../types';
+import { copyToClipboard } from '@nimbalyst/extension-sdk';
 import { columnIndexToLetter, columnLetterToIndex, serializeMetadata } from './csvParser';
 import { isFormula, evaluateFormula } from './formulaEngine';
 import type { UndoRedoPlugin } from '../plugins/UndoRedoPlugin';
@@ -491,7 +492,7 @@ export function createGridOperations(
     }
 
     const text = values.map(row => row.join('\t')).join('\n');
-    await navigator.clipboard.writeText(text);
+    await copyToClipboard(text);
   };
 
   /**

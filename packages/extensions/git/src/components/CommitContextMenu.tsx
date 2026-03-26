@@ -8,6 +8,7 @@ import {
   useDismiss,
   useRole,
 } from '@floating-ui/react';
+import { copyToClipboard } from '@nimbalyst/extension-sdk';
 
 interface GitCommit {
   hash: string;
@@ -61,13 +62,13 @@ export function CommitContextMenu({
   const shortHash = commit.hash.slice(0, 7);
 
   const handleCopyId = () => {
-    navigator.clipboard.writeText(commit.hash);
+    copyToClipboard(commit.hash);
     onMessage('Copied commit ID');
     onClose();
   };
 
   const handleCopyMessage = () => {
-    navigator.clipboard.writeText(commit.message);
+    copyToClipboard(commit.message);
     onMessage('Copied commit message');
     onClose();
   };

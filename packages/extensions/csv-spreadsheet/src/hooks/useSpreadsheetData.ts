@@ -7,6 +7,7 @@ import { useState, useCallback, useRef } from 'react';
 import useUndoable from 'use-undoable';
 import type { SpreadsheetData, Cell, SortDirection, SortConfig, NormalizedSelectionRange, ColumnFormat } from '../types';
 import { parseCSV, serializeToCSV, createCell } from '../utils/csvParser';
+import { copyToClipboard } from '@nimbalyst/extension-sdk';
 import { recalculateFormulas, isFormula, evaluateFormula } from '../utils/formulaEngine';
 
 /**
@@ -456,7 +457,7 @@ export function useSpreadsheetData(
 
     // Copy to system clipboard as tab-delimited text
     const text = values.map(row => row.join('\t')).join('\n');
-    navigator.clipboard.writeText(text).catch(() => {
+    copyToClipboard(text).catch(() => {
       // Clipboard access denied - nothing to do
     });
   }, [data.rows]);
@@ -476,7 +477,7 @@ export function useSpreadsheetData(
 
     // Copy to system clipboard
     const text = values.map(row => row.join('\t')).join('\n');
-    navigator.clipboard.writeText(text).catch(() => {
+    copyToClipboard(text).catch(() => {
       // Clipboard access denied - nothing to do
     });
 
