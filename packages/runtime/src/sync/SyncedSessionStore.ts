@@ -131,8 +131,18 @@ export function createSyncedSessionStore(
       }
 
       // Build sync metadata with only defined fields
-      // NOTE: updatedAt is set when draftInput changes to keep sessions sorted correctly
-      const syncMetadata: Record<string, unknown> = { updatedAt: Date.now() };
+      // NOTE: Only bump updatedAt for fields that represent meaningful content changes
+      // (title, mode, archive state, provider, model). Draft input changes should NOT
+      // bump updatedAt -- they are ephemeral cross-device state, not content changes,
+      // and bumping the sort timestamp causes sessions to jump to the top of the iOS list.
+      const syncMetadata: Record<string, unknown> = {};
+      const sortRelevantFields = ['title', 'mode', 'isArchived', 'provider', 'model'];
+      const hasSortRelevantField = sortRelevantFields.some(
+        (field) => (metadata as Record<string, unknown>)[field] !== undefined
+      );
+      if (hasSortRelevantField) {
+        syncMetadata.updatedAt = Date.now();
+      }
       if (metadata.title !== undefined) syncMetadata.title = metadata.title;
       if (metadata.mode !== undefined) syncMetadata.mode = metadata.mode;
       if (metadata.isArchived !== undefined) syncMetadata.isArchived = metadata.isArchived;

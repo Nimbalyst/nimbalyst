@@ -1243,7 +1243,11 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       mode: broadcast.metadata.mode,
       provider: broadcast.metadata.provider,
       model: broadcast.metadata.model,
-      updatedAt: broadcast.metadata.updatedAt ?? Date.now(),
+      // NOTE: Do NOT set updatedAt here. Metadata broadcasts (read state, isExecuting,
+      // context) are not content changes and should not bump the sort timestamp.
+      // Only message appends should change updatedAt. The previous fallback to
+      // Date.now() caused sessions to jump to the top of the iOS list when any
+      // metadata was updated.
       pendingExecution: broadcast.metadata.pendingExecution,
       isExecuting: broadcast.metadata.isExecuting,
     };
