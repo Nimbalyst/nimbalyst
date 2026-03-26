@@ -79,7 +79,9 @@ export default defineConfig(({ mode }) => ({
         '@openai/codex-sdk',
         'openai',
         'yjs',
-        'y-websocket'
+        'y-websocket',
+        '@nimbalyst/extension-sdk',
+        /^@nimbalyst\/extension-sdk\//,
       ],
       output: {
         globals: {
