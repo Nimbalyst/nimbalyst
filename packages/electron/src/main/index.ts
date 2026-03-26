@@ -8,7 +8,7 @@ import * as path from 'path';
 import { join } from 'path';
 import * as fs from 'fs';
 import { appendFileSync, existsSync, renameSync, unlinkSync, writeFileSync } from 'fs';
-import { createWindow, findWindowByFilePath, findWindowByWorkspace, getMostRecentlyFocusedWorkspaceWindow, windowStates } from './window/WindowManager';
+import { createWindow, findWindowByFilePath, findWindowByWorkspace, getMostRecentlyFocusedWorkspaceWindow } from './window/WindowManager';
 import { loadFileIntoWindow } from './file/FileOperations';
 import { createApplicationMenu } from './menu/ApplicationMenu';
 import { updateNativeTheme, updateWindowTitleBars } from './theme/ThemeManager';
@@ -653,81 +653,6 @@ async function handleDeepLink(url: string): Promise<void> {
             } else {
                 logger.main.error('[DeepLink] Auth callback missing session_token');
             }
-        } else if (parsed.host === 'clip') {
-            // Handle web clip: nimbalyst://clip?url=...&title=...&content=<base64>&selection=<base64>
-            const clipUrl = parsed.searchParams.get('url') || '';
-            const clipTitle = parsed.searchParams.get('title') || 'Untitled Clip';
-            const contentB64 = parsed.searchParams.get('content');
-            const selectionB64 = parsed.searchParams.get('selection');
-
-            // Decode base64 content (UTF-8 safe)
-            const decodeB64 = (b64: string): string => {
-                const binString = atob(b64);
-                const bytes = Uint8Array.from(binString, (c) => c.codePointAt(0)!);
-                return new TextDecoder().decode(bytes);
-            };
-
-            const content = contentB64 ? decodeB64(contentB64) : null;
-            const selection = selectionB64 ? decodeB64(selectionB64) : null;
-            const body = selection || content;
-
-            if (!body) {
-                logger.main.warn('[DeepLink] Clip has no content or selection');
-                return;
-            }
-
-            // Find the frontmost workspace window
-            const targetWindow = getMostRecentlyFocusedWorkspaceWindow();
-            const targetState = targetWindow ? windowStates.get(targetWindow.id) : null;
-            const workspacePath = targetState?.workspacePath;
-
-            if (!workspacePath) {
-                logger.main.warn('[DeepLink] No workspace window open to receive clip');
-                return;
-            }
-
-            // Build filename from title: lowercase, replace non-alphanum with hyphens, truncate
-            const sanitized = clipTitle
-                .toLowerCase()
-                .replace(/[^a-z0-9]+/g, '-')
-                .replace(/^-+|-+$/g, '')
-                .slice(0, 80);
-            const dateStr = new Date().toISOString().slice(0, 10);
-            const fileName = `${dateStr}-${sanitized}.md`;
-
-            // Write to nimbalyst-local/clips/
-            const clipsDir = path.join(workspacePath, 'nimbalyst-local', 'clips');
-            if (!fs.existsSync(clipsDir)) {
-                fs.mkdirSync(clipsDir, { recursive: true });
-            }
-
-            // Build markdown with frontmatter
-            const frontmatter = [
-                '---',
-                `title: "${clipTitle.replace(/"/g, '\\"')}"`,
-                `url: "${clipUrl}"`,
-                `clipped: ${new Date().toISOString()}`,
-                selection ? 'type: selection' : 'type: page',
-                '---',
-            ].join('\n');
-
-            const filePath = path.join(clipsDir, fileName);
-            // If file already exists, append a counter
-            let finalPath = filePath;
-            if (fs.existsSync(filePath)) {
-                let counter = 2;
-                while (fs.existsSync(path.join(clipsDir, `${dateStr}-${sanitized}-${counter}.md`))) {
-                    counter++;
-                }
-                finalPath = path.join(clipsDir, `${dateStr}-${sanitized}-${counter}.md`);
-            }
-
-            fs.writeFileSync(finalPath, `${frontmatter}\n\n${body}`, 'utf-8');
-            logger.main.info(`[DeepLink] Clip saved: ${finalPath}`);
-
-            // Open the clipped file in the target window
-            targetWindow!.webContents.send('open-document', { path: finalPath });
-
         } else if (parsed.host === 'install' || parsed.pathname?.startsWith('/install/')) {
             // Handle extension install: nimbalyst://install/com.nimbalyst.excalidraw
             const extensionId = parsed.host === 'install'

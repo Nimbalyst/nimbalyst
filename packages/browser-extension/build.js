@@ -19,8 +19,6 @@ const staticFiles = [
   ['manifest.json', 'manifest.json'],
   ['src/popup/popup.html', 'popup/popup.html'],
   ['src/popup/popup.css', 'popup/popup.css'],
-  ['src/redirect.html', 'redirect.html'],
-  ['src/redirect.js', 'redirect.js'],
   ['icons/icon16.png', 'icons/icon16.png'],
   ['icons/icon32.png', 'icons/icon32.png'],
   ['icons/icon48.png', 'icons/icon48.png'],

@@ -108,66 +108,10 @@ body {
   background: #d1d5db;
 }
 
-.btn-accent {
-  background: #10b981;
-  color: white;
-}
-
-.btn-accent:hover:not(:disabled) {
-  background: #059669;
-}
-
-.btn-small {
-  padding: 8px 12px;
-  font-size: 13px;
-}
-
 .icon {
   width: 20px;
   height: 20px;
   stroke-width: 2;
-}
-
-.ai-prompt-container {
-  margin-top: 16px;
-  padding: 16px;
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-}
-
-.ai-prompt-container.hidden {
-  display: none;
-}
-
-.ai-prompt-container label {
-  display: block;
-  margin-bottom: 8px;
-  font-weight: 500;
-  color: #374151;
-}
-
-.ai-prompt-container textarea {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-family: inherit;
-  font-size: 13px;
-  resize: vertical;
-  margin-bottom: 12px;
-}
-
-.ai-prompt-container textarea:focus {
-  outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-}
-
-.ai-prompt-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
 }
 
 .popup-footer {
