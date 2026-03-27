@@ -415,18 +415,26 @@ export class PersonalProjectSyncRoom implements DurableObject {
     // Purge orphaned server files whose syncIds the client doesn't recognize.
     // This handles migration from UUID-based syncIds to path-based SHA-256 syncIds:
     // old entries remain on the server under stale keys and must be cleaned up.
+    //
+    // IMPORTANT: Only run orphan cleanup when the client sent a non-empty manifest.
+    // An empty manifest means this is a new device (e.g. iOS) doing its initial sync,
+    // not a desktop client that migrated syncId formats. Without this guard, a new
+    // device connecting with 0 files would cause ALL server files to be deleted as
+    // "orphans", then filtered out of the response -- the new device gets nothing.
     const orphanedSyncIds: string[] = [];
-    for (const row of serverRows) {
-      if (!clientMap.has(row.sync_id)) {
-        orphanedSyncIds.push(row.sync_id);
+    if (clientManifest.length > 0) {
+      for (const row of serverRows) {
+        if (!clientMap.has(row.sync_id)) {
+          orphanedSyncIds.push(row.sync_id);
+        }
       }
-    }
-    if (orphanedSyncIds.length > 0) {
-      for (const syncId of orphanedSyncIds) {
-        sql.exec(`DELETE FROM files WHERE sync_id = ?`, syncId);
-        sql.exec(`DELETE FROM yjs_updates WHERE sync_id = ?`, syncId);
+      if (orphanedSyncIds.length > 0) {
+        for (const syncId of orphanedSyncIds) {
+          sql.exec(`DELETE FROM files WHERE sync_id = ?`, syncId);
+          sql.exec(`DELETE FROM yjs_updates WHERE sync_id = ?`, syncId);
+        }
+        log.info(`Purged ${orphanedSyncIds.length} orphaned files (syncId migration cleanup)`);
       }
-      log.info(`Purged ${orphanedSyncIds.length} orphaned files (syncId migration cleanup)`);
     }
 
     // Check for deleted files (files in server's deleted_files tracking)
