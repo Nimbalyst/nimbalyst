@@ -9,16 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-<!-- New features go here -->
+- Git extension: Changes tab with staged/unstaged file lists and Output tab for git command logs
+- Clipboard helpers (`readClipboard`/`writeClipboard`) added to extension SDK
 
 ### Changed
-<!-- Changes to existing functionality go here -->
+- Upgraded Electron 37 to 41.0.4 (Chromium 146, Node 24)
+- Browser extension cleaned up for public release
 
 ### Fixed
-<!-- Bug fixes go here -->
-
-### Removed
-<!-- Removed features go here -->
+- Prevent iOS initial sync from deleting all server files
+- Improve web clipper content extraction for JS-heavy sites
+- Align desktop and iOS notification opt-in flow
 
 ## [0.56.17] - 2026-03-26
 
