@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+<!-- Bug fixes go here -->
+
+### Removed
+<!-- Removed features go here -->
+
+## [0.57.0] - 2026-03-27
+
+
+### Added
 - Git extension: Changes tab with staged/unstaged file lists and Output tab for git command logs
 - Clipboard helpers (`readClipboard`/`writeClipboard`) added to extension SDK
 
