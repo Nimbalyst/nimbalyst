@@ -4,6 +4,11 @@ import { CommitHoverCard } from './CommitHoverCard';
 import { CommitContextMenu } from './CommitContextMenu';
 import { CommitDetailContent, type CommitDetail } from './CommitDetailContent';
 import { BranchPicker } from './BranchPicker';
+import { ChangesTab } from './ChangesTab';
+import { OutputTab } from './OutputTab';
+import { useOperationLog, getSuggestionForError } from '../hooks/useOperationLog';
+
+type GitTab = 'log' | 'changes' | 'output';
 
 interface GitCommit {
   hash: string;
@@ -126,6 +131,10 @@ export function GitLogPanel({ host }: PanelHostProps) {
   const [detailWidth, setDetailWidth] = useState(() => host.storage.getGlobal<number>('detailWidth') ?? 340);
   const detailResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
+  // Tab state
+  const [activeTab, setActiveTab] = useState<GitTab>('log');
+  const { entries: logEntries, clearLog, withLog } = useOperationLog();
+
   const handleDetailResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     detailResizeRef.current = { startX: e.clientX, startWidth: detailWidth };
@@ -151,14 +160,15 @@ export function GitLogPanel({ host }: PanelHostProps) {
     if (isError) {
       setActionError(msg);
       setActionMessage(null);
+      // Errors persist until dismissed - do NOT auto-clear
     } else {
       setActionMessage(msg);
       setActionError(null);
+      // Success messages auto-clear after 4s
+      setTimeout(() => {
+        setActionMessage(null);
+      }, 4000);
     }
-    setTimeout(() => {
-      setActionMessage(null);
-      setActionError(null);
-    }, 4000);
   }, []);
 
   const loadBranches = useCallback(async () => {
@@ -266,7 +276,16 @@ export function GitLogPanel({ host }: PanelHostProps) {
   const handlePush = useCallback(async () => {
     setActionLoading('push');
     try {
-      const result = await ipc.invoke('git:push', workspacePath) as PushResult;
+      const result = await withLog(
+        'git push origin',
+        () => ipc.invoke('git:push', workspacePath) as Promise<PushResult>,
+        {
+          isError: (r) => !r.success,
+          getError: (r) => r.error,
+          formatSuggestion: (r) => r.error ? getSuggestionForError(r.error) : undefined,
+          formatOutput: () => 'Pushed successfully',
+        }
+      );
       if (result.success) {
         showMessage('Pushed successfully');
         loadStatus();
@@ -279,13 +298,23 @@ export function GitLogPanel({ host }: PanelHostProps) {
     } finally {
       setActionLoading(null);
     }
-  }, [workspacePath, showMessage, loadStatus, loadCommits]);
+  }, [workspacePath, showMessage, loadStatus, loadCommits, withLog]);
 
   const handlePull = useCallback(async () => {
     setActionLoading('pull');
     try {
       const opts = pullStrategy === 'rebase' ? { rebase: true } : pullStrategy === 'ff-only' ? { ffOnly: true } : {};
-      const result = await ipc.invoke('git:pull', workspacePath, opts) as PullResult;
+      const strategyLabel = pullStrategy === 'rebase' ? ' --rebase' : pullStrategy === 'ff-only' ? ' --ff-only' : '';
+      const result = await withLog(
+        `git pull${strategyLabel} origin`,
+        () => ipc.invoke('git:pull', workspacePath, opts) as Promise<PullResult>,
+        {
+          isError: (r) => !r.success,
+          getError: (r) => r.error,
+          formatSuggestion: (r) => r.error ? getSuggestionForError(r.error) : undefined,
+          formatOutput: () => 'Pulled successfully',
+        }
+      );
       if (result.success) {
         showMessage('Pulled successfully');
         loadStatus();
@@ -298,7 +327,7 @@ export function GitLogPanel({ host }: PanelHostProps) {
     } finally {
       setActionLoading(null);
     }
-  }, [workspacePath, showMessage, loadStatus, loadCommits, pullStrategy]);
+  }, [workspacePath, showMessage, loadStatus, loadCommits, pullStrategy, withLog]);
 
   const handleChangePullStrategy = useCallback((strategy: PullStrategy) => {
     setPullStrategy(strategy);
@@ -309,7 +338,16 @@ export function GitLogPanel({ host }: PanelHostProps) {
   const handleFetch = useCallback(async () => {
     setActionLoading('fetch');
     try {
-      const result = await ipc.invoke('git:fetch', workspacePath) as FetchResult;
+      const result = await withLog(
+        'git fetch origin',
+        () => ipc.invoke('git:fetch', workspacePath) as Promise<FetchResult>,
+        {
+          isError: (r) => !r.success,
+          getError: (r) => r.error,
+          formatSuggestion: (r) => r.error ? getSuggestionForError(r.error) : undefined,
+          formatOutput: () => 'Fetched successfully',
+        }
+      );
       if (result.success) {
         showMessage('Fetched successfully');
         loadStatus();
@@ -321,7 +359,7 @@ export function GitLogPanel({ host }: PanelHostProps) {
     } finally {
       setActionLoading(null);
     }
-  }, [workspacePath, showMessage, loadStatus]);
+  }, [workspacePath, showMessage, loadStatus, withLog]);
 
   const handleRefresh = useCallback(() => {
     loadStatus();
@@ -431,6 +469,8 @@ export function GitLogPanel({ host }: PanelHostProps) {
       : 'up to date'
   ) : '';
 
+  const hasChanges = status?.hasUncommitted ?? false;
+
   return (
     <div
       className="git-log-panel"
@@ -443,10 +483,31 @@ export function GitLogPanel({ host }: PanelHostProps) {
         style={{ cursor: 'ns-resize' }}
       />
 
-      {/* Toolbar */}
+      {/* Tab bar + Toolbar */}
       <div className="git-log-toolbar">
         <div className="git-log-toolbar-left">
-          <span className="git-log-toolbar-title">Git Log</span>
+          {/* Tab buttons */}
+          <div className="git-tab-bar">
+            <button
+              className={`git-tab-btn${activeTab === 'log' ? ' git-tab-btn--active' : ''}`}
+              onClick={() => setActiveTab('log')}
+            >
+              Log
+            </button>
+            <button
+              className={`git-tab-btn${activeTab === 'changes' ? ' git-tab-btn--active' : ''}`}
+              onClick={() => setActiveTab('changes')}
+            >
+              Changes{hasChanges ? <span className="git-tab-dot" /> : null}
+            </button>
+            <button
+              className={`git-tab-btn${activeTab === 'output' ? ' git-tab-btn--active' : ''}`}
+              onClick={() => setActiveTab('output')}
+            >
+              Output{logEntries.some(e => e.status === 'error') ? <span className="git-tab-dot git-tab-dot--error" /> : null}
+            </button>
+          </div>
+
           {/* Branch selector */}
           <BranchPicker
             branches={branches}
@@ -470,7 +531,7 @@ export function GitLogPanel({ host }: PanelHostProps) {
             disabled={!!actionLoading}
             title="Push"
           >
-            {actionLoading === 'push' ? '...' : '↑ Push'}
+            {actionLoading === 'push' ? '...' : '\u2191 Push'}
           </button>
           <div className="git-log-split-btn">
             <button
@@ -479,7 +540,7 @@ export function GitLogPanel({ host }: PanelHostProps) {
               disabled={!!actionLoading}
               title={`Pull (${pullStrategy})`}
             >
-              {actionLoading === 'pull' ? '...' : `↓ Pull`}
+              {actionLoading === 'pull' ? '...' : '\u2193 Pull'}
             </button>
             <button
               className="git-log-action-btn git-log-split-btn-arrow"
@@ -487,7 +548,7 @@ export function GitLogPanel({ host }: PanelHostProps) {
               disabled={!!actionLoading}
               title="Pull strategy"
             >
-              ▾
+              {'\u25BE'}
             </button>
             {pullMenuOpen && (
               <div className="git-log-split-menu">
@@ -526,51 +587,66 @@ export function GitLogPanel({ host }: PanelHostProps) {
             disabled={!!actionLoading}
             title="Refresh"
           >
-            ↺
+            {'\u21BA'}
           </button>
         </div>
 
-        <div className="git-log-toolbar-filters">
-          {/* Author filter */}
-          <input
-            className="git-log-input"
-            type="text"
-            placeholder="Author..."
-            value={authorFilter}
-            onChange={e => setAuthorFilter(e.target.value)}
-          />
-
-          {/* Date filter */}
-          <select
-            className="git-log-select git-log-select--sm"
-            value={dateFilter}
-            onChange={e => setDateFilter(e.target.value as DateFilter)}
-          >
-            <option value="all">All time</option>
-            <option value="day">Last day</option>
-            <option value="week">Last week</option>
-            <option value="month">Last month</option>
-          </select>
-
-          {/* Search */}
-          <input
-            className="git-log-input git-log-input--search"
-            type="text"
-            placeholder="Search commits..."
-            value={searchFilter}
-            onChange={e => setSearchFilter(e.target.value)}
-          />
-        </div>
+        {/* Log-specific filters (only shown on log tab) */}
+        {activeTab === 'log' && (
+          <div className="git-log-toolbar-filters">
+            <input
+              className="git-log-input"
+              type="text"
+              placeholder="Author..."
+              value={authorFilter}
+              onChange={e => setAuthorFilter(e.target.value)}
+            />
+            <select
+              className="git-log-select git-log-select--sm"
+              value={dateFilter}
+              onChange={e => setDateFilter(e.target.value as DateFilter)}
+            >
+              <option value="all">All time</option>
+              <option value="day">Last day</option>
+              <option value="week">Last week</option>
+              <option value="month">Last month</option>
+            </select>
+            <input
+              className="git-log-input git-log-input--search"
+              type="text"
+              placeholder="Search commits..."
+              value={searchFilter}
+              onChange={e => setSearchFilter(e.target.value)}
+            />
+          </div>
+        )}
       </div>
 
-      {/* Status message */}
+      {/* Status message (visible on all tabs) */}
       {(actionMessage || actionError) && (
         <div className={`git-log-status-bar ${actionError ? 'error' : 'success'}`}>
           {actionMessage || actionError}
+          {actionError && (
+            <>
+              <button
+                className="git-log-status-details-btn"
+                onClick={() => setActiveTab('output')}
+              >
+                Show Details
+              </button>
+              <button
+                className="git-changes-dismiss-btn"
+                onClick={() => setActionError(null)}
+                title="Dismiss"
+              >
+                &#10005;
+              </button>
+            </>
+          )}
         </div>
       )}
 
-      {/* Context menu */}
+      {/* Context menu (log tab only) */}
       {contextMenu && (
         <CommitContextMenu
           commit={contextMenu.commit}
@@ -583,8 +659,8 @@ export function GitLogPanel({ host }: PanelHostProps) {
         />
       )}
 
-      {/* Hover card */}
-      {hoveredHash && hoverAnchorRect && (
+      {/* Hover card (log tab only) */}
+      {activeTab === 'log' && hoveredHash && hoverAnchorRect && (
         <CommitHoverCard
           detail={commitDetail}
           loading={detailLoading}
@@ -596,89 +672,107 @@ export function GitLogPanel({ host }: PanelHostProps) {
         />
       )}
 
-      {/* Commit list + optional detail panel */}
-      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
-      <div className="git-log-body" tabIndex={0} onKeyDown={handleKeyDown}>
-        <div className="git-log-content">
-          {loading ? (
-            <div className="git-log-empty">Loading commits...</div>
-          ) : commits.length === 0 ? (
-            <div className="git-log-empty">No commits found</div>
-          ) : (
-            <table className="git-log-table">
-              <thead>
-                <tr>
-                  <th className="git-log-th git-log-th--graph" />
-                  <th className="git-log-th git-log-th--hash">Hash</th>
-                  <th className="git-log-th git-log-th--message">Message</th>
-                  <th className="git-log-th git-log-th--author">Author</th>
-                  <th className="git-log-th git-log-th--date">Date</th>
-                </tr>
-              </thead>
-              <tbody ref={tbodyRef}>
-                {commits.map((commit, index) => {
-                  const isUnpushed = index < (status?.ahead ?? 0);
-                  const isFirst = index === 0;
-                  const isLast = index === commits.length - 1;
-                  const isSelected = index === selectedIndex;
-                  return (
-                    <tr
-                      key={commit.hash}
-                      className={`git-log-row${isSelected ? ' git-log-row--selected' : ''}`}
-                      onClick={() => handleRowClick(index)}
-                      onMouseEnter={(e) => handleRowMouseEnter(commit.hash, commit.author, commit.date, e)}
-                      onMouseLeave={handleRowMouseLeave}
-                      onContextMenu={(e) => handleRowContextMenu(commit, e)}
-                    >
-                      <td className="git-log-td git-log-td--graph">
-                        <div className="git-log-graph-cell">
-                          {!isFirst && <div className="git-log-graph-line git-log-graph-line--top" />}
-                          <svg width="10" height="10" className="git-log-graph-dot" viewBox="0 0 10 10">
-                            <circle
-                              cx="5" cy="5" r="3.5"
-                              fill={isUnpushed ? 'transparent' : 'var(--nim-text-faint)'}
-                              stroke={isUnpushed ? 'var(--nim-primary)' : 'var(--nim-text-faint)'}
-                              strokeWidth="1.5"
-                            />
-                          </svg>
-                          {!isLast && <div className="git-log-graph-line git-log-graph-line--bottom" />}
-                        </div>
-                      </td>
-                      <td className="git-log-td git-log-td--hash">
-                        <code>{commit.hash.slice(0, 7)}</code>
-                      </td>
-                      <td className="git-log-td git-log-td--message">
-                        {commit.message}
-                      </td>
-                      <td className="git-log-td git-log-td--author">
-                        {commit.author}
-                      </td>
-                      <td className="git-log-td git-log-td--date">
-                        {formatRelativeDate(commit.date)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      {/* Tab content */}
+      {activeTab === 'log' && (
+        /* eslint-disable-next-line jsx-a11y/no-static-element-interactions */
+        <div className="git-log-body" tabIndex={0} onKeyDown={handleKeyDown}>
+          <div className="git-log-content">
+            {loading ? (
+              <div className="git-log-empty">Loading commits...</div>
+            ) : commits.length === 0 ? (
+              <div className="git-log-empty">No commits found</div>
+            ) : (
+              <table className="git-log-table">
+                <thead>
+                  <tr>
+                    <th className="git-log-th git-log-th--graph" />
+                    <th className="git-log-th git-log-th--hash">Hash</th>
+                    <th className="git-log-th git-log-th--message">Message</th>
+                    <th className="git-log-th git-log-th--author">Author</th>
+                    <th className="git-log-th git-log-th--date">Date</th>
+                  </tr>
+                </thead>
+                <tbody ref={tbodyRef}>
+                  {commits.map((commit, index) => {
+                    const isUnpushed = index < (status?.ahead ?? 0);
+                    const isFirst = index === 0;
+                    const isLast = index === commits.length - 1;
+                    const isSelected = index === selectedIndex;
+                    return (
+                      <tr
+                        key={commit.hash}
+                        className={`git-log-row${isSelected ? ' git-log-row--selected' : ''}`}
+                        onClick={() => handleRowClick(index)}
+                        onMouseEnter={(e) => handleRowMouseEnter(commit.hash, commit.author, commit.date, e)}
+                        onMouseLeave={handleRowMouseLeave}
+                        onContextMenu={(e) => handleRowContextMenu(commit, e)}
+                      >
+                        <td className="git-log-td git-log-td--graph">
+                          <div className="git-log-graph-cell">
+                            {!isFirst && <div className="git-log-graph-line git-log-graph-line--top" />}
+                            <svg width="10" height="10" className="git-log-graph-dot" viewBox="0 0 10 10">
+                              <circle
+                                cx="5" cy="5" r="3.5"
+                                fill={isUnpushed ? 'transparent' : 'var(--nim-text-faint)'}
+                                stroke={isUnpushed ? 'var(--nim-primary)' : 'var(--nim-text-faint)'}
+                                strokeWidth="1.5"
+                              />
+                            </svg>
+                            {!isLast && <div className="git-log-graph-line git-log-graph-line--bottom" />}
+                          </div>
+                        </td>
+                        <td className="git-log-td git-log-td--hash">
+                          <code>{commit.hash.slice(0, 7)}</code>
+                        </td>
+                        <td className="git-log-td git-log-td--message">
+                          {commit.message}
+                        </td>
+                        <td className="git-log-td git-log-td--author">
+                          {commit.author}
+                        </td>
+                        <td className="git-log-td git-log-td--date">
+                          {formatRelativeDate(commit.date)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Selection detail panel */}
+          {selectedIndex !== null && commits[selectedIndex] && (
+            <div className="git-log-detail-panel" style={{ width: detailWidth }}>
+              {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
+              <div className="git-log-detail-resize-handle" onMouseDown={handleDetailResizeStart} />
+              <CommitDetailContent
+                detail={selectedDetail}
+                loading={selectedLoading}
+                author={commits[selectedIndex].author}
+                date={commits[selectedIndex].date}
+                layout="vertical"
+              />
+            </div>
           )}
         </div>
+      )}
 
-        {/* Selection detail panel */}
-        {selectedIndex !== null && commits[selectedIndex] && (
-          <div className="git-log-detail-panel" style={{ width: detailWidth }}>
-            {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
-            <div className="git-log-detail-resize-handle" onMouseDown={handleDetailResizeStart} />
-            <CommitDetailContent
-              detail={selectedDetail}
-              loading={selectedLoading}
-              author={commits[selectedIndex].author}
-              date={commits[selectedIndex].date}
-              layout="vertical"
-            />
-          </div>
-        )}
-      </div>
+      {activeTab === 'changes' && (
+        <ChangesTab
+          workspacePath={workspacePath}
+          withLog={withLog}
+          onWorkspaceEvent={(event, handler) => host.onWorkspaceEvent(event, handler)}
+          onShowOutput={() => setActiveTab('output')}
+        />
+      )}
+
+      {activeTab === 'output' && (
+        <OutputTab
+          entries={logEntries}
+          onClear={clearLog}
+        />
+      )}
     </div>
   );
 }

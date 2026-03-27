@@ -5,6 +5,9 @@
  * that could corrupt git state (e.g., merge + commit, rebase + stage).
  *
  * Read-only operations (status, log, diff) do NOT require locks.
+ *
+ * Uses a proper queue: each waiter chains onto the tail of the queue,
+ * so operations execute strictly one at a time per repository.
  */
 
 import log from 'electron-log/main';
@@ -26,10 +29,11 @@ export interface LockOptions {
  */
 class GitOperationLockService {
   /**
-   * Per-repository operation locks.
-   * Maps repository path to a promise that resolves when the current operation completes.
+   * Per-repository queue tail.
+   * Each new operation chains onto the current tail, then becomes the new tail.
+   * This guarantees strict serialization even with multiple concurrent waiters.
    */
-  private operationLocks: Map<string, Promise<void>> = new Map();
+  private queueTails: Map<string, Promise<void>> = new Map();
 
   /**
    * Track pending waiters for debugging/metrics
@@ -38,6 +42,7 @@ class GitOperationLockService {
 
   /**
    * Execute an operation with a lock on the repository.
+   * Operations are strictly serialized per repository path.
    *
    * @param repoPath - Path to the repository (normalized)
    * @param operationName - Name of the operation (for logging)
@@ -53,11 +58,22 @@ class GitOperationLockService {
     options: LockOptions = {}
   ): Promise<T> {
     const { timeout = 30000 } = options;
-    const startWait = Date.now();
 
-    // Wait for any existing operation to complete
-    const existingLock = this.operationLocks.get(repoPath);
-    if (existingLock) {
+    // Capture the current tail of the queue (the operation we need to wait for)
+    const predecessor = this.queueTails.get(repoPath);
+
+    // Create our own lock promise that will resolve when we finish
+    let releaseLock: () => void;
+    const ourLock = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+
+    // Install ourselves as the new tail BEFORE awaiting anything.
+    // This ensures the next caller after us will wait for us, not our predecessor.
+    this.queueTails.set(repoPath, ourLock);
+
+    // Wait for the predecessor to finish (if any)
+    if (predecessor) {
       const currentWaiting = (this.waitingCount.get(repoPath) || 0) + 1;
       this.waitingCount.set(repoPath, currentWaiting);
 
@@ -67,10 +83,11 @@ class GitOperationLockService {
         waitingCount: currentWaiting,
       });
 
+      const startWait = Date.now();
+
       try {
-        // Race between the existing lock and a timeout
         await Promise.race([
-          existingLock,
+          predecessor,
           new Promise<void>((_, reject) =>
             setTimeout(() => reject(new Error(`Lock timeout after ${timeout}ms`)), timeout)
           ),
@@ -80,6 +97,17 @@ class GitOperationLockService {
         this.waitingCount.set(repoPath, (this.waitingCount.get(repoPath) || 1) - 1);
 
         if (error instanceof Error && error.message.includes('Lock timeout')) {
+          // We're bailing out, but we MUST NOT resolve our lock until the
+          // predecessor finishes. Otherwise downstream waiters (op3, op4, ...)
+          // that are chained on ourLock would start while the predecessor is
+          // still running, breaking serialization.
+          //
+          // Chain our lock resolution onto the predecessor's eventual completion.
+          // This removes us from the queue without creating a gap.
+          predecessor.then(
+            () => releaseLock!(),
+            () => releaseLock!()
+          );
           logger.error('Lock timeout exceeded', { repoPath, operationName, timeout });
           throw new Error(`Git operation '${operationName}' timed out waiting for lock on ${repoPath}`);
         }
@@ -100,26 +128,17 @@ class GitOperationLockService {
       }
     }
 
-    // Create a new lock promise
-    let releaseLock: () => void;
-    const lockPromise = new Promise<void>((resolve) => {
-      releaseLock = resolve;
-    });
-
-    this.operationLocks.set(repoPath, lockPromise);
-    // logger.info('Acquired operation lock', { repoPath, operationName });
-
+    // We now hold the lock - execute the operation
     try {
       const result = await operation();
       return result;
     } finally {
-      // Release the lock
+      // Release the lock (wakes the next waiter, if any)
       releaseLock!();
-      // Clean up the map entry if it's still our lock
-      if (this.operationLocks.get(repoPath) === lockPromise) {
-        this.operationLocks.delete(repoPath);
+      // Clean up the map entry if we're still the tail (no one queued after us)
+      if (this.queueTails.get(repoPath) === ourLock) {
+        this.queueTails.delete(repoPath);
       }
-      // logger.info('Released operation lock', { repoPath, operationName });
     }
   }
 
@@ -127,7 +146,7 @@ class GitOperationLockService {
    * Check if a repository currently has an active lock
    */
   isLocked(repoPath: string): boolean {
-    return this.operationLocks.has(repoPath);
+    return this.queueTails.has(repoPath);
   }
 
   /**

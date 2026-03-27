@@ -542,6 +542,172 @@ export function registerGitHandlers(): void {
   );
 
   /**
+   * Get working tree changes (staged, unstaged, untracked files)
+   */
+  safeHandle(
+    'git:working-changes',
+    async (_event, workspacePath: string): Promise<{
+      staged: Array<{ path: string; status: string }>;
+      unstaged: Array<{ path: string; status: string }>;
+      untracked: Array<{ path: string }>;
+      conflicted: Array<{ path: string }>;
+    }> => {
+      if (!workspacePath) throw new Error('workspacePath is required');
+      if (!isGitRepository(workspacePath)) {
+        return { staged: [], unstaged: [], untracked: [], conflicted: [] };
+      }
+
+      return gitOperationLock.withLock(workspacePath, 'git:working-changes', async () => {
+        try {
+          const git: SimpleGit = simpleGit(workspacePath);
+          const status = await git.status();
+
+          // Build staged files list from the various status arrays.
+          // status.staged = files with index changes (modified in index vs HEAD)
+          // status.created = new files added to index (not in HEAD)
+          const staged: Array<{ path: string; status: string }> = [];
+          for (const f of status.staged) {
+            const isDeleted = status.deleted.includes(f);
+            staged.push({ path: f, status: isDeleted ? 'D' : 'M' });
+          }
+          for (const f of status.created) {
+            staged.push({ path: f, status: 'A' });
+          }
+
+          // Build unstaged files list.
+          // status.modified = files with working-tree changes (vs index).
+          // A file CAN appear in both staged and modified -- this means it has
+          // staged changes AND additional unstaged edits on top. We must show
+          // it in both lists so the user sees the full picture.
+          const unstaged: Array<{ path: string; status: string }> = [];
+          for (const f of status.modified) {
+            unstaged.push({ path: f, status: 'M' });
+          }
+          for (const f of status.deleted) {
+            // Only add to unstaged if it's not already there from modified,
+            // and it represents an unstaged deletion (not a staged one).
+            // status.deleted can contain both staged and unstaged deletions.
+            // If a file is in status.staged with 'D', that's a staged deletion.
+            // If it's in status.deleted but NOT in status.staged, it's unstaged.
+            if (!status.staged.includes(f)) {
+              unstaged.push({ path: f, status: 'D' });
+            }
+          }
+
+          // Untracked files
+          const untracked = status.not_added.map(f => ({ path: f }));
+
+          // Conflicted files
+          const conflicted = status.conflicted.map(f => ({ path: f }));
+
+          return { staged, unstaged, untracked, conflicted };
+        } catch (error) {
+          log.error('[git:working-changes] Failed:', error);
+          throw error;
+        }
+      });
+    }
+  );
+
+  /**
+   * Stage specific files
+   */
+  safeHandle(
+    'git:stage',
+    async (_event, workspacePath: string, files: string[]): Promise<{ success: boolean; error?: string }> => {
+      if (!workspacePath) throw new Error('workspacePath is required');
+      if (!files || files.length === 0) throw new Error('files are required');
+      if (!isGitRepository(workspacePath)) return { success: false, error: 'Not a git repository' };
+
+      return gitOperationLock.withLock(workspacePath, 'git:stage', async () => {
+        try {
+          const git: SimpleGit = simpleGit(workspacePath);
+          await git.add(files);
+          return { success: true };
+        } catch (error) {
+          log.error('[git:stage] Failed:', error);
+          return { success: false, error: error instanceof Error ? error.message : String(error) };
+        }
+      });
+    }
+  );
+
+  /**
+   * Unstage specific files (git reset HEAD <files>)
+   */
+  safeHandle(
+    'git:unstage',
+    async (_event, workspacePath: string, files: string[]): Promise<{ success: boolean; error?: string }> => {
+      if (!workspacePath) throw new Error('workspacePath is required');
+      if (!files || files.length === 0) throw new Error('files are required');
+      if (!isGitRepository(workspacePath)) return { success: false, error: 'Not a git repository' };
+
+      return gitOperationLock.withLock(workspacePath, 'git:unstage', async () => {
+        try {
+          const git: SimpleGit = simpleGit(workspacePath);
+          const repoHasCommits = await hasCommits(git);
+          if (repoHasCommits) {
+            await git.reset(['HEAD', '--', ...files]);
+          } else {
+            // Fresh repo: use git rm --cached
+            await git.raw(['rm', '--cached', ...files]);
+          }
+          return { success: true };
+        } catch (error) {
+          log.error('[git:unstage] Failed:', error);
+          return { success: false, error: error instanceof Error ? error.message : String(error) };
+        }
+      });
+    }
+  );
+
+  /**
+   * Discard changes to specific files (git checkout -- <files>)
+   */
+  safeHandle(
+    'git:discard-changes',
+    async (_event, workspacePath: string, files: string[]): Promise<{ success: boolean; error?: string }> => {
+      if (!workspacePath) throw new Error('workspacePath is required');
+      if (!files || files.length === 0) throw new Error('files are required');
+      if (!isGitRepository(workspacePath)) return { success: false, error: 'Not a git repository' };
+
+      return gitOperationLock.withLock(workspacePath, 'git:discard-changes', async () => {
+        try {
+          const git: SimpleGit = simpleGit(workspacePath);
+          await git.checkout(['--', ...files]);
+          return { success: true };
+        } catch (error) {
+          log.error('[git:discard-changes] Failed:', error);
+          return { success: false, error: error instanceof Error ? error.message : String(error) };
+        }
+      });
+    }
+  );
+
+  /**
+   * Get file content at a specific commit
+   */
+  safeHandle(
+    'git:show-file',
+    async (_event, workspacePath: string, hash: string, filePath: string): Promise<string> => {
+      if (!workspacePath) throw new Error('workspacePath is required');
+      if (!hash) throw new Error('hash is required');
+      if (!filePath) throw new Error('filePath is required');
+      if (!isGitRepository(workspacePath)) return '';
+
+      try {
+        const git: SimpleGit = simpleGit(workspacePath);
+        const content = await git.show([`${hash}:${filePath}`]);
+        return content;
+      } catch (error) {
+        log.error('[git:show-file] Failed:', error);
+        // File may not exist at this commit - return empty
+        return '';
+      }
+    }
+  );
+
+  /**
    * Get file diff
    */
   ipcMain.handle(
@@ -614,13 +780,48 @@ export function registerGitHandlers(): void {
             return rel.replace(/\\/g, '/');
           };
 
+          // When filesToStage is empty/null, commit whatever is already in the index.
+          // This is the "index-as-is" path used by the ChangesTab where the user
+          // has already staged files via git:stage. We do NOT touch the index.
+          if (!filesToStage || filesToStage.length === 0) {
+            const preStatus = await git.status();
+            const stagedCount = preStatus.staged.length + preStatus.created.length;
+            if (stagedCount === 0) {
+              return {
+                success: false,
+                error: 'No files are staged for commit.',
+              };
+            }
+            log.info(`[git:commit] Index-as-is mode: committing ${stagedCount} staged files`);
+
+            const result = await git.commit(message);
+            if (!result.commit) {
+              return {
+                success: false,
+                error: 'No changes were committed.',
+              };
+            }
+
+            log.info(`[git:commit] Successfully committed: ${result.commit}`);
+            let commitDate: string | undefined;
+            try {
+              const showResult = await git.show([result.commit, '--no-patch', '--format=%aI']);
+              commitDate = showResult.trim();
+            } catch {
+              // Non-critical
+            }
+
+            return { success: true, commitHash: result.commit, commitDate };
+          }
+
           // Track originally staged files so we can restore them after commit
           const initialStatus = await git.status();
           const originallyStaged = new Set([...initialStatus.staged, ...initialStatus.created]);
           log.info(`[git:commit] Originally staged files: ${originallyStaged.size}`);
 
-          // Stage files
-          if (filesToStage && filesToStage.length > 0) {
+          // Stage-and-commit path: used by AgentMode/AI commit where we need to
+          // atomically select which files to include.
+          if (filesToStage.length > 0) {
             // First, unstage all files to ensure we only commit what the user selected
             // This prevents previously-staged files from being included in the commit
             log.info(`[git:commit] Resetting staging area before staging selected files`);
