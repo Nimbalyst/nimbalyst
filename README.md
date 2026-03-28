@@ -1,4 +1,4 @@
-# Nimbalyst - The visual workspace for building with Codex and Claude Code
+# Nimbalyst is the visual workspace for building with Codex and Claude Code
 
 [Nimbalyst](https://nimbalyst.com) is a free, local, interactive visual editor & session manager where builders maximize speed, bandwidth, and context with Codex and Claude Code by collaborating visually on files, sessions, and tasks:
 - Iterate visually with Codex and Claude Code in your markdown, mockups, diagrams, csv, Excalidraw, data models, and code. Approve the coding agent's changes in red/green WYSIWYG, edit, annotate, iterate visually. 
