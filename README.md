@@ -1,9 +1,9 @@
-# Nimbalyst - The agent-native visual workspace for builders
+# Nimbalyst - The visual workspace for building with Codex and Claude Code
 
 [Nimbalyst](https://nimbalyst.com) is a free, local, interactive visual editor & session manager where builders maximize speed, bandwidth, and context with Codex and Claude Code by collaborating visually on files, sessions, and tasks:
-- Iterate with Codex and Claude Code on your sessions, markdown, mockups, diagrams, csv, Excalidraw, data models, MCP, and code. Approve the coding agent's changes in red/green WYSIWYG, edit, annotate, iterate visually. 
+- Iterate visually with Codex and Claude Code in your markdown, mockups, diagrams, csv, Excalidraw, data models, and code. Approve the coding agent's changes in red/green WYSIWYG, edit, annotate, iterate visually. 
 - Manage multiple sessions in parallel and in kanban. Search, resume, link sessions to files and files to sessions. For developers we include git management, AI commit, workstreams, worktrees, and terminal.
-- Manage tasks. Keep track of your plans, bugs, todos, etc..  Have agent edit tasks and items, add them, move them, and execute them. Human see and edit this as well.
+- Manage tasks. Keep track of your plans, bugs, todos, etc..  Have the agent edit tasks and items, add them, move them, and execute them. Human see and edit this as well.
 - Mobile app. Start, manage, and respond to your Codex and Claude Code sessions while on the go.
 
 ![Version](https://img.shields.io/github/v/release/nimbalyst/nimbalyst)
