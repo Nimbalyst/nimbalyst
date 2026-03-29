@@ -287,7 +287,12 @@ export function updateInlineTrackerItem(
         // Title is the text before #type[...], handled separately below
         continue;
       }
-      props[key] = value;
+      if (value === null || value === undefined) {
+        // Remove the prop when set to null/undefined
+        delete props[key];
+      } else {
+        props[key] = value;
+      }
     }
 
     // Update the 'updated' timestamp
@@ -340,7 +345,7 @@ function parseInlineProps(propsStr: string): Record<string, string> {
 /** Serialize props back to inline format: id:X status:Y priority:Z */
 function serializeInlineProps(props: Record<string, string>): string {
   // Maintain a consistent field order
-  const order = ['id', 'status', 'priority', 'owner', 'created', 'updated', 'tags'];
+  const order = ['id', 'status', 'priority', 'owner', 'created', 'updated', 'tags', 'archived'];
   const parts: string[] = [];
 
   for (const key of order) {

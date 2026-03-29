@@ -403,12 +403,16 @@ async function hydrateTrackerItem(
     customFields: item.customFields,
   };
 
+  const isArchived = item.archived === true;
+
   await database.query(
     `INSERT INTO tracker_items (
-      id, type, data, workspace, document_path, line_number, created, updated, last_indexed, sync_status
-    ) VALUES ($1, $2, $3, $4, $5, NULL, NOW(), NOW(), $6, 'synced')
+      id, type, data, workspace, document_path, line_number, created, updated, last_indexed, sync_status, archived, archived_at
+    ) VALUES ($1, $2, $3, $4, $5, NULL, NOW(), NOW(), $6, 'synced', $7, $8)
     ON CONFLICT (id) DO UPDATE SET
-      type = $2, data = $3, updated = NOW(), last_indexed = $6, sync_status = 'synced'`,
+      type = $2, data = $3, updated = NOW(), last_indexed = $6, sync_status = 'synced',
+      archived = CASE WHEN $7 = TRUE THEN TRUE ELSE tracker_items.archived END,
+      archived_at = CASE WHEN $7 = TRUE THEN $8 ELSE tracker_items.archived_at END`,
     [
       item.id,
       item.type,
@@ -416,17 +420,39 @@ async function hydrateTrackerItem(
       workspacePath,
       item.module || '', // synced items have empty module (no source file)
       item.lastIndexed,
+      isArchived,
+      isArchived ? (item.archivedAt || new Date().toISOString()) : null,
     ]
   );
 
   // logger.main.info('[TrackerSyncManager] Hydrated item:', payload.itemId, 'into PGLite. Notifying renderer...');
+
+  // Re-read the item from DB to get authoritative archived state
+  // (sync payloads don't include archived, but the DB may have it from local archiving)
+  let dbItem = item;
+  try {
+    const dbResult = await database.query<any>(
+      `SELECT * FROM tracker_items WHERE id = $1`,
+      [item.id]
+    );
+    if (dbResult.rows.length > 0) {
+      const row = dbResult.rows[0];
+      dbItem = {
+        ...item,
+        archived: row.archived ?? false,
+        archivedAt: row.archived_at ? new Date(row.archived_at).toISOString() : undefined,
+      };
+    }
+  } catch {
+    // Fall back to sync item if DB read fails
+  }
 
   // Notify renderer of item change via the document-service channel
   // that TrackerTable's watchTrackerItems is already subscribed to.
   // Only send to windows for this workspace to prevent cross-project item leakage.
   sendToWorkspaceWindows(workspacePath, 'document-service:tracker-items-changed', {
     added: [],
-    updated: [item],
+    updated: [dbItem],
     removed: [],
     timestamp: new Date(),
   });

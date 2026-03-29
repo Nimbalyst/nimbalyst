@@ -21,8 +21,8 @@ planStatus:
 
 
 - Add more ways to add ideas #idea[id:ida_mh86u7bmgcxg11qx status:to-do priority:medium created:2025-10-26]
-- testtest3asdfas #bug[id:bug_mh3pkcl40nyisjsx status:done priority:medium created:2025-10-23 updated:2025-10-23T18:36:09.686Z]
-- shit #bug[id:bug_mh3szl93gemf3hkp status:to-do priority:medium created:2025-10-23 updated:2025-10-26T18:15:49.603Z]
+- testtest3asdfas #bug[id:bug_mh3pkcl40nyisjsx status:done priority:medium created:2025-10-23 updated:2026-03-28 archived:true]
+- shit #bug[id:bug_mh3szl93gemf3hkp status:to-do priority:medium created:2025-10-23 updated:2026-03-28 archived:true]
 
 ## TODO
 - Tracker items are always in lists and if you tag a bug outside of a list, it makes a list

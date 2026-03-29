@@ -103,6 +103,10 @@ export const trackerToolSchemas = [
           description:
             "Filter by priority (e.g., 'low', 'medium', 'high', 'critical')",
         },
+        owner: {
+          type: "string",
+          description: "Filter by owner",
+        },
         archived: {
           type: "boolean",
           description: "Include archived items (default: false)",
@@ -168,6 +172,35 @@ export const trackerToolSchemas = [
           items: { type: "string" },
           description: "Tags for categorization",
         },
+        owner: {
+          type: "string",
+          description: "Owner of the item",
+        },
+        dueDate: {
+          type: "string",
+          description: "Due date (ISO format or YYYY-MM-DD)",
+        },
+        progress: {
+          type: "number",
+          description: "Progress percentage (0-100)",
+        },
+        assigneeId: {
+          type: "string",
+          description: "Assignee org member ID",
+        },
+        reporterId: {
+          type: "string",
+          description: "Reporter org member ID",
+        },
+        labels: {
+          type: "array",
+          items: { type: "string" },
+          description: "Labels for categorization",
+        },
+        linkedCommitSha: {
+          type: "string",
+          description: "Linked git commit SHA",
+        },
       },
       required: ["type", "title"],
     },
@@ -175,7 +208,7 @@ export const trackerToolSchemas = [
   {
     name: "tracker_update",
     description:
-      "Update an existing tracker item's metadata or content. Can change title, status, priority, tags, description, or archive state.",
+      "Update an existing tracker item's metadata or content. Can change title, status, priority, tags, description, owner, dueDate, progress, assigneeId, reporterId, labels, linkedCommitSha, or archive state.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -207,6 +240,35 @@ export const trackerToolSchemas = [
         archived: {
           type: "boolean",
           description: "Set archive state",
+        },
+        owner: {
+          type: "string",
+          description: "New owner",
+        },
+        dueDate: {
+          type: "string",
+          description: "New due date (ISO format or YYYY-MM-DD)",
+        },
+        progress: {
+          type: "number",
+          description: "New progress percentage (0-100)",
+        },
+        assigneeId: {
+          type: "string",
+          description: "New assignee org member ID",
+        },
+        reporterId: {
+          type: "string",
+          description: "New reporter org member ID",
+        },
+        labels: {
+          type: "array",
+          items: { type: "string" },
+          description: "New labels (replaces existing labels)",
+        },
+        linkedCommitSha: {
+          type: "string",
+          description: "Linked git commit SHA",
         },
       },
       required: ["id"],
@@ -269,6 +331,12 @@ export async function handleTrackerList(
       conditions.push(`(archived = FALSE OR archived IS NULL)`);
     }
 
+    // Filter by owner (stored in JSONB data field)
+    if (args.owner) {
+      conditions.push(`data->>'owner' = $${paramIdx++}`);
+      params.push(args.owner);
+    }
+
     // Filter by type
     if (args.type) {
       conditions.push(`type = $${paramIdx++}`);
@@ -303,7 +371,7 @@ export async function handleTrackerList(
         : "";
 
     const result = await db.query<any>(
-      `SELECT id, type, data, archived, source, source_ref, updated
+      `SELECT id, type, data, archived, source, source_ref, updated, sync_status
        FROM tracker_items
        ${whereClause}
        ORDER BY updated DESC
@@ -325,6 +393,7 @@ export async function handleTrackerList(
         tags: data.tags || [],
         archived: row.archived ?? false,
         source: row.source || "native",
+        syncStatus: row.sync_status || "local",
         updated: row.updated,
       };
     });
@@ -332,7 +401,7 @@ export async function handleTrackerList(
     const summary = items
       .map(
         (item: any) =>
-          `- [${item.type}] ${item.title} (${item.status || "no status"}, ${item.priority || "no priority"}) [id: ${item.id}]`
+          `- [${item.type}] ${item.title} (${item.status || "no status"}, ${item.priority || "no priority"}, ${item.syncStatus}) [id: ${item.id}]`
       )
       .join("\n");
 
@@ -400,6 +469,13 @@ export async function handleTrackerGet(args: any): Promise<McpToolResult> {
     if (data.tags?.length)
       lines.push(`**Tags**: ${data.tags.join(", ")}`);
     if (data.owner) lines.push(`**Owner**: ${data.owner}`);
+    if (data.dueDate) lines.push(`**Due Date**: ${data.dueDate}`);
+    if (data.progress !== undefined) lines.push(`**Progress**: ${data.progress}%`);
+    if (data.assigneeId) lines.push(`**Assignee**: ${data.assigneeId}`);
+    if (data.reporterId) lines.push(`**Reporter**: ${data.reporterId}`);
+    if (data.labels?.length) lines.push(`**Labels**: ${data.labels.join(", ")}`);
+    if (data.linkedCommitSha) lines.push(`**Linked Commit**: ${data.linkedCommitSha}`);
+    if (row.sync_status) lines.push(`**Sync Status**: ${row.sync_status}`);
     if (row.archived) lines.push(`**Archived**: yes`);
     if (row.source && row.source !== "native")
       lines.push(
@@ -496,6 +572,13 @@ export async function handleTrackerCreate(
     };
     if (args.tags?.length) data.tags = args.tags;
     if (args.description) data.description = args.description;
+    if (args.owner) data.owner = args.owner;
+    if (args.dueDate) data.dueDate = args.dueDate;
+    if (args.progress !== undefined) data.progress = args.progress;
+    if (args.assigneeId) data.assigneeId = args.assigneeId;
+    if (args.reporterId) data.reporterId = args.reporterId;
+    if (args.labels?.length) data.labels = args.labels;
+    if (args.linkedCommitSha) data.linkedCommitSha = args.linkedCommitSha;
 
     const contentJson = args.description
       ? JSON.stringify(args.description)
@@ -587,6 +670,13 @@ export async function handleTrackerUpdate(
     if (args.tags !== undefined) data.tags = args.tags;
     if (args.description !== undefined)
       data.description = args.description;
+    if (args.owner !== undefined) data.owner = args.owner;
+    if (args.dueDate !== undefined) data.dueDate = args.dueDate;
+    if (args.progress !== undefined) data.progress = args.progress;
+    if (args.assigneeId !== undefined) data.assigneeId = args.assigneeId;
+    if (args.reporterId !== undefined) data.reporterId = args.reporterId;
+    if (args.labels !== undefined) data.labels = args.labels;
+    if (args.linkedCommitSha !== undefined) data.linkedCommitSha = args.linkedCommitSha;
 
     // Update data field
     await db.query(
@@ -603,16 +693,23 @@ export async function handleTrackerUpdate(
       );
     }
 
-    // Handle archive state
+    // Handle archive state -- use document service for file writeback
     if (args.archived !== undefined) {
-      await db.query(
-        `UPDATE tracker_items SET archived = $1, archived_at = $2 WHERE id = $3`,
-        [
-          args.archived,
-          args.archived ? new Date().toISOString() : null,
-          args.id,
-        ]
-      );
+      const { documentServices } = await import("../../window/WindowManager");
+      const docService = workspacePath ? documentServices.get(workspacePath) : undefined;
+      if (docService) {
+        await docService.archiveTrackerItem(args.id, args.archived);
+      } else {
+        // Fallback: DB-only update if no document service available
+        await db.query(
+          `UPDATE tracker_items SET archived = $1, archived_at = $2 WHERE id = $3`,
+          [
+            args.archived,
+            args.archived ? new Date().toISOString() : null,
+            args.id,
+          ]
+        );
+      }
     }
 
     // Auto-link session to the updated tracker item

@@ -105,6 +105,12 @@ export interface TrackerItemPayload {
   /** Comments thread */
   comments: TrackerComment[];
 
+  /** Whether the item is archived */
+  archived?: boolean;
+
+  /** When the item was archived (ISO timestamp) */
+  archivedAt?: string;
+
   /** Custom fields defined by the tracker YAML data model */
   customFields: Record<string, unknown>;
 
@@ -222,6 +228,8 @@ export function trackerItemToPayload(item: TrackerItem, userId: string): Tracker
     linkedSessions: item.linkedSessions || [],
     linkedCommitSha: item.linkedCommitSha,
     documentId: item.documentId,
+    archived: item.archived || false,
+    archivedAt: item.archivedAt,
     comments: [],
     customFields: item.customFields || {},
     fieldUpdatedAt: {
@@ -235,6 +243,7 @@ export function trackerItemToPayload(item: TrackerItem, userId: string): Tracker
       linkedSessions: now,
       linkedCommitSha: now,
       documentId: now,
+      archived: now,
       comments: now,
       customFields: now,
     },
@@ -271,6 +280,8 @@ export function payloadToTrackerItem(
     linkedCommitSha: payload.linkedCommitSha,
     documentId: payload.documentId,
     customFields: payload.customFields,
+    archived: payload.archived || false,
+    archivedAt: payload.archivedAt,
     syncStatus: 'synced',
   };
 }

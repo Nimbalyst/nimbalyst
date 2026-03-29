@@ -988,6 +988,23 @@ export class ElectronDocumentService implements DocumentService {
    * Archive or unarchive a tracker item.
    */
   async archiveTrackerItem(itemId: string, archive: boolean): Promise<TrackerItem> {
+    // For inline/frontmatter items, write archived state back to the source file
+    const preResult = await database.query<any>(
+      `SELECT source, document_path FROM tracker_items WHERE id = $1`,
+      [itemId]
+    );
+    if (preResult.rows.length > 0) {
+      const { source, document_path: documentPath } = preResult.rows[0];
+      if ((source === 'inline' || source === 'frontmatter') && documentPath) {
+        try {
+          await this.updateTrackerItemInFile(itemId, { archived: archive ? 'true' : null });
+        } catch (err) {
+          // File may be gone -- fall through to DB-only update
+          // console.log(`[DocumentService] Failed to write archived state to file for ${itemId}:`, err);
+        }
+      }
+    }
+
     if (archive) {
       await database.query(
         `UPDATE tracker_items SET archived = TRUE, archived_at = NOW(), updated = NOW() WHERE id = $1`,
@@ -1016,6 +1033,15 @@ export class ElectronDocumentService implements DocumentService {
       timestamp: new Date(),
     };
     this.trackerItemWatchers.forEach(callback => callback(changeEvent));
+
+    // Push archived state to sync server so other clients see it
+    if (isTrackerSyncActive(item.workspace)) {
+      try {
+        await syncTrackerItem(item);
+      } catch (syncErr) {
+        console.error('[DocumentService] archiveTrackerItem sync failed:', syncErr);
+      }
+    }
 
     return item;
   }
@@ -1517,6 +1543,7 @@ export class ElectronDocumentService implements DocumentService {
             created: props.created,
             updated: props.updated,
             dueDate: props.due || undefined,
+            archived: props.archived === 'true',
             lastIndexed: new Date()
           });
         }
@@ -1594,13 +1621,21 @@ export class ElectronDocumentService implements DocumentService {
           updated: item.updated
         };
 
+        const isArchived = item.archived === true;
+
         // console.log(`[DocumentService] Inserting tracker item: ${item.id} (${item.type})`);
+        // Only set archived on INSERT (new items default to false).
+        // On UPDATE: only set archived=true if the file explicitly says so.
+        // Never reset archived to false from re-indexing -- the DB is the authority
+        // for archive state when the file doesn't have an archived prop.
         const result = await database.query(
           `INSERT INTO tracker_items (
-            id, type, data, workspace, document_path, line_number, created, updated, last_indexed
-          ) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW(), $7)
+            id, type, data, workspace, document_path, line_number, created, updated, last_indexed, archived, archived_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW(), $7, $8, $9)
           ON CONFLICT (id) DO UPDATE SET
-            type = $2, data = $3, workspace = $4, document_path = $5, line_number = $6, updated = NOW(), last_indexed = $7`,
+            type = $2, data = $3, workspace = $4, document_path = $5, line_number = $6, updated = NOW(), last_indexed = $7,
+            archived = CASE WHEN $8 = TRUE THEN TRUE ELSE tracker_items.archived END,
+            archived_at = CASE WHEN $8 = TRUE THEN $9 ELSE tracker_items.archived_at END`,
           [
             item.id,
             item.type,
@@ -1608,17 +1643,34 @@ export class ElectronDocumentService implements DocumentService {
             item.workspace,
             item.module, // document_path
             item.lineNumber || null,
-            item.lastIndexed
+            item.lastIndexed,
+            isArchived,
+            isArchived ? new Date().toISOString() : null
           ]
         );
         // console.log(`[DocumentService] Insert result:`, result);
       }
 
-      // Notify watchers if there are changes
+      // Notify watchers if there are changes.
+      // Re-read items from DB to get authoritative archived state
+      // (the upsert preserves DB archived state via CASE, but parsed items may not have it)
       if (items.length > 0 || removedIds.length > 0) {
+        const itemIds = items.map(item => item.id);
+        let dbItems: TrackerItem[] = items;
+        if (itemIds.length > 0) {
+          try {
+            const dbResult = await database.query<any>(
+              `SELECT * FROM tracker_items WHERE id = ANY($1)`,
+              [itemIds]
+            );
+            dbItems = dbResult.rows.map((row: any) => this.rowToTrackerItem(row));
+          } catch {
+            // Fall back to parsed items if DB read fails
+          }
+        }
         const changeEvent: TrackerItemChangeEvent = {
-          added: items.filter(item => !existingIds.has(item.id)),
-          updated: items.filter(item => existingIds.has(item.id)),
+          added: dbItems.filter(item => !existingIds.has(item.id)),
+          updated: dbItems.filter(item => existingIds.has(item.id)),
           removed: removedIds,
           timestamp: new Date()
         };
