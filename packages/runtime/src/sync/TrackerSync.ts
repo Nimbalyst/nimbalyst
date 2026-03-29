@@ -106,6 +106,7 @@ export function mergeTrackerItems(
     'title', 'description', 'status', 'priority',
     'assigneeId', 'reporterId', 'labels', 'linkedSessions',
     'linkedCommitSha', 'documentId', 'comments', 'customFields',
+    'archived', 'archivedAt',
   ];
 
   for (const field of mergeableFields) {
@@ -151,6 +152,13 @@ export class TrackerSyncProvider {
   /** Local cache of decrypted items (itemId -> payload) for LWW merge */
   private localItems: Map<string, TrackerItemPayload> = new Map();
 
+  /** Reconnect state */
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectAttempts = 0;
+  private static readonly MAX_RECONNECT_ATTEMPTS = 10;
+  private static readonly BASE_RECONNECT_DELAY_MS = 1000;
+  private static readonly MAX_RECONNECT_DELAY_MS = 60000;
+
   constructor(config: TrackerSyncConfig) {
     this.config = config;
   }
@@ -166,6 +174,7 @@ export class TrackerSyncProvider {
     if (this.destroyed) throw new Error('Provider has been destroyed');
     if (this.ws) return;
 
+    this.cancelReconnect();
     this.setStatus('connecting');
 
     const { serverUrl, orgId, projectId } = this.config;
@@ -184,6 +193,7 @@ export class TrackerSyncProvider {
 
     ws.addEventListener('open', () => {
       console.log('[TrackerSync] WebSocket connected, requesting sync...');
+      this.reconnectAttempts = 0; // Reset on successful connection
       this.setStatus('syncing');
       this.requestSync();
     });
@@ -192,13 +202,25 @@ export class TrackerSyncProvider {
       this.handleMessage(event);
     });
 
-    ws.addEventListener('close', (event) => {
-      console.log('[TrackerSync] WebSocket closed:', event.code, event.reason);
-      this.handleDisconnect();
-    });
+    let lastError = '';
 
     ws.addEventListener('error', (event) => {
-      console.error('[TrackerSync] WebSocket error:', event);
+      // Capture error details for the close handler to inspect
+      lastError = String((event as unknown as { message?: string }).message || event);
+      console.error('[TrackerSync] WebSocket error:', lastError);
+    });
+
+    ws.addEventListener('close', (event) => {
+      console.log('[TrackerSync] WebSocket closed:', event.code, event.reason);
+      // Check for auth errors (HTTP 401/403 during upgrade) in close reason or prior error
+      const combined = `${event.reason || ''} ${lastError}`;
+      if (combined.includes('401') || combined.includes('403')) {
+        console.error('[TrackerSync] Auth error, stopping reconnect');
+        this.ws = null;
+        this.synced = false;
+        this.setStatus('disconnected');
+        return;
+      }
       this.handleDisconnect();
     });
   }
@@ -207,6 +229,7 @@ export class TrackerSyncProvider {
    * Disconnect from the TrackerRoom.
    */
   disconnect(): void {
+    this.cancelReconnect(true);
     if (this.ws) {
       this.ws.close();
       this.ws = null;
@@ -219,6 +242,7 @@ export class TrackerSyncProvider {
    * Destroy the provider. Cannot be reused after this.
    */
   destroy(): void {
+    this.cancelReconnect(true);
     this.disconnect();
     this.localItems.clear();
     this.offlineQueue = [];
@@ -464,5 +488,52 @@ export class TrackerSyncProvider {
     this.ws = null;
     this.synced = false;
     this.setStatus('disconnected');
+    this.scheduleReconnect();
+  }
+
+  private scheduleReconnect(): void {
+    if (this.destroyed) return;
+    if (this.reconnectTimer) return; // already scheduled
+    if (this.reconnectAttempts >= TrackerSyncProvider.MAX_RECONNECT_ATTEMPTS) {
+      console.log('[TrackerSync] Max reconnect attempts reached, giving up');
+      return;
+    }
+
+    // Exponential backoff with jitter: base * 2^attempt + random jitter
+    const delay = Math.min(
+      TrackerSyncProvider.BASE_RECONNECT_DELAY_MS * Math.pow(2, this.reconnectAttempts) + Math.random() * 1000,
+      TrackerSyncProvider.MAX_RECONNECT_DELAY_MS
+    );
+    this.reconnectAttempts++;
+
+    console.log(`[TrackerSync] Reconnecting in ${Math.round(delay)}ms (attempt ${this.reconnectAttempts}/${TrackerSyncProvider.MAX_RECONNECT_ATTEMPTS})`);
+
+    this.reconnectTimer = setTimeout(async () => {
+      this.reconnectTimer = null;
+      if (this.destroyed || this.ws) return;
+      try {
+        await this.connect();
+      } catch (err) {
+        const errMsg = String(err);
+        // Stop retrying on auth errors -- they won't fix themselves
+        if (errMsg.includes('401') || errMsg.includes('403') || errMsg.includes('Not authenticated')) {
+          console.error('[TrackerSync] Auth error, stopping reconnect:', errMsg);
+          this.setStatus('disconnected');
+          return;
+        }
+        console.error('[TrackerSync] Reconnect failed:', err);
+        this.handleDisconnect();
+      }
+    }, delay);
+  }
+
+  private cancelReconnect(resetAttempts = false): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (resetAttempts) {
+      this.reconnectAttempts = 0;
+    }
   }
 }

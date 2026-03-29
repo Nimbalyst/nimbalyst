@@ -514,7 +514,13 @@ export async function handleAuthCallback(params: {
   // Determine the personalOrgId for this callback.
   // On initial auth, orgId IS the personal org. On re-auth, preserve existing value.
   const incomingPersonalOrgId = orgId || null;
-  const isSecondaryAccount = primaryAccountId !== null && incomingPersonalOrgId !== null
+
+  // Only treat as secondary if the primary account is still valid/active.
+  // If primary session is expired or not authenticated, the new login should replace it.
+  const primaryIsActive = primaryAccountId !== null && authState.isAuthenticated
+    && accounts.has(primaryAccountId)
+    && (accounts.get(primaryAccountId)!.expiresAt > Date.now());
+  const isSecondaryAccount = primaryIsActive && incomingPersonalOrgId !== null
     && incomingPersonalOrgId !== primaryAccountId;
 
   // Build credentials to persist
@@ -536,9 +542,15 @@ export async function handleAuthCallback(params: {
     saveAllAccounts();
     logger.main.info('[StytchAuthService] Added secondary account:', email, incomingPersonalOrgId);
   } else {
-    // Primary account: first sign-in or re-auth of existing primary.
-    const personalOrgId = authState.personalOrgId || incomingPersonalOrgId;
-    const personalUserId = authState.personalUserId || userId || null;
+    // Primary account: first sign-in, re-auth of existing primary, or replacing expired primary.
+    // When the incoming org differs from the stored primary (expired primary being replaced),
+    // use the incoming values instead of preserving stale state.
+    const isReplacingPrimary = primaryAccountId !== null && incomingPersonalOrgId !== primaryAccountId;
+    if (isReplacingPrimary) {
+      logger.main.info('[StytchAuthService] Replacing expired primary account:', primaryAccountId, '->', incomingPersonalOrgId);
+    }
+    const personalOrgId = isReplacingPrimary ? incomingPersonalOrgId : (authState.personalOrgId || incomingPersonalOrgId);
+    const personalUserId = isReplacingPrimary ? (userId || null) : (authState.personalUserId || userId || null);
 
     // Update singleton auth state
     updateAuthState({
@@ -568,7 +580,7 @@ export async function handleAuthCallback(params: {
     // Update multi-account store
     if (personalOrgId) {
       accounts.set(personalOrgId, credsToSave);
-      if (!primaryAccountId) {
+      if (!primaryAccountId || isReplacingPrimary) {
         primaryAccountId = personalOrgId;
       }
       saveAllAccounts();
