@@ -409,7 +409,7 @@ describe('Canonical Read Path Integration', () => {
 
       // Legacy messages skip turn_ended
       expect(legacyMessages).toHaveLength(2);
-      expect(legacyMessages.every((m) => m.role !== 'turn_ended')).toBe(true);
+      expect(legacyMessages.every((m) => (m.role as string) !== 'turn_ended')).toBe(true);
     });
   });
 

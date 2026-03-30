@@ -150,7 +150,7 @@ describe('convertCanonicalToLegacyMessages', () => {
     // The result should be parsed back to the MCP content array, not left as a string
     expect(result[0].toolCall?.result).toEqual(mcpContent);
     // The widget can then extract text from the array
-    const resultArray = result[0].toolCall?.result as Array<{ type: string; text: string }>;
+    const resultArray = result[0].toolCall?.result as unknown as Array<{ type: string; text: string }>;
     expect(resultArray[0].type).toBe('text');
     const innerJson = JSON.parse(resultArray[0].text);
     expect(innerJson.after.name).toBe('Test');

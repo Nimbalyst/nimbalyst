@@ -17,6 +17,7 @@
 
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+// @ts-expect-error -- @testing-library/react types not in tsconfig types array (vitest resolves them at runtime)
 import { render, screen, fireEvent } from '@testing-library/react';
 import { createStore, Provider as JotaiProvider } from 'jotai';
 import type { Message } from '../../../../ai/server/types';
@@ -81,7 +82,8 @@ function makeToolMessage(
       id: `tool-${Date.now()}`,
       name: toolName,
       arguments: args,
-      result,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      result: result as any,
     },
     ...overrides,
   });
