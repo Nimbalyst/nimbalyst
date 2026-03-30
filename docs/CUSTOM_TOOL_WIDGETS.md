@@ -30,7 +30,7 @@ export const MyToolWidget: React.FC<CustomToolWidgetProps> = ({
 
 2. **Create CSS file** for the widget (e.g., `MyToolWidget.css`):
    - Use CSS variables from `PlaygroundEditorTheme.css` for theming
-   - Follow existing patterns in `MockupScreenshotWidget.css`
+   - Follow existing patterns in `EditorScreenshotWidget.tsx`
 
 3. **Register the widget** in `CustomToolWidgets/index.ts`:
 ```typescript
@@ -58,19 +58,18 @@ interface CustomToolWidgetProps {
 
 ## Existing Custom Widgets
 
-### MockupScreenshotWidget
+### EditorScreenshotWidget
 
-Displays captured editor screenshots with thumbnail preview and lightbox modal. Works for mockups and all other editor types.
+Displays captured editor screenshots with a large inline preview and lightbox modal. Works for all editor types (mockups, Excalidraw, code, markdown, CSV, etc.).
 
 - **Tool name**: `capture_editor_screenshot`
-- **Shows**: Image thumbnail, file path, success/error status
+- **Shows**: Large inline image, file name, success/error status
 - **Features**: Click-to-enlarge lightbox
 
 ## Key Files
 
 - `CustomToolWidgets/index.ts` - Registry and helper functions
-- `CustomToolWidgets/MockupScreenshotWidget.tsx` - Example widget implementation
-- `CustomToolWidgets/MockupScreenshotWidget.css` - Widget styling
+- `CustomToolWidgets/EditorScreenshotWidget.tsx` - Example widget implementation
 - `RichTranscriptView.tsx` - Integration point in renderToolCard
 
 ## MCP Tool Name Handling

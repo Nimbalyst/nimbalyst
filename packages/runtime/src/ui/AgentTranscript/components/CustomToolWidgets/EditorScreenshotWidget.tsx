@@ -2,7 +2,7 @@
  * Custom widget for the capture_editor_screenshot MCP tool
  *
  * Displays a preview of the captured editor screenshot with:
- * - Thumbnail image preview (click to enlarge)
+ * - Large inline image preview (click to open lightbox)
  * - File path information
  * - Success/error status badge
  * - Full-size lightbox modal
@@ -15,20 +15,18 @@ import React, { useState, useEffect } from 'react';
 import type { CustomToolWidgetProps } from './index';
 
 /**
- * Extract just the mockup name from a file path
- * e.g., "/path/to/my_mockup.mockup.html" -> "my_mockup"
+ * Extract a display name from a file path
+ * e.g., "/path/to/my_mockup.mockup.html" -> "my_mockup.mockup.html"
+ *       "/path/to/diagram.excalidraw" -> "diagram.excalidraw"
  */
-function extractMockupName(filePath: string): string {
-  if (!filePath) return 'mockup';
+function extractFileName(filePath: string): string {
+  if (!filePath) return 'screenshot';
 
   // Get the filename from the path
   const parts = filePath.split('/');
   const filename = parts[parts.length - 1] || '';
 
-  // Remove .mockup.html extension
-  const name = filename.replace(/\.mockup\.html$/i, '');
-
-  return name || 'mockup';
+  return filename || 'screenshot';
 }
 
 /**
@@ -245,7 +243,7 @@ function extractErrorMessage(result: any, message: any): string | null {
   return null;
 }
 
-export const MockupScreenshotWidget: React.FC<CustomToolWidgetProps> = ({
+export const EditorScreenshotWidget: React.FC<CustomToolWidgetProps> = ({
   message,
   workspacePath,
   readFile
@@ -297,10 +295,10 @@ export const MockupScreenshotWidget: React.FC<CustomToolWidgetProps> = ({
 
   if (!tool) return null;
 
-  // Extract file path from arguments and get simple name
+  // Extract file path from arguments and get display name
   const args = tool.arguments as Record<string, any> | undefined;
   const filePath = (args?.file_path || args?.filePath || '') as string;
-  const mockupName = extractMockupName(filePath);
+  const fileName = extractFileName(filePath);
 
   // Extract image data from result (either inline or from persisted file)
   const inlineImageData = extractImageData(tool.result);
@@ -311,15 +309,11 @@ export const MockupScreenshotWidget: React.FC<CustomToolWidgetProps> = ({
     const source = inlineImageData ? 'inline' : 'file-system';
     const sizeBytes = Math.floor((imageData.imageBase64.length * 3) / 4);
     const sizeMB = (sizeBytes / 1024 / 1024).toFixed(2);
-    console.log(`[MockupScreenshotWidget] Image loaded: ${sizeMB} MB, source: ${source}, mimeType: ${imageData.mimeType}`);
+    console.log(`[EditorScreenshotWidget] Image loaded: ${sizeMB} MB, source: ${source}, mimeType: ${imageData.mimeType}`);
   }
 
   const hasError = isToolError(tool.result, message);
   const errorMessage = extractErrorMessage(tool.result, message) || persistedLoadError;
-
-  // Success if we have image data OR if there's no error flag set
-  // (handles case where result parsing might fail but tool succeeded)
-  const isSuccess = !!imageData || !hasError;
 
   // Build image source URL
   const imageSrc = imageData
@@ -341,33 +335,19 @@ export const MockupScreenshotWidget: React.FC<CustomToolWidgetProps> = ({
   }, [showLightbox]);
 
   return (
-    <div className="mockup-screenshot-widget rounded bg-nim-secondary border border-nim overflow-hidden">
-      <div className="flex items-start gap-2 p-2">
+    <div className="editor-screenshot-widget rounded bg-nim-secondary border border-nim overflow-hidden">
+      <div className="flex items-center gap-2 p-2">
         <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-          <span className="text-xs text-nim-faint font-medium">Viewing Mockup Image</span>
+          <span className="text-xs text-nim-faint font-medium">Editor Screenshot</span>
           <span className="font-mono text-sm text-nim font-semibold overflow-hidden text-ellipsis whitespace-nowrap" title={filePath}>
-            {mockupName}
+            {fileName}
           </span>
         </div>
         {/* Loading spinner when loading from persisted file */}
         {loadingPersistedFile && (
-          <div className="w-10 h-10 shrink-0 flex items-center justify-center border border-nim rounded bg-nim-tertiary" title="Loading image...">
-            <div className="w-4 h-4 border-2 border-nim border-t-nim-primary rounded-full animate-mockup-spin" />
+          <div className="w-5 h-5 shrink-0 flex items-center justify-center" title="Loading image...">
+            <div className="w-4 h-4 border-2 border-nim border-t-nim-primary rounded-full animate-spin" />
           </div>
-        )}
-        {/* Thumbnail on the right if we have an image */}
-        {imageSrc && !loadingPersistedFile && (
-          <button
-            className="w-10 h-10 shrink-0 p-0 m-0 border border-nim rounded bg-nim-tertiary cursor-pointer overflow-hidden transition-all duration-200 hover:border-nim-primary hover:shadow-[0_0_0_2px_color-mix(in_srgb,var(--nim-primary)_20%,transparent)]"
-            onClick={() => setShowLightbox(true)}
-            title="Click to enlarge"
-          >
-            <img
-              src={imageSrc}
-              alt={mockupName}
-              className="w-full h-full object-cover object-top-left"
-            />
-          </button>
         )}
         {/* Show error badge if there was an error */}
         {hasError && !loadingPersistedFile && (
@@ -376,6 +356,21 @@ export const MockupScreenshotWidget: React.FC<CustomToolWidgetProps> = ({
           </span>
         )}
       </div>
+
+      {/* Large inline image preview */}
+      {imageSrc && !loadingPersistedFile && (
+        <button
+          className="w-full p-0 m-0 border-0 border-t border-nim bg-nim-tertiary cursor-pointer overflow-hidden block transition-opacity duration-200 hover:opacity-90"
+          onClick={() => setShowLightbox(true)}
+          title="Click to enlarge"
+        >
+          <img
+            src={imageSrc}
+            alt={fileName}
+            className="w-full max-h-[400px] object-contain object-top-left"
+          />
+        </button>
+      )}
 
       {errorMessage && (
         <div className="mx-2 mb-2 p-2 bg-[color-mix(in_srgb,var(--nim-error)_10%,transparent)] border border-[color-mix(in_srgb,var(--nim-error)_30%,transparent)] rounded text-nim-error text-xs leading-relaxed">
@@ -408,11 +403,11 @@ export const MockupScreenshotWidget: React.FC<CustomToolWidgetProps> = ({
             </button>
             <img
               src={imageSrc}
-              alt={mockupName}
+              alt={fileName}
               className="max-w-full max-h-[calc(90vh-3rem)] object-contain rounded-lg shadow-2xl"
             />
             <div className="mt-3 text-sm text-nim-muted font-mono bg-nim-secondary py-2 px-3 rounded text-center flex flex-col gap-1">
-              {mockupName}
+              {fileName}
               <span className="text-xs text-nim-faint font-sans">Click outside or press Escape to close</span>
             </div>
           </div>
@@ -421,3 +416,6 @@ export const MockupScreenshotWidget: React.FC<CustomToolWidgetProps> = ({
     </div>
   );
 };
+
+/** @deprecated Use EditorScreenshotWidget instead */
+export const MockupScreenshotWidget = EditorScreenshotWidget;

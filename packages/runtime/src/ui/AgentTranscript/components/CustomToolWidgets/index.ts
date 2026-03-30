@@ -41,7 +41,7 @@
 import type { Message } from '../../../../ai/server/types';
 
 // Re-export widgets
-export { MockupScreenshotWidget } from './MockupScreenshotWidget';
+export { EditorScreenshotWidget, MockupScreenshotWidget } from './EditorScreenshotWidget';
 export { AskUserQuestionWidget } from './AskUserQuestionWidget';
 export { VisualDisplayWidget } from './VisualDisplayWidget';
 export { BashWidget } from './BashWidget';
@@ -111,7 +111,7 @@ const SHELL_WRAPPER_NAME_REGEX = /^(?:\/(?:bin|usr\/bin)\/)?(?:bash|zsh|sh)\s+-l
 const WINDOWS_SHELL_NAME_REGEX = /^(?:"?[A-Za-z]:\\[^"]*\\)?(?:powershell|pwsh|cmd)(?:\.exe)?"?\s+(?:-Command|\/[cC])\s+[\s\S]+$/i;
 
 // Import custom widgets
-import { MockupScreenshotWidget } from './MockupScreenshotWidget';
+import { EditorScreenshotWidget } from './EditorScreenshotWidget';
 import { AskUserQuestionWidget } from './AskUserQuestionWidget';
 import { VisualDisplayWidget } from './VisualDisplayWidget';
 import { BashWidget } from './BashWidget';
@@ -135,8 +135,8 @@ import { TrackerToolWidget } from './TrackerToolWidget';
  */
 export const CUSTOM_TOOL_WIDGETS: CustomToolWidgetRegistry = {
   // Editor screenshot capture tool (works for mockups and all other editor types)
-  'capture_editor_screenshot': MockupScreenshotWidget,
-  'mcp__nimbalyst-mcp__capture_editor_screenshot': MockupScreenshotWidget,
+  'capture_editor_screenshot': EditorScreenshotWidget,
+  'mcp__nimbalyst-mcp__capture_editor_screenshot': EditorScreenshotWidget,
 
   // AskUserQuestion tool - displays questions from Claude for user input
   'AskUserQuestion': AskUserQuestionWidget,
