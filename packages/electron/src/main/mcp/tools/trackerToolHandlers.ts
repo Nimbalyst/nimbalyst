@@ -58,13 +58,80 @@ export async function createBidirectionalLink(
   return changed;
 }
 
-/** Broadcast tracker-items-changed to all windows */
-async function notifyTrackerChanged(workspacePath: string | undefined): Promise<void> {
+/** Convert a raw DB row to a TrackerItem for the renderer */
+function rowToTrackerItem(row: any): any {
+  const data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data || {};
+  return {
+    id: row.id,
+    type: row.type,
+    title: data.title || row.title,
+    description: data.description || undefined,
+    status: data.status || row.status,
+    priority: data.priority || undefined,
+    owner: data.owner || undefined,
+    module: row.document_path || undefined,
+    lineNumber: row.line_number || undefined,
+    workspace: row.workspace,
+    tags: data.tags || undefined,
+    created: data.created || row.created || undefined,
+    updated: data.updated || row.updated || undefined,
+    dueDate: data.dueDate || undefined,
+    lastIndexed: new Date(row.last_indexed),
+    content: row.content || undefined,
+    archived: row.archived ?? false,
+    archivedAt: row.archived_at ? new Date(row.archived_at).toISOString() : undefined,
+    source: row.source || (row.document_path ? 'inline' : 'native'),
+    sourceRef: row.source_ref || undefined,
+    assigneeId: data.assigneeId || undefined,
+    reporterId: data.reporterId || undefined,
+    labels: data.labels || undefined,
+    linkedSessions: data.linkedSessions || undefined,
+    linkedCommitSha: data.linkedCommitSha || undefined,
+    documentId: data.documentId || undefined,
+    syncStatus: row.sync_status || 'local',
+  };
+}
+
+/**
+ * Broadcast a TrackerItemChangeEvent to all windows on the correct IPC channel.
+ * Uses the same channel and event shape that trackerSyncListeners.ts expects.
+ */
+async function notifyTrackerItemAdded(workspacePath: string | undefined, itemId: string): Promise<void> {
+  const { getDatabase } = await import("../../database/initialize");
+  const db = getDatabase();
+  const result = await db.query<any>(`SELECT * FROM tracker_items WHERE id = $1`, [itemId]);
+  if (result.rows.length === 0) return;
+  const item = rowToTrackerItem(result.rows[0]);
+
   const { BrowserWindow } = await import("electron");
-  const windows = BrowserWindow.getAllWindows();
-  for (const win of windows) {
+  for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
-      win.webContents.send("tracker-items-changed", { workspacePath });
+      win.webContents.send("document-service:tracker-items-changed", {
+        added: [item],
+        updated: [],
+        removed: [],
+        timestamp: new Date(),
+      });
+    }
+  }
+}
+
+async function notifyTrackerItemUpdated(workspacePath: string | undefined, itemId: string): Promise<void> {
+  const { getDatabase } = await import("../../database/initialize");
+  const db = getDatabase();
+  const result = await db.query<any>(`SELECT * FROM tracker_items WHERE id = $1`, [itemId]);
+  if (result.rows.length === 0) return;
+  const item = rowToTrackerItem(result.rows[0]);
+
+  const { BrowserWindow } = await import("electron");
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send("document-service:tracker-items-changed", {
+        added: [],
+        updated: [item],
+        removed: [],
+        timestamp: new Date(),
+      });
     }
   }
 }
@@ -605,8 +672,8 @@ export async function handleTrackerCreate(
       await notifySessionLinkedTrackerChanged(sessionId, linkedIds);
     }
 
-    // Notify renderer of the new item
-    await notifyTrackerChanged(workspacePath);
+    // Notify renderer of the new item (correct channel + event format)
+    await notifyTrackerItemAdded(workspacePath, id);
 
     return {
       content: [
@@ -725,8 +792,8 @@ export async function handleTrackerUpdate(
       }
     }
 
-    // Notify renderer
-    await notifyTrackerChanged(workspacePath);
+    // Notify renderer (correct channel + event format)
+    await notifyTrackerItemUpdated(workspacePath, args.id);
 
     return {
       content: [
@@ -820,8 +887,8 @@ export async function handleTrackerLinkSession(
       : trackerResult.rows[0]?.data || {};
     const linkedSessions: string[] = trackerData.linkedSessions || [];
 
-    // Notify renderer of both changes
-    await notifyTrackerChanged(workspacePath);
+    // Notify renderer of both changes (correct channel + event format)
+    await notifyTrackerItemUpdated(workspacePath, args.trackerId);
     const sessionResult = await db.query<any>(
       `SELECT metadata FROM ai_sessions WHERE id = $1`,
       [sessionId]

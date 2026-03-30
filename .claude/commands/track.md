@@ -55,6 +55,10 @@ Where `[type]` is the tracker type (e.g., bug, task, idea, feature-request, etc.
 
 The `/track` command automatically detects which tracker schemas are installed in your workspace and routes items to the appropriate file. If a tracker type doesn't exist, it will suggest creating one or offer alternatives.
 
+## CRITICAL: Do NOT Call tracker_create
+
+**Never call the `tracker_create` MCP tool when executing /track.** The markdown file you write is automatically synced to the tracker widget via frontmatter/inline parsing. Calling `tracker_create` in addition to writing the markdown file creates a duplicate entry. Only write the markdown file; the tracker system handles the rest.
+
 ## Best Practices
 
 - Be specific in descriptions

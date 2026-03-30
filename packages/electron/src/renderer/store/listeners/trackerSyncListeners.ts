@@ -77,7 +77,7 @@ async function loadAllTrackerItems(): Promise<void> {
 
     // Merge: PGLite items take priority over frontmatter items (by ID)
     const allItems = [...(pgliteItems || []), ...frontmatterItems];
-    // console.log('[trackerSyncListeners] Loaded:', pgliteItems?.length || 0, 'PGLite +', frontmatterItems.length, 'frontmatter items');
+    // console.log('[trackerSyncListeners] Loaded:', pgliteItems?.length || 0, 'PGLite +', frontmatterItems.length, 'frontmatter items =', allItems.length, 'total');
     store.set(replaceAllTrackerItemsAtom, allItems);
   } catch (err) {
     console.error('[trackerSyncListeners] Failed to load tracker items:', err);

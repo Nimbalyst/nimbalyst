@@ -146,7 +146,9 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
     let items = showArchived ? archivedItems : activeItems;
 
     if (activeFilters.includes('mine')) {
-      items = items.filter(item => item.source === 'native' || !item.source);
+      // Show items where owner is unset (assumed mine in single-user context)
+      // or owner matches current user. TODO: wire up actual user identity for teams.
+      items = items.filter(item => !item.owner || item.owner === 'me');
     }
 
     if (activeFilters.includes('high-priority')) {
@@ -444,6 +446,7 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
               overrideItems={hasFilters ? filteredItems : undefined}
               onArchiveItems={handleArchiveItems}
               onDeleteItems={handleDeleteItems}
+              searchQuery={searchQuery}
             />
           ) : (
             <KanbanBoard

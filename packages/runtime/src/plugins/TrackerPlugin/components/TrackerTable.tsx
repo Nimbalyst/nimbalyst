@@ -38,6 +38,8 @@ interface TrackerTableProps {
   onArchiveItems?: (itemIds: string[], archive: boolean) => void;
   /** Callback for bulk/single delete action */
   onDeleteItems?: (itemIds: string[]) => void;
+  /** External search query from parent toolbar (replaces internal search input) */
+  searchQuery?: string;
 }
 
 /**
@@ -404,6 +406,7 @@ export function TrackerTable({
   overrideItems,
   onArchiveItems,
   onDeleteItems,
+  searchQuery: externalSearchQuery,
 }: TrackerTableProps): JSX.Element {
   // Type filter: use prop filterType when hideTypeTabs is true, otherwise use internal state
   const [internalTypeFilter, setInternalTypeFilter] = useState<TrackerItemType | 'all'>('all');
@@ -442,7 +445,11 @@ export function TrackerTable({
   const [error, setError] = useState<string | null>(null);
   const [currentSortBy, setCurrentSortBy] = useState<SortColumn>(sortBy);
   const [currentSortDirection, setCurrentSortDirection] = useState<SortDirection>(sortDirection);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [internalSearchTerm, setInternalSearchTerm] = useState('');
+  // Use external search query from parent when provided, otherwise use internal state
+  const searchTerm = externalSearchQuery ?? internalSearchTerm;
+  const setSearchTerm = externalSearchQuery !== undefined ? () => {} : setInternalSearchTerm;
+  const hasExternalSearch = externalSearchQuery !== undefined;
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [customFieldFilters, setCustomFieldFilters] = useState<Record<string, Set<string>>>({});
@@ -1151,13 +1158,15 @@ export function TrackerTable({
               <tr className="filter-row">
                 <th className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]"></th>
                 <th className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]">
-                  <input
-                    type="text"
-                    className="filter-input w-full py-1 px-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] text-xs focus:outline-none focus:border-[var(--nim-primary)]"
-                    placeholder="Search..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
+                  {!hasExternalSearch && (
+                    <input
+                      type="text"
+                      className="filter-input w-full py-1 px-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] text-xs focus:outline-none focus:border-[var(--nim-primary)]"
+                      placeholder="Search..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                  )}
                 </th>
                 <th className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]">
                   <select

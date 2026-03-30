@@ -73,6 +73,10 @@ The `[type]` and `[idPrefix]` come from the tracker YAML definition. The `[defau
 7. Add to `nimbalyst-local/tracker/[type]s.md` (pluralize the type name)
 8. Confirm where the item was tracked
 
+## CRITICAL: Do NOT Call tracker_create
+
+**Never call the `tracker_create` MCP tool when executing /track.** The markdown file you write is automatically synced to the tracker widget via frontmatter/inline parsing. Calling `tracker_create` in addition to writing the markdown file creates a duplicate entry -- one from the file sync and one from the database insert. Only write the markdown file; the tracker system handles the rest.
+
 ## Best Practices
 
 - Always check for custom tracker types before falling back to built-in ones
