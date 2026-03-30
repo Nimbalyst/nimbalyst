@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.1] - 2026-03-30
+
+
+### Added
+- Canonical transcript storage: all transcript rendering now uses ai_transcript_events table for consistent, provider-agnostic display
+- Database browser: inline cell editing for viewing and modifying data
+
+### Changed
+- Updated claude-agent-sdk 0.2.81->0.2.87, mcp-sdk 1.27.1->1.28.0, codex-sdk 0.114.0->0.117.0
+
+### Fixed
+- Canonical transcript handlers (list-user-prompts, get-tail-messages) were unreachable due to misplaced closing brace
+- TypeScript errors in transcript event store and converter
+- Improved Figma MCP OAuth error messaging with clearer user guidance
+
 ## [0.57.0] - 2026-03-27
 
 

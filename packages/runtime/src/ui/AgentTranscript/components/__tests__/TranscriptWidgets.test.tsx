@@ -17,7 +17,6 @@
 
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-// @ts-expect-error -- @testing-library/react types not in tsconfig types array (vitest resolves them at runtime)
 import { render, screen, fireEvent } from '@testing-library/react';
 import { createStore, Provider as JotaiProvider } from 'jotai';
 import type { Message } from '../../../../ai/server/types';
