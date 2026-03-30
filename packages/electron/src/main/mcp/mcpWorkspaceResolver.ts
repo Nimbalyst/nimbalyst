@@ -379,9 +379,10 @@ export async function getAvailableExtensionTools(
           filePath: {
             type: "string",
             description:
-              "Absolute path to the file to operate on. If omitted, uses the currently active file.",
+              "Absolute path to the file to operate on.",
           },
         },
+        required: [...(tool.inputSchema.required || []), "filePath"],
       },
     };
   });
