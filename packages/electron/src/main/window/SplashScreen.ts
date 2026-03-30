@@ -136,7 +136,7 @@ export function showSplashScreen(): BrowserWindow | null {
         show: false,
         center: true,
         skipTaskbar: true,
-        alwaysOnTop: true,
+        alwaysOnTop: false,
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
