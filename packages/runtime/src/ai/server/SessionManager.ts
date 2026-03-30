@@ -814,19 +814,15 @@ export class SessionManager {
       worktreeProjectPath,
     });
 
-    // New sessions start with pending status -- TranscriptTransformer will
+    // Canonical transform columns default to null in the DB schema, so new
+    // sessions need no explicit write here. TranscriptTransformer will
     // transform raw ai_agent_messages into canonical ai_transcript_events
     // on first read via ensureTransformed().
-    try {
-      await AISessionsRepository.updateMetadata(sessionId, {
-        canonicalTransformVersion: null,
-        canonicalTransformStatus: null,
-        canonicalLastTransformedAt: null,
-        canonicalLastRawMessageId: null,
-      });
-    } catch {
-      // Non-fatal: session will still work without canonical status
-    }
+    //
+    // Note: once ensureTransformed() marks a session 'complete', it will not
+    // re-transform even if new raw messages arrive (e.g. mid-stream). Callers
+    // that need up-to-date canonical events for an active session should be
+    // aware of this limitation.
 
     const now = Date.now();
     const session: SessionData = {

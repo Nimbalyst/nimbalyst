@@ -337,7 +337,7 @@ export class TranscriptWriter {
     },
   ): Promise<TranscriptEvent> {
     // When seeded (bulk transform), use in-memory counter to avoid N round-trips.
-    // Otherwise query DB for safe concurrent writes (live dual-write path).
+    // Otherwise query DB for safe concurrent writes.
     let sequence: number;
     if (this.seededSequence != null) {
       sequence = this.seededSequence++;

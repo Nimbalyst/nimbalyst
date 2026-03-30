@@ -238,13 +238,13 @@ The AI transcript system uses a two-tier architecture:
 **Key components:**
 - **TranscriptWriter** -- Shared service for writing canonical events (in `packages/runtime/src/ai/server/transcript/`)
 - **TranscriptProjector** -- Pure function that projects canonical events into UI view models
-- **Provider adapters** -- Per-provider translators converting streaming events to canonical writes (ClaudeCode, Codex, ClaudeChat, OpenAI/LMStudio)
-- **TranscriptTransformer** -- Lazy migration pipeline for sessions created before the canonical system
+- **TranscriptTransformer** -- Transforms raw `ai_agent_messages` into canonical `ai_transcript_events` on first read via `ensureTransformed()`
+- **TranscriptMigrationService** -- Wraps TranscriptTransformer for use in IPC handlers
 
 **Rules:**
-- New sessions are "born canonical" (`canonical_transform_status = 'complete'`)
-- Old sessions are lazily transformed on first access
-- All providers dual-write (raw + canonical) via `TranscriptDualWriter`
+- All providers write only to `ai_agent_messages` (raw log); there is no dual-write
+- New sessions start with null canonical status -- TranscriptTransformer runs on first read
+- Old sessions are lazily transformed on first access (same path as new sessions)
 - Canonical errors are non-fatal -- raw log is always written
 - Only `user_message`, `assistant_message`, and `system_message` events are searchable
 

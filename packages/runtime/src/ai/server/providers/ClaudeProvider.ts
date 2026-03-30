@@ -17,7 +17,6 @@ import {
 import { CLAUDE_MODELS, DEFAULT_MODELS } from '../../modelConstants';
 import { buildUserMessageAddition } from './documentContextUtils';
 
-
 const LOG_PREVIEW_LENGTH = 400;
 
 function previewForLog(value?: string, max: number = LOG_PREVIEW_LENGTH): string {

@@ -16,7 +16,6 @@ import {
 } from '../types';
 import { buildUserMessageAddition } from './documentContextUtils';
 
-
 interface LMStudioConfig extends ProviderConfig {
   baseUrl?: string;  // Default: http://127.0.0.1:1234
 }

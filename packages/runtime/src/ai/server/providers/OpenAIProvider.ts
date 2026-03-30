@@ -18,7 +18,6 @@ import {
 import { OPENAI_MODELS, DEFAULT_MODELS } from '../../modelConstants';
 import { buildUserMessageAddition } from './documentContextUtils';
 
-
 export class OpenAIProvider extends BaseAIProvider {
   private openai: OpenAI | null = null;
   private abortController: AbortController | null = null;

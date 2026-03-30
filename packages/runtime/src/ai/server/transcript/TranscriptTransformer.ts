@@ -8,6 +8,8 @@
  */
 
 import { TranscriptWriter } from './TranscriptWriter';
+import { parseCodexEvent } from '../providers/codex/codexEventParser';
+import { parseMcpToolName } from './utils';
 import type { ITranscriptEventStore } from './types';
 
 // Tool names that represent sub-agent spawns
@@ -195,6 +197,7 @@ export class TranscriptTransformer {
     provider: string,
   ): Promise<{ lastRawMessageId: number; eventsWritten: number }> {
     const writer = new TranscriptWriter(this.transcriptStore, provider);
+    const isCodex = provider === 'openai-codex';
 
     // Seed the sequence counter once to avoid N separate MAX(sequence) queries
     const startSequence = await this.transcriptStore.getNextSequence(sessionId);
@@ -225,14 +228,23 @@ export class TranscriptTransformer {
             subagentEventIds,
           );
         } else if (msg.direction === 'output') {
-          eventsWritten += await this.transformOutputMessage(
-            writer,
-            sessionId,
-            msg,
-            toolEventIds,
-            subagentEventIds,
-            processedTextMessageIds,
-          );
+          if (isCodex) {
+            eventsWritten += await this.transformCodexOutputMessage(
+              writer,
+              sessionId,
+              msg,
+              toolEventIds,
+            );
+          } else {
+            eventsWritten += await this.transformOutputMessage(
+              writer,
+              sessionId,
+              msg,
+              toolEventIds,
+              subagentEventIds,
+              processedTextMessageIds,
+            );
+          }
         }
       } catch {
         // Skip unparseable messages -- the raw log is preserved
@@ -458,6 +470,178 @@ export class TranscriptTransformer {
     }
 
     return eventsWritten;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Codex output message transformation
+  // ---------------------------------------------------------------------------
+
+  private async transformCodexOutputMessage(
+    writer: TranscriptWriter,
+    sessionId: string,
+    msg: RawMessage,
+    toolEventIds: Map<string, number>,
+  ): Promise<number> {
+    let eventsWritten = 0;
+
+    try {
+      const parsed = JSON.parse(msg.content);
+      const codexEvents = parseCodexEvent(parsed);
+
+      if (codexEvents.length === 0) {
+        // Unrecognized event structure -- skip silently (raw log preserved)
+        return 0;
+      }
+
+      for (const ce of codexEvents) {
+        if (ce.error) {
+          const event = await writer.appendSystemMessage(sessionId, ce.error, {
+            systemType: 'error',
+            createdAt: msg.createdAt,
+          });
+          if (event) eventsWritten++;
+        }
+
+        if (ce.text) {
+          const event = await writer.appendAssistantMessage(sessionId, ce.text, {
+            createdAt: msg.createdAt,
+          });
+          if (event) eventsWritten++;
+        }
+
+        if (ce.toolCall) {
+          eventsWritten += await this.handleCodexToolCall(
+            writer,
+            sessionId,
+            msg,
+            ce.toolCall,
+            toolEventIds,
+          );
+        }
+
+        if (ce.usage) {
+          await writer.recordTurnEnded(sessionId, {
+            contextFill: {
+              inputTokens: ce.usage.input_tokens,
+              cacheReadInputTokens: 0,
+              cacheCreationInputTokens: 0,
+              outputTokens: ce.usage.output_tokens,
+              totalContextTokens: ce.usage.input_tokens,
+            },
+            contextWindow: ce.contextSnapshot?.contextWindow ?? 0,
+            cumulativeUsage: {
+              inputTokens: ce.usage.input_tokens,
+              outputTokens: ce.usage.output_tokens,
+              cacheReadInputTokens: 0,
+              cacheCreationInputTokens: 0,
+              costUSD: 0,
+              webSearchRequests: 0,
+            },
+            contextCompacted: false,
+          });
+          eventsWritten++;
+        }
+
+        // reasoning is internal thinking -- skip
+      }
+    } catch {
+      // Not JSON -- treat as plain text assistant message
+      const content = String(msg.content ?? '');
+      if (content.trim()) {
+        const event = await writer.appendAssistantMessage(sessionId, content, {
+          createdAt: msg.createdAt,
+        });
+        if (event) eventsWritten++;
+      }
+    }
+
+    return eventsWritten;
+  }
+
+  private async handleCodexToolCall(
+    writer: TranscriptWriter,
+    sessionId: string,
+    msg: RawMessage,
+    tc: { id?: string; name: string; arguments?: unknown; result?: unknown },
+    toolEventIds: Map<string, number>,
+  ): Promise<number> {
+    const toolName = tc.name;
+    const toolId = tc.id ?? `codex-tool-${Date.now()}`;
+    const args = (tc.arguments ?? {}) as Record<string, unknown>;
+    const hasResult = tc.result !== undefined && tc.result !== null;
+
+    const isMcpTool = toolName.startsWith('mcp__');
+    let mcpServer: string | null = null;
+    let mcpTool: string | null = null;
+    if (isMcpTool) {
+      const parsed = parseMcpToolName(toolName);
+      if (parsed) {
+        mcpServer = parsed.server;
+        mcpTool = parsed.tool;
+      }
+    }
+
+    // If we've already created this tool call, update with result
+    const existingEventId = toolEventIds.get(toolId);
+    if (existingEventId != null && hasResult) {
+      const resultText = typeof tc.result === 'string'
+        ? tc.result
+        : JSON.stringify(tc.result);
+      const isError = typeof tc.result === 'object' && tc.result !== null && 'error' in (tc.result as Record<string, unknown>);
+
+      await writer.updateToolCall(existingEventId, {
+        status: isError ? 'error' : 'completed',
+        result: resultText,
+        isError,
+      });
+      return 0; // update, not a new event
+    }
+
+    // Deduplicate
+    if (existingEventId != null) return 0;
+
+    // Determine target file path
+    let targetFilePath: string | null = null;
+    if (typeof args.file_path === 'string') targetFilePath = args.file_path;
+    else if (typeof args.path === 'string') targetFilePath = args.path;
+
+    // Create new tool call
+    const event = await writer.createToolCall(sessionId, {
+      toolName,
+      toolDisplayName: this.codexToolDisplayName(toolName),
+      arguments: args,
+      targetFilePath,
+      mcpServer,
+      mcpTool,
+      providerToolCallId: toolId,
+      createdAt: msg.createdAt,
+    });
+
+    toolEventIds.set(toolId, event.id);
+
+    // If tool call already has a result, update immediately
+    if (hasResult) {
+      const resultText = typeof tc.result === 'string'
+        ? tc.result
+        : JSON.stringify(tc.result);
+      const isError = typeof tc.result === 'object' && tc.result !== null && 'error' in (tc.result as Record<string, unknown>);
+
+      await writer.updateToolCall(event.id, {
+        status: isError ? 'error' : 'completed',
+        result: resultText,
+        isError,
+      });
+    }
+
+    return 1;
+  }
+
+  private codexToolDisplayName(toolName: string): string {
+    const mcp = parseMcpToolName(toolName);
+    if (mcp) return mcp.tool;
+    if (toolName === 'file_change') return 'File Change';
+    if (toolName.includes('command') || toolName === 'shell') return 'Bash';
+    return toolName;
   }
 
   // ---------------------------------------------------------------------------

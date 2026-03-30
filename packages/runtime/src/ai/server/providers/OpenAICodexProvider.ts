@@ -28,7 +28,6 @@ import { MCPServerConfig } from '../../../types/MCPServerConfig';
 import { safeJSONSerialize } from '../../../utils/serialization';
 import { AskUserQuestionPrompt, AskUserQuestionPromptOption } from './shared/askUserQuestionTypes';
 
-
 interface OpenAICodexProviderDeps {
   protocol?: CodexSDKProtocol;
   permissionService?: ToolPermissionService;
