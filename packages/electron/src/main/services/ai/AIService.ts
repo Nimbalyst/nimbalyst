@@ -714,21 +714,10 @@ export class AIService {
   }
 
   private initializeApiKeys() {
-    // Delay initialization to avoid accessing store before app is ready
-    process.nextTick(() => {
-      try {
-        // Check if we have API key stored
-        const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
-
-        // If we have an env variable and no stored key, save it
-        if (process.env.ANTHROPIC_API_KEY && !apiKeys['anthropic']) {
-          apiKeys['anthropic'] = process.env.ANTHROPIC_API_KEY;
-          this.getSettingsStore().set('apiKeys', apiKeys);
-        }
-      } catch (error) {
-        console.error('[AIService] Error initializing API keys:', error);
-      }
-    });
+    // NOOP — API keys must be explicitly set by the user in settings.
+    // NEVER auto-import keys from process.env. A user's .env file with
+    // ANTHROPIC_API_KEY was silently picked up, persisted into settings,
+    // and used instead of their subscription — costing them $100+.
   }
 
   /**
@@ -757,14 +746,17 @@ export class AIService {
       }
     }
 
-    // Fall back to global API key
+    // Return the explicitly-configured global API key.
+    // NEVER fall back to process.env — users must explicitly set keys in settings.
+    // Implicit env-var usage caused a user to burn $100+ on their personal Anthropic
+    // account because Nimbalyst silently picked up ANTHROPIC_API_KEY from a .env file.
     switch (provider) {
       case 'claude':
-        return globalApiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY;
+        return globalApiKeys['anthropic'];
       case 'claude-code':
         return globalApiKeys['claude-code'];
       case 'openai':
-        return globalApiKeys['openai'] || process.env.OPENAI_API_KEY;
+        return globalApiKeys['openai'];
       case 'openai-codex':
         return globalApiKeys['openai-codex'];
       case 'lmstudio':
@@ -1627,7 +1619,7 @@ export class AIService {
       if (claudeCodeEnabled) return true;
 
       // Claude Chat needs an Anthropic API key and enabled models
-      const hasAnthropicKey = !!(apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY);
+      const hasAnthropicKey = !!apiKeys['anthropic'];
       if (hasAnthropicKey) {
         const hasClaude = providerSettings['claude']?.enabled &&
                          providerSettings['claude']?.models?.length > 0;
@@ -1635,7 +1627,7 @@ export class AIService {
       }
 
       // Check OpenAI (needs API key and enabled models)
-      const hasOpenAIKey = !!(apiKeys['openai'] || process.env.OPENAI_API_KEY);
+      const hasOpenAIKey = !!apiKeys['openai'];
       if (hasOpenAIKey) {
         const hasOpenAI = providerSettings['openai']?.enabled &&
                          providerSettings['openai']?.models?.length > 0;
@@ -4970,7 +4962,7 @@ export class AIService {
       let apiKey: string | undefined;
       switch (provider) {
         case 'claude':
-          apiKey = apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY;
+          apiKey = apiKeys['anthropic'];
           if (!apiKey) {
             return { success: false, error: 'Anthropic API key not configured' };
           }
@@ -4981,7 +4973,7 @@ export class AIService {
           // No error if missing - will use SSO login
           break;
         case 'openai':
-          apiKey = apiKeys['openai'] || process.env.OPENAI_API_KEY;
+          apiKey = apiKeys['openai'];
           if (!apiKey) {
             return { success: false, error: 'OpenAI API key not configured' };
           }
@@ -5161,9 +5153,9 @@ export class AIService {
 
       // Only fetch from providers that are enabled (skip LMStudio network call when disabled)
       const enabledSet = new Set<AIProviderType>();
-      if (providerSettings['claude']?.enabled === true && !!(apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY)) enabledSet.add('claude');
+      if (providerSettings['claude']?.enabled === true && !!apiKeys['anthropic']) enabledSet.add('claude');
       if (providerSettings['claude-code']?.enabled !== false) enabledSet.add('claude-code');
-      if (providerSettings['openai']?.enabled === true && !!(apiKeys['openai'] || process.env.OPENAI_API_KEY)) enabledSet.add('openai');
+      if (providerSettings['openai']?.enabled === true && !!apiKeys['openai']) enabledSet.add('openai');
       if (providerSettings['openai-codex']?.enabled === true) enabledSet.add('openai-codex');
       if (providerSettings['opencode']?.enabled === true) enabledSet.add('opencode');
       if (providerSettings['lmstudio']?.enabled === true) enabledSet.add('lmstudio');
@@ -5246,7 +5238,7 @@ export class AIService {
       // Build enabled providers map (needed before fetching to skip disabled providers)
       const enabledProviders: Record<AIProviderType, { enabled: boolean; models?: string[] }> = {
         'claude': {
-          enabled: providerSettings['claude']?.enabled === true && !!(apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY),
+          enabled: providerSettings['claude']?.enabled === true && !!apiKeys['anthropic'],
           models: providerSettings['claude']?.models
         },
         'claude-code': {
@@ -5255,7 +5247,7 @@ export class AIService {
           models: claudeCodeSettings.models
         },
         'openai': {
-          enabled: providerSettings['openai']?.enabled === true && !!(apiKeys['openai'] || process.env.OPENAI_API_KEY),
+          enabled: providerSettings['openai']?.enabled === true && !!apiKeys['openai'],
           models: providerSettings['openai']?.models
         },
         'openai-codex': {

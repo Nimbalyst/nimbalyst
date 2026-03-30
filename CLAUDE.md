@@ -19,6 +19,18 @@ Dynamic imports in the Electron main process cause `__ELECTRON_LOG__` double-reg
 
 **Never store customer, org, or team-sensitive data in the D1 shared database.** D1 is a multi-tenant SQL database where every Worker request can query any row. Customer data (team metadata, member roles, key envelopes, tracker items, documents, sessions) must live in Durable Objects where each entity gets its own isolated SQLite instance. D1 is only for cross-entity management lookups (e.g., git remote hash -> org ID mapping). See `packages/collabv3/CLAUDE.md` for the full policy.
 
+## CRITICAL: Never Use Environment Variables as Implicit API Key Sources
+
+**NEVER read API keys from `process.env` as a fallback for provider authentication.** API keys must only come from values the user explicitly configured in Nimbalyst settings (the electron-store `apiKeys` object or project-level overrides).
+
+A user had `ANTHROPIC_API_KEY` in a `.env` file for unrelated development. Nimbalyst silently picked it up via `process.env`, auto-persisted it into the settings store, and used it for API calls — billing the user's personal Anthropic account $100+ instead of their Nimbalyst subscription.
+
+- **No env fallbacks**: `getApiKeyForProvider` must return only from `globalApiKeys[provider]` or project-level overrides — never `process.env.*_API_KEY`
+- **No auto-import**: Never copy env vars into the settings store automatically (the old `initializeApiKeys` pattern)
+- **No implicit enablement**: Provider availability checks must only consider explicitly-stored keys, not env vars
+
+If you are tempted to add `|| process.env.SOME_API_KEY` as a convenience fallback, **stop**. The user did not consent to using that key with Nimbalyst.
+
 ## CRITICAL: Database Access Rules
 
 **NEVER directly open or query the PGLite database files using Node.js or command-line tools.**
