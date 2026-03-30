@@ -20,6 +20,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.2] - 2026-03-30
+
+
+### Changed
+- Renamed MockupScreenshotWidget to EditorScreenshotWidget for clarity
+
+### Fixed
+- API keys from user's environment variables (e.g. .env files) are no longer silently used for provider authentication
+- Excalidraw MCP tools no longer fail when no file is active in the editor
+- Dotfiles like .env are now visible in the file tree
+
 ## [0.57.1] - 2026-03-30
 
 
