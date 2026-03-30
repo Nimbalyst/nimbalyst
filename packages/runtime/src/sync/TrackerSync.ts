@@ -202,25 +202,16 @@ export class TrackerSyncProvider {
       this.handleMessage(event);
     });
 
-    let lastError = '';
-
-    ws.addEventListener('error', (event) => {
-      // Capture error details for the close handler to inspect
-      lastError = String((event as unknown as { message?: string }).message || event);
-      console.error('[TrackerSync] WebSocket error:', lastError);
+    ws.addEventListener('error', () => {
+      // WebSocket error events carry no useful detail -- the close event
+      // that follows has the code and reason. Just log that it happened.
+      console.error('[TrackerSync] WebSocket error (details in close event)');
     });
 
     ws.addEventListener('close', (event) => {
       console.log('[TrackerSync] WebSocket closed:', event.code, event.reason);
-      // Check for auth errors (HTTP 401/403 during upgrade) in close reason or prior error
-      const combined = `${event.reason || ''} ${lastError}`;
-      if (combined.includes('401') || combined.includes('403')) {
-        console.error('[TrackerSync] Auth error, stopping reconnect');
-        this.ws = null;
-        this.synced = false;
-        this.setStatus('disconnected');
-        return;
-      }
+      // Auth errors (expired JWT) should still attempt reconnect --
+      // getJwt() will fetch a fresh token. Only stop if fresh token also fails.
       this.handleDisconnect();
     });
   }
@@ -514,14 +505,10 @@ export class TrackerSyncProvider {
       try {
         await this.connect();
       } catch (err) {
-        const errMsg = String(err);
-        // Stop retrying on auth errors -- they won't fix themselves
-        if (errMsg.includes('401') || errMsg.includes('403') || errMsg.includes('Not authenticated')) {
-          console.error('[TrackerSync] Auth error, stopping reconnect:', errMsg);
-          this.setStatus('disconnected');
-          return;
-        }
         console.error('[TrackerSync] Reconnect failed:', err);
+        // Keep retrying -- getJwt() fetches fresh tokens, so even auth
+        // errors may resolve on the next attempt (e.g., expired JWT that
+        // gets refreshed). Max attempts cap prevents infinite loops.
         this.handleDisconnect();
       }
     }, delay);
