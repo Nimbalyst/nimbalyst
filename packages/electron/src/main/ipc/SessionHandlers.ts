@@ -1379,7 +1379,6 @@ export async function registerSessionHandlers() {
             return { success: false, error: String(error) };
         }
     });
-}
 
     // ============================================================
     // Canonical transcript queries
