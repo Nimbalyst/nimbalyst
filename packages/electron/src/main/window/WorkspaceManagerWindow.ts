@@ -4,6 +4,7 @@ import { getPreloadPath } from '../utils/appPaths';
 import { existsSync, mkdirSync, statSync } from 'fs';
 import { readdir } from 'fs/promises';
 import { resolveEntryType } from '../utils/FileTree';
+import { shouldExcludeDir } from '../utils/fileFilters';
 import { getRecentItems, addToRecentItems, store, getWorkspaceWindowState, getTheme } from '../utils/store';
 import { createWindow, findWindowByWorkspace, windowStates } from './WindowManager';
 import { safeHandle } from '../utils/ipcRegistry';
@@ -471,10 +472,8 @@ async function getWorkspaceFiles(
         break;
       }
 
-      // Skip hidden files and common ignore patterns
-      if (item.name.startsWith('.') || item.name === 'node_modules' || item.name === 'dist' || item.name === 'out') {
-        continue;
-      }
+      // Skip .DS_Store
+      if (item.name === '.DS_Store') continue;
 
       const itemPath = join(relativePath, item.name);
 
@@ -483,6 +482,7 @@ async function getWorkspaceFiles(
       const { isDir, isFile } = resolved;
 
       if (isDir) {
+        if (shouldExcludeDir(item.name)) continue;
         const result = await getWorkspaceFiles(workspacePath, itemPath, maxFiles - files.length, maxDepth, currentDepth + 1);
         files.push(...result.files);
         if (result.limited) {

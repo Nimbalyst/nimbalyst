@@ -357,13 +357,8 @@ export class ElectronDocumentService implements DocumentService {
           break;
         }
 
-        // Skip hidden files and excluded directories (including worktrees)
-        if (item.startsWith('.') && item !== '.nimbalyst') {
-          continue;
-        }
-
-        // Use centralized directory exclusion logic
-        if (shouldExcludeDir(item)) {
+        // Skip .DS_Store
+        if (item === '.DS_Store') {
           continue;
         }
 
@@ -381,6 +376,10 @@ export class ElectronDocumentService implements DocumentService {
           const stats = await fs.stat(fullPath);
 
           if (stats.isDirectory()) {
+            // Use centralized directory exclusion logic (worktrees, node_modules, .git, etc.)
+            if (shouldExcludeDir(item)) {
+              continue;
+            }
             // Add directory as a mentionable document for @ mentions
             const dirId = crypto.createHash('md5').update(relativePath + '/').digest('hex');
             documents.push({

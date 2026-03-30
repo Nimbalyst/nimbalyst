@@ -77,7 +77,7 @@ export async function getFolderContents(dirPath: string, depth: number = 0): Pro
         let visibleCount = 0;
 
         for (const entry of entries) {
-            if (entry.name === '.DS_Store' || shouldExcludeDir(entry.name)) continue;
+            if (entry.name === '.DS_Store') continue;
             if (visibleCount >= MAX_ITEMS_PER_DIR) break;
 
             const fullPath = join(dirPath, entry.name);
@@ -87,6 +87,7 @@ export async function getFolderContents(dirPath: string, depth: number = 0): Pro
             const { isDir, isFile } = resolved;
 
             if (isDir) {
+                if (shouldExcludeDir(entry.name)) continue;
                 const dirItem: FileTreeItem = {
                     name: entry.name,
                     type: 'directory',
