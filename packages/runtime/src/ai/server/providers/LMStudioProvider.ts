@@ -15,7 +15,7 @@ import {
   ModelIdentifier
 } from '../types';
 import { buildUserMessageAddition } from './documentContextUtils';
-import { createTranscriptAdapter, safeTranscriptCall } from '../transcript/TranscriptDualWriter';
+
 
 interface LMStudioConfig extends ProviderConfig {
   baseUrl?: string;  // Default: http://127.0.0.1:1234
@@ -198,17 +198,6 @@ export class LMStudioProvider extends BaseAIProvider {
       await this.logAgentMessage(sessionId, 'lmstudio', 'input', message);
     }
 
-    // Canonical transcript dual-write: create adapter and record user input
-    const transcriptAdapter = sessionId
-      ? createTranscriptAdapter('lmstudio', sessionId)
-      : null;
-    if (transcriptAdapter) {
-      await safeTranscriptCall(
-        () => transcriptAdapter.handleUserInput(message),
-        'lmstudio:handleUserInput',
-      );
-    }
-
     // Use the centralized tool system (OpenAI-compatible format)
     const tools = this.getToolsInOpenAIFormat();
 
@@ -321,14 +310,6 @@ export class LMStudioProvider extends BaseAIProvider {
             try {
               const json = JSON.parse(line.slice(6));
               chunkCount++;
-
-              // Canonical transcript dual-write: feed parsed OpenAI-compatible chunk to adapter
-              if (transcriptAdapter) {
-                safeTranscriptCall(
-                  () => transcriptAdapter.handleChunk(json),
-                  'lmstudio:handleChunk',
-                );
-              }
 
               // Check for error in the response (LMStudio/OpenAI format)
               if (json.error) {
@@ -760,10 +741,6 @@ export class LMStudioProvider extends BaseAIProvider {
         };
       }
     } finally {
-      // Flush any pending canonical transcript text
-      if (transcriptAdapter) {
-        await safeTranscriptCall(() => transcriptAdapter.flush(), 'lmstudio:flush');
-      }
       this.abortController = null;
     }
   }

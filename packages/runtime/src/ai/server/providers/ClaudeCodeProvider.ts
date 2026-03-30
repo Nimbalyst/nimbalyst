@@ -81,8 +81,7 @@ import {
   pollForAskUserQuestionResponse,
   type PendingAskUserQuestionEntry,
 } from './claudeCode/askUserQuestion';
-import { createTranscriptAdapter, safeTranscriptCall } from '../transcript/TranscriptDualWriter';
-import type { ClaudeCodeTranscriptAdapter } from '../transcript/adapters/ClaudeCodeTranscriptAdapter';
+
 import {
   resolveImmediateToolDecision as resolveImmediateToolDecisionHelper,
 } from './claudeCode/immediateToolDecision';
@@ -453,9 +452,6 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     // Clear edited files tracker for new turn
     this.toolHooksService.clearEditedFiles();
 
-    // Declared outside try so it's accessible in finally
-    let transcriptAdapter: ClaudeCodeTranscriptAdapter | null = null;
-
     try {
       // Append document context to message using pre-built prompts from DocumentContextService
       // Skip adding system message if the prompt starts with a slash command
@@ -597,28 +593,6 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         }), metadataToLog, hideMessages, undefined, true /* searchable */);
       }
 
-      // Canonical transcript dual-write: create adapter and record user input
-      transcriptAdapter = sessionId
-        ? createTranscriptAdapter('claude-code', sessionId) as ClaudeCodeTranscriptAdapter | null
-        : null;
-      if (transcriptAdapter && !hideMessages) {
-        const ta = transcriptAdapter;
-        await safeTranscriptCall(
-          () => ta.handleUserInput(message, {
-            mode: this.currentMode as 'agent' | 'planning',
-            attachments: attachments?.map(a => ({
-              id: a.id || a.filepath || '',
-              filename: a.filename || '',
-              filepath: a.filepath || '',
-              mimeType: a.mimeType || '',
-              size: a.size || 0,
-              type: a.type || '',
-            })),
-          }),
-          'claude-code:handleUserInput',
-        );
-      }
-
       // console.log('[CLAUDE-CODE] Calling SDK query() - this spawns the claude process...');
       const queryCallStart = Date.now();
       const leadQuery = query({
@@ -713,15 +687,6 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
             const isSearchable = isSearchableAssistantChunk(chunk);
 
             this.logAgentMessageNonBlocking(sessionId, 'claude-code', 'output', rawChunkJson, undefined, hideMessages, providerMessageId, isSearchable);
-          }
-
-          // Canonical transcript dual-write: feed each chunk to the adapter
-          if (transcriptAdapter && !hideMessages) {
-            const ta = transcriptAdapter;
-            await safeTranscriptCall(
-              () => ta.handleChunk(chunk),
-              'claude-code:handleChunk',
-            );
           }
 
           // if (chunkCount <= 5) {
@@ -1845,12 +1810,6 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         };
       }
     } finally {
-      // Flush any pending canonical transcript text
-      if (transcriptAdapter) {
-        const ta = transcriptAdapter;
-        await safeTranscriptCall(() => ta.flush(), 'claude-code:flush');
-      }
-
       // Don't stop MCP health checks or clear mcpQuery between turns -
       // the SDK subprocess stays alive for session resume, so MCP operations
       // (health checks, reconnect) should keep working between turns.

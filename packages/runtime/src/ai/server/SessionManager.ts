@@ -814,13 +814,15 @@ export class SessionManager {
       worktreeProjectPath,
     });
 
-    // Mark new session as canonical from birth -- no lazy migration needed
+    // New sessions start with pending status -- TranscriptTransformer will
+    // transform raw ai_agent_messages into canonical ai_transcript_events
+    // on first read via ensureTransformed().
     try {
       await AISessionsRepository.updateMetadata(sessionId, {
-        canonicalTransformVersion: 1,
-        canonicalTransformStatus: 'complete',
-        canonicalLastTransformedAt: new Date(),
-        canonicalLastRawMessageId: 0,
+        canonicalTransformVersion: null,
+        canonicalTransformStatus: null,
+        canonicalLastTransformedAt: null,
+        canonicalLastRawMessageId: null,
       });
     } catch {
       // Non-fatal: session will still work without canonical status

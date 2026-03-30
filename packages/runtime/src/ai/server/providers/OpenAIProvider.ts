@@ -17,7 +17,7 @@ import {
 } from '../types';
 import { OPENAI_MODELS, DEFAULT_MODELS } from '../../modelConstants';
 import { buildUserMessageAddition } from './documentContextUtils';
-import { createTranscriptAdapter, safeTranscriptCall } from '../transcript/TranscriptDualWriter';
+
 
 export class OpenAIProvider extends BaseAIProvider {
   private openai: OpenAI | null = null;
@@ -218,17 +218,6 @@ export class OpenAIProvider extends BaseAIProvider {
       await this.logAgentMessage(sessionId, 'openai', 'input', message);
     }
 
-    // Canonical transcript dual-write: create adapter and record user input
-    const transcriptAdapter = sessionId
-      ? createTranscriptAdapter('openai', sessionId)
-      : null;
-    if (transcriptAdapter) {
-      await safeTranscriptCall(
-        () => transcriptAdapter.handleUserInput(message),
-        'openai:handleUserInput',
-      );
-    }
-
     try {
       // Use the centralized tool system
       const tools: OpenAI.Chat.ChatCompletionTool[] = this.getToolsInOpenAIFormat();
@@ -344,13 +333,6 @@ export class OpenAIProvider extends BaseAIProvider {
 
       const responseStream = response as unknown as AsyncIterable<any>;
       for await (const chunk of responseStream) {
-        // Canonical transcript dual-write: feed each OpenAI chunk to adapter
-        if (transcriptAdapter) {
-          safeTranscriptCall(
-            () => transcriptAdapter.handleChunk(chunk),
-            'openai:handleChunk',
-          );
-        }
         if (chunkCount === 0) {
           firstChunkTime = Date.now();
           clearTimeout(timeoutCheck);
@@ -598,10 +580,6 @@ export class OpenAIProvider extends BaseAIProvider {
         };
       }
     } finally {
-      // Flush any pending canonical transcript text
-      if (transcriptAdapter) {
-        await safeTranscriptCall(() => transcriptAdapter.flush(), 'openai:flush');
-      }
       this.abortController = null;
     }
   }
