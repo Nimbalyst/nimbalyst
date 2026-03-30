@@ -1415,7 +1415,7 @@ export async function registerSessionHandlers() {
         const { TranscriptMigrationRepository, AISessionsRepository } = await import('@nimbalyst/runtime');
         if (!TranscriptMigrationRepository.hasService()) return [];
 
-        const session = await AISessionsRepository.getById(sessionId);
+        const session = await AISessionsRepository.get(sessionId);
         if (!session) return [];
 
         // Use efficient tail query instead of loading all events

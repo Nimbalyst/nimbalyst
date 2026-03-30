@@ -8,7 +8,7 @@
  */
 
 import type { TranscriptViewMessage } from './TranscriptProjector';
-import type { Message, ToolCall } from '../types';
+import type { Message, ToolCall, ToolResult } from '../types';
 
 /**
  * Convert projected canonical transcript view messages into the legacy
@@ -25,10 +25,10 @@ import type { Message, ToolCall } from '../types';
  * Plain text results (e.g. "file contents here") that aren't valid JSON are
  * returned as-is.
  */
-function parseToolResult(result?: string): unknown {
+function parseToolResult(result?: string): ToolResult | string | undefined {
   if (result == null) return undefined;
   try {
-    return JSON.parse(result);
+    return JSON.parse(result) as ToolResult;
   } catch {
     return result;
   }

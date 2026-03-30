@@ -13,6 +13,8 @@ import type {
   ITranscriptEventStore,
 } from '@nimbalyst/runtime/ai/server/transcript/types';
 
+type TranscriptEventStoreType = ITranscriptEventStore;
+
 type PGliteLike = {
   query<T = any>(sql: string, params?: any[]): Promise<{ rows: T[] }>;
 };
@@ -81,7 +83,7 @@ const SELECT_COLS = `id, session_id, sequence, created_at, event_type, searchabl
 export function createTranscriptEventStore(
   db: PGliteLike,
   ensureDbReady?: EnsureReadyFn,
-): TranscriptEventStore {
+): TranscriptEventStoreType {
   const ensureReady = async () => {
     if (ensureDbReady) {
       await ensureDbReady();
