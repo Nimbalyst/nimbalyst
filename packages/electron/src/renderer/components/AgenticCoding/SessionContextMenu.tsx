@@ -40,6 +40,8 @@ export interface SessionContextMenuProps {
   onArchive?: () => void;
   onUnarchive?: () => void;
   onDelete?: () => void;
+  /** When part of a multiselect, how many items the action applies to */
+  selectedCount?: number;
 }
 
 export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
@@ -60,6 +62,7 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
   onArchive,
   onUnarchive,
   onDelete,
+  selectedCount = 1,
 }) => {
   const [showPhaseSubmenu, setShowPhaseSubmenu] = useState(false);
   const [submenuFlipped, setSubmenuFlipped] = useState(false);
@@ -295,12 +298,12 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
             {isArchived ? (
               <>
                 <MaterialSymbol icon="unarchive" size={14} />
-                Unarchive {isWorkstream ? 'Workstream' : isWorktreeSession ? 'Worktree' : 'Session'}
+                Unarchive {selectedCount > 1 ? `${selectedCount} Sessions` : isWorkstream ? 'Workstream' : isWorktreeSession ? 'Worktree' : 'Session'}
               </>
             ) : (
               <>
                 <MaterialSymbol icon="archive" size={14} />
-                Archive {isWorkstream ? 'Workstream' : isWorktreeSession ? 'Worktree' : 'Session'}
+                Archive {selectedCount > 1 ? `${selectedCount} Sessions` : isWorkstream ? 'Workstream' : isWorktreeSession ? 'Worktree' : 'Session'}
               </>
             )}
           </button>

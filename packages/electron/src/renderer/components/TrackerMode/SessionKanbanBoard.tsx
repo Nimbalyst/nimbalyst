@@ -371,11 +371,12 @@ interface SessionKanbanCardProps {
   phaseColor: string;
   isFocused?: boolean;
   isSelected?: boolean;
+  selectedCount?: number;
   showPeekOverride?: boolean;
   onPeekToggle?: () => void;
 }
 
-function SessionKanbanCard({ session, onSelect, onArchive, onRename, phaseColor, isFocused, isSelected, showPeekOverride, onPeekToggle }: SessionKanbanCardProps) {
+function SessionKanbanCard({ session, onSelect, onArchive, onRename, phaseColor, isFocused, isSelected, selectedCount = 1, showPeekOverride, onPeekToggle }: SessionKanbanCardProps) {
   const cardType = useMemo(() => getCardType(session), [session]);
   const cardState = useCardState(session.id, cardType);
   const stateStyle = CARD_STATE_STYLES[cardState.state];
@@ -616,6 +617,7 @@ function SessionKanbanCard({ session, onSelect, onArchive, onRename, phaseColor,
           phase={session.phase}
           onRename={onRename ? () => { setRenameValue(session.title); setIsRenaming(true); } : undefined}
           onArchive={onArchive ? () => onArchive(session.id) : undefined}
+          selectedCount={isSelected ? selectedCount : 1}
         />,
         document.body,
       )}
@@ -774,6 +776,7 @@ function SessionKanbanColumn({ phase, label, color, sessions, onSelect, onArchiv
                 phaseColor={color}
                 isFocused={focusedCardId === session.id}
                 isSelected={selectedIds.has(session.id)}
+                selectedCount={selectedIds.size}
                 showPeekOverride={peekCardId === session.id ? true : undefined}
                 onPeekToggle={() => onPeekToggle(session.id)}
               />
@@ -931,6 +934,7 @@ function UnphasedColumn({ sessions, onSelect, onArchive, onRename, onDropToPhase
               phaseColor="#525252"
               isFocused={focusedCardId === session.id}
               isSelected={selectedIds.has(session.id)}
+              selectedCount={selectedIds.size}
               showPeekOverride={peekCardId === session.id ? true : undefined}
               onPeekToggle={() => onPeekToggle(session.id)}
             />
@@ -1439,10 +1443,14 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
     setSelectedIds(new Set());
   }, [updateSessionStore, setPhase, registry, showArchiveWorktreeDialog, workspacePath, cleanupWorktreeSessions, posthog]);
 
-  // Single-session archive wrapper for context menu
+  // Archive wrapper for context menu: if the session is part of a multiselect, archive all selected
   const handleArchiveSingle = useCallback((sessionId: string) => {
-    handleArchive([sessionId]);
-  }, [handleArchive]);
+    if (selectedIds.has(sessionId) && selectedIds.size > 1) {
+      handleArchive(Array.from(selectedIds));
+    } else {
+      handleArchive([sessionId]);
+    }
+  }, [handleArchive, selectedIds]);
 
   const handleRename = useCallback(async (sessionId: string, newName: string) => {
     try {
