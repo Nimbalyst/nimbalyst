@@ -1074,9 +1074,9 @@ async function getAvailableModelsForMobile(): Promise<{ models: Array<{ id: stri
 
     // Build enabled provider set to avoid fetching from disabled providers (e.g., LMStudio network call)
     const enabledSet = new Set<string>();
-    if (providerSettings['claude']?.enabled === true && !!(apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY)) enabledSet.add('claude');
+    if (providerSettings['claude']?.enabled === true && !!apiKeys['anthropic']) enabledSet.add('claude');
     if (providerSettings['claude-code']?.enabled !== false) enabledSet.add('claude-code');
-    if (providerSettings['openai']?.enabled === true && !!(apiKeys['openai'] || process.env.OPENAI_API_KEY)) enabledSet.add('openai');
+    if (providerSettings['openai']?.enabled === true && !!apiKeys['openai']) enabledSet.add('openai');
     if (providerSettings['openai-codex']?.enabled === true) enabledSet.add('openai-codex');
     if (providerSettings['lmstudio']?.enabled === true) enabledSet.add('lmstudio');
 

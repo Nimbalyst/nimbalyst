@@ -200,8 +200,9 @@ function bucketAgeInDays(timestampMs: number): string {
 }
 
 /**
- * Detects the configured AI provider based on environment variables.
- * Returns the provider identifier or null if no known provider is detected.
+ * Detects which AI provider the user's shell environment is configured for.
+ * Used ONLY for analytics telemetry — NOT for routing or billing decisions.
+ * Nimbalyst never uses these env vars for API calls (see CLAUDE.md policy).
  *
  * Checks providers in order of specificity:
  * 1. Claude Code specific flags (Bedrock, Vertex) - most specific
@@ -646,8 +647,10 @@ export class AIService {
       toolRegistry.register(tool);
     }
 
-    // Delay initialization until first use
-    this.initializeApiKeys();
+    // API keys must be explicitly set by the user in settings.
+    // NEVER auto-import keys from process.env. A user's .env file with
+    // ANTHROPIC_API_KEY was silently picked up, persisted into settings,
+    // and used instead of their subscription — costing them $100+.
     this.setupIpcHandlers();
 
     // Clean up any empty messages from existing sessions on startup
@@ -711,13 +714,6 @@ export class AIService {
       });
     }
     return this.settingsStore;
-  }
-
-  private initializeApiKeys() {
-    // NOOP — API keys must be explicitly set by the user in settings.
-    // NEVER auto-import keys from process.env. A user's .env file with
-    // ANTHROPIC_API_KEY was silently picked up, persisted into settings,
-    // and used instead of their subscription — costing them $100+.
   }
 
   /**

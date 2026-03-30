@@ -241,7 +241,7 @@ export function initVoiceModeService() {
 
       // Get OpenAI API key from settings store
       const apiKeys = settingsStore.get('apiKeys', {}) as Record<string, string>;
-      const apiKey = apiKeys['openai'] || process.env.OPENAI_API_KEY;
+      const apiKey = apiKeys['openai'];
 
       if (!apiKey) {
         throw new Error('OpenAI API key not configured. Please add it in Settings.');

@@ -170,11 +170,17 @@ export async function buildSdkOptions(
     }
   }
 
-  // Set up environment variables
+  // Set up environment variables.
+  // Strip API keys from inherited env so we never silently use a key the user
+  // didn't explicitly configure in Nimbalyst settings. A user's .env file with
+  // ANTHROPIC_API_KEY was picked up here and billed their personal account $100+.
+  const { ANTHROPIC_API_KEY: _envAnthropicKey, OPENAI_API_KEY: _envOpenaiKey, ...sanitizedProcessEnv } = process.env;
+  const { ANTHROPIC_API_KEY: _shellAnthropicKey, OPENAI_API_KEY: _shellOpenaiKey, ...sanitizedShellEnv } = shellEnv;
+
   const enableAgentTeams = settingsEnv.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS === '1';
   const env: any = {
-    ...process.env,
-    ...shellEnv,
+    ...sanitizedProcessEnv,
+    ...sanitizedShellEnv,
     ...settingsEnv,
     ENABLE_TOOL_SEARCH: 'auto:10',
     ...(config.effortLevel && config.effortLevel !== DEFAULT_EFFORT_LEVEL && {
