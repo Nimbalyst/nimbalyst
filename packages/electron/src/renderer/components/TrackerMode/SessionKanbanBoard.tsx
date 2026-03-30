@@ -284,21 +284,21 @@ function TranscriptPeek({ sessionId, anchorRef, onClose }: TranscriptPeekProps) 
     }
 
     let cancelled = false;
-    (async () => {
-      try {
-        const result = await window.electronAPI.ai.getTailMessages(sessionId, 20);
+    window.electronAPI.ai
+      .getTailMessages(sessionId, 10)
+      .then((msgs: Message[]) => {
         if (!cancelled) {
-          tailMessageCache.set(sessionId, result);
-          setMessages(result);
+          tailMessageCache.set(sessionId, msgs);
+          setMessages(msgs);
           setLoading(false);
         }
-      } catch {
+      })
+      .catch(() => {
         if (!cancelled) {
           setMessages([]);
           setLoading(false);
         }
-      }
-    })();
+      });
 
     return () => { cancelled = true; };
   }, [sessionId]);

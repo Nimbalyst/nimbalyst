@@ -166,6 +166,104 @@ function getContextSnapshotFromTokenCountPayload(
   };
 }
 
+function extractSpecialToolCall(
+  record: Record<string, unknown>,
+  itemType: string,
+  eventType: string
+): ParsedCodexToolCall | undefined {
+  if (itemType === 'command_execution') {
+    const command = typeof record.command === 'string' ? record.command : '';
+    if (!command) {
+      return undefined;
+    }
+
+    return {
+      id: typeof record.id === 'string' ? record.id : undefined,
+      name: 'command_execution',
+      arguments: { command },
+      ...(eventType === 'item.completed'
+        ? {
+            result: {
+              success: !(record.error ?? null) && (record.exit_code === undefined || record.exit_code === null || record.exit_code === 0),
+              command,
+              output: record.aggregated_output ?? record.output,
+              exit_code: typeof record.exit_code === 'number' ? record.exit_code : undefined,
+              status: typeof record.status === 'string' ? record.status : undefined,
+              ...(record.error ? { error: record.error } : {}),
+            },
+          }
+        : {}),
+    };
+  }
+
+  if (itemType === 'mcp_tool_call') {
+    const server = typeof record.server === 'string' ? record.server : '';
+    const tool = typeof record.tool === 'string' ? record.tool : '';
+    const name = server && tool ? `mcp__${server}__${tool}` : tool;
+    if (!name) {
+      return undefined;
+    }
+
+    const error = record.error;
+    const hasError = error !== undefined && error !== null && error !== '';
+
+    return {
+      id: typeof record.id === 'string' ? record.id : undefined,
+      name,
+      arguments: (record.arguments ?? record.args ?? {}) as unknown,
+      ...(eventType === 'item.completed'
+        ? {
+            result: {
+              success: !hasError,
+              result: record.result,
+              status: typeof record.status === 'string' ? record.status : undefined,
+              ...(hasError ? { error } : {}),
+            },
+          }
+        : {}),
+    };
+  }
+
+  if (itemType === 'web_search') {
+    return {
+      id: typeof record.id === 'string' ? record.id : undefined,
+      name: 'web_search',
+      arguments: {
+        query: typeof record.query === 'string' ? record.query : '',
+        ...(record.action !== undefined ? { action: record.action } : {}),
+      },
+      ...(eventType === 'item.completed'
+        ? {
+            result: {
+              success: true,
+              query: typeof record.query === 'string' ? record.query : '',
+              ...(record.action !== undefined ? { action: record.action } : {}),
+            },
+          }
+        : {}),
+    };
+  }
+
+  if (itemType === 'file_change') {
+    return {
+      id: typeof record.id === 'string' ? record.id : undefined,
+      name: 'file_change',
+      arguments: { changes: record.changes },
+      ...(eventType === 'item.completed'
+        ? {
+            result: {
+              success: record.status !== 'failed',
+              status: record.status,
+              changes: record.changes,
+            },
+          }
+        : {}),
+    };
+  }
+
+  return undefined;
+}
+
 function extractToolCallFromRecord(record: Record<string, unknown> | null | undefined): ParsedCodexToolCall | undefined {
   if (!record) return undefined;
 
@@ -243,22 +341,8 @@ export function parseCodexEvent(event: unknown): ParsedCodexEvent[] {
       parsed.push({ text: itemText, rawEvent: event });
     }
 
-    // Handle file_change items directly (they don't have standard tool name fields)
-    if (itemType === 'file_change') {
-      parsed.push({
-        toolCall: {
-          id: typeof itemRecord.id === 'string' ? itemRecord.id : undefined,
-          name: 'file_change',
-          arguments: { changes: itemRecord.changes },
-          ...(eventType === 'item.completed'
-            ? { result: { status: itemRecord.status, changes: itemRecord.changes } }
-            : {}),
-        },
-        rawEvent: event,
-      });
-    }
-
     const itemToolCall =
+      extractSpecialToolCall(itemRecord, itemType, eventType) ??
       extractToolCallFromRecord(itemRecord.tool as Record<string, unknown> | undefined) ??
       extractToolCallFromRecord(itemRecord);
     if (

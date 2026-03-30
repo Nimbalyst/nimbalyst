@@ -108,24 +108,19 @@ export const PromptQuickOpen: React.FC<PromptQuickOpenProps> = ({
     });
   }, [searchQuery, allPrompts]);
 
-  // Load all prompts when modal opens
+  // Load all prompts from canonical transcript events when modal opens
   useEffect(() => {
     if (isOpen && workspacePath) {
-      console.log('[PromptQuickOpen] Requesting prompts for workspace:', workspacePath);
-      window.electronAPI.invoke('messages:list-user-prompts', workspacePath, 2000)
-        .then((result: { success: boolean; prompts: PromptItem[]; error?: string }) => {
-          console.log('[PromptQuickOpen] Result:', result);
-          if (result.success && Array.isArray(result.prompts)) {
-            console.log('[PromptQuickOpen] Setting', result.prompts.length, 'prompts');
+      setAllPrompts([]);
+      window.electronAPI.ai
+        .listUserPrompts(workspacePath)
+        .then((result: { success: boolean; prompts: PromptItem[] }) => {
+          if (result.success) {
             setAllPrompts(result.prompts);
-          } else {
-            console.warn('[PromptQuickOpen] No prompts or error:', result.error);
-            setAllPrompts([]);
           }
         })
-        .catch((error: Error) => {
-          console.error('[PromptQuickOpen] Failed to load prompts:', error);
-          setAllPrompts([]);
+        .catch(() => {
+          // Silently fail - prompts list will remain empty
         });
     }
   }, [isOpen, workspacePath]);

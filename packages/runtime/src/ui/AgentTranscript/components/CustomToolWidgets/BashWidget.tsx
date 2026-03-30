@@ -28,9 +28,12 @@ const MAX_COLLAPSED_COMMAND_LENGTH = 60;
 /**
  * Extract the command from tool arguments
  */
-function extractCommand(args: Record<string, any> | undefined): string | null {
+function extractCommand(
+  args: Record<string, any> | undefined,
+  fallbackName?: string | null
+): string | null {
   if (!args) return null;
-  const command = args.command || null;
+  const command = args.command || args.cmd || args.rawCommand || fallbackName || null;
   if (!command) return null;
   return unwrapShellCommand(command);
 }
@@ -189,7 +192,7 @@ export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpande
   }, [copied]);
 
   const handleCopyCommand = useCallback(async () => {
-    const command = extractCommand(tool?.arguments);
+    const command = extractCommand(tool?.arguments, tool?.name);
     if (command) {
       try {
         await copyToClipboard(command);
@@ -198,11 +201,11 @@ export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpande
         console.error('Failed to copy command:', err);
       }
     }
-  }, [tool?.arguments]);
+  }, [tool?.arguments, tool?.name]);
 
   if (!tool) return null;
 
-  const command = extractCommand(tool.arguments);
+  const command = extractCommand(tool.arguments, tool.name);
   const description = extractDescription(tool.arguments);
   const output = extractOutputText(tool.result);
   const hasError = isToolError(tool.result, message);

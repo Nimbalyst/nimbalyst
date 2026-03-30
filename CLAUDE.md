@@ -216,6 +216,26 @@ The Nimbalyst app uses **PGLite** (PostgreSQL in WebAssembly) for all data stora
 
 For implementation details, see `/packages/electron/CLAUDE.md`.
 
+## Canonical Transcript Storage
+
+The AI transcript system uses a two-tier architecture:
+
+- **`ai_agent_messages`** -- Append-only raw source log preserving provider-native payloads. Not used for rendering or search.
+- **`ai_transcript_events`** -- Canonical, provider-agnostic transcript rows optimized for rendering, search, and sync.
+
+**Key components:**
+- **TranscriptWriter** -- Shared service for writing canonical events (in `packages/runtime/src/ai/server/transcript/`)
+- **TranscriptProjector** -- Pure function that projects canonical events into UI view models
+- **Provider adapters** -- Per-provider translators converting streaming events to canonical writes (ClaudeCode, Codex, ClaudeChat, OpenAI/LMStudio)
+- **TranscriptTransformer** -- Lazy migration pipeline for sessions created before the canonical system
+
+**Rules:**
+- New sessions are "born canonical" (`canonical_transform_status = 'complete'`)
+- Old sessions are lazily transformed on first access
+- All providers dual-write (raw + canonical) via `TranscriptDualWriter`
+- Canonical errors are non-fatal -- raw log is always written
+- Only `user_message`, `assistant_message`, and `system_message` events are searchable
+
 ## General Development Guidelines
 
 - **Never use emojis** - Not in commits, code, or documentation unless explicitly requested

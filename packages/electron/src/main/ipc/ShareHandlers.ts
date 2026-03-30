@@ -5,9 +5,10 @@ import * as path from 'path';
 import { safeHandle } from '../utils/ipcRegistry';
 import { logger } from '../utils/logger';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
-import { AISessionsRepository, AgentMessagesRepository, transformAgentMessagesToUI } from '@nimbalyst/runtime';
+import { AISessionsRepository } from '@nimbalyst/runtime';
 import type { SessionData } from '@nimbalyst/runtime/ai/server/types';
 import { exportSessionToHtml } from '../services/SessionHtmlExporter';
+import { loadLegacyMessages } from '../utils/transcriptHelpers';
 import { exportFileToHtml } from '../services/FileHtmlExporter';
 import { getSessionJwt, refreshSession } from '../services/StytchAuthService';
 import { store } from '../utils/store';
@@ -293,8 +294,10 @@ export function registerShareHandlers() {
           return { success: false, error: `Session not found: ${sessionId}` };
         }
 
-        const agentMessages = await AgentMessagesRepository.list(sessionId);
-        const uiMessages = transformAgentMessagesToUI(agentMessages);
+        const msgResult = await loadLegacyMessages(sessionId, chatSession.provider ?? 'unknown');
+        if (!msgResult.success) {
+          return { success: false, error: msgResult.error };
+        }
 
         const session: SessionData = {
           id: chatSession.id,
@@ -304,7 +307,7 @@ export function registerShareHandlers() {
           mode: chatSession.mode,
           createdAt: new Date(chatSession.createdAt as any).getTime(),
           updatedAt: new Date(chatSession.updatedAt as any).getTime(),
-          messages: uiMessages,
+          messages: msgResult.messages,
           workspacePath: (chatSession.metadata as any)?.workspaceId ?? chatSession.workspacePath ?? '',
           title: chatSession.title ?? 'New conversation',
         };

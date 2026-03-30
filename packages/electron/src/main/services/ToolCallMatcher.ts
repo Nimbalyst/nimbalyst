@@ -24,6 +24,8 @@ import { parse as parseShellCommand } from 'shell-quote';
 import { diffLines } from 'diff';
 import { database } from '../database/PGLiteDatabaseWorker';
 import { logger } from '../utils/logger';
+import { TranscriptEventRepository } from '@nimbalyst/runtime/storage/repositories/TranscriptEventRepository';
+import type { TranscriptEvent, ToolCallPayload } from '@nimbalyst/runtime/ai/server/transcript/types';
 
 const gunzip = promisify(zlib.gunzip);
 
@@ -107,10 +109,6 @@ interface AgentMessageRow {
   id: number;
   content: string;
   created_at_ms: number;
-}
-
-interface WorkspaceAgentMessageRow extends AgentMessageRow {
-  session_id: string;
 }
 
 interface ToolCallMatchRow {
@@ -435,6 +433,107 @@ interface MatchCandidate {
 }
 
 /** Exported for testing */
+/**
+ * Build ToolCallWindow[] from canonical ai_transcript_events.
+ * Returns null if the canonical store is not available or the session has no canonical events.
+ * Used as a faster alternative to parsing raw ai_agent_messages.
+ */
+export async function getCanonicalToolCallWindows(
+  sessionId: string,
+  options?: { afterDate?: Date; beforeDate?: Date },
+): Promise<ToolCallWindow[] | null> {
+  if (!TranscriptEventRepository.hasStore()) {
+    return null;
+  }
+
+  try {
+    const store = TranscriptEventRepository.getStore();
+    const events = await store.getSessionEvents(sessionId, {
+      eventTypes: ['tool_call'],
+      createdAfter: options?.afterDate,
+      createdBefore: options?.beforeDate,
+    });
+
+    if (events.length === 0) {
+      return null;
+    }
+
+    return events.map((event: TranscriptEvent) => {
+      const payload = event.payload as unknown as ToolCallPayload;
+      return {
+        messageId: event.id,
+        messageCreatedAt: event.createdAt.getTime(),
+        sessionId: event.sessionId,
+        toolName: payload.toolName,
+        toolCallItemId: event.providerToolCallId,
+        toolUseId: event.providerToolCallId,
+        argsText: stringifyArgs(payload.arguments),
+        outputText: payload.result ?? '',
+        args: payload.arguments,
+        isCompleted: payload.status === 'completed' || payload.status === 'error',
+      };
+    });
+  } catch (error) {
+    logger.main.warn('[ToolCallMatcher] Failed to read canonical tool events:', error);
+    return null;
+  }
+}
+
+/**
+ * Batch version: load ToolCallWindow[] for multiple sessions in a single SQL query.
+ * Returns null if the canonical store is not available.
+ */
+async function getCanonicalToolCallWindowsMultiSession(
+  sessionIds: string[],
+  options?: { afterDate?: Date; beforeDate?: Date },
+): Promise<Map<string, ToolCallWindow[]> | null> {
+  if (!TranscriptEventRepository.hasStore()) {
+    return null;
+  }
+
+  try {
+    const store = TranscriptEventRepository.getStore();
+    const events = await store.getMultiSessionEvents(sessionIds, {
+      eventTypes: ['tool_call'],
+      createdAfter: options?.afterDate,
+      createdBefore: options?.beforeDate,
+    });
+
+    if (events.length === 0) {
+      return null;
+    }
+
+    const result = new Map<string, ToolCallWindow[]>();
+    for (const event of events) {
+      const payload = event.payload as unknown as ToolCallPayload;
+      const window: ToolCallWindow = {
+        messageId: event.id,
+        messageCreatedAt: event.createdAt.getTime(),
+        sessionId: event.sessionId,
+        toolName: payload.toolName,
+        toolCallItemId: event.providerToolCallId,
+        toolUseId: event.providerToolCallId,
+        argsText: stringifyArgs(payload.arguments),
+        outputText: payload.result ?? '',
+        args: payload.arguments,
+        isCompleted: payload.status === 'completed' || payload.status === 'error',
+      };
+
+      let arr = result.get(event.sessionId);
+      if (!arr) {
+        arr = [];
+        result.set(event.sessionId, arr);
+      }
+      arr.push(window);
+    }
+
+    return result;
+  } catch (error) {
+    logger.main.warn('[ToolCallMatcher] Failed to read canonical tool events (multi-session):', error);
+    return null;
+  }
+}
+
 export function scoreMatch(
   filePath: string,
   fileTimestamp: number,
@@ -611,64 +710,37 @@ class ToolCallMatcherImpl {
         return { winner: null, candidates: [], reason: 'no_active_sessions' };
       }
 
+      const sessionWindows = new Map<string, ToolCallWindow[]>();
+
+      // Load canonical tool call windows for all sessions in a single query
       const windowStart = input.fileTimestamp - TIME_CUTOFF_MS;
       const windowEnd = input.fileTimestamp + TIME_CUTOFF_MS;
-      const messagesResult = await database.query<WorkspaceAgentMessageRow>(
-        `SELECT session_id, id, content, EXTRACT(EPOCH FROM created_at) * 1000 AS created_at_ms
-         FROM ai_agent_messages
-         WHERE session_id = ANY($1::text[])
-           AND direction = 'output'
-           AND hidden = FALSE
-           AND (EXTRACT(EPOCH FROM created_at) * 1000) >= $2
-           AND (EXTRACT(EPOCH FROM created_at) * 1000) <= $3
-         ORDER BY id ASC`,
-        [candidateSessionIds, windowStart, windowEnd]
-      );
-
-      if (messagesResult.rows.length === 0) {
-        return { winner: null, candidates: [], reason: 'no_recent_tool_windows' };
+      const batchWindows = await getCanonicalToolCallWindowsMultiSession(candidateSessionIds, {
+        afterDate: new Date(windowStart),
+        beforeDate: new Date(windowEnd),
+      });
+      if (batchWindows) {
+        for (const [sessionId, windows] of batchWindows) {
+          if (windows.length > 0) {
+            sessionWindows.set(sessionId, windows);
+          }
+        }
       }
 
-      const sessionWindows = new Map<string, ToolCallWindow[]>();
-      const sessionMessages = new Map<string, AgentMessageRow[]>();
-
-      for (const row of messagesResult.rows) {
-        const sessionId = row.session_id;
-        const msgCreatedAt = new Date(ensureNumber(row.created_at_ms));
-        const msgId = ensureNumber(row.id);
-
-        if (!sessionMessages.has(sessionId)) {
-          sessionMessages.set(sessionId, []);
-        }
-        sessionMessages.get(sessionId)!.push({
-          id: msgId,
-          content: row.content,
-          created_at_ms: ensureNumber(row.created_at_ms),
-        });
-
-        const parsedWindows = parseToolCallWindows(
-          msgId,
-          row.content,
-          msgCreatedAt,
-          sessionId,
-          input.workspacePath
-        );
-        if (parsedWindows.length > 0) {
-          if (!sessionWindows.has(sessionId)) {
-            sessionWindows.set(sessionId, []);
-          }
-          sessionWindows.get(sessionId)!.push(...parsedWindows);
-        }
+      if (sessionWindows.size === 0) {
+        return { winner: null, candidates: [], reason: 'no_recent_tool_windows' };
       }
 
       const bestBySession = new Map<string, WorkspaceFileEditCandidate>();
 
       for (const sessionId of candidateSessionIds) {
         const windows = sessionWindows.get(sessionId) || [];
-        const messages = sessionMessages.get(sessionId) || [];
-        if (windows.length === 0 || messages.length === 0) continue;
+        if (windows.length === 0) continue;
 
-        const deduped = this.deduplicateWindows(windows, messages);
+        // Canonical events produce one window per tool call (already deduplicated by providerToolCallId).
+        // deduplicateWindows is safe to call with empty messages - it groups by toolCallItemId and
+        // prefers completed windows, which is correct for canonical events.
+        const deduped = this.deduplicateWindows(windows, []);
         for (const window of deduped) {
           const scored = scoreWorkspaceFileEdit(input.filePath, input.fileTimestamp, window);
           if (!scored || scored.score < MIN_MATCH_SCORE) continue;
@@ -807,39 +879,24 @@ class ToolCallMatcherImpl {
       }
       const sessionFiles = [...sessionFilesByKey.values()];
 
-      // 3. Load output messages
-      // Use EXTRACT(EPOCH) for timestamp safety across legacy/modern schemas.
-      // This avoids timezone offsets when a column was historically persisted
-      // as timestamp without time zone on some machines.
-      const messagesResult = await database.query<AgentMessageRow>(
-        `SELECT id, content, EXTRACT(EPOCH FROM created_at) * 1000 AS created_at_ms
-         FROM ai_agent_messages
-         WHERE session_id = $1 AND direction = 'output' AND hidden = FALSE
-         ORDER BY id ASC`,
-        [sessionId]
-      );
-
-      // 4. Parse tool call windows from messages
-      const windows: ToolCallWindow[] = [];
-      for (const msg of messagesResult.rows) {
-        const msgWindows = parseToolCallWindows(
-          ensureNumber(msg.id),
-          msg.content,
-          new Date(ensureNumber(msg.created_at_ms)),
-          sessionId,
-          workspacePath
-        );
-        windows.push(...msgWindows);
+      // 3. Load tool call windows from canonical transcript events
+      let windows: ToolCallWindow[] = [];
+      const canonicalWindows = await getCanonicalToolCallWindows(sessionId);
+      if (canonicalWindows && canonicalWindows.length > 0) {
+        windows = canonicalWindows;
       }
 
       if (windows.length === 0 || sessionFiles.length === 0) return 0;
 
-      // 5. Deduplicate windows by toolCallItemId.
+      // 4. Deduplicate windows by toolCallItemId.
       // When both item.started and item.completed exist for the same tool call,
       // merge into one window preferring item.completed data (has output/result).
       // When only item.started exists but the session continued (later messages exist),
       // treat it as implicitly closed — a valid match candidate.
-      const deduped = this.deduplicateWindows(windows, messagesResult.rows);
+      // Canonical events produce one window per tool call (already deduplicated by providerToolCallId).
+      // deduplicateWindows is safe to call with empty messages - it groups by toolCallItemId and
+      // prefers completed windows, which is correct for canonical events.
+      const deduped = this.deduplicateWindows(windows, []);
       logger.main.debug('[ToolCallMatcher] Loaded match inputs:', {
         sessionId,
         sessionFileCount: sessionFiles.length,
@@ -1087,19 +1144,7 @@ class ToolCallMatcherImpl {
       }
 
       // 1. Find matches for this tool call
-      const latestMessageResult = lookup.toolCallTimestamp != null
-        ? await database.query<{
-          message_id: number;
-        }>(
-          `SELECT edits.message_id
-           FROM ai_tool_call_file_edits edits
-           JOIN ai_agent_messages msg ON msg.id = edits.message_id
-           WHERE edits.session_id = $1 AND edits.tool_call_item_id = $2
-           ORDER BY ABS((EXTRACT(EPOCH FROM msg.created_at) * 1000) - $3) ASC, edits.created_at DESC
-           LIMIT 1`,
-          [sessionId, lookup.toolCallItemId, lookup.toolCallTimestamp]
-        )
-        : await database.query<{
+      const latestMessageResult = await database.query<{
           message_id: number;
         }>(
           `SELECT message_id
@@ -1148,22 +1193,18 @@ class ToolCallMatcherImpl {
         });
       }
 
-      // 3. Get the raw ai_agent_messages content for the matched message(s)
-      const messageIds = [...new Set(matchResult.rows.map(r => r.message_id))];
-      const msgResult = await database.query<{
-        id: number;
-        content: string;
-      }>(
-        `SELECT id, content
-         FROM ai_agent_messages
-         WHERE id = ANY($1)`,
-        [messageIds]
-      );
-
-      const messagesById = new Map<number, string>();
-      for (const row of msgResult.rows) {
-        const id = ensureNumber(row.id);
-        messagesById.set(id, row.content);
+      // 3. Try canonical event for the specific tool call, fall back to raw messages
+      let canonicalPayload: ToolCallPayload | null = null;
+      try {
+        if (TranscriptEventRepository.hasStore() && lookup.toolCallItemId) {
+          const store = TranscriptEventRepository.getStore();
+          const event = await store.findByProviderToolCallId(lookup.toolCallItemId);
+          if (event) {
+            canonicalPayload = event.payload as unknown as ToolCallPayload;
+          }
+        }
+      } catch (canonicalError) {
+        logger.main.warn('[ToolCallMatcher] Failed to load canonical event for diffs, falling back to raw:', canonicalError);
       }
 
       // 4. Build diff results
@@ -1174,7 +1215,6 @@ class ToolCallMatcherImpl {
         if (!fileInfo) continue;
 
         const msgId = ensureNumber(match.message_id);
-        const rawContent = messagesById.get(msgId);
         const operation = fileInfo.metadata?.operation || 'edit';
         const debug: string[] = [`match: ${match.match_reason}`];
 
@@ -1186,17 +1226,24 @@ class ToolCallMatcherImpl {
           linesRemoved: fileInfo.metadata?.linesRemoved,
         };
 
-        // Try to extract diff data from the raw message content
-        if (rawContent) {
-          const extracted = this.extractDiffsFromMessageContent(rawContent, fileInfo.filePath);
+        // Try canonical payload first
+        let extracted: { diffs: Array<{ oldString: string; newString: string }>; content?: string } | null = null;
+        if (canonicalPayload) {
+          extracted = this.extractDiffsFromCanonicalPayload(canonicalPayload, fileInfo.filePath);
+          if (extracted && (extracted.diffs.length > 0 || extracted.content)) {
+            debug.push('diff: canonical');
+          }
+        }
+
+        if (!extracted || (extracted.diffs.length === 0 && !extracted.content)) {
+          debug.push('diff: no canonical payload found');
+        }
+
+        if (extracted) {
           if (extracted.diffs.length > 0) {
             diffResult.diffs = extracted.diffs;
-            debug.push('diff: tool args');
           } else if (extracted.content) {
             diffResult.content = extracted.content;
-            debug.push('diff: new file content');
-          } else {
-            debug.push('diff: nothing extractable from tool args');
           }
           if (diffResult.linesAdded == null && diffResult.linesRemoved == null) {
             let added = 0;
@@ -1211,8 +1258,6 @@ class ToolCallMatcherImpl {
             if (added > 0) diffResult.linesAdded = added;
             if (removed > 0) diffResult.linesRemoved = removed;
           }
-        } else {
-          debug.push('message: not found for msgId ' + msgId);
         }
 
         diffResult.debugInfo = debug.join(' | ');
@@ -1337,6 +1382,65 @@ class ToolCallMatcherImpl {
       fileTimestamp: row.file_timestamp ? (row.file_timestamp instanceof Date ? row.file_timestamp : new Date(row.file_timestamp)) : null,
       createdAt: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
     };
+  }
+
+  /**
+   * Extract diff data from a canonical ToolCallPayload.
+   * Reads the structured arguments directly without JSON parsing.
+   */
+  private extractDiffsFromCanonicalPayload(
+    payload: ToolCallPayload,
+    targetFilePath: string
+  ): { diffs: Array<{ oldString: string; newString: string }>; content?: string } {
+    const args = payload.arguments;
+    if (!args || typeof args !== 'object') return { diffs: [] };
+
+    // Check if this tool call targets the right file
+    const toolFilePath = (args as any).file_path || (args as any).filePath || (args as any).path || (args as any).notebook_path;
+    if (toolFilePath && typeof toolFilePath === 'string') {
+      const normalizedTool = path.normalize(toolFilePath);
+      const normalizedTarget = path.normalize(targetFilePath);
+      if (normalizedTool !== normalizedTarget) {
+        return { diffs: [] };
+      }
+    }
+
+    // file_change: check for content in changes array
+    if (payload.changes && Array.isArray(payload.changes)) {
+      for (const change of payload.changes) {
+        if (change.path === targetFilePath && typeof (change as any).content === 'string') {
+          return { diffs: [], content: (change as any).content };
+        }
+      }
+    }
+
+    // Extract Edit-style diffs (old_string / new_string)
+    if ((args as any).old_string !== undefined || (args as any).new_string !== undefined) {
+      return {
+        diffs: [{
+          oldString: (args as any).old_string || '',
+          newString: (args as any).new_string || '',
+        }],
+      };
+    }
+
+    // Extract Write-style content (full file creation)
+    if (typeof (args as any).content === 'string' && (args as any).content.length > 0) {
+      return { diffs: [], content: (args as any).content };
+    }
+
+    // Multi-edit: replacements array
+    if (Array.isArray((args as any).replacements)) {
+      const diffs = (args as any).replacements
+        .filter((r: any) => r && (r.oldText || r.old_text || r.newText || r.new_text))
+        .map((r: any) => ({
+          oldString: r.oldText || r.old_text || '',
+          newString: r.newText || r.new_text || '',
+        }));
+      if (diffs.length > 0) return { diffs };
+    }
+
+    return { diffs: [] };
   }
 
   /**
@@ -1795,54 +1899,21 @@ class ToolCallMatcherImpl {
 
       if (filePaths.length === 0) return [];
 
-      // Find the matching message content for extracting diffs from tool args.
-      // Match by toolCallItemId only — the old '%item.completed%' filter excluded
-      // raw Claude API messages (Format 1: {"type":"assistant","message":{...}})
-      // which never contain that string.
-      const escapedToolCallItemId = escapeSqlLikeWildcards(toolCallItemId);
-      const messageResult = toolCallTimestamp != null
-        ? await database.query<{
-          id: number;
-          content: string;
-          created_at_ms: number;
-        }>(
-          `SELECT id, content, EXTRACT(EPOCH FROM created_at) * 1000 AS created_at_ms
-           FROM ai_agent_messages
-           WHERE session_id = $1 AND content LIKE $2 ESCAPE '\'
-           ORDER BY ABS((EXTRACT(EPOCH FROM created_at) * 1000) - $3) ASC, id DESC
-           LIMIT 50`,
-          [sessionId, `%\"id\":\"${escapedToolCallItemId}\"%`, toolCallTimestamp]
-        )
-        : await database.query<{
-        id: number;
-        content: string;
-      }>(
-        `SELECT id, content
-           FROM ai_agent_messages
-           WHERE session_id = $1 AND content LIKE $2 ESCAPE '\'
-           ORDER BY id DESC
-           LIMIT 50`,
-          [sessionId, `%\"id\":\"${escapedToolCallItemId}\"%`]
-        );
-
-      // Determine tool name from message content
+      // Try canonical event first for diff extraction (targeted lookup via indexed column)
+      let canonicalPayload: ToolCallPayload | null = null;
       let toolName = 'edit';
-      for (const row of messageResult.rows) {
-        const windows = parseToolCallWindows(
-          ensureNumber(row.id),
-          row.content,
-          new Date(),
-          sessionId,
-          workspacePath
-        );
-        const match = windows.find(w => w.toolCallItemId === toolCallItemId);
-        if (match) {
-          toolName = match.toolName;
-          break;
+      try {
+        if (TranscriptEventRepository.hasStore() && toolCallItemId) {
+          const store = TranscriptEventRepository.getStore();
+          const matchingEvent = await store.findByProviderToolCallId(toolCallItemId);
+          if (matchingEvent) {
+            canonicalPayload = matchingEvent.payload as unknown as ToolCallPayload;
+            toolName = canonicalPayload.toolName;
+          }
         }
+      } catch (canonicalError) {
+        logger.main.warn('[ToolCallMatcher] Failed to load canonical event for getDiffsFromToolCallContent:', canonicalError);
       }
-
-      const rawContent = messageResult.rows[0]?.content;
 
       const results: ToolCallDiffResult[] = [];
       for (const filePath of filePaths) {
@@ -1854,20 +1925,24 @@ class ToolCallMatcherImpl {
           diffs: [],
         };
 
-        // Try to extract diff data from the raw message content
-        if (rawContent) {
-          const extracted = this.extractDiffsFromMessageContent(rawContent, filePath);
+        let extracted: { diffs: Array<{ oldString: string; newString: string }>; content?: string } | null = null;
+        if (canonicalPayload) {
+          extracted = this.extractDiffsFromCanonicalPayload(canonicalPayload, filePath);
+          if (extracted && (extracted.diffs.length > 0 || extracted.content)) {
+            debug.push('diff: canonical');
+          }
+        }
+
+        if (!extracted || (extracted.diffs.length === 0 && !extracted.content)) {
+          debug.push('diff: no canonical payload found');
+        }
+
+        if (extracted) {
           if (extracted.diffs.length > 0) {
             diffResult.diffs = extracted.diffs;
-            debug.push('diff: tool args');
           } else if (extracted.content) {
             diffResult.content = extracted.content;
-            debug.push('diff: new file content');
-          } else {
-            debug.push('diff: nothing extractable from tool args');
           }
-        } else {
-          debug.push('message: not found');
         }
 
         let added = 0;

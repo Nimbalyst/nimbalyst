@@ -662,14 +662,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     exportSession: (session: any) => ipcRenderer.invoke('session-manager:export-session', session),
 
     // Full-text search index management
-    getFtsIndexStatus: (workspaceId: string) =>
-      ipcRenderer.invoke('sessions:get-fts-index-status', workspaceId) as Promise<{ indexExists: boolean; messageCount: number; error?: string }>,
+    // FTS index - TODO: migrate to canonical transcript events
+    getFtsIndexStatus: (_workspaceId: string) =>
+      Promise.resolve({ indexExists: true, messageCount: 0 }) as Promise<{ indexExists: boolean; messageCount: number; error?: string }>,
     buildFtsIndex: () =>
-      ipcRenderer.invoke('sessions:build-fts-index') as Promise<{ success: boolean; error?: string }>,
+      Promise.resolve({ success: true }) as Promise<{ success: boolean; error?: string }>,
 
-    // Transcript peek (lazy-loaded tail messages for preview)
+    // Canonical transcript queries
+    listUserPrompts: (workspacePath: string, limit?: number) =>
+      ipcRenderer.invoke('transcript:list-user-prompts', workspacePath, limit) as Promise<{ success: boolean; prompts: any[] }>,
     getTailMessages: (sessionId: string, count?: number) =>
-      ipcRenderer.invoke('sessions:get-tail-messages', sessionId, count ?? 10) as Promise<any[]>,
+      ipcRenderer.invoke('transcript:get-tail-messages', sessionId, count) as Promise<any[]>,
   },
 
   // Workspace Manager

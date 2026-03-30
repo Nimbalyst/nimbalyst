@@ -24,6 +24,7 @@ import {
 } from './types';
 import type { SessionData as ChatSession } from './types';
 import { parseContextUsageMessage } from './utils/contextUsage';
+import { TranscriptMigrationRepository } from '../../storage/repositories/TranscriptMigrationRepository';
 
 /** Parsed tool_progress event from the agent stream */
 interface ToolProgressEvent {
@@ -813,6 +814,18 @@ export class SessionManager {
       worktreeProjectPath,
     });
 
+    // Mark new session as canonical from birth -- no lazy migration needed
+    try {
+      await AISessionsRepository.updateMetadata(sessionId, {
+        canonicalTransformVersion: 1,
+        canonicalTransformStatus: 'complete',
+        canonicalLastTransformedAt: new Date(),
+        canonicalLastRawMessageId: 0,
+      });
+    } catch {
+      // Non-fatal: session will still work without canonical status
+    }
+
     const now = Date.now();
     const session: SessionData = {
       id: sessionId,
@@ -967,44 +980,8 @@ export class SessionManager {
       return null;
     }
 
-    // Fetch raw agent messages from the database (already filtered to exclude hidden messages)
-    let agentMessages = await AgentMessagesRepository.list(sessionId);
-    const branchMessageCount = agentMessages.length; // Store original count before prepending parent messages
-
-    // For branched sessions, prepend parent's messages (up to branch point)
-    // This allows viewing the conversation history that led to the branch
-    if (session.parentSessionId) {
-      const parentMessages = await AgentMessagesRepository.list(session.parentSessionId);
-
-      // If we have a branch point, only include parent messages up to that point
-      // The branchPointMessageId is the database message ID (auto-incrementing)
-      if (session.branchPointMessageId && parentMessages.length > 0) {
-        const branchPointIndex = parentMessages.findIndex(
-          (msg) => msg.id === session.branchPointMessageId
-        );
-        if (branchPointIndex >= 0) {
-          // Include messages up to and including the branch point
-          agentMessages = [...parentMessages.slice(0, branchPointIndex + 1), ...agentMessages];
-        } else {
-          // Branch point not found, include all parent messages
-          agentMessages = [...parentMessages, ...agentMessages];
-        }
-      } else {
-        // No branch point specified, include all parent messages
-        agentMessages = [...parentMessages, ...agentMessages];
-      }
-
-      // console.log('[SessionManager] Loaded branch session with parent messages:', {
-      //   branchedFromProviderSessionId: session.branchedFromProviderSessionId,
-      //   parentMessageCount: parentMessages.length,
-      //   branchMessageCount,
-      //   totalMessageCount: agentMessages.length,
-      // });
-    }
-
-    // Transform raw messages into UI format
-    // Hidden messages are already filtered out in transformAgentMessagesToUI
-    const uiMessages = transformAgentMessagesToUI(agentMessages);
+    // Load transcript from canonical ai_transcript_events table
+    const uiMessages = await this.loadCanonicalTranscript(sessionId, session.provider);
 
     // Create session data with transformed messages
     // tokenUsage is read from metadata in sessionDataFromChatSession
@@ -1017,8 +994,8 @@ export class SessionManager {
 
     // Fallback: If no tokenUsage in metadata, try parsing from /context responses
     // This provides backwards compatibility for sessions created before tokenUsage was stored in metadata
-    // Uses already-loaded agentMessages instead of re-querying the database
     if (!sessionData.tokenUsage) {
+      const agentMessages = await AgentMessagesRepository.list(sessionId);
       for (let i = agentMessages.length - 1; i >= 0; i--) {
         const msg = agentMessages[i];
         if (msg.direction === 'output' && msg.content?.includes('## Context Usage')) {
@@ -1040,6 +1017,18 @@ export class SessionManager {
     this.currentSession = sessionData;
     this.currentWorkspacePath = sessionData.workspacePath ?? workspace;
     return sessionData;
+  }
+
+  /**
+   * Load transcript via canonical ai_transcript_events path.
+   * Lazily transforms old sessions on first access.
+   */
+  private async loadCanonicalTranscript(sessionId: string, provider: string): Promise<Message[]> {
+    if (!TranscriptMigrationRepository.hasService()) {
+      throw new Error('TranscriptMigrationService not available');
+    }
+
+    return TranscriptMigrationRepository.getService().getLegacyMessages(sessionId, provider);
   }
 
   async getSessions(workspacePath?: string): Promise<SessionData[]> {

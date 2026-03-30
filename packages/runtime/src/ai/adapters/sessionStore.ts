@@ -81,6 +81,11 @@ export interface UpdateSessionMetadataPayload extends Partial<CreateSessionPaylo
   isArchived?: boolean;
   /** Document state for transition detection (persisted across restarts) */
   lastDocumentState?: PersistedDocumentState | null;
+  /** Canonical transcript transform tracking */
+  canonicalTransformVersion?: number | null;
+  canonicalTransformStatus?: 'pending' | 'complete' | 'error' | null;
+  canonicalLastTransformedAt?: Date | null;
+  canonicalLastRawMessageId?: number | null;
 }
 
 export interface SessionListOptions {

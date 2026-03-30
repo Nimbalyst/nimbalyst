@@ -345,7 +345,7 @@ export type SessionChange =
   | { type: 'session_deleted' };
 
 // AgentMessage is imported from ai/server/types.ts - the real database type
-// We sync the raw database format, both sides transform it for UI using transformAgentMessagesToUI()
+// We sync the raw database format; rendering uses canonical ai_transcript_events
 
 /** Queued prompt for cross-device sync */
 export interface SyncedQueuedPrompt {

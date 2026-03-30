@@ -1,0 +1,233 @@
+/**
+ * TranscriptProjector -- pure function that reads canonical transcript events
+ * and produces UI view models.
+ *
+ * No side effects, no DB access. Expects events pre-sorted by sequence.
+ */
+
+import type {
+  TranscriptEvent,
+  TranscriptEventType,
+  UserMessagePayload,
+  SystemMessagePayload,
+  ToolCallPayload,
+  ToolProgressPayload,
+  InteractivePromptPayload,
+  SubagentPayload,
+  TurnEndedPayload,
+  AssistantMessagePayload,
+} from './types';
+
+// ---------------------------------------------------------------------------
+// View model types
+// ---------------------------------------------------------------------------
+
+export interface TranscriptViewModel {
+  messages: TranscriptViewMessage[];
+}
+
+export interface TranscriptViewMessage {
+  id: number;
+  sequence: number;
+  createdAt: Date;
+  type: TranscriptEventType;
+  text?: string;
+  mode?: 'agent' | 'planning';
+  attachments?: UserMessagePayload['attachments'];
+  toolCall?: {
+    toolName: string;
+    toolDisplayName: string;
+    status: 'running' | 'completed' | 'error';
+    description: string | null;
+    arguments: Record<string, unknown>;
+    targetFilePath: string | null;
+    mcpServer: string | null;
+    mcpTool: string | null;
+    result?: string;
+    isError?: boolean;
+    exitCode?: number;
+    durationMs?: number;
+    changes?: Array<{ path: string; patch: string }>;
+    providerToolCallId: string | null;
+    progress: Array<{
+      elapsedSeconds: number;
+      progressContent: string;
+    }>;
+  };
+  interactivePrompt?: InteractivePromptPayload;
+  subagent?: SubagentPayload & {
+    childEvents: TranscriptViewMessage[];
+  };
+  turnEnded?: TurnEndedPayload;
+  systemMessage?: SystemMessagePayload;
+  subagentId: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Projector
+// ---------------------------------------------------------------------------
+
+export class TranscriptProjector {
+  /**
+   * Project canonical events into a UI view model.
+   * Handles:
+   * - Grouping tool_progress under parent tool_call
+   * - Grouping events by subagent_id into subagent hierarchies
+   * - Merging stateful event data (already in payload)
+   * - Surfacing stable tool IDs for diff rendering
+   */
+  static project(events: TranscriptEvent[]): TranscriptViewModel {
+    if (events.length === 0) {
+      return { messages: [] };
+    }
+
+    // Index tool_progress events by parentEventId for grouping
+    const progressByParent = new Map<number, TranscriptEvent[]>();
+    for (const event of events) {
+      if (event.eventType === 'tool_progress' && event.parentEventId != null) {
+        const list = progressByParent.get(event.parentEventId) ?? [];
+        list.push(event);
+        progressByParent.set(event.parentEventId, list);
+      }
+    }
+
+    // Build view messages for non-progress events
+    const allMessages: TranscriptViewMessage[] = [];
+    for (const event of events) {
+      if (event.eventType === 'tool_progress') {
+        continue; // grouped under parent tool_call
+      }
+      allMessages.push(projectEvent(event, progressByParent));
+    }
+
+    // Separate subagent child events from top-level
+    const subagentEvents = new Map<string, TranscriptViewMessage[]>();
+    const subagentParents = new Map<string, TranscriptViewMessage>();
+    const topLevel: TranscriptViewMessage[] = [];
+
+    // First pass: identify subagent parent events
+    for (const msg of allMessages) {
+      if (msg.type === 'subagent' && msg.subagent && msg.subagentId) {
+        subagentParents.set(msg.subagentId, msg);
+        if (!subagentEvents.has(msg.subagentId)) {
+          subagentEvents.set(msg.subagentId, []);
+        }
+      }
+    }
+
+    // Second pass: group events by subagent ownership
+    for (const msg of allMessages) {
+      if (msg.subagentId && subagentParents.has(msg.subagentId) && msg.type !== 'subagent') {
+        subagentEvents.get(msg.subagentId)!.push(msg);
+      } else {
+        topLevel.push(msg);
+      }
+    }
+
+    // Attach child events to subagent parents
+    for (const [subagentId, parent] of subagentParents) {
+      if (parent.subagent) {
+        parent.subagent.childEvents = subagentEvents.get(subagentId) ?? [];
+      }
+    }
+
+    return { messages: topLevel };
+  }
+
+  /**
+   * Project events for a specific subagent only.
+   */
+  static projectSubagent(events: TranscriptEvent[], subagentId: string): TranscriptViewMessage[] {
+    const filtered = events.filter((e) => e.subagentId === subagentId);
+    const vm = TranscriptProjector.project(filtered);
+    return vm.messages;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function projectEvent(
+  event: TranscriptEvent,
+  progressByParent: Map<number, TranscriptEvent[]>,
+): TranscriptViewMessage {
+  const base: TranscriptViewMessage = {
+    id: event.id,
+    sequence: event.sequence,
+    createdAt: event.createdAt,
+    type: event.eventType,
+    subagentId: event.subagentId,
+  };
+
+  switch (event.eventType) {
+    case 'user_message': {
+      const p = event.payload as unknown as UserMessagePayload;
+      base.text = event.searchableText ?? undefined;
+      base.mode = p.mode;
+      if (p.attachments) {
+        base.attachments = p.attachments;
+      }
+      break;
+    }
+    case 'assistant_message': {
+      const p = event.payload as unknown as AssistantMessagePayload;
+      base.text = event.searchableText ?? undefined;
+      base.mode = p.mode;
+      break;
+    }
+    case 'system_message': {
+      const p = event.payload as unknown as SystemMessagePayload;
+      base.text = event.searchableText ?? undefined;
+      base.systemMessage = p;
+      break;
+    }
+    case 'tool_call': {
+      const p = event.payload as unknown as ToolCallPayload;
+      const progressEvents = progressByParent.get(event.id) ?? [];
+      base.toolCall = {
+        toolName: p.toolName,
+        toolDisplayName: p.toolDisplayName,
+        status: p.status,
+        description: p.description,
+        arguments: p.arguments,
+        targetFilePath: p.targetFilePath,
+        mcpServer: p.mcpServer,
+        mcpTool: p.mcpTool,
+        result: p.result,
+        isError: p.isError,
+        exitCode: p.exitCode,
+        durationMs: p.durationMs,
+        changes: p.changes,
+        providerToolCallId: event.providerToolCallId,
+        progress: progressEvents.map((pe) => {
+          const pp = pe.payload as unknown as ToolProgressPayload;
+          return {
+            elapsedSeconds: pp.elapsedSeconds,
+            progressContent: pp.progressContent,
+          };
+        }),
+      };
+      break;
+    }
+    case 'interactive_prompt': {
+      base.interactivePrompt = event.payload as unknown as InteractivePromptPayload;
+      break;
+    }
+    case 'subagent': {
+      const p = event.payload as unknown as SubagentPayload;
+      base.subagent = {
+        ...p,
+        childEvents: [],
+      };
+      break;
+    }
+    case 'turn_ended': {
+      base.turnEnded = event.payload as unknown as TurnEndedPayload;
+      break;
+    }
+  }
+
+  return base;
+}
+

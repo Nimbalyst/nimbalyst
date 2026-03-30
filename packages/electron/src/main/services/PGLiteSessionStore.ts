@@ -97,13 +97,9 @@ export async function getAllSessionsForSync(includeMessages = false): Promise<Ar
   const { rows } = await moduleDb.query<any>(
     `SELECT s.id, s.provider, s.model, s.mode, s.session_type, s.parent_session_id, s.title, s.workspace_id, s.draft_input,
             s.worktree_id, s.is_archived, s.is_pinned, s.branched_from_session_id, s.branch_point_message_id, s.branched_at,
-            s.created_at, s.updated_at, s.metadata, COUNT(m.id) as message_count
+            s.created_at, s.updated_at, s.metadata
      FROM ai_sessions s
-     LEFT JOIN ai_agent_messages m ON s.id = m.session_id AND m.direction = 'input' AND (m.hidden = FALSE OR m.hidden IS NULL)
      WHERE (s.is_archived = FALSE OR s.is_archived IS NULL)
-     GROUP BY s.id, s.provider, s.model, s.mode, s.session_type, s.parent_session_id, s.title, s.workspace_id, s.draft_input,
-              s.worktree_id, s.is_archived, s.is_pinned, s.branched_from_session_id, s.branch_point_message_id, s.branched_at,
-              s.created_at, s.updated_at, s.metadata
      ORDER BY s.updated_at DESC`
   );
   const queryTime = performance.now() - queryStart;
@@ -138,7 +134,7 @@ export async function getAllSessionsForSync(includeMessages = false): Promise<Ar
       workspacePath: row.workspace_id, // workspace_id is the path in this system
       // NOTE: Do NOT include draftInput in bulk sync - it should only sync when actually changed
       // Including it here causes spurious metadata_updated events for all sessions on startup
-      messageCount: parseInt(row.message_count) || 0,
+      messageCount: 0,
       updatedAt: toMillis(row.updated_at),
       createdAt: toMillis(row.created_at),
       metadata: row.metadata,
@@ -405,6 +401,11 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       if ((metadata as any).isPinned !== undefined) pushUpdate('is_pinned =', (metadata as any).isPinned);
       if ((metadata as any).parentSessionId !== undefined) pushUpdate('parent_session_id =', (metadata as any).parentSessionId);
       if ((metadata as any).lastDocumentState !== undefined) pushUpdate('last_document_state =', (metadata as any).lastDocumentState);
+      // Canonical transcript transform status columns
+      if (metadata.canonicalTransformVersion !== undefined) pushUpdate('canonical_transform_version =', metadata.canonicalTransformVersion);
+      if (metadata.canonicalTransformStatus !== undefined) pushUpdate('canonical_transform_status =', metadata.canonicalTransformStatus);
+      if (metadata.canonicalLastTransformedAt !== undefined) pushUpdate('canonical_last_transformed_at =', metadata.canonicalLastTransformedAt);
+      if (metadata.canonicalLastRawMessageId !== undefined) pushUpdate('canonical_last_raw_message_id =', metadata.canonicalLastRawMessageId);
 
       // NOTE: We intentionally do NOT update updated_at here. The updated_at timestamp
       // should only change when messages are added (via PGLiteAgentMessagesStore.create),
@@ -622,8 +623,8 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       const timeRange = options?.timeRange ?? '30d';
       const direction = options?.direction ?? 'all';
 
-      // Sanitize query for FTS - replace special characters and prepare for tsquery
-      const searchTerms = query.trim().split(/\s+/).filter(Boolean).join(' & ');
+      // Use plainto_tsquery which handles arbitrary user input safely
+      const searchTerms = query.trim();
 
       // Calculate cutoff date for time range filter
       let cutoffDate: Date | null = null;
@@ -656,7 +657,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           s.branched_from_session_id,
           s.branch_point_message_id,
           s.branched_at,
-          ts_rank_cd(to_tsvector('english', COALESCE(s.title, '')), to_tsquery('english', $2)) * 2 as rank,
+          ts_rank_cd(to_tsvector('english', COALESCE(s.title, '')), plainto_tsquery('english', $2)) * 2 as rank,
           COALESCE(child_stats.child_count, 0) as child_count
         FROM ai_sessions s
         LEFT JOIN (
@@ -666,32 +667,33 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           GROUP BY parent_session_id
         ) child_stats ON child_stats.parent_session_id = s.id
         WHERE s.workspace_id = $1
-          AND to_tsvector('english', COALESCE(s.title, '')) @@ to_tsquery('english', $2)
+          AND to_tsvector('english', COALESCE(s.title, '')) @@ plainto_tsquery('english', $2)
           ${archiveFilter}`,
         [workspaceId, searchTerms]
       );
 
-      // Query 2: Search message content (uses GIN index on searchable messages)
+      // Query 2: Search canonical transcript events (uses GIN index on searchable_text)
       // Only returns session IDs that match - we'll join with session data in memory
-      // Includes time range and direction filters to reduce database load
+      // Includes time range filter; direction maps to event_type filter
       const contentQueryParams: any[] = [searchTerms];
-      let contentQuerySql = `SELECT DISTINCT m.session_id,
-          MAX(ts_rank_cd(to_tsvector('english', m.content), to_tsquery('english', $1))) as rank
-        FROM ai_agent_messages m
-        WHERE m.searchable = true
-          AND to_tsvector('english', m.content) @@ to_tsquery('english', $1)`;
+      let contentQuerySql = `SELECT DISTINCT t.session_id,
+          MAX(ts_rank_cd(to_tsvector('english', COALESCE(t.searchable_text, '')), plainto_tsquery('english', $1))) as rank
+        FROM ai_transcript_events t
+        WHERE t.searchable = TRUE
+          AND to_tsvector('english', COALESCE(t.searchable_text, '')) @@ plainto_tsquery('english', $1)`;
 
       if (cutoffDate) {
         contentQueryParams.push(cutoffDate);
-        contentQuerySql += ` AND m.created_at >= $${contentQueryParams.length}`;
+        contentQuerySql += ` AND t.created_at >= $${contentQueryParams.length}`;
       }
 
-      if (direction !== 'all') {
-        contentQueryParams.push(direction);
-        contentQuerySql += ` AND m.direction = $${contentQueryParams.length}`;
+      if (direction === 'input') {
+        contentQuerySql += ` AND t.event_type = 'user_message'`;
+      } else if (direction === 'output') {
+        contentQuerySql += ` AND t.event_type = 'assistant_message'`;
       }
 
-      contentQuerySql += ' GROUP BY m.session_id';
+      contentQuerySql += ' GROUP BY t.session_id';
 
       const contentQuery = db.query<any>(contentQuerySql, contentQueryParams);
 
@@ -810,13 +812,9 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       const { rows } = await db.query<any>(
         `SELECT s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
                 s.worktree_id, s.parent_session_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned,
-                s.branched_from_session_id, s.branch_point_message_id, s.branched_at, COUNT(m.id) as message_count
+                s.branched_from_session_id, s.branch_point_message_id, s.branched_at
          FROM ai_sessions s
-         LEFT JOIN ai_agent_messages m ON s.id = m.session_id AND m.direction = 'input' AND (m.hidden = FALSE OR m.hidden IS NULL)
          WHERE s.branched_from_session_id=$1
-         GROUP BY s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
-                  s.worktree_id, s.parent_session_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned,
-                  s.branched_from_session_id, s.branch_point_message_id, s.branched_at
          ORDER BY s.branched_at DESC`,
         [sessionId]
       );
@@ -824,7 +822,6 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
         const createdAt = toMillis(row.created_at);
         const updatedAt = toMillis(row.updated_at);
         const branchedAt = row.branched_at ? toMillis(row.branched_at) : undefined;
-        const messageCount = parseInt(row.message_count) || 0;
         return {
           id: row.id,
           provider: row.provider,
@@ -839,7 +836,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           uncommittedCount: 0,
           createdAt,
           updatedAt,
-          messageCount,
+          messageCount: 0,
           isArchived: row.is_archived ?? false,
           isPinned: row.is_pinned ?? false,
           branchedFromSessionId: row.branched_from_session_id ?? undefined,

@@ -296,6 +296,8 @@ interface ElectronAPI {
     // Full-text search index management
     getFtsIndexStatus: (workspaceId: string) => Promise<{ indexExists: boolean; messageCount: number; error?: string }>;
     buildFtsIndex: () => Promise<{ success: boolean; error?: string }>;
+    // Canonical transcript queries
+    listUserPrompts: (workspacePath: string, limit?: number) => Promise<{ success: boolean; prompts: any[] }>;
     // Transcript peek (lazy-loaded tail messages for preview)
     getTailMessages: (sessionId: string, count?: number) => Promise<any[]>;
   };

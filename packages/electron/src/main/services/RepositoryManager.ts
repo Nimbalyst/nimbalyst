@@ -10,7 +10,9 @@ import type {
 } from '@nimbalyst/runtime';
 import type { WorkspaceRepository } from '../types/workspace';
 import type { AgentMessagesStore } from '@nimbalyst/runtime/storage/repositories/AgentMessagesRepository';
-import { AISessionsRepository, SessionFilesRepository, AgentMessagesRepository } from '@nimbalyst/runtime';
+import { AISessionsRepository, SessionFilesRepository, AgentMessagesRepository, TranscriptEventRepository, TranscriptMigrationRepository } from '@nimbalyst/runtime';
+import { TranscriptMigrationService } from '@nimbalyst/runtime/ai/server/transcript/TranscriptMigrationService';
+import { createRawMessageStoreAdapter, createSessionMetadataStoreAdapter } from './TranscriptMigrationAdapters';
 import { createPGLiteSessionStore } from './PGLiteSessionStore';
 import { createPGLiteSessionFileStore } from './PGLiteSessionFileStore';
 import { createPGLiteAgentMessagesStore } from './PGLiteAgentMessagesStore';
@@ -18,6 +20,7 @@ import { createSyncedAgentMessagesStore } from './SyncedAgentMessagesStore';
 import { createPGLiteWorkspaceRepository } from './PGLiteWorkspaceRepository';
 import { createPGLiteDocumentsRepository } from './PGLiteDocumentsRepository';
 import { createPGLiteQueuedPromptsStore, type QueuedPromptsStore } from './PGLiteQueuedPromptsStore';
+import { createTranscriptEventStore } from './TranscriptEventStore';
 import { database } from '../database/PGLiteDatabaseWorker';
 import { logger } from '../utils/logger';
 import { initializeSync, shutdownSync, isSyncEnabled, reinitializeSync } from './SyncManager';
@@ -121,6 +124,27 @@ class RepositoryManager {
           }
         }
       );
+
+      // Create transcript event store and register with runtime
+      const transcriptEventStore = createTranscriptEventStore(
+        dbAdapter,
+        async () => {
+          if (!database.isInitialized()) {
+            await database.initialize();
+          }
+        }
+      );
+      TranscriptEventRepository.setStore(transcriptEventStore);
+
+      // Create and register transcript migration service
+      const rawMessageStore = createRawMessageStoreAdapter();
+      const sessionMetadataStore = createSessionMetadataStoreAdapter();
+      const migrationService = new TranscriptMigrationService(
+        rawMessageStore,
+        transcriptEventStore,
+        sessionMetadataStore,
+      );
+      TranscriptMigrationRepository.setService(migrationService);
 
       this.initialized = true;
       logger.main.info('[RepositoryManager] All repositories initialized successfully');
@@ -301,6 +325,8 @@ class RepositoryManager {
     if (this.agentMessagesStore) {
       AgentMessagesRepository.clearStore();
     }
+    TranscriptEventRepository.clearStore();
+    TranscriptMigrationRepository.clearService();
     this.sessionStore = null;
     this.sessionFileStore = null;
     this.agentMessagesStore = null;

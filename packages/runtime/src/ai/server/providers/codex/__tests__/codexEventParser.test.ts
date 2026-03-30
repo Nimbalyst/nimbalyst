@@ -54,4 +54,88 @@ describe('parseCodexEvent token_count parsing', () => {
       contextWindow: 200000,
     });
   });
+
+  it('normalizes command_execution items into a Bash-like tool call shape', () => {
+    const parsed = parseCodexEvent({
+      type: 'item.completed',
+      item: {
+        id: 'cmd-1',
+        type: 'command_execution',
+        command: '/bin/zsh -lc "sed -n \'1,20p\' CLAUDE.md"',
+        aggregated_output: '# CLAUDE.md',
+        exit_code: 0,
+        status: 'completed',
+      },
+    });
+
+    expect(parsed).toContainEqual({
+      toolCall: {
+        id: 'cmd-1',
+        name: 'command_execution',
+        arguments: {
+          command: '/bin/zsh -lc "sed -n \'1,20p\' CLAUDE.md"',
+        },
+        result: {
+          success: true,
+          command: '/bin/zsh -lc "sed -n \'1,20p\' CLAUDE.md"',
+          output: '# CLAUDE.md',
+          exit_code: 0,
+          status: 'completed',
+        },
+      },
+      rawEvent: {
+        type: 'item.completed',
+        item: {
+          id: 'cmd-1',
+          type: 'command_execution',
+          command: '/bin/zsh -lc "sed -n \'1,20p\' CLAUDE.md"',
+          aggregated_output: '# CLAUDE.md',
+          exit_code: 0,
+          status: 'completed',
+        },
+      },
+    });
+  });
+
+  it('normalizes mcp_tool_call items into canonical MCP tool names', () => {
+    const parsed = parseCodexEvent({
+      type: 'item.completed',
+      item: {
+        id: 'mcp-1',
+        type: 'mcp_tool_call',
+        server: 'nimbalyst-extension-dev',
+        tool: 'database_query',
+        arguments: { sql: 'SELECT 1' },
+        result: { rows: [{ value: 1 }] },
+        error: null,
+        status: 'completed',
+      },
+    });
+
+    expect(parsed).toContainEqual({
+      toolCall: {
+        id: 'mcp-1',
+        name: 'mcp__nimbalyst-extension-dev__database_query',
+        arguments: { sql: 'SELECT 1' },
+        result: {
+          success: true,
+          result: { rows: [{ value: 1 }] },
+          status: 'completed',
+        },
+      },
+      rawEvent: {
+        type: 'item.completed',
+        item: {
+          id: 'mcp-1',
+          type: 'mcp_tool_call',
+          server: 'nimbalyst-extension-dev',
+          tool: 'database_query',
+          arguments: { sql: 'SELECT 1' },
+          result: { rows: [{ value: 1 }] },
+          error: null,
+          status: 'completed',
+        },
+      },
+    });
+  });
 });

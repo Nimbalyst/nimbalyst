@@ -12,6 +12,18 @@ export function formatToolDisplayName(toolName?: string): string {
     return '';
   }
 
+  if (trimmed === 'command_execution' || trimmed === 'shell' || trimmed === 'exec_command') {
+    return 'Bash';
+  }
+
+  if (trimmed === 'file_change') {
+    return 'File Change';
+  }
+
+  if (trimmed === 'web_search') {
+    return 'Web Search';
+  }
+
   const parts = trimmed.split('__').filter(part => part.length > 0);
   if (parts.length < 3 || parts[0].toLowerCase() !== 'mcp') {
     return trimmed;

@@ -107,6 +107,9 @@ export type CustomToolWidgetComponent = React.FC<CustomToolWidgetProps>;
  */
 export type CustomToolWidgetRegistry = Record<string, CustomToolWidgetComponent>;
 
+const SHELL_WRAPPER_NAME_REGEX = /^(?:\/(?:bin|usr\/bin)\/)?(?:bash|zsh|sh)\s+-l?c\s+[\s\S]+$/;
+const WINDOWS_SHELL_NAME_REGEX = /^(?:"?[A-Za-z]:\\[^"]*\\)?(?:powershell|pwsh|cmd)(?:\.exe)?"?\s+(?:-Command|\/[cC])\s+[\s\S]+$/i;
+
 // Import custom widgets
 import { MockupScreenshotWidget } from './MockupScreenshotWidget';
 import { AskUserQuestionWidget } from './AskUserQuestionWidget';
@@ -215,6 +218,12 @@ export function getCustomToolWidget(toolName: string): CustomToolWidgetComponent
   const withoutAnyMcpPrefix = toolName.replace(/^mcp__[^_]+__/, '');
   if (withoutAnyMcpPrefix !== toolName && CUSTOM_TOOL_WIDGETS[withoutAnyMcpPrefix]) {
     return CUSTOM_TOOL_WIDGETS[withoutAnyMcpPrefix];
+  }
+
+  // Backward compatibility for shell commands that were persisted with the raw
+  // wrapper command as the tool name instead of the normalized command_execution type.
+  if (SHELL_WRAPPER_NAME_REGEX.test(toolName) || WINDOWS_SHELL_NAME_REGEX.test(toolName)) {
+    return BashWidget;
   }
 
   return undefined;

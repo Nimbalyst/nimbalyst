@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { SessionManager, transformAgentMessagesToUI } from '../SessionManager';
+import { SessionManager } from '../SessionManager';
 import type {
   SessionStore,
   CreateSessionPayload,
@@ -151,53 +151,6 @@ describe('SessionManager (runtime server)', () => {
     const sessions = await manager.getSessions('ws');
     expect(sessions).toHaveLength(1);
     expect(Array.isArray(sessions[0].messages)).toBe(true);
-  });
-
-  it('loads persisted sessions including tool messages after a new manager is created', async () => {
-    const session = await manager.createSession('claude-code', { content: 'text' }, 'ws');
-    await manager.addMessage({ role: 'user', content: 'hello', timestamp: Date.now() }, session.id);
-    await manager.addMessage({
-      role: 'tool',
-      content: '',
-      timestamp: Date.now(),
-      toolCall: {
-        name: 'applyDiff',
-        arguments: { replacements: [] },
-        result: { success: true },
-      },
-    }, session.id);
-
-    const newManager = new SessionManager(store);
-    await newManager.initialize();
-    const loaded = await newManager.loadSession(session.id, 'ws');
-    expect(loaded).not.toBeNull();
-    expect(Array.isArray(loaded?.messages)).toBe(true);
-  });
-
-  it('renders system reminder input rows as system messages instead of user prompts', () => {
-    const messages = transformAgentMessagesToUI([
-      {
-        direction: 'input',
-        content: '<SYSTEM_REMINDER>Call update_session_meta now.</SYSTEM_REMINDER>',
-        createdAt: new Date().toISOString(),
-        metadata: {
-          promptType: 'system_reminder',
-          reminderKind: 'session_naming',
-        },
-      },
-    ]);
-
-    expect(messages).toHaveLength(1);
-    expect(messages[0]).toMatchObject({
-      role: 'system',
-      content: 'Call update_session_meta now.',
-      isSystem: true,
-      isUserInput: false,
-      metadata: {
-        promptType: 'system_reminder',
-        reminderKind: 'session_naming',
-      },
-    });
   });
 
   it('blocks switching a started Claude Agent session to OpenAI Codex', async () => {

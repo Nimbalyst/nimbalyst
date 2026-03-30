@@ -12,7 +12,7 @@ export * from './ai/models';
 export * from './ai/tools';
 export * from './ai/modelConstants';
 export * from './ai/adapters/sessionStore';
-export { transformAgentMessagesToUI } from './ai/server/SessionManager';
+export { SessionManager } from './ai/server/SessionManager';
 export {
   DocumentContextService,
   type IDocumentContextService,
@@ -27,6 +27,8 @@ export * from './storage/repositories/AISessionsRepository';
 export * from './storage/repositories/SessionFilesRepository';
 export { AgentMessagesRepository } from './storage/repositories/AgentMessagesRepository';
 export type { AgentMessagesStore } from './storage/repositories/AgentMessagesRepository';
+export { TranscriptEventRepository } from './storage/repositories/TranscriptEventRepository';
+export { TranscriptMigrationRepository } from './storage/repositories/TranscriptMigrationRepository';
 // AI Chat Integration
 export { AIChatIntegrationPlugin } from './ai/plugins/AIChatIntegrationPlugin';
 export { editorRegistry } from './ai/EditorRegistry';

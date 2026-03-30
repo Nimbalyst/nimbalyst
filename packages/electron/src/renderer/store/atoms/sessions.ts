@@ -189,40 +189,21 @@ export const sessionPendingPromptsRefreshAtom = atomFamily((_sessionId: string) 
 );
 
 /**
- * Action atom to refresh pending prompts for a session from the database.
- * Call this when:
- * - Session is loaded/selected
- * - Notification received that a prompt was created
- * - User responds to a prompt
+ * Action atom to refresh pending prompts for a session.
+ * Pending prompts are now derived from canonical transcript events, not ai_agent_messages.
  */
+const INTERACTIVE_PROMPT_TOOLS = new Set(['AskUserQuestion', 'ToolPermission', 'ExitPlanMode', 'GitCommitProposal']);
+
 export const refreshPendingPromptsAtom = atom(
   null,
-  async (get, set, sessionId: string) => {
-    try {
-      const result = await window.electronAPI.invoke('messages:get-pending-prompts', sessionId);
-      if (result.success && result.prompts) {
-        const pendingPrompts: PendingPrompt[] = result.prompts.map((p: any) => ({
-          id: p.id,
-          sessionId: p.sessionId,
-          promptType: p.content.type,
-          promptId: p.content.requestId || p.content.questionId || p.content.proposalId,
-          data: p.content,
-          createdAt: p.createdAt,
-        }));
-        set(sessionPendingPromptsAtom(sessionId), pendingPrompts);
-
-        // Update unified pending interactive prompt state.
-        // AskUserQuestion is not a durable prompt — check session messages too.
-        const hasDurablePrompt = pendingPrompts.length > 0;
-        const messages = get(sessionMessagesAtom(sessionId));
-        const hasPendingAskUserQuestion = messages.some(
-          msg => msg.role === 'tool' && msg.toolCall?.name === 'AskUserQuestion' && !msg.toolCall.result
-        );
-        set(sessionHasPendingInteractivePromptAtom(sessionId), hasDurablePrompt || hasPendingAskUserQuestion);
-      }
-    } catch (error) {
-      console.error('[refreshPendingPromptsAtom] Failed to refresh:', error);
-    }
+  (get, set, sessionId: string) => {
+    // Pending prompts are now rendered from canonical transcript events via widgets.
+    // Update the unified pending interactive prompt state from session messages.
+    const messages = get(sessionMessagesAtom(sessionId));
+    const hasPendingPrompt = messages.some(
+      msg => msg.role === 'tool' && msg.toolCall?.name && INTERACTIVE_PROMPT_TOOLS.has(msg.toolCall.name) && !msg.toolCall.result
+    );
+    set(sessionHasPendingInteractivePromptAtom(sessionId), hasPendingPrompt);
   }
 );
 

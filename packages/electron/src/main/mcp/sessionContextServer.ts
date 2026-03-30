@@ -12,10 +12,9 @@ import { parse as parseUrl } from "url";
 import { randomUUID } from "crypto";
 import {
   AISessionsRepository,
-  AgentMessagesRepository,
   SessionFilesRepository,
 } from "@nimbalyst/runtime";
-import type { AgentMessage, SessionMeta } from "@nimbalyst/runtime";
+import type { SessionMeta } from "@nimbalyst/runtime";
 
 // ─── Transport tracking ─────────────────────────────────────────────
 
@@ -143,79 +142,7 @@ export function shutdownSessionContextServer(): Promise<void> {
   });
 }
 
-// ─── Message parsing utilities ──────────────────────────────────────
-
-/**
- * Extract user prompts from agent messages.
- * Input messages are JSON with a .prompt field.
- */
-function extractUserPrompts(messages: AgentMessage[]): string[] {
-  const prompts: string[] = [];
-  for (const msg of messages) {
-    if (msg.direction !== "input") continue;
-    try {
-      const parsed = JSON.parse(msg.content);
-      if (parsed.prompt && typeof parsed.prompt === "string") {
-        const prompt = parsed.prompt.trim();
-        if (prompt.length > 0) {
-          prompts.push(prompt);
-        }
-      }
-    } catch {
-      // Not JSON or missing prompt field, skip
-    }
-  }
-  return prompts;
-}
-
-/**
- * Extract the last substantive agent text response from messages.
- * Walks backwards through output messages to find the last text content.
- */
-function extractLastAgentResponse(
-  messages: AgentMessage[],
-  maxLength: number = 500
-): string | null {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i];
-    if (msg.direction !== "output") continue;
-
-    try {
-      const parsed = JSON.parse(msg.content);
-
-      // Handle type: 'text' (streaming text chunks)
-      if (parsed.type === "text" && parsed.content) {
-        const text = parsed.content.trim();
-        if (text.length > 0) {
-          return text.length > maxLength
-            ? text.substring(0, maxLength) + "..."
-            : text;
-        }
-      }
-
-      // Handle type: 'assistant' with text content blocks
-      if (parsed.type === "assistant" && parsed.message?.content) {
-        const textBlocks = parsed.message.content.filter(
-          (block: any) => block.type === "text" && block.text
-        );
-        if (textBlocks.length > 0) {
-          const text = textBlocks
-            .map((b: any) => b.text)
-            .join("\n")
-            .trim();
-          if (text.length > 0) {
-            return text.length > maxLength
-              ? text.substring(0, maxLength) + "..."
-              : text;
-          }
-        }
-      }
-    } catch {
-      // Not JSON, skip
-    }
-  }
-  return null;
-}
+// ─── Utilities ──────────────────────────────────────────────────────
 
 function formatRelativeTime(timestamp: number): string {
   const now = Date.now();
@@ -266,36 +193,27 @@ async function handleGetSessionSummary(
     return `Error: Session ${sessionId} not found`;
   }
 
-  // Fetch ALL input messages (user prompts) - no limit, since there are
-  // typically far fewer input messages than total messages
+  // Fetch user prompts and last response from canonical transcript events
   const { getDatabase } = await import("../database/initialize");
   const db = getDatabase();
-  const { rows: inputRows } = await db.query<any>(
-    `SELECT content FROM ai_agent_messages
-     WHERE session_id = $1 AND direction = 'input' AND hidden = FALSE
-     ORDER BY id ASC`,
+  const { rows: userRows } = await db.query<any>(
+    `SELECT searchable_text FROM ai_transcript_events
+     WHERE session_id = $1 AND event_type = 'user_message'
+     ORDER BY sequence ASC`,
     [sessionId]
   );
-  const inputMessages = inputRows.map((row: any) => ({
-    direction: "input" as const,
-    content: row.content,
-  }));
-  const userPrompts = extractUserPrompts(inputMessages as AgentMessage[]);
+  const userPrompts = userRows.map((row: any) => row.searchable_text || "").filter((t: string) => t.length > 0);
 
-  // For last agent response, fetch recent output messages (last 50 is plenty)
-  const { rows: outputRows } = await db.query<any>(
-    `SELECT content FROM ai_agent_messages
-     WHERE session_id = $1 AND direction = 'output' AND hidden = FALSE
-     ORDER BY id DESC
-     LIMIT 50`,
+  const { rows: assistantRows } = await db.query<any>(
+    `SELECT searchable_text FROM ai_transcript_events
+     WHERE session_id = $1 AND event_type = 'assistant_message'
+     ORDER BY sequence DESC
+     LIMIT 1`,
     [sessionId]
   );
-  // Reverse to get chronological order for extractLastAgentResponse
-  const outputMessages = outputRows.reverse().map((row: any) => ({
-    direction: "output" as const,
-    content: row.content,
-  }));
-  const lastResponse = extractLastAgentResponse(outputMessages as AgentMessage[]);
+  const lastResponse = assistantRows.length > 0
+    ? (assistantRows[0].searchable_text || "").slice(0, 2000)
+    : null;
 
   let editedFiles: string[] = [];
   try {
@@ -423,13 +341,6 @@ async function handleGetWorkstreamOverview(
     filesBySession.set(link.sessionId, existing);
   }
 
-  let messageCounts = new Map<string, number>();
-  try {
-    messageCounts = await AgentMessagesRepository.getMessageCounts(childIds);
-  } catch {
-    // Fall back to empty counts
-  }
-
   const lines: string[] = [];
   lines.push(
     `Workstream: "${parent.title || "Untitled"}" (${parentId})`
@@ -443,12 +354,11 @@ async function handleGetWorkstreamOverview(
       row.updated_at instanceof Date
         ? row.updated_at.getTime()
         : new Date(row.updated_at).getTime();
-    const msgCount = messageCounts.get(row.id) || 0;
     const sessionFiles = filesBySession.get(row.id) || [];
     const isCurrentSession = row.id === currentSessionId;
 
     lines.push(
-      `${i + 1}. "${row.title || "Untitled"}" (${row.id}) - ${msgCount} messages, last active ${formatRelativeTime(updatedAt)}${isCurrentSession ? " [CURRENT]" : ""}`
+      `${i + 1}. "${row.title || "Untitled"}" (${row.id}) - last active ${formatRelativeTime(updatedAt)}${isCurrentSession ? " [CURRENT]" : ""}`
     );
 
     if (sessionFiles.length > 0) {
@@ -525,14 +435,7 @@ async function handleListRecentSessions(
     }
   }
 
-  // list() and search() return messageCount: 0 for performance, so fetch actual counts
   const sessionIds = limited.map((s) => s.id);
-  let messageCounts = new Map<string, number>();
-  try {
-    messageCounts = await AgentMessagesRepository.getMessageCounts(sessionIds);
-  } catch {
-    // Fall back to empty counts
-  }
 
   // Fetch running status from database (idle, running, error, interrupted)
   let statusMap = new Map<string, string>();
@@ -563,10 +466,9 @@ async function handleListRecentSessions(
   for (let i = 0; i < limited.length; i++) {
     const s = limited[i];
     const isCurrentSession = s.id === currentSessionId;
-    const msgCount = messageCounts.get(s.id) || 0;
     const status = statusMap.get(s.id) || "idle";
 
-    let line = `${i + 1}. "${s.title}" (${s.id}) - ${formatRelativeTime(s.updatedAt)}, ${msgCount} messages`;
+    let line = `${i + 1}. "${s.title}" (${s.id}) - ${formatRelativeTime(s.updatedAt)}`;
     if (status === "running") {
       line += " [RUNNING]";
     } else if (status === "error") {

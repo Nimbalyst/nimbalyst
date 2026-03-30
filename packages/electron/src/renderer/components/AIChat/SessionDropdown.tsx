@@ -184,7 +184,7 @@ export function SessionDropdown({
                               </span>
                             )}
                           </div>
-                          {session.messageCount !== undefined && (
+                          {session.messageCount !== undefined && session.messageCount > 0 && (
                             <span className="session-message-count text-[11px] text-[var(--nim-text-muted)]">{session.messageCount} turns</span>
                           )}
                         </div>

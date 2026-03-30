@@ -81,6 +81,14 @@
       "import": "./dist/plugins/MockupPlugin/index.js",
       "types": "./dist/plugins/MockupPlugin/index.d.ts"
     },
+    "./ai/server/transcript/types": {
+      "import": "./dist/ai/server/transcript/types.js",
+      "types": "./dist/ai/server/transcript/types.d.ts"
+    },
+    "./ai/server/transcript": {
+      "import": "./dist/ai/server/transcript/index.js",
+      "types": "./dist/ai/server/transcript/index.d.ts"
+    },
     "./storage/repositories/AgentMessagesRepository": {
       "import": "./dist/storage/repositories/AgentMessagesRepository.js",
       "types": "./dist/storage/repositories/AgentMessagesRepository.d.ts"
@@ -203,6 +211,8 @@
   },
   "devDependencies": {
     "@lexical/headless": "^0.34.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/diff": "^7.0.2",
     "@types/lodash-es": "^4.14.182",
     "jsdom": "^26.1.0",

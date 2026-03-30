@@ -1595,6 +1595,62 @@ class PGLiteWorker {
       console.error('[PGLite Worker] Failed to create direction/hidden index:', error);
       // Non-fatal
     }
+
+    // Migration: Create ai_transcript_events table for canonical transcript storage
+    // This is the product-facing canonical layer; ai_agent_messages remains the raw source log.
+    const { TRANSCRIPT_EVENTS_CREATE_TABLE, TRANSCRIPT_EVENTS_INDEXES } = require('./schemas/transcriptEvents');
+    try {
+      await this.db.exec(TRANSCRIPT_EVENTS_CREATE_TABLE);
+      // PGLite requires one statement per exec for indexes
+      for (const indexStmt of TRANSCRIPT_EVENTS_INDEXES) {
+        await this.db.exec(indexStmt);
+      }
+      console.log('[PGLite Worker] ai_transcript_events table created successfully');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to create ai_transcript_events table:', error);
+      // Non-fatal - transcript features will be unavailable but app continues
+    }
+
+    // Migration: Add canonical transform projection columns to ai_sessions
+    try {
+      await this.db.exec(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'ai_sessions' AND column_name = 'canonical_transform_version'
+          ) THEN
+            ALTER TABLE ai_sessions ADD COLUMN canonical_transform_version INTEGER;
+          END IF;
+
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'ai_sessions' AND column_name = 'canonical_last_raw_message_id'
+          ) THEN
+            ALTER TABLE ai_sessions ADD COLUMN canonical_last_raw_message_id BIGINT;
+          END IF;
+
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'ai_sessions' AND column_name = 'canonical_last_transformed_at'
+          ) THEN
+            ALTER TABLE ai_sessions ADD COLUMN canonical_last_transformed_at TIMESTAMPTZ;
+          END IF;
+
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'ai_sessions' AND column_name = 'canonical_transform_status'
+          ) THEN
+            ALTER TABLE ai_sessions ADD COLUMN canonical_transform_status TEXT
+              CHECK (canonical_transform_status IN ('pending', 'complete', 'error'));
+          END IF;
+        END $$;
+      `);
+      console.log('[PGLite Worker] canonical transform columns added to ai_sessions');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to add canonical transform columns:', error);
+      // Non-fatal - lazy transformation will be unavailable but app continues
+    }
   }
 
   async query(message) {

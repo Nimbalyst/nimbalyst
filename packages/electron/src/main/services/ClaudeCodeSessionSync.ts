@@ -68,7 +68,7 @@ async function parseSessionFile(filePath: string): Promise<ClaudeCodeEntry[]> {
  * Convert Claude Code JSONL entry to Nimbalyst message format
  *
  * IMPORTANT: This must produce the SAME format as ClaudeCodeProvider.logAgentMessage()
- * so that SessionManager.transformAgentMessagesToUI() can parse it correctly.
+ * so that the canonical transcript system can parse it correctly.
  *
  * Live session format examples:
  * - Input: { prompt: "...", options: {...} }
@@ -143,7 +143,7 @@ function entryToMessage(entry: ClaudeCodeEntry): { direction: 'input' | 'output'
       entry.message.content.some((p: any) => p.type === 'tool_result');
 
     if (hasToolResults) {
-      // Tool result - store in the format transformAgentMessagesToUI expects
+      // Tool result - store in the standard agent message format
       return {
         direction: 'output',
         content: JSON.stringify({
@@ -173,7 +173,7 @@ function entryToMessage(entry: ClaudeCodeEntry): { direction: 'input' | 'output'
   }
 
   if (entry.type === 'assistant') {
-    // Assistant message - store in the format transformAgentMessagesToUI expects
+    // Assistant message - store in the standard agent message format
     // Format: { type: "assistant", message: {...}, session_id: "...", uuid: "..." }
 
     // Skip if no message content

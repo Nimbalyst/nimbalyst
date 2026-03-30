@@ -3,9 +3,10 @@ import { safeHandle } from '../utils/ipcRegistry';
 import { writeFile } from 'fs/promises';
 import { logger } from '../utils/logger';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
-import { AISessionsRepository, AgentMessagesRepository, transformAgentMessagesToUI } from '@nimbalyst/runtime';
+import { AISessionsRepository } from '@nimbalyst/runtime';
 import type { SessionData } from '@nimbalyst/runtime/ai/server/types';
 import { exportSessionToHtml, getExportFilename } from '../services/SessionHtmlExporter';
+import { loadLegacyMessages } from '../utils/transcriptHelpers';
 
 /**
  * Registers IPC handlers for export functionality.
@@ -150,8 +151,10 @@ export function registerExportHandlers() {
           return { success: false, error: `Session not found: ${sessionId}` };
         }
 
-        const agentMessages = await AgentMessagesRepository.list(sessionId);
-        const uiMessages = transformAgentMessagesToUI(agentMessages);
+        const msgResult = await loadLegacyMessages(sessionId, chatSession.provider ?? 'unknown');
+        if (!msgResult.success) {
+          return { success: false, error: msgResult.error };
+        }
 
         const session: SessionData = {
           id: chatSession.id,
@@ -161,7 +164,7 @@ export function registerExportHandlers() {
           mode: chatSession.mode,
           createdAt: new Date(chatSession.createdAt as any).getTime(),
           updatedAt: new Date(chatSession.updatedAt as any).getTime(),
-          messages: uiMessages,
+          messages: msgResult.messages,
           workspacePath: (chatSession.metadata as any)?.workspaceId ?? chatSession.workspacePath ?? '',
           title: chatSession.title ?? 'New conversation',
         };
@@ -227,8 +230,11 @@ export function registerExportHandlers() {
           return { success: false, error: `Session not found: ${sessionId}` };
         }
 
-        const agentMessages = await AgentMessagesRepository.list(sessionId);
-        const uiMessages = transformAgentMessagesToUI(agentMessages);
+        const msgResult = await loadLegacyMessages(sessionId, chatSession.provider ?? 'unknown');
+        if (!msgResult.success) {
+          return { success: false, error: msgResult.error };
+        }
+        const uiMessages = msgResult.messages;
 
         const title = chatSession.title ?? 'Untitled Session';
         const provider = chatSession.provider ?? 'unknown';

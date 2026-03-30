@@ -16,6 +16,7 @@ import {
 } from '../types';
 import { CLAUDE_MODELS, DEFAULT_MODELS } from '../../modelConstants';
 import { buildUserMessageAddition } from './documentContextUtils';
+import { createTranscriptAdapter, safeTranscriptCall } from '../transcript/TranscriptDualWriter';
 
 const LOG_PREVIEW_LENGTH = 400;
 
@@ -182,6 +183,17 @@ export class ClaudeProvider extends BaseAIProvider {
       await this.logAgentMessage(sessionId, 'claude', 'input', message);
     }
 
+    // Canonical transcript dual-write: create adapter and record user input
+    const transcriptAdapter = sessionId
+      ? createTranscriptAdapter('claude', sessionId)
+      : null;
+    if (transcriptAdapter) {
+      await safeTranscriptCall(
+        () => transcriptAdapter.handleUserInput(message),
+        'claude:handleUserInput',
+      );
+    }
+
     // Check if current message has attachments
     if (attachments && attachments.length > 0) {
       const content: any[] = [];
@@ -341,6 +353,14 @@ export class ClaudeProvider extends BaseAIProvider {
         // Stream the response
         for await (const rawChunk of stream as AsyncIterable<any>) {
         const chunk = rawChunk as any;
+
+        // Canonical transcript dual-write: feed raw Anthropic chunk to adapter
+        if (transcriptAdapter) {
+          safeTranscriptCall(
+            () => transcriptAdapter.handleEvent(chunk),
+            'claude:handleEvent',
+          );
+        }
         console.log('[ClaudeProvider] Chunk received:', {
           type: chunk.type,
           toolName: chunk.content_block?.name,
@@ -858,6 +878,10 @@ export class ClaudeProvider extends BaseAIProvider {
         };
       }
     } finally {
+      // Flush any pending canonical transcript text
+      if (transcriptAdapter) {
+        await safeTranscriptCall(() => transcriptAdapter.flush(), 'claude:flush');
+      }
       this.abortController = null;
     }
   }

@@ -27,6 +27,7 @@ import { McpConfigService } from '../services/McpConfigService';
 import { MCPServerConfig } from '../../../types/MCPServerConfig';
 import { safeJSONSerialize } from '../../../utils/serialization';
 import { AskUserQuestionPrompt, AskUserQuestionPromptOption } from './shared/askUserQuestionTypes';
+import { createTranscriptAdapter, safeTranscriptCall } from '../transcript/TranscriptDualWriter';
 
 interface OpenAICodexProviderDeps {
   protocol?: CodexSDKProtocol;
@@ -769,6 +770,17 @@ export class OpenAICodexProvider extends BaseAgentProvider {
       );
     }
 
+    // Canonical transcript dual-write: create adapter and record user input
+    const transcriptAdapter = sessionId
+      ? createTranscriptAdapter('openai-codex', sessionId)
+      : null;
+    if (transcriptAdapter) {
+      await safeTranscriptCall(
+        () => transcriptAdapter.handleUserInput(messageWithAttachmentHints),
+        'codex:handleUserInput',
+      );
+    }
+
     const permissionsPath = documentContext?.permissionsPath || workspacePath;
     const abortController = new AbortController();
     this.abortController = abortController;
@@ -860,6 +872,14 @@ export class OpenAICodexProvider extends BaseAgentProvider {
           await this.storeRawEventIfPresent(event, sessionId);
         }
 
+        // Canonical transcript dual-write
+        if (transcriptAdapter) {
+          safeTranscriptCall(
+            () => transcriptAdapter.handleEvent(event),
+            'codex:handleEvent',
+          );
+        }
+
         // Convert protocol events to stream chunks
         if (event.type === 'error') {
           yield { type: 'error', error: event.error };
@@ -939,6 +959,10 @@ export class OpenAICodexProvider extends BaseAgentProvider {
         };
       }
     } finally {
+      // Flush any pending canonical transcript text
+      if (transcriptAdapter) {
+        await safeTranscriptCall(() => transcriptAdapter.flush(), 'codex:flush');
+      }
       if (this.abortController === abortController) {
         this.abortController = null;
       }

@@ -609,13 +609,9 @@ export async function registerSessionHandlers() {
 
             const { rows } = await database.query<any>(
                 `SELECT s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
-                        s.worktree_id, s.parent_session_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned,
-                        COUNT(m.id) as message_count
+                        s.worktree_id, s.parent_session_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned
                  FROM ai_sessions s
-                 LEFT JOIN ai_agent_messages m ON s.id = m.session_id AND m.direction = 'input' AND (m.hidden = FALSE OR m.hidden IS NULL)
                  WHERE s.parent_session_id = $1 AND s.workspace_id = $2
-                 GROUP BY s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
-                          s.worktree_id, s.parent_session_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned
                  ORDER BY s.created_at ASC`,
                 [parentSessionId, workspacePath]
             );
@@ -654,7 +650,6 @@ export async function registerSessionHandlers() {
                 model: row.model,
                 createdAt: row.created_at instanceof Date ? row.created_at.getTime() : new Date(row.created_at).getTime(),
                 updatedAt: row.updated_at instanceof Date ? row.updated_at.getTime() : new Date(row.updated_at).getTime(),
-                messageCount: parseInt(row.message_count) || 0,
                 parentSessionId: row.parent_session_id,
                 isArchived: row.is_archived || false,
                 isPinned: row.is_pinned || false,
@@ -1126,208 +1121,7 @@ export async function registerSessionHandlers() {
         }
     });
 
-    // Get FTS index status - check if index exists AND if backfill has been done
-    safeHandle('sessions:get-fts-index-status', async (event, workspaceId: string) => {
-        try {
-            const { database } = await import('../database/PGLiteDatabaseWorker');
 
-            // Check if FTS index exists by querying pg_indexes
-            const indexResult = await database.query(`
-                SELECT 1 FROM pg_indexes
-                WHERE indexname = 'idx_ai_agent_messages_content_fts'
-            `);
-            const indexExistsInDb = indexResult.rows.length > 0;
-
-            // Get total message count for this workspace
-            const countResult = await database.query<{ count: string }>(`
-                SELECT COUNT(*) as count
-                FROM ai_agent_messages m
-                JOIN ai_sessions s ON m.session_id = s.id
-                WHERE s.workspace_id = $1
-            `, [workspaceId]);
-            const messageCount = parseInt(countResult.rows[0]?.count || '0');
-
-            // Quick heuristic: check ratio of searchable to total messages
-            // This is fast because it just counts, no pattern matching
-            const ratioResult = await database.query<{ searchable: string; total: string }>(`
-                SELECT
-                  COUNT(*) FILTER (WHERE searchable = true) as searchable,
-                  COUNT(*) as total
-                FROM ai_agent_messages
-            `);
-            const searchableCount = parseInt(ratioResult.rows[0]?.searchable || '0');
-            const totalMessages = parseInt(ratioResult.rows[0]?.total || '0');
-
-            // Backfill is needed if we have lots of messages but very few are searchable
-            // Expected ratio after backfill is ~15-20% (user prompts + assistant text responses)
-            const searchableRatio = totalMessages > 0 ? searchableCount / totalMessages : 1;
-            const needsBackfill = totalMessages > 5000 && searchableRatio < 0.01;
-
-            // Index is only "ready" if it exists AND backfill has been done
-            const indexExists = indexExistsInDb && !needsBackfill;
-
-            return { indexExists, messageCount };
-        } catch (error) {
-            console.error('[SessionHandlers] Error getting FTS index status:', error);
-            return { indexExists: false, messageCount: 0, error: String(error) };
-        }
-    });
-
-    // Build FTS index on demand (for large databases where we skipped at startup)
-    // This first backfills the searchable column, then builds a partial index on searchable messages only
-    safeHandle('sessions:build-fts-index', async (event) => {
-        try {
-            const { database } = await import('../database/PGLiteDatabaseWorker');
-
-            const startTime = Date.now();
-            console.log('[SessionHandlers] Starting FTS index build...');
-
-            // Step 1: Backfill searchable column for existing messages
-            // Only mark user prompts and assistant text (no tool content) as searchable
-            // Also exclude messages over 500KB to avoid tsvector 1MB limit
-            console.log('[SessionHandlers] Backfilling searchable column...');
-            const backfillStart = Date.now();
-            await database.exec(`
-                UPDATE ai_agent_messages SET searchable = true
-                WHERE LENGTH(content) < 500000
-                  AND source = 'claude-code'
-                  AND (
-                    -- User prompts
-                    (direction = 'input' AND content LIKE '{"prompt":%')
-                    -- Assistant text responses (no tool content)
-                    OR (content LIKE '%"type":"assistant"%'
-                        AND content LIKE '%"type":"text"%'
-                        AND content NOT LIKE '%"type":"tool_use"%'
-                        AND content NOT LIKE '%"type":"tool_result"%')
-                  )
-            `, 10 * 60 * 1000);
-            const backfillElapsed = ((Date.now() - backfillStart) / 1000).toFixed(1);
-            console.log(`[SessionHandlers] Backfill completed in ${backfillElapsed}s`);
-
-            // Step 2: Drop existing index (if any) and rebuild with backfilled data
-            console.log('[SessionHandlers] Building FTS index on searchable messages...');
-            const indexStart = Date.now();
-            await database.exec(`DROP INDEX IF EXISTS idx_ai_agent_messages_content_fts`, 60 * 1000);
-            await database.exec(`
-                CREATE INDEX idx_ai_agent_messages_content_fts
-                ON ai_agent_messages USING GIN(to_tsvector('english', content))
-                WHERE searchable = true
-            `, 10 * 60 * 1000);
-            const indexElapsed = ((Date.now() - indexStart) / 1000).toFixed(1);
-            console.log(`[SessionHandlers] Index build completed in ${indexElapsed}s`);
-
-            const totalElapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-            console.log(`[SessionHandlers] FTS index built successfully in ${totalElapsed}s total`);
-            return { success: true };
-        } catch (error) {
-            console.error('[SessionHandlers] Error building FTS index:', error);
-            return { success: false, error: String(error) };
-        }
-    });
-
-    // List recent user prompts for prompt history quick-open
-    safeHandle('messages:list-user-prompts', async (event, workspacePath: string, limit: number = 2000) => {
-        try {
-            const { database } = await import('../database/PGLiteDatabaseWorker');
-
-            const { rows } = await database.query<{
-                id: string;
-                session_id: string;
-                content: string;
-                created_at: Date;
-                session_title: string;
-                provider: string;
-                parent_session_id: string | null;
-            }>(
-                `SELECT
-                    m.id,
-                    m.session_id,
-                    m.content,
-                    m.created_at,
-                    s.title as session_title,
-                    s.provider,
-                    s.parent_session_id
-                 FROM ai_agent_messages m
-                 JOIN ai_sessions s ON m.session_id = s.id
-                 WHERE m.direction = 'input'
-                   AND (m.hidden = FALSE OR m.hidden IS NULL)
-                   AND s.workspace_id = $1
-                   AND (m.metadata IS NULL OR m.metadata->>'messageType' IS NULL
-                        OR m.metadata->>'messageType' NOT IN ('teammate_message_injected'))
-                 ORDER BY m.created_at DESC
-                 LIMIT $2`,
-                [workspacePath, limit]
-            );
-
-            const prompts = rows.map(row => ({
-                id: row.id,
-                sessionId: row.session_id,
-                content: row.content,
-                createdAt: row.created_at instanceof Date ? row.created_at.getTime() : row.created_at,
-                sessionTitle: row.session_title || 'Untitled Session',
-                provider: row.provider,
-                parentSessionId: row.parent_session_id,
-            }));
-
-            return { success: true, prompts };
-        } catch (error) {
-            console.error('[SessionHandlers] Failed to list user prompts:', error);
-            return { success: false, error: String(error), prompts: [] };
-        }
-    });
-
-    // Get the last N messages for a session (for transcript peek/preview)
-    // Returns lightweight UI messages suitable for a popover preview
-    safeHandle('sessions:get-tail-messages', async (event, sessionId: string, count: number = 10) => {
-        try {
-            const { database } = await import('../database/PGLiteDatabaseWorker');
-
-            // Get the total count first, then fetch the tail
-            const countResult = await database.query<{ count: string }>(
-                `SELECT COUNT(*) as count FROM ai_agent_messages WHERE session_id = $1 AND hidden = FALSE`,
-                [sessionId]
-            );
-            const total = parseInt(countResult.rows[0]?.count || '0', 10);
-            if (total === 0) return [];
-
-            const offset = Math.max(0, total - count);
-
-            const { rows } = await database.query<{
-                id: string;
-                session_id: string;
-                source: string;
-                direction: string;
-                content: string;
-                created_at: Date;
-                metadata: any;
-            }>(
-                `SELECT id, session_id, source, direction, content, created_at, metadata
-                 FROM ai_agent_messages
-                 WHERE session_id = $1 AND hidden = FALSE
-                 ORDER BY id ASC
-                 LIMIT $2 OFFSET $3`,
-                [sessionId, count, offset]
-            );
-
-            // Transform to lightweight UI messages
-            const { transformAgentMessagesToUI } = await import('@nimbalyst/runtime/ai/server/SessionManager');
-            const agentMessages = rows.map(row => ({
-                id: Number(row.id),
-                sessionId: row.session_id,
-                source: row.source,
-                direction: row.direction as 'input' | 'output',
-                content: row.content,
-                createdAt: row.created_at ? new Date(row.created_at) : undefined,
-                metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
-                hidden: false,
-            }));
-
-            return transformAgentMessagesToUI(agentMessages);
-        } catch (error) {
-            console.error('[SessionHandlers] Error getting tail messages:', error);
-            return [];
-        }
-    });
 
     // Get uncommitted file counts per session (lightweight, for updating after git commits)
     // Returns counts for ALL sessions that have edited files, including 0 for fully committed sessions
@@ -1368,106 +1162,6 @@ export async function registerSessionHandlers() {
     // where the database is the source of truth for pending prompts.
     // ============================================================
 
-    /**
-     * Get all pending interactive prompts for a session.
-     * Returns prompts where status is 'pending' and no response message exists.
-     */
-    safeHandle('messages:get-pending-prompts', async (event, sessionId: string) => {
-        try {
-            const { database } = await import('../database/PGLiteDatabaseWorker');
-
-            // Query for pending prompt messages
-            // We check for messages with type containing 'request' and status 'pending'
-            const { rows } = await database.query<{
-                id: string;
-                session_id: string;
-                content: string;
-                created_at: Date;
-                metadata: any;
-            }>(
-                `SELECT id, session_id, content, created_at, metadata
-                 FROM ai_agent_messages
-                 WHERE session_id = $1
-                   AND (hidden = FALSE OR hidden IS NULL)
-                   AND content LIKE '%"status":"pending"%'
-                   AND (content LIKE '%"type":"permission_request"%'
-                        OR content LIKE '%"type":"ask_user_question_request"%'
-                        OR content LIKE '%"type":"exit_plan_mode_request"%'
-                        OR content LIKE '%"type":"git_commit_proposal"%')
-                 ORDER BY created_at ASC`,
-                [sessionId]
-            );
-
-            // Parse and validate the prompts
-            const pendingPrompts = [];
-            for (const row of rows) {
-                try {
-                    const content = JSON.parse(row.content);
-                    if (content.status === 'pending') {
-                        // Check if there's already a response for this prompt
-                        const promptId = content.requestId || content.questionId || content.proposalId;
-                        const responseType = content.type === 'permission_request'
-                            ? 'permission_response'
-                            : content.type === 'ask_user_question_request'
-                            ? 'ask_user_question_response'
-                            : content.type === 'exit_plan_mode_request'
-                            ? 'exit_plan_mode_response'
-                            : content.type === 'git_commit_proposal'
-                            ? 'git_commit_proposal_response'
-                            : null;
-
-                        if (!responseType) {
-                            continue; // Unknown type, skip
-                        }
-
-                        const { rows: responseRows } = await database.query(
-                            `SELECT id FROM ai_agent_messages
-                             WHERE session_id = $1
-                               AND content LIKE $2
-                             LIMIT 1`,
-                            [sessionId, `%"${responseType}"%"${promptId}"%`]
-                        );
-
-                        // Only include if no response exists
-                        if (responseRows.length === 0) {
-                            // For git_commit_proposal, also check if the MCP tool already
-                            // returned a result via Claude Code SDK. The tool_result message
-                            // contains the tool_use_id matching the proposalId. If present,
-                            // the proposal is resolved even if no explicit response was persisted.
-                            if (content.type === 'git_commit_proposal' && promptId) {
-                                const { rows: toolResultRows } = await database.query(
-                                    `SELECT id FROM ai_agent_messages
-                                     WHERE session_id = $1
-                                       AND source = 'claude-code'
-                                       AND content LIKE $2
-                                       AND content LIKE '%"type":"tool_result"%'
-                                     LIMIT 1`,
-                                    [sessionId, `%"tool_use_id":"${promptId}"%`]
-                                );
-                                if (toolResultRows.length > 0) {
-                                    continue; // Tool already completed - skip
-                                }
-                            }
-
-                            pendingPrompts.push({
-                                id: row.id,
-                                sessionId: row.session_id,
-                                content,
-                                createdAt: row.created_at instanceof Date ? row.created_at.getTime() : row.created_at,
-                            });
-                        }
-                    }
-                } catch {
-                    // Skip invalid JSON
-                }
-            }
-
-            return { success: true, prompts: pendingPrompts };
-        } catch (error) {
-            console.error('[SessionHandlers] Failed to get pending prompts:', error);
-            return { success: false, error: String(error), prompts: [] };
-        }
-    });
 
     /**
      * Respond to an interactive prompt.
@@ -1684,6 +1378,59 @@ export async function registerSessionHandlers() {
             console.error('[SessionHandlers] Failed to link tracker item to session:', error);
             return { success: false, error: String(error) };
         }
+    });
+}
+
+    // ============================================================
+    // Canonical transcript queries
+    // ============================================================
+
+    safeHandle('transcript:list-user-prompts', async (_event, workspacePath: string, limit: number = 2000) => {
+        const { database } = await import('../database/PGLiteDatabaseWorker');
+        const { rows } = await database.query(`
+            SELECT t.id, t.session_id, t.searchable_text, t.created_at,
+                   s.title, s.provider, s.parent_session_id
+            FROM ai_transcript_events t
+            JOIN ai_sessions s ON t.session_id = s.id
+            WHERE t.event_type = 'user_message'
+              AND t.searchable = TRUE
+              AND s.workspace_id = $1
+            ORDER BY t.created_at DESC
+            LIMIT $2
+        `, [workspacePath, limit]);
+        return {
+            success: true,
+            prompts: rows.map((row: any) => ({
+                id: String(row.id),
+                sessionId: row.session_id,
+                content: row.searchable_text || '',
+                createdAt: row.created_at instanceof Date ? row.created_at.getTime() : new Date(row.created_at).getTime(),
+                sessionTitle: row.title || 'Untitled Session',
+                provider: row.provider,
+                parentSessionId: row.parent_session_id,
+            })),
+        };
+    });
+
+    safeHandle('transcript:get-tail-messages', async (_event, sessionId: string, count: number = 10) => {
+        const { TranscriptMigrationRepository, AISessionsRepository } = await import('@nimbalyst/runtime');
+        if (!TranscriptMigrationRepository.hasService()) return [];
+
+        const session = await AISessionsRepository.getById(sessionId);
+        if (!session) return [];
+
+        // Use efficient tail query instead of loading all events
+        const migrationService = TranscriptMigrationRepository.getService();
+        const tailEvents = await migrationService.getTailEvents(
+            sessionId,
+            session.provider ?? 'unknown',
+            count,
+            { excludeEventTypes: ['tool_progress'] },
+        );
+
+        const { TranscriptProjector, convertCanonicalToLegacyMessages } = await import('@nimbalyst/runtime/ai/server/transcript');
+        const viewModel = TranscriptProjector.project(tailEvents);
+        return convertCanonicalToLegacyMessages(viewModel.messages);
     });
 }
 
