@@ -819,10 +819,8 @@ export class SessionManager {
     // transform raw ai_agent_messages into canonical ai_transcript_events
     // on first read via ensureTransformed().
     //
-    // Note: once ensureTransformed() marks a session 'complete', it will not
-    // re-transform even if new raw messages arrive (e.g. mid-stream). Callers
-    // that need up-to-date canonical events for an active session should be
-    // aware of this limitation.
+    // ensureTransformed() will also pick up any new raw messages on
+    // subsequent reads for completed sessions.
 
     const now = Date.now();
     const session: SessionData = {

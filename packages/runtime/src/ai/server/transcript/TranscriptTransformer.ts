@@ -8,7 +8,7 @@
  */
 
 import { TranscriptWriter } from './TranscriptWriter';
-import { parseCodexEvent } from '../providers/codex/codexEventParser';
+import { parseCodexEvent, type ParsedCodexToolCall } from '../providers/codex/codexEventParser';
 import { parseMcpToolName } from './utils';
 import type { ITranscriptEventStore } from './types';
 
@@ -73,12 +73,15 @@ export class TranscriptTransformer {
   async ensureTransformed(sessionId: string, provider: string): Promise<boolean> {
     const status = await this.metadataStore.getTransformStatus(sessionId);
 
-    // Already complete at current version -- nothing to do
+    // Complete at current version -- resume to pick up any new raw messages
+    // written since the last transform. Without dual-write, new turns append
+    // raw messages after the transform ran. resumeTransformation is a no-op
+    // when there are no new messages (one DB query, no writes).
     if (
       status.transformStatus === 'complete' &&
       status.transformVersion === TranscriptTransformer.CURRENT_VERSION
     ) {
-      return false;
+      return this.resumeTransformation(sessionId, provider, status.lastRawMessageId ?? undefined, true);
     }
 
     // Version mismatch (upgrade or downgrade) -- re-transform from scratch
@@ -153,17 +156,21 @@ export class TranscriptTransformer {
     sessionId: string,
     provider: string,
     afterId?: number,
+    alreadyComplete = false,
   ): Promise<boolean> {
     try {
       const messages = await this.rawStore.getMessages(sessionId, afterId);
       if (messages.length === 0) {
-        await this.metadataStore.updateTransformStatus(sessionId, {
-          transformVersion: TranscriptTransformer.CURRENT_VERSION,
-          lastRawMessageId: afterId ?? 0,
-          lastTransformedAt: new Date(),
-          transformStatus: 'complete',
-        });
-        return true;
+        if (!alreadyComplete) {
+          // Settle pending/error sessions to complete so they don't re-query
+          await this.metadataStore.updateTransformStatus(sessionId, {
+            transformVersion: TranscriptTransformer.CURRENT_VERSION,
+            lastRawMessageId: afterId ?? 0,
+            lastTransformedAt: new Date(),
+            transformStatus: 'complete',
+          });
+        }
+        return false;
       }
 
       const result = await this.transformMessages(sessionId, messages, provider);
@@ -558,15 +565,17 @@ export class TranscriptTransformer {
     return eventsWritten;
   }
 
+  private codexToolIdCounter = 0;
+
   private async handleCodexToolCall(
     writer: TranscriptWriter,
     sessionId: string,
     msg: RawMessage,
-    tc: { id?: string; name: string; arguments?: unknown; result?: unknown },
+    tc: ParsedCodexToolCall,
     toolEventIds: Map<string, number>,
   ): Promise<number> {
     const toolName = tc.name;
-    const toolId = tc.id ?? `codex-tool-${Date.now()}`;
+    const toolId = tc.id ?? `codex-tool-${++this.codexToolIdCounter}`;
     const args = (tc.arguments ?? {}) as Record<string, unknown>;
     const hasResult = tc.result !== undefined && tc.result !== null;
 
@@ -584,16 +593,7 @@ export class TranscriptTransformer {
     // If we've already created this tool call, update with result
     const existingEventId = toolEventIds.get(toolId);
     if (existingEventId != null && hasResult) {
-      const resultText = typeof tc.result === 'string'
-        ? tc.result
-        : JSON.stringify(tc.result);
-      const isError = typeof tc.result === 'object' && tc.result !== null && 'error' in (tc.result as Record<string, unknown>);
-
-      await writer.updateToolCall(existingEventId, {
-        status: isError ? 'error' : 'completed',
-        result: resultText,
-        isError,
-      });
+      await this.updateCodexToolResult(writer, existingEventId, tc.result);
       return 0; // update, not a new event
     }
 
@@ -621,19 +621,27 @@ export class TranscriptTransformer {
 
     // If tool call already has a result, update immediately
     if (hasResult) {
-      const resultText = typeof tc.result === 'string'
-        ? tc.result
-        : JSON.stringify(tc.result);
-      const isError = typeof tc.result === 'object' && tc.result !== null && 'error' in (tc.result as Record<string, unknown>);
-
-      await writer.updateToolCall(event.id, {
-        status: isError ? 'error' : 'completed',
-        result: resultText,
-        isError,
-      });
+      await this.updateCodexToolResult(writer, event.id, tc.result);
     }
 
     return 1;
+  }
+
+  private async updateCodexToolResult(
+    writer: TranscriptWriter,
+    eventId: number,
+    result: unknown,
+  ): Promise<void> {
+    const resultText = typeof result === 'string'
+      ? result
+      : JSON.stringify(result);
+    const isError = typeof result === 'object' && result !== null && !Array.isArray(result) && 'error' in result;
+
+    await writer.updateToolCall(eventId, {
+      status: isError ? 'error' : 'completed',
+      result: resultText,
+      isError,
+    });
   }
 
   private codexToolDisplayName(toolName: string): string {
