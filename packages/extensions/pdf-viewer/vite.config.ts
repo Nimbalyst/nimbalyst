@@ -76,6 +76,8 @@ export default defineConfig({
           }
           return assetInfo.names?.[0] || 'asset';
         },
+        // Inline dynamic imports to prevent code splitting issues in extension context
+        inlineDynamicImports: true,
       },
     },
     outDir: 'dist',
