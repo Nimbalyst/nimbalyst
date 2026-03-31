@@ -33,6 +33,8 @@ docker run -d \
   --cap-add=SYS_ADMIN \
   -v "$(pwd):/workspaces/nimbalyst-code" \
   $NODE_MODULES_VOLUMES \
+  -v nimbalyst-npm-cache:/root/.npm \
+  -v nimbalyst-playwright-cache:/root/.cache/ms-playwright \
   -e DISPLAY=:99 \
   -e PLAYWRIGHT=1 \
   -e ELECTRON_DISABLE_SECURITY_WARNINGS=1 \
