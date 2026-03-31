@@ -54,10 +54,24 @@ function getResultText(result: unknown): string | null {
   // ToolResult.output may hold the raw content
   if (r.output != null && typeof r.output === 'string') return r.output;
 
+  // Already-parsed structured object (from canonical transcript path):
+  // the transformer extracts inner text and parseToolResult() parses it back
+  if (r.summary != null && typeof r.summary === 'string') return r.summary;
+
   return null;
 }
 
 function extractResult(tool: { result?: unknown }): StructuredResult | null {
+  // Direct structured object: when the canonical transcript path extracts the inner
+  // JSON text from MCP content arrays, parseToolResult() parses it back into a plain
+  // object. Check for that shape first before trying the text extraction path.
+  if (tool.result && typeof tool.result === 'object' && !Array.isArray(tool.result)) {
+    const r = tool.result as any;
+    if (r.before && r.after) {
+      return r as StructuredResult;
+    }
+  }
+
   const text = getResultText(tool.result);
   if (!text) return null;
 

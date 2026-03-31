@@ -1404,6 +1404,37 @@ describe('UpdateSessionMetaWidget', () => {
     );
     expect(screen.getByText('No metadata set')).toBeDefined();
   });
+
+  it('renders structured result when tool.result is already a parsed object (canonical transcript path)', () => {
+    // When loading Claude Code sessions from the canonical transcript,
+    // parseToolResult() parses the stored JSON string back into an object.
+    // The widget must handle this shape directly (not just JSON strings or MCP arrays).
+    const result = {
+      summary: 'Set name: "Bug fix"\nAdded tags: #bug-fix\nSet phase: implementing',
+      before: { name: null, tags: [] as string[], phase: null },
+      after: { name: 'Bug fix', tags: ['bug-fix'], phase: 'implementing' },
+    };
+    const message = makeToolMessage(
+      'mcp__nimbalyst-session-naming__update_session_meta',
+      { name: 'Bug fix', add: ['bug-fix'], phase: 'implementing' },
+      result // Pass the object directly, not JSON.stringify
+    );
+    const { container } = render(
+      <Wrapper>
+        <UpdateSessionMetaWidget
+          message={message}
+          isExpanded={false}
+          onToggle={() => {}}
+          sessionId="meta-parsed-object"
+        />
+      </Wrapper>
+    );
+    expect(screen.getByText('Bug fix')).toBeDefined();
+    expect(screen.getByText('#bug-fix')).toBeDefined();
+    expect(screen.getByText('implementing')).toBeDefined();
+    // Should show the "set" badge since name changed from null
+    expect(container.textContent).toContain('set');
+  });
 });
 
 // ============================================================================
