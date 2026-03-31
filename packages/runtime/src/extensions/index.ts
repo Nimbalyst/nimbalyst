@@ -95,6 +95,7 @@ export {
   getEditorAPI as getExtensionEditorAPI,
   hasEditorAPI as hasExtensionEditorAPI,
   flushEditorSave,
+  getRegisteredPaths as getRegisteredEditorPaths,
 } from './ExtensionEditorAPIRegistry';
 
 // Editor Host

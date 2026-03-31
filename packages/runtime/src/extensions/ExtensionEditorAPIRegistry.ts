@@ -21,12 +21,27 @@ interface RegistryEntry {
 const registry = new Map<string, RegistryEntry>();
 
 /**
+ * Normalize a file path for consistent registry lookups.
+ * Removes trailing slashes and collapses double slashes to prevent
+ * mismatches when the same file is referenced via slightly different paths.
+ */
+function normalizePath(filePath: string): string {
+  // Collapse repeated slashes (e.g., /foo//bar -> /foo/bar)
+  let normalized = filePath.replace(/\/\/+/g, '/');
+  // Remove trailing slash (unless it's the root "/")
+  if (normalized.length > 1 && normalized.endsWith('/')) {
+    normalized = normalized.slice(0, -1);
+  }
+  return normalized;
+}
+
+/**
  * Register an editor API for a file path.
  * Called by EditorHost.registerEditorAPI() when extensions report readiness.
  * @param flushSave Optional callback to trigger an immediate save (used after tool execution).
  */
 export function registerEditorAPI(filePath: string, api: unknown, flushSave?: () => void): void {
-  registry.set(filePath, { api, flushSave });
+  registry.set(normalizePath(filePath), { api, flushSave });
 }
 
 /**
@@ -34,21 +49,21 @@ export function registerEditorAPI(filePath: string, api: unknown, flushSave?: ()
  * Called when an editor unmounts.
  */
 export function unregisterEditorAPI(filePath: string): void {
-  registry.delete(filePath);
+  registry.delete(normalizePath(filePath));
 }
 
 /**
  * Get the registered editor API for a file path.
  */
 export function getEditorAPI(filePath: string): unknown | undefined {
-  return registry.get(filePath)?.api;
+  return registry.get(normalizePath(filePath))?.api;
 }
 
 /**
  * Check if an editor API is registered for a file path.
  */
 export function hasEditorAPI(filePath: string): boolean {
-  return registry.has(filePath);
+  return registry.has(normalizePath(filePath));
 }
 
 /**
@@ -57,5 +72,12 @@ export function hasEditorAPI(filePath: string): boolean {
  * when the user closes the tab before the normal auto-save fires.
  */
 export function flushEditorSave(filePath: string): void {
-  registry.get(filePath)?.flushSave?.();
+  registry.get(normalizePath(filePath))?.flushSave?.();
+}
+
+/**
+ * Get all registered file paths (for diagnostics).
+ */
+export function getRegisteredPaths(): string[] {
+  return Array.from(registry.keys());
 }

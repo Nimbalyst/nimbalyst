@@ -12,7 +12,7 @@
 import { toolRegistry, type ToolDefinition } from '../ai/tools';
 import { editorRegistry } from '../ai/EditorRegistry';
 import { getExtensionLoader } from './ExtensionLoader';
-import { getEditorAPI as getCentralEditorAPI, flushEditorSave } from './ExtensionEditorAPIRegistry';
+import { getEditorAPI as getCentralEditorAPI, flushEditorSave, getRegisteredPaths } from './ExtensionEditorAPIRegistry';
 import type { ExtensionAITool, AIToolContext, LoadedExtension, ExtensionToolResult } from './types';
 
 // Track which tools were registered by which extension
@@ -174,6 +174,8 @@ export async function executeExtensionTool(
   // Resolve filePath: prefer explicit arg from agent, fall back to session state
   const resolvedFilePath = (args.filePath as string) || context.activeFilePath;
 
+  let ensureEditorError: string | undefined;
+
   try {
     // Ensure editor is available if a filePath is provided.
     // This covers both editor-scoped tools AND global tools that operate on files
@@ -183,17 +185,54 @@ export async function executeExtensionTool(
         console.log(`[ExtensionAIToolsBridge] Ensuring editor available for ${resolvedFilePath}`);
         await ensureEditorCallback(resolvedFilePath, context.workspacePath);
       } catch (mountError) {
+        ensureEditorError = mountError instanceof Error ? mountError.message : String(mountError);
         console.warn(`[ExtensionAIToolsBridge] Failed to ensure editor:`, mountError);
-        // Continue anyway - the tool might work without it or fail with a better error
+        // Continue — the editor may already be open in a visible tab
       }
+    }
+
+    const editorAPI = resolvedFilePath ? getCentralEditorAPI(resolvedFilePath) : undefined;
+
+    // If the editor failed to mount AND the API still isn't available,
+    // return a diagnostic error instead of letting the tool fail with a vague message.
+    if (resolvedFilePath && !editorAPI && ensureEditorError) {
+      const registeredPaths = getRegisteredPaths();
+      console.error(
+        `[ExtensionAIToolsBridge] Editor mount failed and no API available for ${resolvedFilePath}.`,
+        `Mount error: ${ensureEditorError}.`,
+        `Registered paths (${registeredPaths.length}):`,
+        registeredPaths.length <= 10 ? registeredPaths : registeredPaths.slice(0, 10).concat('...')
+      );
+      return {
+        success: false,
+        error: `Failed to initialize editor for ${resolvedFilePath}: ${ensureEditorError}. ` +
+          'The file exists but the editor could not mount. Try calling the tool again.',
+        extensionId,
+        toolName,
+        errorContext: {
+          resolvedFilePath,
+          registeredEditorPaths: registeredPaths,
+          ensureEditorError,
+          hint: 'The editor initialization timed out or failed. This can happen if the file is very large or the editor extension is still loading.',
+        },
+      };
+    }
+
+    // Log diagnostic info when editor API isn't found despite having a file path
+    if (resolvedFilePath && !editorAPI) {
+      const registeredPaths = getRegisteredPaths();
+      console.warn(
+        `[ExtensionAIToolsBridge] No editor API found for ${resolvedFilePath}.`,
+        `Registered paths (${registeredPaths.length}):`,
+        registeredPaths.length <= 10 ? registeredPaths : registeredPaths.slice(0, 10).concat('...')
+      );
     }
 
     const aiContext: AIToolContext = {
       workspacePath: context.workspacePath,
       activeFilePath: resolvedFilePath,
       extensionContext: handler.extension.context,
-      // Populate from central registry so tools don't need their own registries
-      editorAPI: resolvedFilePath ? getCentralEditorAPI(resolvedFilePath) : undefined,
+      editorAPI,
     };
 
     const result = await handler.tool.handler(args, aiContext);

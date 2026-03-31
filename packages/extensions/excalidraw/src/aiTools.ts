@@ -16,6 +16,23 @@ import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types/types
 function getEditorAPI(context: { editorAPI?: unknown }): ExcalidrawImperativeAPI | null {
   return (context.editorAPI as ExcalidrawImperativeAPI) ?? null;
 }
+
+/** Build a consistent error result when no editor API is available. */
+function noEditorError(context: { activeFilePath?: string }): { success: false; error: string } {
+  const path = context.activeFilePath;
+  if (!path) {
+    return {
+      success: false,
+      error: 'No active Excalidraw editor found. Please provide a filePath to a .excalidraw file.',
+    };
+  }
+  return {
+    success: false,
+    error: `Could not connect to Excalidraw editor for ${path}. ` +
+      'The file may exist but the editor failed to initialize. ' +
+      'Try again — if the file does not exist yet, create it first with the Write tool.',
+  };
+}
 import { LayoutEngine } from './layout/LayoutEngine';
 import { createFrame } from './utils/elementFactory';
 
@@ -128,10 +145,7 @@ export const aiTools = [
     handler: async (_params: Record<string, never>, context: { activeFilePath?: string; editorAPI?: unknown }) => {
       const api = getEditorAPI(context);
       if (!api) {
-        return {
-          success: false,
-          error: 'No active Excalidraw editor found. Please open a .excalidraw file first.',
-        };
+        return noEditorError(context);
       }
 
       const sceneElements = api.getSceneElements();
@@ -222,10 +236,7 @@ export const aiTools = [
     ) => {
       const api = getEditorAPI(context);
       if (!api) {
-        return {
-          success: false,
-          error: 'No active Excalidraw editor found.',
-        };
+        return noEditorError(context);
       }
 
       const { label, nearElement, color, strokeColor, rounded = true } = params;
@@ -313,10 +324,7 @@ export const aiTools = [
     ) => {
       const api = getEditorAPI(context);
       if (!api) {
-        return {
-          success: false,
-          error: 'No active Excalidraw editor found.',
-        };
+        return noEditorError(context);
       }
 
       const currentElements = api.getSceneElements();
@@ -466,10 +474,7 @@ export const aiTools = [
     ) => {
       const api = getEditorAPI(context);
       if (!api) {
-        return {
-          success: false,
-          error: 'No active Excalidraw editor found.',
-        };
+        return noEditorError(context);
       }
 
       if (!params.id && !params.label) {
@@ -567,10 +572,7 @@ export const aiTools = [
     ) => {
       const api = getEditorAPI(context);
       if (!api) {
-        return {
-          success: false,
-          error: 'No active Excalidraw editor found.',
-        };
+        return noEditorError(context);
       }
 
       if (!params.id && !params.label) {
@@ -690,10 +692,7 @@ export const aiTools = [
     ) => {
       const api = getEditorAPI(context);
       if (!api) {
-        return {
-          success: false,
-          error: 'No active Excalidraw editor found.',
-        };
+        return noEditorError(context);
       }
 
       try {
@@ -747,10 +746,7 @@ export const aiTools = [
     ) => {
       const api = getEditorAPI(context);
       if (!api) {
-        return {
-          success: false,
-          error: 'No active Excalidraw editor found.',
-        };
+        return noEditorError(context);
       }
 
       api.updateScene({ elements: [] });
@@ -804,10 +800,7 @@ export const aiTools = [
     ) => {
       const api = getEditorAPI(context);
       if (!api) {
-        return {
-          success: false,
-          error: 'No active Excalidraw editor found.',
-        };
+        return noEditorError(context);
       }
 
       const currentElements = api.getSceneElements() || [];
@@ -896,10 +889,7 @@ export const aiTools = [
     ) => {
       const api = getEditorAPI(context);
       if (!api) {
-        return {
-          success: false,
-          error: 'No active Excalidraw editor found.',
-        };
+        return noEditorError(context);
       }
 
       const currentElements = api.getSceneElements() || [];
@@ -1000,10 +990,7 @@ export const aiTools = [
     ) => {
       const api = getEditorAPI(context);
       if (!api) {
-        return {
-          success: false,
-          error: 'No active Excalidraw editor found.',
-        };
+        return noEditorError(context);
       }
 
       const currentElements = api.getSceneElements() || [];
@@ -1080,10 +1067,7 @@ export const aiTools = [
     ) => {
       const api = getEditorAPI(context);
       if (!api) {
-        return {
-          success: false,
-          error: 'No active Excalidraw editor found.',
-        };
+        return noEditorError(context);
       }
 
       const currentElements = api.getSceneElements();
@@ -1242,10 +1226,7 @@ export const aiTools = [
     ) => {
       const api = getEditorAPI(context);
       if (!api) {
-        return {
-          success: false,
-          error: 'No active Excalidraw editor found.',
-        };
+        return noEditorError(context);
       }
 
       const currentElements = api.getSceneElements();
@@ -1412,10 +1393,7 @@ export const aiTools = [
     ) => {
       const api = getEditorAPI(context);
       if (!api) {
-        return {
-          success: false,
-          error: 'No active Excalidraw editor found.',
-        };
+        return noEditorError(context);
       }
 
       if (params.x === undefined && params.y === undefined && params.dx === undefined && params.dy === undefined) {
@@ -1506,10 +1484,7 @@ export const aiTools = [
     ) => {
       const api = getEditorAPI(context);
       if (!api) {
-        return {
-          success: false,
-          error: 'No active Excalidraw editor found.',
-        };
+        return noEditorError(context);
       }
 
       if (params.labels.length < 2) {
@@ -1589,10 +1564,7 @@ export const aiTools = [
     ) => {
       const api = getEditorAPI(context);
       if (!api) {
-        return {
-          success: false,
-          error: 'No active Excalidraw editor found.',
-        };
+        return noEditorError(context);
       }
 
       const currentElements = api.getSceneElements();
@@ -1687,10 +1659,7 @@ export const aiTools = [
     ) => {
       const api = getEditorAPI(context);
       if (!api) {
-        return {
-          success: false,
-          error: 'No active Excalidraw editor found.',
-        };
+        return noEditorError(context);
       }
 
       const currentElements = api.getSceneElements();
@@ -1891,10 +1860,7 @@ export const aiTools = [
     ) => {
       const api = getEditorAPI(context);
       if (!api) {
-        return {
-          success: false,
-          error: 'No active Excalidraw editor found.',
-        };
+        return noEditorError(context);
       }
 
       const currentElements = api.getSceneElements() || [];
@@ -1980,10 +1946,7 @@ export const aiTools = [
     ) => {
       const api = getEditorAPI(context);
       if (!api) {
-        return {
-          success: false,
-          error: 'No active Excalidraw editor found.',
-        };
+        return noEditorError(context);
       }
 
       if ((!params.labels || params.labels.length === 0) && (!params.ids || params.ids.length === 0)) {
