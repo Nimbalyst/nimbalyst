@@ -168,6 +168,7 @@
     "diff": "^8.0.2",
     "esbuild": "0.25.10",
     "front-matter": "^4.0.2",
+    "gifuct-js": "^2.1.2",
     "jotai": "^2.16.1",
     "js-yaml": "^4.1.0",
     "lodash-es": "^4.17.21",

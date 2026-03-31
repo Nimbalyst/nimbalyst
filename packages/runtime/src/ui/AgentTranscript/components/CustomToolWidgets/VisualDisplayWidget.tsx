@@ -33,6 +33,7 @@ import {
 import type { CustomToolWidgetProps } from './index';
 import type { ToolCall } from '../../../../ai/server/types';
 import { isDarkThemeAtom } from '../../../../store/atoms/theme';
+import { GifPlayer } from './GifPlayer';
 
 // Theme-aware color palettes
 const LIGHT_COLORS = [
@@ -599,20 +600,30 @@ const ImageDisplay: React.FC<{
     );
   }
 
+  const isGif = image.path.toLowerCase().endsWith('.gif');
+
   return (
     <div className="overflow-hidden rounded-md">
-      <img
-        src={imageData || ''}
-        alt={description || 'Image'}
-        className="max-w-full h-auto block"
-        onError={(e) => {
-          console.error('[VisualDisplayWidget] Image element failed to load:', {
-            path: image.path,
-            src: imageData?.substring(0, 100) + (imageData && imageData.length > 100 ? '...' : '')
-          });
-          setError(`Failed to render image from: ${image.path}`);
-        }}
-      />
+      {isGif && imageData ? (
+        <GifPlayer
+          src={imageData}
+          alt={description || 'Animated GIF'}
+          className="max-w-full"
+        />
+      ) : (
+        <img
+          src={imageData || ''}
+          alt={description || 'Image'}
+          className="max-w-full h-auto block"
+          onError={(e) => {
+            console.error('[VisualDisplayWidget] Image element failed to load:', {
+              path: image.path,
+              src: imageData?.substring(0, 100) + (imageData && imageData.length > 100 ? '...' : '')
+            });
+            setError(`Failed to render image from: ${image.path}`);
+          }}
+        />
+      )}
     </div>
   );
 };
