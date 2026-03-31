@@ -607,21 +607,40 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       const effectiveContext = await getEffectiveDocumentContext();
       const serializableContext = serializeDocumentContext(effectiveContext);
 
+      // If there's already a pending queued prompt, append to it instead of
+      // creating a separate entry. This bundles multiple queued messages into
+      // one prompt, matching how Claude Code handles stacked queries.
+      const lastQueued = queuedPrompts[queuedPrompts.length - 1];
+      let combinedPrompt = message.trim();
+      let combinedAttachments = draftAttachments;
+
+      if (lastQueued) {
+        // Delete the existing queued prompt so we can replace it
+        await window.electronAPI.invoke('ai:deleteQueuedPrompt', lastQueued.id);
+        combinedPrompt = lastQueued.prompt + '\n\n' + message.trim();
+        // Merge attachments from both prompts
+        combinedAttachments = [...(lastQueued.attachments || []), ...draftAttachments];
+      }
+
       const result = await window.electronAPI.invoke(
         'ai:createQueuedPrompt',
         sessionId,
-        message.trim(),
-        draftAttachments,
+        combinedPrompt,
+        combinedAttachments,
         serializableContext
       ) as { id: string; prompt: string; timestamp: number };
 
-      setQueuedPrompts(prev => [...prev, {
-        id: result.id,
-        prompt: message.trim(),
-        timestamp: result.timestamp,
-        documentContext: serializableContext,
-        attachments: draftAttachments
-      }]);
+      setQueuedPrompts(prev => {
+        // Remove the old queued prompt (if we merged into it) and add the new combined one
+        const filtered = lastQueued ? prev.filter(p => p.id !== lastQueued.id) : prev;
+        return [...filtered, {
+          id: result.id,
+          prompt: combinedPrompt,
+          timestamp: result.timestamp,
+          documentContext: serializableContext,
+          attachments: combinedAttachments
+        }];
+      });
 
       setLastSubmitAt(Date.now());
       setDraftInput('');
@@ -631,7 +650,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     } finally {
       setIsQueueing(false);
     }
-  }, [sessionId, getEffectiveDocumentContext, draftAttachments, setDraftInput, setDraftAttachments, setLastSubmitAt, isQueueing]);
+  }, [sessionId, getEffectiveDocumentContext, draftAttachments, setDraftInput, setDraftAttachments, setLastSubmitAt, isQueueing, queuedPrompts]);
 
   const handleSend = useCallback(async () => {
     if (!draftInput.trim() || !sessionData) return;
