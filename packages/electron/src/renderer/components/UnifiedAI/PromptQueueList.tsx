@@ -17,6 +17,7 @@ interface PromptQueueListProps {
   queue: QueuedPrompt[];
   onCancel: (id: string) => void;
   onEdit?: (id: string, prompt: string) => void;
+  onSendNow?: (id: string, prompt: string) => void;
 }
 
 function AttachmentIndicator({ attachments }: { attachments: QueuedPromptAttachment[] }) {
@@ -53,7 +54,7 @@ function AttachmentIndicator({ attachments }: { attachments: QueuedPromptAttachm
 /**
 - PromptQueueList - Displays queued prompts waiting to be processed
  */
-export function PromptQueueList({ queue, onCancel, onEdit }: PromptQueueListProps) {
+export function PromptQueueList({ queue, onCancel, onEdit, onSendNow }: PromptQueueListProps) {
   if (queue.length === 0) {
     return null;
   }
@@ -70,6 +71,18 @@ export function PromptQueueList({ queue, onCancel, onEdit }: PromptQueueListProp
             <span className="prompt-queue-text flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-nim-primary">{item.prompt}</span>
             {item.attachments && item.attachments.length > 0 && (
               <AttachmentIndicator attachments={item.attachments} />
+            )}
+            {onSendNow && (
+              <button
+                className="prompt-queue-send-now shrink-0 w-5 h-5 flex items-center justify-center bg-transparent border-none rounded text-nim-muted cursor-pointer text-sm leading-none p-0 transition-all duration-150 hover:bg-nim-hover hover:text-nim-accent"
+                onClick={() => onSendNow(item.id, item.prompt)}
+                title="Interrupt and send now"
+                type="button"
+              >
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M9 1L3 9h4.5l-1 6L13 7H8.5L9 1z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
             )}
             {onEdit && (
               <button

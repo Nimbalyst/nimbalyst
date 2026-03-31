@@ -4810,6 +4810,37 @@ export class AIService {
       return { success: false, error: 'No active provider for session' };
     });
 
+    // Interrupt the current turn (graceful) so queued prompts are processed sooner.
+    // Unlike cancelRequest (abort), this uses the SDK's interrupt() which stops the
+    // current turn but keeps the session alive. The completion handler will fire
+    // normally and process the next queued prompt.
+    safeHandle('ai:interruptCurrentTurn', async (_event, sessionId: string) => {
+      if (!sessionId) {
+        throw new Error('Session ID is required to interrupt');
+      }
+
+      const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
+      const session = await AISessionsRepository.get(sessionId);
+      if (!session) {
+        return { success: false, error: 'Session not found' };
+      }
+
+      const provider = ProviderFactory.getProvider(session.provider as AIProviderType, sessionId);
+      if (provider && typeof (provider as any).interruptCurrentTurn === 'function') {
+        await (provider as any).interruptCurrentTurn();
+        logger.main.info(`[AIService] Interrupted current turn for session ${sessionId}`);
+        return { success: true };
+      }
+
+      // Fallback to abort for providers that don't support interrupt
+      if (provider) {
+        provider.abort();
+        return { success: true };
+      }
+
+      return { success: false, error: 'No active provider for session' };
+    });
+
     // Settings handlers
     safeHandle('ai:getSettings', async () => {
       const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;

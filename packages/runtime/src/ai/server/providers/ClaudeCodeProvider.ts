@@ -1853,6 +1853,35 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   }
 
   /**
+   * Interrupt the current turn so the session completes early.
+   * The streaming loop breaks, the 'complete' chunk is still yielded,
+   * and the AIService completion handler runs normally (including queue processing).
+   * This is a graceful stop — unlike abort(), it doesn't kill the SDK subprocess.
+   */
+  async interruptCurrentTurn(): Promise<void> {
+    if (!this.leadQuery) {
+      console.log('[CLAUDE-CODE] interruptCurrentTurn: no active lead query, nothing to interrupt');
+      return;
+    }
+
+    console.log('[CLAUDE-CODE] interruptCurrentTurn: interrupting active lead query');
+    this.wasInterrupted = true;
+
+    // Resolve the interrupt promise so the Promise.race in the streaming loop
+    // settles immediately without waiting for the SDK subprocess.
+    if (this.interruptResolve) {
+      this.interruptResolve();
+      this.interruptResolve = null;
+    }
+
+    try {
+      await this.leadQuery.interrupt();
+    } catch (err) {
+      console.warn('[CLAUDE-CODE] interruptCurrentTurn: interrupt() failed (transport may be closed):', err);
+    }
+  }
+
+  /**
    * Interrupt the lead agent's current turn and queue a teammate message
    * to be delivered as a new user turn via streamInput.
    *

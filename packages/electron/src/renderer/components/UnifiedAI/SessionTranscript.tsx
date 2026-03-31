@@ -877,6 +877,17 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     }
   }, [setDraftInput]);
 
+  const handleSendNowQueuedPrompt = useCallback(async (_id: string, _prompt: string) => {
+    try {
+      // Interrupt the current turn using the SDK's interrupt(). This gracefully
+      // stops the current turn, the completion handler fires normally, and the
+      // existing queue processing picks up the next pending prompt.
+      await window.electronAPI.invoke('ai:interruptCurrentTurn', sessionId);
+    } catch (error) {
+      console.error('[SessionTranscript] Failed to interrupt for send-now:', error);
+    }
+  }, [sessionId]);
+
   const handleCloseAndArchive = useCallback(async () => {
     try {
       await window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: true });
@@ -1546,6 +1557,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         queue={queuedPrompts}
         onCancel={handleCancelQueuedPrompt}
         onEdit={handleEditQueuedPrompt}
+        onSendNow={isLoading ? handleSendNowQueuedPrompt : undefined}
       />
 
       {/* Note: All interactive prompts (ToolPermission, ExitPlanMode, AskUserQuestion) use inline widgets in transcript */}
