@@ -14,6 +14,7 @@ import type { CustomToolWidgetProps } from './index';
 import { copyToClipboard } from '../../../../utils/clipboard';
 import { ToolCallChanges } from '../ToolCallChanges';
 import { unwrapShellCommand } from '../../utils/unwrapShellCommand';
+import { useElapsedTime } from './useElapsedTime';
 
 /**
  * Maximum number of lines to show before adding "show more" in expanded view
@@ -181,6 +182,8 @@ export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpande
   const [outputExpanded, setOutputExpanded] = useState(false);
 
   const tool = message.toolCall;
+  const isRunning = tool ? isToolRunning(tool) : false;
+  const elapsed = useElapsedTime(isRunning, message.timestamp);
 
   // Reset copied state after timeout
   useEffect(() => {
@@ -209,7 +212,6 @@ export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpande
   const description = extractDescription(tool.arguments);
   const output = extractOutputText(tool.result);
   const hasError = isToolError(tool.result, message);
-  const isRunning = isToolRunning(tool);
 
   // Check if output needs truncation in expanded view
   const outputLineCount = output ? countLines(output) : 0;
@@ -270,6 +272,7 @@ export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpande
           {isRunning && (
             <span className="flex items-center gap-1 text-[0.7rem] font-medium font-sans text-nim-primary">
               <span className="w-2.5 h-2.5 border-[1.5px] border-[color-mix(in_srgb,var(--nim-primary)_30%,transparent)] border-t-nim-primary rounded-full animate-spin" />
+              {elapsed && <span className="tabular-nums">{elapsed}</span>}
             </span>
           )}
           {!isRunning && !hasError && (
@@ -313,7 +316,7 @@ export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpande
           {isRunning && (
             <span className="flex items-center gap-1 text-[0.7rem] font-medium font-sans text-nim-primary">
               <span className="w-2.5 h-2.5 border-[1.5px] border-[color-mix(in_srgb,var(--nim-primary)_30%,transparent)] border-t-nim-primary rounded-full animate-spin" />
-              Running
+              Running{elapsed && <span className="tabular-nums">{elapsed}</span>}
             </span>
           )}
           {!isRunning && !hasError && (

@@ -12,6 +12,7 @@ import React, { useState, useCallback } from 'react';
 import { useAtomValue } from 'jotai';
 import type { CustomToolWidgetProps } from './index';
 import { interactiveWidgetHostAtom } from '../../../../store/atoms/interactiveWidgetHost';
+import { useElapsedTime } from './useElapsedTime';
 
 /**
  * Maximum number of lines to show before adding "show more"
@@ -144,11 +145,13 @@ export const FileChangeWidget: React.FC<CustomToolWidgetProps> = ({
   const [loadingLive, setLoadingLive] = useState<Set<string>>(new Set());
 
   const tool = message.toolCall;
+  const running = tool ? isToolRunning(tool) : false;
+  const elapsed = useElapsedTime(running, message.timestamp);
+
   if (!tool) return null;
 
   const changes = extractChanges(tool);
   const snapshots = extractSnapshots(tool);
-  const running = isToolRunning(tool);
   const hasError = isToolError(tool.result, message);
 
   const handleFileClick = useCallback(async (filePath: string) => {
@@ -228,6 +231,7 @@ export const FileChangeWidget: React.FC<CustomToolWidgetProps> = ({
           {running && (
             <span className="flex items-center gap-1 text-[0.7rem] font-medium font-sans text-nim-primary">
               <span className="w-2.5 h-2.5 border-[1.5px] border-[color-mix(in_srgb,var(--nim-primary)_30%,transparent)] border-t-nim-primary rounded-full animate-spin" />
+              {elapsed && <span className="tabular-nums">{elapsed}</span>}
             </span>
           )}
           {!running && !hasError && (
@@ -309,7 +313,7 @@ export const FileChangeWidget: React.FC<CustomToolWidgetProps> = ({
           {running && (
             <span className="flex items-center gap-1 text-[0.7rem] font-medium font-sans text-nim-primary">
               <span className="w-2.5 h-2.5 border-[1.5px] border-[color-mix(in_srgb,var(--nim-primary)_30%,transparent)] border-t-nim-primary rounded-full animate-spin" />
-              Running
+              Running{elapsed && <span className="tabular-nums">{elapsed}</span>}
             </span>
           )}
           {!running && !hasError && (
