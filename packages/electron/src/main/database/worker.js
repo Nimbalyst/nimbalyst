@@ -953,6 +953,32 @@ class PGLiteWorker {
       // Non-fatal
     }
 
+    // Migration: Add type_tags TEXT[] column for multi-type tracker items
+    try {
+      const typeTagsCheck = await this.db.query(`
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'tracker_items' AND column_name = 'type_tags'
+        ) as has_type_tags
+      `);
+      const { has_type_tags } = typeTagsCheck.rows[0] || {};
+      if (!has_type_tags) {
+        console.log('[PGLite Worker] Adding type_tags column to tracker_items...');
+        await this.db.exec(`
+          ALTER TABLE tracker_items ADD COLUMN type_tags TEXT[] DEFAULT '{}';
+          CREATE INDEX IF NOT EXISTS idx_tracker_type_tags ON tracker_items USING GIN(type_tags);
+        `);
+        // Backfill: set type_tags = ARRAY[type] for all existing rows
+        await this.db.exec(`
+          UPDATE tracker_items SET type_tags = ARRAY[type] WHERE type_tags = '{}' OR type_tags IS NULL;
+        `);
+        console.log('[PGLite Worker] Added type_tags column and backfilled from type');
+      }
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to add type_tags column:', error);
+      // Non-fatal
+    }
+
     // AI Agent Messages table - write-only raw storage for AI interactions
     console.log('[PGLite Worker] Creating ai_agent_messages table...');
     try {

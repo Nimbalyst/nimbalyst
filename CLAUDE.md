@@ -249,6 +249,31 @@ The AI transcript system uses a two-tier architecture:
 - Canonical errors are non-fatal -- raw log is always written
 - Only `user_message`, `assistant_message`, and `system_message` events are searchable
 
+## Decision Logging
+
+When choosing between alternatives that affect more than the immediate task -- a library, an architecture pattern, an API design, or deciding NOT to do something -- log it as a **decision** tracker item using the `tracker_create` tool.
+
+**When to log:**
+- Choosing a library or dependency
+- Picking an architecture pattern over alternatives
+- Designing an API contract or data model
+- Deciding NOT to do something (e.g., "we won't use Redux because...")
+- Any choice where future-you would ask "why did we do it this way?"
+
+**How to log:**
+
+```
+tracker_create({
+  type: "decision",
+  title: "{what you decided}",
+  priority: "medium",  // or "high" for architectural decisions
+  labels: ["{area}"],  // e.g., "extensions", "ai", "sync", "ui"
+  description: `## Context\n{why this came up}\n\n## Alternatives considered\n{what else was on the table}\n\n## Reasoning\n{why this option won}\n\n## Trade-offs accepted\n{what you gave up}`
+})
+```
+
+**Before making a similar decision**, search existing decisions with `tracker_list({ type: "decision", search: "{topic}" })`. Follow prior decisions unless new information invalidates the reasoning -- in which case, log a new decision that supersedes the old one and reference it.
+
 ## General Development Guidelines
 
 - **Never use emojis** - Not in commits, code, or documentation unless explicitly requested
@@ -261,6 +286,7 @@ The AI transcript system uses a two-tier architecture:
 - **Don't git reset or git add -A without asking**
 - **Don't add Co-Authored-By lines to commit messages**
 - **Never restart Nimbalyst without explicit permission** - Always ask before using `restart_nimbalyst`
+- **Never mark work as done/completed without user approval** - When finishing a task, feature, or implementation, set tracker items to a review/validation state (e.g., `in-review`), NOT `done` or `completed`. Set session phase to `validating`, NOT `complete`. Only the user can approve moving work to `done`/`completed`/`complete`. This applies to tracker items, plan statuses, session phases, and any other status field. The agent's job is to implement and present for review -- the user decides when work is actually done.
 
 **Keyboard Shortcuts**: When adding or modifying keyboard shortcuts, update `KeyboardShortcutsDialog.tsx` to keep the Help > Keyboard Shortcuts dialog in sync.
 

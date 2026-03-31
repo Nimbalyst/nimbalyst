@@ -19,7 +19,7 @@ import { store } from '@nimbalyst/runtime/store';
 /**
  * Tracker item types supported by the system.
  */
-export type TrackerType = 'bug' | 'plan' | 'task' | 'idea' | 'decision';
+export type TrackerType = 'bug' | 'plan' | 'task' | 'idea' | 'decision' | 'feature';
 
 /**
  * Status values for tracker items.
@@ -365,6 +365,7 @@ export const trackerCountsAtom = atom<Record<TrackerType, number>>({
   task: 0,
   idea: 0,
   decision: 0,
+  feature: 0,
 });
 
 /**
@@ -455,7 +456,7 @@ export const totalOpenItemsAtom = atom((get) => {
  */
 export const criticalItemsCountAtom = atom((get) => {
   let count = 0;
-  const types: TrackerType[] = ['bug', 'plan', 'task', 'idea', 'decision'];
+  const types: TrackerType[] = ['bug', 'plan', 'task', 'idea', 'decision', 'feature'];
   for (const type of types) {
     const items = get(trackerItemsAtom(type));
     count += items.filter(

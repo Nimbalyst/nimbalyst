@@ -101,6 +101,15 @@ function getTypeDescription(type: TrackerItemType): { title: string; description
         'Automations run on a daily, weekly, or interval schedule',
       ],
     },
+    'feature': {
+      title: 'Features',
+      description: 'Features track shippable capabilities with release versioning. Items can be tagged with both feature and task types for multi-dimensional tracking.',
+      hints: [
+        'Use /track feature in agent chat',
+        'Click "+ New" to add a feature',
+        'Features have release version and release notes fields',
+      ],
+    },
   };
   return descriptions[type] || descriptions['task'];
 }
@@ -116,6 +125,7 @@ function getTypeColor(type: TrackerItemType): string {
     'idea': '#ca8a04',
     'decision': '#8b5cf6',
     'automation': '#60a5fa',
+    'feature': '#10b981',
   };
   return colors[type] || '#6b7280';
 }
@@ -239,6 +249,7 @@ function getTypeIcon(type: TrackerItemType): string {
     'idea': 'lightbulb',
     'decision': 'gavel',
     'automation': 'auto_mode',
+    'feature': 'rocket_launch',
   };
   return icons[type];
 }

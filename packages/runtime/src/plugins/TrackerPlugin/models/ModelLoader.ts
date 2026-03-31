@@ -158,6 +158,7 @@ const builtinTrackers: TrackerDataModel[] = [
         options: [
           { value: 'to-do', label: 'To Do', icon: 'circle' },
           { value: 'in-progress', label: 'In Progress', icon: 'motion_photos_on' },
+          { value: 'in-review', label: 'In Review', icon: 'rate_review', color: '#3b82f6' },
           { value: 'done', label: 'Done', icon: 'check_circle' },
         ],
       },
@@ -195,6 +196,7 @@ const builtinTrackers: TrackerDataModel[] = [
         options: [
           { value: 'to-do', label: 'To Do', icon: 'circle' },
           { value: 'in-progress', label: 'In Progress', icon: 'motion_photos_on' },
+          { value: 'in-review', label: 'In Review', icon: 'rate_review', color: '#3b82f6' },
           { value: 'done', label: 'Done', icon: 'check_circle' },
         ],
       },
@@ -238,6 +240,46 @@ const builtinTrackers: TrackerDataModel[] = [
       },
     ],
     inlineTemplate: '{icon} {title} {status}',
+  },
+  {
+    type: 'feature',
+    displayName: 'Feature',
+    displayNamePlural: 'Features',
+    icon: 'rocket_launch',
+    color: '#10b981',
+    modes: { inline: true, fullDocument: false },
+    sync: { mode: 'shared', scope: 'project' },
+    idPrefix: 'feat',
+    idFormat: 'ulid',
+    fields: [
+      { name: 'title', type: 'string', required: true },
+      {
+        name: 'status',
+        type: 'select',
+        default: 'to-do',
+        options: [
+          { value: 'to-do', label: 'To Do', icon: 'circle' },
+          { value: 'in-progress', label: 'In Progress', icon: 'motion_photos_on' },
+          { value: 'in-review', label: 'In Review', icon: 'rate_review', color: '#3b82f6' },
+          { value: 'done', label: 'Done', icon: 'check_circle' },
+        ],
+      },
+      {
+        name: 'priority',
+        type: 'select',
+        options: [
+          { value: 'low', label: 'Low' },
+          { value: 'medium', label: 'Medium' },
+          { value: 'high', label: 'High' },
+          { value: 'critical', label: 'Critical' },
+        ],
+      },
+      { name: 'owner', type: 'string' },
+      { name: 'description', type: 'text' },
+      { name: 'releaseVersion', type: 'string', displayInline: true },
+      { name: 'releaseNotes', type: 'text' },
+    ],
+    inlineTemplate: '{icon} {title} {status} {releaseVersion}',
   },
   {
     type: 'automation',

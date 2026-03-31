@@ -842,9 +842,15 @@ export class ElectronDocumentService implements DocumentService {
     // Parse JSONB data field
     const data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
 
+    // type_tags from DB column; fall back to [type] for backward compat
+    const typeTags: string[] = row.type_tags && row.type_tags.length > 0
+      ? row.type_tags
+      : [row.type];
+
     return {
       id: row.id,
       type: row.type,
+      typeTags,
       title: data.title || row.title, // Fallback to generated column
       description: data.description || undefined,
       status: data.status || row.status, // Fallback to generated column
@@ -919,8 +925,20 @@ export class ElectronDocumentService implements DocumentService {
     const row = existing.rows[0];
     const data = typeof row.data === 'string' ? JSON.parse(row.data) : (row.data || {});
 
-    // Merge updates into data
+    // Handle typeTags separately -- stored in SQL column, not JSONB
+    if (updates.typeTags !== undefined) {
+      const newTypeTags: string[] = Array.isArray(updates.typeTags) ? updates.typeTags : [row.type];
+      // Ensure primary type is always included
+      if (!newTypeTags.includes(row.type)) newTypeTags.unshift(row.type);
+      await database.query(
+        `UPDATE tracker_items SET type_tags = $1 WHERE id = $2`,
+        [newTypeTags, itemId]
+      );
+    }
+
+    // Merge remaining updates into data (skip typeTags since it's a column)
     for (const [key, value] of Object.entries(updates)) {
+      if (key === 'typeTags') continue;
       data[key] = value;
     }
 

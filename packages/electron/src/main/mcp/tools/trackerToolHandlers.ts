@@ -61,9 +61,14 @@ export async function createBidirectionalLink(
 /** Convert a raw DB row to a TrackerItem for the renderer */
 function rowToTrackerItem(row: any): any {
   const data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data || {};
+  // type_tags comes from the DB column; fall back to [type] for backward compat
+  const typeTags: string[] = row.type_tags && row.type_tags.length > 0
+    ? row.type_tags
+    : [row.type];
   return {
     id: row.id,
     type: row.type,
+    typeTags,
     title: data.title || row.title,
     description: data.description || undefined,
     status: data.status || row.status,
@@ -158,7 +163,12 @@ export const trackerToolSchemas = [
         type: {
           type: "string",
           description:
-            "Filter by item type (e.g., 'bug', 'task', 'plan', 'idea', 'decision')",
+            "Filter by primary item type (e.g., 'bug', 'task', 'plan', 'idea', 'decision', 'feature')",
+        },
+        typeTag: {
+          type: "string",
+          description:
+            "Filter by type tag (matches primary type or additional tags). Use this to find all items tagged with a type regardless of primary.",
         },
         status: {
           type: "string",
@@ -207,7 +217,7 @@ export const trackerToolSchemas = [
   {
     name: "tracker_create",
     description:
-      "Create a new tracker item (bug, task, plan, idea, decision, or any custom type).",
+      "Create a new tracker item (bug, task, plan, idea, decision, or any custom type).\n\nIMPORTANT: Never set status to 'done' or 'completed'. Use 'in-review' or 'in-progress' instead. Only the user can mark items as done.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -268,6 +278,11 @@ export const trackerToolSchemas = [
           type: "string",
           description: "Linked git commit SHA",
         },
+        typeTags: {
+          type: "array",
+          items: { type: "string" },
+          description: "Additional type tags beyond the primary type (e.g., ['feature', 'task'] for an item that is both)",
+        },
       },
       required: ["type", "title"],
     },
@@ -275,7 +290,7 @@ export const trackerToolSchemas = [
   {
     name: "tracker_update",
     description:
-      "Update an existing tracker item's metadata or content. Can change title, status, priority, tags, description, owner, dueDate, progress, assigneeId, reporterId, labels, linkedCommitSha, or archive state.",
+      "Update an existing tracker item's metadata or content. Can change title, status, priority, tags, description, owner, dueDate, progress, assigneeId, reporterId, labels, linkedCommitSha, or archive state.\n\nIMPORTANT: Never set status to 'done' or 'completed' without explicit user approval. Use 'in-review' when work is finished and awaiting review. Only the user decides when work is actually done.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -336,6 +351,11 @@ export const trackerToolSchemas = [
         linkedCommitSha: {
           type: "string",
           description: "Linked git commit SHA",
+        },
+        typeTags: {
+          type: "array",
+          items: { type: "string" },
+          description: "Set type tags (replaces existing type tags). Primary type is always included.",
         },
       },
       required: ["id"],
@@ -404,10 +424,16 @@ export async function handleTrackerList(
       params.push(args.owner);
     }
 
-    // Filter by type
+    // Filter by primary type
     if (args.type) {
       conditions.push(`type = $${paramIdx++}`);
       params.push(args.type);
+    }
+
+    // Filter by type tag (matches any tag in the array, not just primary)
+    if (args.typeTag) {
+      conditions.push(`$${paramIdx++} = ANY(type_tags)`);
+      params.push(args.typeTag);
     }
 
     // Filter by status (stored in JSONB data field)
@@ -438,7 +464,7 @@ export async function handleTrackerList(
         : "";
 
     const result = await db.query<any>(
-      `SELECT id, type, data, archived, source, source_ref, updated, sync_status
+      `SELECT id, type, type_tags, data, archived, source, source_ref, updated, sync_status
        FROM tracker_items
        ${whereClause}
        ORDER BY updated DESC
@@ -451,9 +477,13 @@ export async function handleTrackerList(
         typeof row.data === "string"
           ? JSON.parse(row.data)
           : row.data || {};
+      const typeTags: string[] = row.type_tags && row.type_tags.length > 0
+        ? row.type_tags
+        : [row.type];
       return {
         id: row.id,
         type: row.type,
+        typeTags,
         title: data.title || "",
         status: data.status || "",
         priority: data.priority || "",
@@ -474,6 +504,7 @@ export async function handleTrackerList(
 
     const filters: Record<string, string> = {};
     if (args.type) filters.type = args.type;
+    if (args.typeTag) filters.typeTag = args.typeTag;
     if (args.status) filters.status = args.status;
     if (args.priority) filters.priority = args.priority;
     if (args.owner) filters.owner = args.owner;
@@ -486,6 +517,7 @@ export async function handleTrackerList(
       items: items.map((item: any) => ({
         id: item.id,
         type: item.type,
+        typeTags: item.typeTags,
         title: item.title,
         status: item.status,
         priority: item.priority,
@@ -593,11 +625,16 @@ export async function handleTrackerGet(args: any): Promise<McpToolResult> {
       lines.push(data.description);
     }
 
+    const typeTags: string[] = row.type_tags && row.type_tags.length > 0
+      ? row.type_tags
+      : [row.type];
+
     const structured = {
       action: "retrieved" as const,
       item: {
         id: row.id,
         type: row.type,
+        typeTags,
         title: data.title || "Untitled",
         status: data.status || undefined,
         priority: data.priority || undefined,
@@ -686,17 +723,25 @@ export async function handleTrackerCreate(
     if (args.labels?.length) data.labels = args.labels;
     if (args.linkedCommitSha) data.linkedCommitSha = args.linkedCommitSha;
 
+    // Build type_tags: always includes primary type + any additional tags
+    const typeTags: string[] = [args.type];
+    if (args.typeTags?.length) {
+      for (const tag of args.typeTags) {
+        if (!typeTags.includes(tag)) typeTags.push(tag);
+      }
+    }
+
     const contentJson = args.description
       ? JSON.stringify(args.description)
       : null;
 
     await db.query(
       `INSERT INTO tracker_items (
-        id, type, data, workspace, document_path, line_number,
+        id, type, type_tags, data, workspace, document_path, line_number,
         created, updated, last_indexed, sync_status,
         content, archived, source, source_ref
-      ) VALUES ($1, $2, $3, $4, '', NULL, NOW(), NOW(), NOW(), 'pending', $5, FALSE, 'native', NULL)`,
-      [id, args.type, JSON.stringify(data), workspacePath, contentJson]
+      ) VALUES ($1, $2, $3, $4, $5, '', NULL, NOW(), NOW(), NOW(), 'pending', $6, FALSE, 'native', NULL)`,
+      [id, args.type, typeTags, JSON.stringify(data), workspacePath, contentJson]
     );
 
     // Auto-link session to the newly created tracker item
@@ -719,6 +764,7 @@ export async function handleTrackerCreate(
       item: {
         id,
         type: args.type,
+        typeTags,
         title: args.title,
         status: data.status,
         priority: data.priority,
@@ -809,6 +855,19 @@ export async function handleTrackerUpdate(
     if (args.labels !== undefined) data.labels = args.labels;
     if (args.linkedCommitSha !== undefined) data.linkedCommitSha = args.linkedCommitSha;
 
+    // Update type_tags if provided
+    if (args.typeTags !== undefined) {
+      // Ensure primary type is always in the array
+      const newTypeTags: string[] = [row.type];
+      for (const tag of args.typeTags) {
+        if (!newTypeTags.includes(tag)) newTypeTags.push(tag);
+      }
+      await db.query(
+        `UPDATE tracker_items SET type_tags = $1 WHERE id = $2`,
+        [newTypeTags, args.id]
+      );
+    }
+
     // Update data field
     await db.query(
       `UPDATE tracker_items SET data = $1, updated = NOW() WHERE id = $2`,
@@ -866,10 +925,20 @@ export async function handleTrackerUpdate(
     if (args.archived !== undefined) updateSummaryParts.push(`- **Archived**: ${args.archived}`);
     if (args.tags !== undefined) updateSummaryParts.push(`- **Tags**: ${args.tags.join(", ")}`);
 
+    // Re-read type_tags after potential update
+    const updatedRow = await db.query<any>(
+      `SELECT type_tags FROM tracker_items WHERE id = $1`,
+      [args.id]
+    );
+    const currentTypeTags: string[] = updatedRow.rows[0]?.type_tags?.length > 0
+      ? updatedRow.rows[0].type_tags
+      : [row.type];
+
     const structured = {
       action: "updated" as const,
       id: args.id,
       type: row.type,
+      typeTags: currentTypeTags,
       title: data.title,
       changes,
     };

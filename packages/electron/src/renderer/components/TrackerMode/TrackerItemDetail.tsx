@@ -50,6 +50,7 @@ const TYPE_COLORS: Record<string, string> = {
   plan: '#7c3aed',
   idea: '#ca8a04',
   decision: '#8b5cf6',
+  feature: '#10b981',
 };
 
 function getTypeIcon(type: string): string {
@@ -59,6 +60,7 @@ function getTypeIcon(type: string): string {
     plan: 'assignment',
     idea: 'lightbulb',
     decision: 'gavel',
+    feature: 'rocket_launch',
   };
   return icons[type] || 'label';
 }
@@ -94,6 +96,71 @@ function getSourceLabel(item: TrackerItem): string | null {
   if (item.source === 'import') return `Imported${item.sourceRef ? ` from ${item.sourceRef}` : ''}`;
   return null;
 }
+
+/** Inline editor for adding/removing secondary type tags */
+const TypeTagsEditor: React.FC<{
+  typeTags: string[];
+  primaryType: string;
+  onUpdate: (tags: string[]) => void;
+}> = ({ typeTags, primaryType, onUpdate }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const allModels = globalRegistry.getAll().filter(m => m.primaryCapable !== false && m.creatable !== false);
+  const secondaryTags = typeTags.filter(t => t !== primaryType);
+  const availableTypes = allModels.filter(m => m.type !== primaryType && !typeTags.includes(m.type));
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] text-nim-faint font-medium uppercase tracking-wider">Type Tags</span>
+        <button
+          className="text-[10px] text-nim-muted hover:text-nim px-1 py-0.5 rounded hover:bg-nim-tertiary"
+          onClick={() => setIsOpen(!isOpen)}
+        >
+          {isOpen ? 'Done' : '+ Add'}
+        </button>
+      </div>
+      {secondaryTags.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {secondaryTags.map(tag => {
+            const tagModel = globalRegistry.get(tag);
+            const tagColor = TYPE_COLORS[tag] || '#6b7280';
+            return (
+              <span
+                key={tag}
+                className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded cursor-pointer group"
+                style={{ color: tagColor, backgroundColor: `${tagColor}15`, border: `1px solid ${tagColor}30` }}
+                onClick={() => onUpdate(typeTags.filter(t => t !== tag))}
+                title={`Remove ${tagModel?.displayName || tag} tag`}
+              >
+                {tagModel?.displayName || tag}
+                <span className="opacity-0 group-hover:opacity-100 text-[9px]">&times;</span>
+              </span>
+            );
+          })}
+        </div>
+      )}
+      {isOpen && availableTypes.length > 0 && (
+        <div className="flex flex-wrap gap-1 pt-1">
+          {availableTypes.map(m => {
+            const tagColor = TYPE_COLORS[m.type] || '#6b7280';
+            return (
+              <button
+                key={m.type}
+                className="text-[10px] font-medium px-1.5 py-0.5 rounded hover:opacity-80"
+                style={{ color: tagColor, backgroundColor: `${tagColor}10`, border: `1px dashed ${tagColor}40` }}
+                onClick={() => {
+                  onUpdate([...typeTags, m.type]);
+                }}
+              >
+                + {m.displayName}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
   itemId,
@@ -446,6 +513,26 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
             >
               {model?.displayName || item.type}
             </span>
+            {/* Secondary type tags */}
+            {(item.typeTags ?? [])
+              .filter(tag => tag !== item.type)
+              .map(tag => {
+                const tagModel = globalRegistry.get(tag);
+                const tagColor = TYPE_COLORS[tag] || '#6b7280';
+                return (
+                  <span
+                    key={tag}
+                    className="text-[10px] font-medium px-1.5 py-0.5 rounded"
+                    style={{
+                      color: tagColor,
+                      backgroundColor: `${tagColor}15`,
+                      border: `1px solid ${tagColor}30`,
+                    }}
+                  >
+                    {tagModel?.displayName || tag}
+                  </span>
+                );
+              })}
             {isNativeItem(item) && (
               <span
                 className="text-[10px] font-medium px-1.5 py-0.5 rounded flex items-center gap-0.5"
@@ -522,6 +609,22 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
               </div>
             ))}
           </div>
+        )}
+
+        {/* Type tags editor (for native/editable items) */}
+        {editable && (
+          <TypeTagsEditor
+            typeTags={item.typeTags ?? [item.type]}
+            primaryType={item.type}
+            onUpdate={(newTags) => {
+              // Save via IPC -- typeTags are stored in the DB column, not JSONB data
+              window.electronAPI.documentService.updateTrackerItem({
+                itemId: item.id,
+                updates: { typeTags: newTags },
+                syncMode,
+              }).catch((err: any) => console.error('[TrackerItemDetail] Failed to save type tags:', err));
+            }}
+          />
         )}
 
         {/* Custom fields */}

@@ -46,7 +46,7 @@ export interface MetadataChangeEvent {
 /**
  * Tracker item types
  */
-export type TrackerItemType = 'bug' | 'task' | 'plan' | 'idea' | 'decision' | (string & {});
+export type TrackerItemType = 'bug' | 'task' | 'plan' | 'idea' | 'decision' | 'feature' | (string & {});
 export type TrackerItemStatus = 'to-do' | 'in-progress' | 'in-review' | 'done' | 'blocked' | 'proposed' | 'in-discussion' | 'decided' | 'implemented' | 'rejected' | 'superseded' | (string & {});
 export type TrackerItemPriority = 'low' | 'medium' | 'high' | 'critical';
 export type TrackerItemSyncStatus = 'local' | 'synced' | 'pending';
@@ -60,6 +60,8 @@ export type TrackerItemSource = 'native' | 'inline' | 'frontmatter' | 'import';
 export interface TrackerItem {
   id: string;
   type: TrackerItemType;
+  /** All type tags including primary type. Enables multi-type items. */
+  typeTags?: string[];
   title: string;
   description?: string;   // Optional description from indented content
   status: TrackerItemStatus;

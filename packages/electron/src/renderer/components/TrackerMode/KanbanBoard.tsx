@@ -44,6 +44,7 @@ const TYPE_COLORS: Record<string, string> = {
   plan: '#7c3aed',
   idea: '#ca8a04',
   decision: '#8b5cf6',
+  feature: '#10b981',
 };
 
 function getStatusColumns(filterType: TrackerItemType | 'all'): { value: string; label: string }[] {
@@ -450,6 +451,22 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                         >
                           {item.type}
                         </span>
+                        {/* Secondary type tags */}
+                        {(item.typeTags ?? [])
+                          .filter(tag => tag !== item.type)
+                          .map(tag => (
+                            <span
+                              key={tag}
+                              className="text-[9px] font-medium px-1 py-0.5 rounded"
+                              style={{
+                                color: TYPE_COLORS[tag] || '#6b7280',
+                                backgroundColor: `${TYPE_COLORS[tag] || '#6b7280'}12`,
+                                border: `1px solid ${TYPE_COLORS[tag] || '#6b7280'}30`,
+                              }}
+                            >
+                              {tag}
+                            </span>
+                          ))}
                         {/* Priority label */}
                         {item.priority && item.priority !== 'medium' && (
                           <span

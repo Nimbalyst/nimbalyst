@@ -18,6 +18,7 @@ import type { CustomToolWidgetProps } from './index';
 interface TrackerItem {
   id: string;
   type: string;
+  typeTags?: string[];
   title: string;
   status?: string;
   priority?: string;
@@ -35,6 +36,7 @@ interface StructuredUpdated {
   action: 'updated';
   id: string;
   type: string;
+  typeTags?: string[];
   title: string;
   changes: Record<string, { from: any; to: any }>;
 }
@@ -123,7 +125,7 @@ const TYPE_COLORS: Record<string, string> = {
   plan: '#a78bfa',
   idea: '#fbbf24',
   decision: '#4ade80',
-  feature: '#34d399',
+  feature: '#10b981',
 };
 
 const getTypeColor = (type: string) => TYPE_COLORS[type] || 'var(--nim-text-muted)';
@@ -315,6 +317,19 @@ const WidgetShell: React.FC<{ header: React.ReactNode; children: React.ReactNode
 
 // ---------- Per-action renderers ----------
 
+const SecondaryTypeBadges: React.FC<{ typeTags?: string[]; primaryType: string }> = ({ typeTags, primaryType }) => {
+  if (!typeTags) return null;
+  const secondary = typeTags.filter(t => t !== primaryType);
+  if (secondary.length === 0) return null;
+  return (
+    <>
+      {secondary.map(tag => (
+        <TypeBadge key={tag} type={tag} />
+      ))}
+    </>
+  );
+};
+
 const CreatedView: React.FC<{ data: StructuredCreated }> = ({ data }) => {
   const { item } = data;
   return (
@@ -331,6 +346,7 @@ const CreatedView: React.FC<{ data: StructuredCreated }> = ({ data }) => {
       <Row>
         <Label>Type</Label>
         <TypeBadge type={item.type} />
+        <SecondaryTypeBadges typeTags={item.typeTags} primaryType={item.type} />
       </Row>
       <Row>
         <Label>Title</Label>
@@ -386,6 +402,7 @@ const UpdatedView: React.FC<{ data: StructuredUpdated }> = ({ data }) => {
         <>
           <span style={{ fontWeight: 600, color: 'var(--nim-text)' }}>Tracker Updated</span>
           <TypeBadge type={data.type} />
+          <SecondaryTypeBadges typeTags={data.typeTags} primaryType={data.type} />
           <span
             onClick={() => navigateToTrackerItem(data.id)}
             style={{
@@ -507,6 +524,7 @@ const ListedView: React.FC<{ data: StructuredListed }> = ({ data }) => {
               }}
             >
               <TypeBadge type={item.type} />
+              <SecondaryTypeBadges typeTags={item.typeTags} primaryType={item.type} />
               <span
                 onClick={() => navigateToTrackerItem(item.id)}
                 style={{

@@ -41,9 +41,16 @@ export const trackerItemsArrayAtom = atom((get) => {
   return Array.from(get(trackerItemsMapAtom).values());
 });
 
+/** Check if an item matches a type filter (primary type or any type tag) */
+function itemMatchesType(item: TrackerItem, type: string): boolean {
+  if (item.type === type) return true;
+  return item.typeTags?.includes(type) ?? false;
+}
+
 /**
  * Tracker items filtered by type (excludes archived).
  * Returns all non-archived items when type is 'all'.
+ * Matches on primary type OR any type tag.
  */
 export const trackerItemsByTypeAtom = atomFamily((type: TrackerItemType | 'all') =>
   atom((get) => {
@@ -51,12 +58,13 @@ export const trackerItemsByTypeAtom = atomFamily((type: TrackerItemType | 'all')
     const all = Array.from(map.values());
     const active = all.filter(item => !item.archived);
     if (type === 'all') return active;
-    return active.filter(item => item.type === type);
+    return active.filter(item => itemMatchesType(item, type));
   })
 );
 
 /**
  * Archived tracker items, optionally filtered by type.
+ * Matches on primary type OR any type tag.
  */
 export const archivedTrackerItemsAtom = atomFamily((type: TrackerItemType | 'all') =>
   atom((get) => {
@@ -64,7 +72,7 @@ export const archivedTrackerItemsAtom = atomFamily((type: TrackerItemType | 'all
     const all = Array.from(map.values());
     const archived = all.filter(item => item.archived);
     if (type === 'all') return archived;
-    return archived.filter(item => item.type === type);
+    return archived.filter(item => itemMatchesType(item, type));
   })
 );
 

@@ -96,6 +96,8 @@ export interface TrackerDataModel {
   sync?: TrackerSyncPolicy;
   /** If false, items of this type cannot be created via tracker_create. Defaults to true. */
   creatable?: boolean;
+  /** Whether this type can be used as a primary type. Defaults to true. */
+  primaryCapable?: boolean;
 }
 
 /**
@@ -244,3 +246,66 @@ export class TrackerDataModelRegistry {
 
 // Global registry instance
 export const globalRegistry = new TrackerDataModelRegistry();
+
+/**
+ * Base fields shared by all tracker item types.
+ * Types only need to define their unique fields on top of these.
+ */
+export const BASE_TRACKER_FIELDS: FieldDefinition[] = [
+  { name: 'title', type: 'string', required: true, displayInline: true },
+  {
+    name: 'status',
+    type: 'select',
+    default: 'to-do',
+    options: [
+      { value: 'to-do', label: 'To Do', icon: 'circle' },
+      { value: 'in-progress', label: 'In Progress', icon: 'motion_photos_on' },
+      { value: 'done', label: 'Done', icon: 'check_circle' },
+    ],
+  },
+  {
+    name: 'priority',
+    type: 'select',
+    options: [
+      { value: 'low', label: 'Low' },
+      { value: 'medium', label: 'Medium' },
+      { value: 'high', label: 'High' },
+      { value: 'critical', label: 'Critical' },
+    ],
+  },
+  { name: 'owner', type: 'string' },
+  { name: 'description', type: 'text' },
+  { name: 'tags', type: 'array', itemType: 'string', displayInline: false },
+  { name: 'created', type: 'datetime', displayInline: false, readOnly: true },
+  { name: 'updated', type: 'datetime', displayInline: false, readOnly: true },
+];
+
+/**
+ * Resolve the available fields for an item with multiple type tags.
+ * Returns the union of all tag types' fields, with base fields first.
+ * First type tag wins for duplicate field names (primary type takes precedence).
+ */
+export function resolveFields(typeTags: string[]): FieldDefinition[] {
+  const seen = new Set<string>();
+  const fields: FieldDefinition[] = [];
+
+  // Base fields always come first
+  for (const field of BASE_TRACKER_FIELDS) {
+    seen.add(field.name);
+    fields.push(field);
+  }
+
+  // Then add type-specific fields from each tag
+  for (const tag of typeTags) {
+    const model = globalRegistry.get(tag);
+    if (!model) continue;
+    for (const field of model.fields) {
+      if (!seen.has(field.name)) {
+        seen.add(field.name);
+        fields.push(field);
+      }
+    }
+  }
+
+  return fields;
+}

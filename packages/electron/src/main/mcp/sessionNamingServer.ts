@@ -314,7 +314,7 @@ function createSessionNamingMcpServer(aiSessionId: string): Server {
                 type: "string",
                 enum: ["backlog", "planning", "implementing", "validating", "complete"],
                 description:
-                  'The current phase of work. Controls which kanban column the session appears in. Use "planning" for exploration/design, "implementing" for coding, "validating" for testing, "complete" when done.',
+                  'The current phase of work. Controls which kanban column the session appears in. Use "planning" for exploration/design, "implementing" for coding, "validating" for testing/review. IMPORTANT: Never set "complete" without explicit user approval -- use "validating" when work is finished. Only the user decides when work is complete.',
               },
             },
           },
