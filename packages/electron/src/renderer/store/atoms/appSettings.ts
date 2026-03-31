@@ -957,7 +957,7 @@ export interface AgentModeSettings {
  * Default agent mode settings.
  */
 const defaultAgentModeSettings: AgentModeSettings = {
-  defaultModel: 'claude-code:opus',
+  defaultModel: 'claude-code:opus-1m',
   defaultEffortLevel: DEFAULT_EFFORT_LEVEL,
 };
 

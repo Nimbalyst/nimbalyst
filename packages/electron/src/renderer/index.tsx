@@ -104,7 +104,7 @@ initializeTheme();
 // Initialize app settings atoms from main process
 // This loads settings and hydrates the Jotai atoms before React renders
 // MUST be awaited to ensure settings are loaded before components mount
-await Promise.all([
+await Promise.allSettled([
   initVoiceModeSettings().then((settings) => {
     store.set(voiceModeSettingsAtom, settings);
   }),
@@ -141,9 +141,7 @@ await Promise.all([
   initAutoCommitSetting().then((enabled) => {
     store.set(autoCommitEnabledAtom, enabled);
   }),
-]).catch(() => {
-  // Ignore errors - settings will use defaults
-});
+]);
 
 // Initialize centralized voice mode IPC listeners (must be after settings are loaded)
 initVoiceModeListeners();
