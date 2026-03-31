@@ -189,6 +189,7 @@ export const CUSTOM_TOOL_WIDGETS: CustomToolWidgetRegistry = {
   'tracker_create': TrackerToolWidget,
   'tracker_update': TrackerToolWidget,
   'tracker_link_session': TrackerToolWidget,
+  'tracker_link_file': TrackerToolWidget,
 };
 
 /**

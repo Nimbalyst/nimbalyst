@@ -472,14 +472,36 @@ export async function handleTrackerList(
       )
       .join("\n");
 
+    const filters: Record<string, string> = {};
+    if (args.type) filters.type = args.type;
+    if (args.status) filters.status = args.status;
+    if (args.priority) filters.priority = args.priority;
+    if (args.owner) filters.owner = args.owner;
+    if (args.search) filters.search = args.search;
+
+    const structured = {
+      action: "listed" as const,
+      filters,
+      count: items.length,
+      items: items.map((item: any) => ({
+        id: item.id,
+        type: item.type,
+        title: item.title,
+        status: item.status,
+        priority: item.priority,
+      })),
+    };
+
     return {
       content: [
         {
           type: "text",
-          text:
-            items.length > 0
+          text: JSON.stringify({
+            structured,
+            summary: items.length > 0
               ? `Found ${items.length} tracker item(s):\n\n${summary}`
               : "No tracker items found matching the filters.",
+          }),
         },
       ],
       isError: false,
@@ -571,11 +593,28 @@ export async function handleTrackerGet(args: any): Promise<McpToolResult> {
       lines.push(data.description);
     }
 
+    const structured = {
+      action: "retrieved" as const,
+      item: {
+        id: row.id,
+        type: row.type,
+        title: data.title || "Untitled",
+        status: data.status || undefined,
+        priority: data.priority || undefined,
+        tags: data.tags || [],
+        owner: data.owner || undefined,
+        dueDate: data.dueDate || undefined,
+      },
+    };
+
     return {
       content: [
         {
           type: "text",
-          text: lines.join("\n"),
+          text: JSON.stringify({
+            structured,
+            summary: lines.join("\n"),
+          }),
         },
       ],
       isError: false,
@@ -675,11 +714,26 @@ export async function handleTrackerCreate(
     // Notify renderer of the new item (correct channel + event format)
     await notifyTrackerItemAdded(workspacePath, id);
 
+    const structured = {
+      action: "created" as const,
+      item: {
+        id,
+        type: args.type,
+        title: args.title,
+        status: data.status,
+        priority: data.priority,
+        tags: data.tags || [],
+      },
+    };
+
     return {
       content: [
         {
           type: "text",
-          text: `Created tracker item:\n- **Type**: ${args.type}\n- **Title**: ${args.title}\n- **Status**: ${data.status}\n- **ID**: ${id}`,
+          text: JSON.stringify({
+            structured,
+            summary: `Created tracker item:\n- **Type**: ${args.type}\n- **Title**: ${args.title}\n- **Status**: ${data.status}\n- **ID**: ${id}`,
+          }),
         },
       ],
       isError: false,
@@ -729,6 +783,16 @@ export async function handleTrackerUpdate(
       typeof row.data === "string"
         ? JSON.parse(row.data)
         : row.data || {};
+
+    // Capture before-state for changed fields
+    const changes: Record<string, { from: any; to: any }> = {};
+    const trackableFields = ['title', 'status', 'priority', 'tags', 'owner', 'dueDate', 'progress', 'description', 'archived'] as const;
+    for (const field of trackableFields) {
+      if (args[field] !== undefined) {
+        const oldVal = field === 'archived' ? (row.archived ?? false) : data[field];
+        changes[field] = { from: oldVal, to: args[field] };
+      }
+    }
 
     // Apply updates to data JSONB
     if (args.title !== undefined) data.title = args.title;
@@ -795,29 +859,29 @@ export async function handleTrackerUpdate(
     // Notify renderer (correct channel + event format)
     await notifyTrackerItemUpdated(workspacePath, args.id);
 
+    const updateSummaryParts: string[] = [];
+    if (args.title !== undefined) updateSummaryParts.push(`- **Title**: ${args.title}`);
+    if (args.status !== undefined) updateSummaryParts.push(`- **Status**: ${args.status}`);
+    if (args.priority !== undefined) updateSummaryParts.push(`- **Priority**: ${args.priority}`);
+    if (args.archived !== undefined) updateSummaryParts.push(`- **Archived**: ${args.archived}`);
+    if (args.tags !== undefined) updateSummaryParts.push(`- **Tags**: ${args.tags.join(", ")}`);
+
+    const structured = {
+      action: "updated" as const,
+      id: args.id,
+      type: row.type,
+      title: data.title,
+      changes,
+    };
+
     return {
       content: [
         {
           type: "text",
-          text: `Updated tracker item ${args.id}:\n${
-            args.title !== undefined ? `- **Title**: ${args.title}\n` : ""
-          }${
-            args.status !== undefined
-              ? `- **Status**: ${args.status}\n`
-              : ""
-          }${
-            args.priority !== undefined
-              ? `- **Priority**: ${args.priority}\n`
-              : ""
-          }${
-            args.archived !== undefined
-              ? `- **Archived**: ${args.archived}\n`
-              : ""
-          }${
-            args.tags !== undefined
-              ? `- **Tags**: ${args.tags.join(", ")}\n`
-              : ""
-          }`,
+          text: JSON.stringify({
+            structured,
+            summary: `Updated tracker item ${args.id}:\n${updateSummaryParts.join("\n")}`,
+          }),
         },
       ],
       isError: false,
@@ -859,7 +923,7 @@ export async function handleTrackerLinkSession(
 
     // Verify tracker item exists
     const existing = await db.query<any>(
-      `SELECT id FROM tracker_items WHERE id = $1`,
+      `SELECT id, type, data FROM tracker_items WHERE id = $1`,
       [args.trackerId]
     );
     if (existing.rows.length === 0) {
@@ -896,11 +960,22 @@ export async function handleTrackerLinkSession(
     const linkedIds = sessionResult.rows[0]?.metadata?.linkedTrackerItemIds || [];
     await notifySessionLinkedTrackerChanged(sessionId, linkedIds);
 
+    const structured = {
+      action: "linked" as const,
+      trackerId: args.trackerId,
+      type: existing.rows[0]?.type || "",
+      title: trackerData.title || "",
+      linkedCount: linkedSessions.length,
+    };
+
     return {
       content: [
         {
           type: "text",
-          text: `Linked session ${sessionId} to tracker item ${args.trackerId}. Total linked sessions: ${linkedSessions.length}`,
+          text: JSON.stringify({
+            structured,
+            summary: `Linked session ${sessionId} to tracker item ${args.trackerId}. Total linked sessions: ${linkedSessions.length}`,
+          }),
         },
       ],
       isError: false,
@@ -976,11 +1051,20 @@ export async function handleTrackerLinkFile(
     // Notify renderer
     await notifySessionLinkedTrackerChanged(sessionId, linkedTrackerItemIds);
 
+    const structured = {
+      action: "linked_file" as const,
+      filePath: args.filePath,
+      linkedCount: linkedTrackerItemIds.length,
+    };
+
     return {
       content: [
         {
           type: "text",
-          text: `Linked file "${args.filePath}" to this session. Total linked items: ${linkedTrackerItemIds.length}`,
+          text: JSON.stringify({
+            structured,
+            summary: `Linked file "${args.filePath}" to this session. Total linked items: ${linkedTrackerItemIds.length}`,
+          }),
         },
       ],
       isError: false,

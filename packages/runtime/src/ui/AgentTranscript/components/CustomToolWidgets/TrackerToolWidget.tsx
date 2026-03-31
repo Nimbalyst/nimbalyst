@@ -1,26 +1,89 @@
 /**
  * TrackerToolWidget - Custom widget for tracker MCP tools.
  *
- * Handles: tracker_list, tracker_get, tracker_create, tracker_update, tracker_link_session
- * Shows compact, readable summaries of tracker operations in the AI transcript.
+ * Handles: tracker_list, tracker_get, tracker_create, tracker_update,
+ *          tracker_link_session, tracker_link_file
+ *
+ * Shows compact, structured summaries of tracker operations in the AI transcript,
+ * matching the visual style of UpdateSessionMetaWidget.
+ *
+ * Supports structured JSON results (new format) with fallback to plain text (old sessions).
  */
 
 import React from 'react';
 import type { CustomToolWidgetProps } from './index';
+
+// ---------- Types ----------
+
+interface TrackerItem {
+  id: string;
+  type: string;
+  title: string;
+  status?: string;
+  priority?: string;
+  tags?: string[];
+  owner?: string;
+  dueDate?: string;
+}
+
+interface StructuredCreated {
+  action: 'created';
+  item: TrackerItem;
+}
+
+interface StructuredUpdated {
+  action: 'updated';
+  id: string;
+  type: string;
+  title: string;
+  changes: Record<string, { from: any; to: any }>;
+}
+
+interface StructuredListed {
+  action: 'listed';
+  filters: Record<string, string>;
+  count: number;
+  items: TrackerItem[];
+}
+
+interface StructuredRetrieved {
+  action: 'retrieved';
+  item: TrackerItem;
+}
+
+interface StructuredLinked {
+  action: 'linked';
+  trackerId: string;
+  type: string;
+  title: string;
+  linkedCount: number;
+}
+
+interface StructuredLinkedFile {
+  action: 'linked_file';
+  filePath: string;
+  linkedCount: number;
+}
+
+type StructuredResult =
+  | StructuredCreated
+  | StructuredUpdated
+  | StructuredListed
+  | StructuredRetrieved
+  | StructuredLinked
+  | StructuredLinkedFile;
 
 // ---------- Helpers ----------
 
 function getResultText(result: unknown): string | null {
   if (!result) return null;
   if (typeof result === 'string') return result;
-
   if (Array.isArray(result)) {
     for (const block of result) {
       if (block && block.type === 'text' && block.text) return block.text as string;
     }
     return null;
   }
-
   const r = result as any;
   if (r.content && Array.isArray(r.content)) {
     for (const block of r.content) {
@@ -32,6 +95,28 @@ function getResultText(result: unknown): string | null {
   return null;
 }
 
+function extractStructured(tool: { result?: unknown }): { structured: StructuredResult; summary: string } | null {
+  const text = getResultText(tool.result);
+  if (!text) return null;
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed.structured && parsed.summary) {
+      return { structured: parsed.structured, summary: parsed.summary };
+    }
+  } catch {
+    // Not JSON -- old format
+  }
+  return null;
+}
+
+function navigateToTrackerItem(itemId: string): void {
+  window.dispatchEvent(
+    new CustomEvent('nimbalyst:navigate-tracker-item', { detail: { itemId } })
+  );
+}
+
+// ---------- Style constants ----------
+
 const TYPE_COLORS: Record<string, string> = {
   bug: '#f87171',
   task: '#60a5fa',
@@ -42,6 +127,26 @@ const TYPE_COLORS: Record<string, string> = {
 };
 
 const getTypeColor = (type: string) => TYPE_COLORS[type] || 'var(--nim-text-muted)';
+
+const STATUS_COLORS: Record<string, string> = {
+  'done': '#4ade80',
+  'completed': '#4ade80',
+  'in-progress': '#60a5fa',
+  'active': '#60a5fa',
+};
+
+const getStatusColor = (status: string) => STATUS_COLORS[status] || 'var(--nim-text-muted)';
+
+const PRIORITY_COLORS: Record<string, string> = {
+  critical: '#ef4444',
+  high: '#fbbf24',
+  medium: '#9ca3af',
+  low: '#808080',
+};
+
+const getPriorityColor = (priority: string) => PRIORITY_COLORS[priority] || 'var(--nim-text-muted)';
+
+// ---------- Small components ----------
 
 const TypeBadge: React.FC<{ type: string }> = ({ type }) => (
   <span
@@ -62,9 +167,7 @@ const TypeBadge: React.FC<{ type: string }> = ({ type }) => (
 );
 
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
-  const isDone = status === 'done' || status === 'completed';
-  const isInProgress = status === 'in-progress' || status === 'active';
-  const color = isDone ? '#4ade80' : isInProgress ? '#60a5fa' : 'var(--nim-text-muted)';
+  const color = getStatusColor(status);
   return (
     <span
       style={{
@@ -83,38 +186,461 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
   );
 };
 
-// ---------- Tool-specific renderers ----------
+const PriorityBadge: React.FC<{ priority: string }> = ({ priority }) => {
+  const color = getPriorityColor(priority);
+  return (
+    <span
+      style={{
+        fontSize: '10px',
+        padding: '0px 6px',
+        borderRadius: '10px',
+        fontWeight: 500,
+        lineHeight: '18px',
+        background: `${color}18`,
+        color,
+        border: `1px solid ${color}30`,
+      }}
+    >
+      {priority}
+    </span>
+  );
+};
+
+const TagPill: React.FC<{ tag: string; variant: 'kept' | 'added' | 'removed' }> = ({ tag, variant }) => {
+  const styles: Record<string, React.CSSProperties> = {
+    kept: {
+      background: 'var(--nim-bg-tertiary)',
+      color: 'var(--nim-text-muted)',
+      border: '1px solid var(--nim-border)',
+    },
+    added: {
+      background: 'rgba(74,222,128,0.12)',
+      color: '#4ade80',
+      border: '1px solid rgba(74,222,128,0.3)',
+    },
+    removed: {
+      background: 'rgba(248,113,113,0.12)',
+      color: '#f87171',
+      border: '1px solid rgba(248,113,113,0.3)',
+      textDecoration: 'line-through',
+    },
+  };
+  const prefix = variant === 'added' ? '+' : variant === 'removed' ? '-' : '';
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '2px',
+        fontSize: '10px',
+        padding: '0px 6px',
+        borderRadius: '10px',
+        fontWeight: 500,
+        lineHeight: '18px',
+        ...styles[variant],
+      }}
+    >
+      {prefix && <span style={{ fontWeight: 700, fontSize: '11px' }}>{prefix}</span>}
+      #{tag}
+    </span>
+  );
+};
+
+const Arrow: React.FC = () => (
+  <span style={{ color: 'var(--nim-text-faint)', fontSize: '10px', padding: '0 2px' }}>
+    {'\u2192'}
+  </span>
+);
+
+const Label: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <span style={{ fontSize: '10px', color: 'var(--nim-text-faint)', fontWeight: 500, minWidth: '50px' }}>
+    {children}
+  </span>
+);
+
+const ClickableTitle: React.FC<{ title: string; itemId: string }> = ({ title, itemId }) => (
+  <span
+    onClick={() => navigateToTrackerItem(itemId)}
+    style={{
+      fontSize: '11px',
+      color: 'var(--nim-text)',
+      fontWeight: 500,
+      cursor: 'pointer',
+    }}
+    onMouseEnter={(e) => {
+      e.currentTarget.style.textDecoration = 'underline';
+      e.currentTarget.style.color = 'var(--nim-primary)';
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.textDecoration = 'none';
+      e.currentTarget.style.color = 'var(--nim-text)';
+    }}
+  >
+    {title}
+  </span>
+);
+
+const Row: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+    {children}
+  </div>
+);
+
+const WidgetShell: React.FC<{ header: React.ReactNode; children: React.ReactNode }> = ({ header, children }) => (
+  <div
+    style={{
+      border: '1px solid var(--nim-border)',
+      borderRadius: '6px',
+      overflow: 'hidden',
+      fontSize: '11px',
+    }}
+  >
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        padding: '5px 10px',
+        background: 'var(--nim-bg-tertiary)',
+        borderBottom: '1px solid var(--nim-border)',
+      }}
+    >
+      {header}
+    </div>
+    <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      {children}
+    </div>
+  </div>
+);
+
+// ---------- Per-action renderers ----------
+
+const CreatedView: React.FC<{ data: StructuredCreated }> = ({ data }) => {
+  const { item } = data;
+  return (
+    <WidgetShell
+      header={
+        <>
+          <span style={{ fontWeight: 600, color: 'var(--nim-text)' }}>Tracker Created</span>
+          <span style={{ fontFamily: 'monospace', fontSize: '9px', color: 'var(--nim-text-faint)', marginLeft: 'auto' }}>
+            {item.id}
+          </span>
+        </>
+      }
+    >
+      <Row>
+        <Label>Type</Label>
+        <TypeBadge type={item.type} />
+      </Row>
+      <Row>
+        <Label>Title</Label>
+        <ClickableTitle title={item.title} itemId={item.id} />
+      </Row>
+      <Row>
+        <Label>Status</Label>
+        {item.status && <StatusBadge status={item.status} />}
+        {item.priority && (
+          <>
+            <span style={{ width: '12px' }} />
+            <span style={{ fontSize: '10px', color: 'var(--nim-text-faint)', fontWeight: 500 }}>Priority</span>
+            <PriorityBadge priority={item.priority} />
+          </>
+        )}
+      </Row>
+      {item.tags && item.tags.length > 0 && (
+        <Row>
+          <Label>Tags</Label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+            {item.tags.map((t) => (
+              <TagPill key={t} tag={t} variant="kept" />
+            ))}
+          </div>
+        </Row>
+      )}
+    </WidgetShell>
+  );
+};
+
+const UpdatedView: React.FC<{ data: StructuredUpdated }> = ({ data }) => {
+  const { changes } = data;
+  const changedKeys = Object.keys(changes);
+  if (changedKeys.length === 0) return null;
+
+  // Compute tag diff
+  let tagDiff: { kept: string[]; added: string[]; removed: string[] } | null = null;
+  if (changes.tags) {
+    const fromTags: string[] = changes.tags.from || [];
+    const toTags: string[] = changes.tags.to || [];
+    const fromSet = new Set(fromTags);
+    const toSet = new Set(toTags);
+    tagDiff = {
+      kept: toTags.filter((t) => fromSet.has(t)),
+      added: toTags.filter((t) => !fromSet.has(t)),
+      removed: fromTags.filter((t) => !toSet.has(t)),
+    };
+  }
+
+  return (
+    <WidgetShell
+      header={
+        <>
+          <span style={{ fontWeight: 600, color: 'var(--nim-text)' }}>Tracker Updated</span>
+          <TypeBadge type={data.type} />
+          <span
+            onClick={() => navigateToTrackerItem(data.id)}
+            style={{
+              color: 'var(--nim-text-muted)',
+              fontSize: '10px',
+              flex: 1,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              cursor: 'pointer',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--nim-primary)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--nim-text-muted)'; }}
+          >
+            {data.title}
+          </span>
+        </>
+      }
+    >
+      {changes.status && (
+        <Row>
+          <Label>Status</Label>
+          <StatusBadge status={String(changes.status.from || 'none')} />
+          <Arrow />
+          <StatusBadge status={String(changes.status.to)} />
+        </Row>
+      )}
+      {changes.priority && (
+        <Row>
+          <Label>Priority</Label>
+          <PriorityBadge priority={String(changes.priority.from || 'none')} />
+          <Arrow />
+          <PriorityBadge priority={String(changes.priority.to)} />
+        </Row>
+      )}
+      {changes.title && (
+        <Row>
+          <Label>Title</Label>
+          <span style={{ fontSize: '10px', color: 'var(--nim-text-faint)', textDecoration: 'line-through' }}>
+            {String(changes.title.from)}
+          </span>
+          <Arrow />
+          <span style={{ fontSize: '11px', color: 'var(--nim-text)', fontWeight: 500 }}>
+            {String(changes.title.to)}
+          </span>
+        </Row>
+      )}
+      {changes.owner && (
+        <Row>
+          <Label>Owner</Label>
+          <span style={{ fontSize: '10px', color: 'var(--nim-text-faint)' }}>{String(changes.owner.from || 'none')}</span>
+          <Arrow />
+          <span style={{ fontSize: '11px', color: 'var(--nim-text-muted)' }}>{String(changes.owner.to)}</span>
+        </Row>
+      )}
+      {changes.archived !== undefined && (
+        <Row>
+          <Label>Archived</Label>
+          <span style={{ fontSize: '10px', color: changes.archived.to ? '#fbbf24' : '#4ade80' }}>
+            {changes.archived.to ? 'archived' : 'unarchived'}
+          </span>
+        </Row>
+      )}
+      {changes.progress !== undefined && (
+        <Row>
+          <Label>Progress</Label>
+          <span style={{ fontSize: '10px', color: 'var(--nim-text-faint)' }}>{String(changes.progress.from ?? 0)}%</span>
+          <Arrow />
+          <span style={{ fontSize: '11px', color: 'var(--nim-text-muted)' }}>{String(changes.progress.to)}%</span>
+        </Row>
+      )}
+      {tagDiff && (tagDiff.kept.length > 0 || tagDiff.added.length > 0 || tagDiff.removed.length > 0) && (
+        <Row>
+          <Label>Tags</Label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+            {tagDiff.kept.map((t) => <TagPill key={`k-${t}`} tag={t} variant="kept" />)}
+            {tagDiff.added.map((t) => <TagPill key={`a-${t}`} tag={t} variant="added" />)}
+            {tagDiff.removed.map((t) => <TagPill key={`r-${t}`} tag={t} variant="removed" />)}
+          </div>
+        </Row>
+      )}
+    </WidgetShell>
+  );
+};
+
+const ListedView: React.FC<{ data: StructuredListed }> = ({ data }) => {
+  const filterSummary = Object.entries(data.filters)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join(', ');
+
+  return (
+    <WidgetShell
+      header={
+        <>
+          <span style={{ fontWeight: 600, color: 'var(--nim-text)' }}>Tracker List</span>
+          {filterSummary && (
+            <span style={{ fontSize: '10px', color: 'var(--nim-text-faint)' }}>{filterSummary}</span>
+          )}
+          <span style={{ fontSize: '10px', color: 'var(--nim-primary)', fontWeight: 500 }}>({data.count})</span>
+        </>
+      }
+    >
+      {data.items.length === 0 ? (
+        <span style={{ fontSize: '10px', color: 'var(--nim-text-faint)', fontStyle: 'italic' }}>
+          No items found
+        </span>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+          {data.items.map((item, i) => (
+            <div
+              key={item.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '3px 0',
+                borderTop: i > 0 ? '1px solid rgba(74,74,74,0.4)' : undefined,
+                paddingTop: i > 0 ? '5px' : '3px',
+              }}
+            >
+              <TypeBadge type={item.type} />
+              <span
+                onClick={() => navigateToTrackerItem(item.id)}
+                style={{
+                  fontSize: '11px',
+                  color: 'var(--nim-text-muted)',
+                  flex: 1,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--nim-primary)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--nim-text-muted)'; }}
+              >
+                {item.title}
+              </span>
+              {item.status && <StatusBadge status={item.status} />}
+              {item.priority && <PriorityBadge priority={item.priority} />}
+            </div>
+          ))}
+        </div>
+      )}
+    </WidgetShell>
+  );
+};
+
+const RetrievedView: React.FC<{ data: StructuredRetrieved }> = ({ data }) => {
+  const { item } = data;
+  return (
+    <WidgetShell
+      header={
+        <>
+          <span style={{ fontWeight: 600, color: 'var(--nim-text)' }}>Tracker Item</span>
+          <span style={{ flex: 1 }} />
+          <TypeBadge type={item.type} />
+        </>
+      }
+    >
+      <Row>
+        <Label>Title</Label>
+        <ClickableTitle title={item.title} itemId={item.id} />
+      </Row>
+      <Row>
+        <Label>Status</Label>
+        {item.status && <StatusBadge status={item.status} />}
+        {item.priority && (
+          <>
+            <span style={{ width: '12px' }} />
+            <span style={{ fontSize: '10px', color: 'var(--nim-text-faint)', fontWeight: 500 }}>Priority</span>
+            <PriorityBadge priority={item.priority} />
+          </>
+        )}
+      </Row>
+      {item.tags && item.tags.length > 0 && (
+        <Row>
+          <Label>Tags</Label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
+            {item.tags.map((t) => <TagPill key={t} tag={t} variant="kept" />)}
+          </div>
+        </Row>
+      )}
+      {item.owner && (
+        <Row>
+          <Label>Owner</Label>
+          <span style={{ fontSize: '11px', color: 'var(--nim-text-muted)' }}>{item.owner}</span>
+        </Row>
+      )}
+    </WidgetShell>
+  );
+};
+
+const LinkedView: React.FC<{ data: StructuredLinked }> = ({ data }) => (
+  <WidgetShell
+    header={
+      <span style={{ fontWeight: 600, color: 'var(--nim-text)' }}>Tracker Linked</span>
+    }
+  >
+    <Row>
+      <span style={{ fontSize: '10px', color: 'var(--nim-text-faint)' }}>Linked to</span>
+      <TypeBadge type={data.type} />
+      <ClickableTitle title={data.title} itemId={data.trackerId} />
+      <span style={{ fontSize: '10px', color: 'var(--nim-text-faint)' }}>
+        ({data.linkedCount} session{data.linkedCount !== 1 ? 's' : ''})
+      </span>
+    </Row>
+  </WidgetShell>
+);
+
+const LinkedFileView: React.FC<{ data: StructuredLinkedFile }> = ({ data }) => (
+  <WidgetShell
+    header={
+      <span style={{ fontWeight: 600, color: 'var(--nim-text)' }}>File Linked</span>
+    }
+  >
+    <Row>
+      <span style={{ fontSize: '10px', color: 'var(--nim-text-faint)' }}>Linked</span>
+      <span style={{ fontSize: '11px', color: 'var(--nim-text-muted)', fontFamily: 'monospace' }}>
+        {data.filePath}
+      </span>
+      <span style={{ fontSize: '10px', color: 'var(--nim-text-faint)' }}>
+        ({data.linkedCount} total link{data.linkedCount !== 1 ? 's' : ''})
+      </span>
+    </Row>
+  </WidgetShell>
+);
+
+// ---------- Fallback for old text results ----------
+
+function getBaseName(toolName: string): string {
+  return toolName.replace(/^mcp__[^_]+__/, '');
+}
 
 function getToolLabel(toolName: string): string {
-  const base = toolName.replace(/^mcp__[^_]+__/, '');
+  const base = getBaseName(toolName);
   switch (base) {
     case 'tracker_list': return 'Tracker List';
     case 'tracker_get': return 'Tracker Get';
     case 'tracker_create': return 'Tracker Create';
     case 'tracker_update': return 'Tracker Update';
     case 'tracker_link_session': return 'Tracker Link';
+    case 'tracker_link_file': return 'File Link';
     default: return 'Tracker';
   }
 }
 
-function getBaseName(toolName: string): string {
-  return toolName.replace(/^mcp__[^_]+__/, '');
-}
+const FallbackView: React.FC<{ toolName: string; resultText: string | null; args: Record<string, any> }> = ({
+  toolName,
+  resultText,
+  args,
+}) => {
+  const label = getToolLabel(toolName);
 
-// ---------- Main widget ----------
-
-export const TrackerToolWidget: React.FC<CustomToolWidgetProps> = ({ message }) => {
-  const tool = message.toolCall;
-  if (!tool) return null;
-
-  const resultText = getResultText(tool.result);
-  const isError = (tool.result as any)?.isError === true;
-  const args = (tool.arguments || {}) as Record<string, any>;
-  const baseName = getBaseName(tool.toolName);
-  const label = getToolLabel(tool.toolName);
-
-  // Pending state (no result yet)
   if (!resultText) {
+    // Pending state
     return (
       <div
         style={{
@@ -136,17 +662,71 @@ export const TrackerToolWidget: React.FC<CustomToolWidgetProps> = ({ message }) 
           <span style={{ fontWeight: 600, color: 'var(--nim-text)' }}>{label}</span>
           {args.type && <TypeBadge type={args.type} />}
           {args.title && (
-            <span style={{ color: 'var(--nim-text-muted)', fontSize: '10px' }}>
-              {args.title}
-            </span>
+            <span style={{ color: 'var(--nim-text-muted)', fontSize: '10px' }}>{args.title}</span>
           )}
         </div>
       </div>
     );
   }
 
+  return (
+    <WidgetShell
+      header={
+        <>
+          <span style={{ fontWeight: 600, color: 'var(--nim-text)' }}>{label}</span>
+          {args.type && <TypeBadge type={args.type} />}
+        </>
+      }
+    >
+      <div
+        style={{
+          color: 'var(--nim-text-muted)',
+          fontSize: '10px',
+          whiteSpace: 'pre-wrap',
+          maxHeight: '200px',
+          overflowY: 'auto',
+          lineHeight: '1.5',
+        }}
+      >
+        {resultText}
+      </div>
+    </WidgetShell>
+  );
+};
+
+// ---------- Main widget ----------
+
+export const TrackerToolWidget: React.FC<CustomToolWidgetProps> = ({ message }) => {
+  const tool = message.toolCall;
+  if (!tool) return null;
+
+  const args = (tool.arguments || {}) as Record<string, any>;
+  const isError = (tool.result as any)?.isError === true;
+
+  // Try structured JSON first
+  const parsed = extractStructured(tool);
+  if (parsed && !isError) {
+    const { structured } = parsed;
+    switch (structured.action) {
+      case 'created':
+        return <CreatedView data={structured} />;
+      case 'updated':
+        return <UpdatedView data={structured} />;
+      case 'listed':
+        return <ListedView data={structured} />;
+      case 'retrieved':
+        return <RetrievedView data={structured} />;
+      case 'linked':
+        return <LinkedView data={structured} />;
+      case 'linked_file':
+        return <LinkedFileView data={structured} />;
+    }
+  }
+
   // Error state
+  const resultText = getResultText(tool.result);
   if (isError) {
+    const label = getToolLabel(tool.name);
     return (
       <div
         style={{
@@ -175,63 +755,8 @@ export const TrackerToolWidget: React.FC<CustomToolWidgetProps> = ({ message }) 
     );
   }
 
-  // Render based on tool type
-  return (
-    <div
-      style={{
-        border: '1px solid var(--nim-border)',
-        borderRadius: '6px',
-        overflow: 'hidden',
-        fontSize: '11px',
-      }}
-    >
-      {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          padding: '5px 10px',
-          background: 'var(--nim-bg-tertiary)',
-          borderBottom: '1px solid var(--nim-border)',
-        }}
-      >
-        <span style={{ fontWeight: 600, color: 'var(--nim-text)' }}>{label}</span>
-        {baseName === 'tracker_create' && args.type && <TypeBadge type={args.type} />}
-        {baseName === 'tracker_create' && args.title && (
-          <span style={{ color: 'var(--nim-text-muted)', fontSize: '10px', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {args.title}
-          </span>
-        )}
-        {baseName === 'tracker_list' && (
-          <span style={{ color: 'var(--nim-text-faint)', fontSize: '10px' }}>
-            {args.type ? `type: ${args.type}` : 'all types'}
-            {args.status ? `, status: ${args.status}` : ''}
-          </span>
-        )}
-        {baseName === 'tracker_get' && args.id && (
-          <span style={{ color: 'var(--nim-text-faint)', fontSize: '10px', fontFamily: 'monospace' }}>
-            {args.id}
-          </span>
-        )}
-      </div>
-
-      {/* Body */}
-      <div
-        style={{
-          padding: '6px 10px',
-          color: 'var(--nim-text-muted)',
-          fontSize: '10px',
-          whiteSpace: 'pre-wrap',
-          maxHeight: baseName === 'tracker_list' ? '200px' : '300px',
-          overflowY: 'auto',
-          lineHeight: '1.5',
-        }}
-      >
-        {resultText}
-      </div>
-    </div>
-  );
+  // Fallback: plain text for old sessions
+  return <FallbackView toolName={tool.name} resultText={resultText} args={args} />;
 };
 
 TrackerToolWidget.displayName = 'TrackerToolWidget';

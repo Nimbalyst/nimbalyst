@@ -1240,6 +1240,23 @@ export default function App() {
     return () => window.removeEventListener('terminal:show', handleTerminalShow);
   }, [openTerminalPanel, closeTrackerPanel]);
 
+  // Listen for tracker item navigation events (from TrackerToolWidget in transcript)
+  useEffect(() => {
+    const handleNavigateTrackerItem = (e: Event) => {
+      const itemId = (e as CustomEvent).detail?.itemId;
+      if (typeof itemId === 'string') {
+        setActiveMode('tracker');
+        store.set(trackerModeLayoutAtom, (current) => ({
+          ...current,
+          selectedItemId: itemId,
+        }));
+      }
+    };
+
+    window.addEventListener('nimbalyst:navigate-tracker-item', handleNavigateTrackerItem);
+    return () => window.removeEventListener('nimbalyst:navigate-tracker-item', handleNavigateTrackerItem);
+  }, [setActiveMode]);
+
   // Listen for open-ai-session events (from rebase/merge conflict resolution)
   useEffect(() => {
     const handleOpenAiSession = async (event: CustomEvent<{ sessionId: string; workspacePath: string; draftInput?: string }>) => {
