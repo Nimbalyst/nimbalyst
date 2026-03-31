@@ -39,10 +39,14 @@ This ensures:
 ```bash
 # 1. Ensure Docker is running
 if ! docker info > /dev/null 2>&1; then
+  # Kill any stuck Docker processes before starting fresh
+  pkill -9 -f "com.docker" 2>/dev/null
+  pkill -9 -f "Docker Desktop" 2>/dev/null
+  sleep 3
   echo "Starting Docker Desktop..."
   open -a Docker
-  # Wait for Docker to be ready (max 30 seconds)
-  for i in {1..30}; do
+  # Wait for Docker to be ready (max 120 seconds — cold starts can take 1-2 min)
+  for i in {1..120}; do
     if docker info > /dev/null 2>&1; then break; fi
     sleep 1
   done
@@ -116,6 +120,19 @@ Test artifacts are written to the mounted workspace volume:
 - `e2e_test_output/playwright-report/` - HTML report
 
 These directories are gitignored and accessible from both host and container.
+
+### Showing Results to the User
+
+After tests complete, convert video recordings to GIF and display them inline using `mcp__nimbalyst-mcp__display_to_user`:
+
+```bash
+# Convert WebM to GIF using ffmpeg
+ffmpeg -y -i e2e_test_output/videos/<hash>.webm \
+  -vf "fps=10,scale=1080:-1:flags=lanczos" -loop 0 \
+  e2e_test_output/videos/test-results.gif
+```
+
+Then display with `display_to_user` using the GIF path. This lets the user see the test run directly in the conversation without opening external files.
 
 ## Cleanup of Stale Containers
 
