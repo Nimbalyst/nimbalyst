@@ -47,23 +47,58 @@ const TYPE_COLORS: Record<string, string> = {
   feature: '#10b981',
 };
 
-function getStatusColumns(filterType: TrackerItemType | 'all'): { value: string; label: string }[] {
+/**
+ * Get status columns for the kanban board.
+ * Starts with model-defined statuses, then appends any extra statuses
+ * found in the actual items so nothing silently disappears.
+ */
+function getStatusColumns(filterType: TrackerItemType | 'all', items: TrackerItem[]): { value: string; label: string }[] {
+  // Collect model-defined columns (from all relevant types when 'all')
+  const modelColumns: { value: string; label: string }[] = [];
+  const seen = new Set<string>();
+
   if (filterType !== 'all') {
     const model = globalRegistry.get(filterType);
     if (model) {
       const statusField = model.fields.find(f => f.name === 'status');
       if (statusField?.options) {
-        return statusField.options.map(o => ({ value: o.value, label: o.label }));
+        for (const o of statusField.options) {
+          if (!seen.has(o.value)) {
+            seen.add(o.value);
+            modelColumns.push({ value: o.value, label: o.label });
+          }
+        }
       }
     }
   }
-  // Default columns
-  return [
-    { value: 'to-do', label: 'To Do' },
-    { value: 'in-progress', label: 'In Progress' },
-    { value: 'in-review', label: 'In Review' },
-    { value: 'done', label: 'Done' },
-  ];
+
+  // If no model columns found, use sensible defaults
+  if (modelColumns.length === 0) {
+    for (const col of [
+      { value: 'to-do', label: 'To Do' },
+      { value: 'in-progress', label: 'In Progress' },
+      { value: 'in-review', label: 'In Review' },
+      { value: 'done', label: 'Done' },
+    ]) {
+      seen.add(col.value);
+      modelColumns.push(col);
+    }
+  }
+
+  // Now scan actual items for statuses not covered by the model.
+  // This prevents items from silently disappearing when their status
+  // doesn't match the model (e.g. multi-type items, status set by agents).
+  for (const item of items) {
+    const status = (item.status || 'to-do').toLowerCase();
+    if (!seen.has(status)) {
+      seen.add(status);
+      // Title-case the status value for display
+      const label = status.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+      modelColumns.push({ value: status, label });
+    }
+  }
+
+  return modelColumns;
 }
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
@@ -349,22 +384,24 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     }
   }, [selectedIds, closeContextMenu]);
 
-  const columns = useMemo(() => getStatusColumns(filterType), [filterType]);
+  const columns = useMemo(() => getStatusColumns(filterType, allItems), [filterType, allItems]);
 
   const itemsByStatus = useMemo(() => {
     const grouped: Record<string, TrackerItem[]> = {};
     for (const col of columns) {
       grouped[col.value] = [];
     }
-    // Catch-all for items with statuses not in the column list
-    grouped['__other__'] = [];
 
     for (const item of allItems) {
       const status = (item.status || 'to-do').toLowerCase();
       if (grouped[status]) {
         grouped[status].push(item);
       } else {
-        grouped['__other__'].push(item);
+        // Should not happen since getStatusColumns scans items,
+        // but fallback to first column just in case
+        const firstCol = columns[0]?.value || 'to-do';
+        grouped[firstCol] = grouped[firstCol] || [];
+        grouped[firstCol].push(item);
       }
     }
     return grouped;
