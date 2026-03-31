@@ -52,6 +52,7 @@ import { FilesScopeDropdown } from './FilesScopeDropdown';
 import { GitOperationsPanel } from './GitOperationsPanel';
 import { TodoPanel } from './TodoPanel';
 import { TeammatePanel } from './TeammatePanel';
+import { TrackerPanel } from './TrackerPanel';
 
 interface FilesEditedSidebarProps {
   /** The workstream ID (parent session ID) - files from all child sessions will be shown */
@@ -577,6 +578,9 @@ export const FilesEditedSidebar: React.FC<FilesEditedSidebarProps> = React.memo(
       {activeSessionId && (
         <TeammatePanel sessionId={activeSessionId} />
       )}
+
+      {/* Tracker Panel - shows tracker items linked by the agent */}
+      <TrackerPanel workstreamId={workstreamId} />
     </div>
   );
 });

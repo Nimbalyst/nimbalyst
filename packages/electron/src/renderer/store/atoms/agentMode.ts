@@ -50,6 +50,7 @@ export interface AgentModeLayout {
   todoPanelCollapsed: boolean;
   teammatePanelCollapsed: boolean;
   agentPanelCollapsed: boolean;
+  trackerPanelCollapsed: boolean;
 }
 
 // ============================================================
@@ -71,6 +72,7 @@ const DEFAULT_LAYOUT: AgentModeLayout = {
   todoPanelCollapsed: false,
   teammatePanelCollapsed: false,
   agentPanelCollapsed: false,
+  trackerPanelCollapsed: false,
 };
 
 /**
@@ -92,6 +94,7 @@ function mergeWithDefaults(persisted: Partial<AgentModeLayout> | undefined): Age
     todoPanelCollapsed: persisted?.todoPanelCollapsed ?? DEFAULT_LAYOUT.todoPanelCollapsed,
     teammatePanelCollapsed: persisted?.teammatePanelCollapsed ?? DEFAULT_LAYOUT.teammatePanelCollapsed,
     agentPanelCollapsed: persisted?.agentPanelCollapsed ?? DEFAULT_LAYOUT.agentPanelCollapsed,
+    trackerPanelCollapsed: persisted?.trackerPanelCollapsed ?? DEFAULT_LAYOUT.trackerPanelCollapsed,
   };
 }
 
@@ -152,6 +155,11 @@ export const teammatePanelCollapsedAtom = atom(
 /** Whether the agent panel is collapsed */
 export const agentPanelCollapsedAtom = atom(
   (get) => get(agentModeLayoutAtom).agentPanelCollapsed
+);
+
+/** Whether the tracker panel is collapsed */
+export const trackerPanelCollapsedAtom = atom(
+  (get) => get(agentModeLayoutAtom).trackerPanelCollapsed
 );
 
 /** Per-session derived atom for current teammates from session metadata */
@@ -376,6 +384,25 @@ export const toggleAgentPanelCollapsedAtom = atom(
   (get, set) => {
     const current = get(agentModeLayoutAtom);
     const newLayout = { ...current, agentPanelCollapsed: !current.agentPanelCollapsed };
+
+    set(agentModeLayoutAtom, newLayout);
+
+    if (!currentWorkspacePath) {
+      console.warn('[agentMode] Cannot persist layout - initAgentModeLayout not called yet');
+      return;
+    }
+    schedulePersist(currentWorkspacePath, newLayout);
+  }
+);
+
+/**
+ * Toggle tracker panel collapsed state.
+ */
+export const toggleTrackerPanelCollapsedAtom = atom(
+  null,
+  (get, set) => {
+    const current = get(agentModeLayoutAtom);
+    const newLayout = { ...current, trackerPanelCollapsed: !current.trackerPanelCollapsed };
 
     set(agentModeLayoutAtom, newLayout);
 
