@@ -38,6 +38,21 @@ You may use the `e2e-runner` agent to run **targeted E2E tests** related to the 
 - Run tests to "check" what the error is when you just saw it
 - Run tests without `--max-failures=1` when fixing issues
 
+### Showing Test Results to the User
+
+When running E2E tests for a new feature or bug fix, always show the results visually:
+
+1. **Enable video recording** - Playwright records WebM videos to `e2e_test_output/videos/`
+2. **Convert to GIF** after tests complete:
+   ```bash
+   ffmpeg -y -i e2e_test_output/videos/<hash>.webm \
+     -vf "fps=10,scale=1080:-1:flags=lanczos" -loop 0 \
+     e2e_test_output/videos/test-results.gif
+   ```
+3. **Display inline** using `mcp__nimbalyst-mcp__display_to_user` with the GIF path
+
+This lets the user see the test run directly in the conversation without opening external files.
+
 ### Quick Command Reference
 
 ```bash
