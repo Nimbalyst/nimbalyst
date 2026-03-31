@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useRef, useCallback, useState, forwardRef } from 'react';
-import { Excalidraw } from '@excalidraw/excalidraw';
+import { Excalidraw, exportToBlob } from '@excalidraw/excalidraw';
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/types/element/types';
 import type { ExcalidrawImperativeAPI, AppState, BinaryFiles } from '@excalidraw/excalidraw/types/types';
 import { useEditorLifecycle, type EditorHostProps } from '@nimbalyst/extension-sdk';
@@ -214,16 +214,40 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
     }
   }, [markDirty]);
 
+  // Create a wrapper around the Excalidraw API that adds screenshot export capability.
+  // This keeps Excalidraw-specific export logic in the extension rather than the host.
+  const createWrappedAPI = useCallback((api: ExcalidrawImperativeAPI) => {
+    return Object.create(api, {
+      exportToPngBlob: {
+        value: async (opts?: { padding?: number; maxWidthOrHeight?: number }) => {
+          const elements = api.getSceneElements();
+          const appState = api.getAppState();
+          const files = api.getFiles();
+          return exportToBlob({
+            elements,
+            appState: { ...appState, exportWithDarkMode: appState.theme === 'dark' },
+            files,
+            mimeType: 'image/png',
+            exportPadding: opts?.padding ?? 20,
+            maxWidthOrHeight: opts?.maxWidthOrHeight,
+          });
+        },
+        writable: false,
+        enumerable: true,
+      },
+    });
+  }, []);
+
   // Register editor API for AI tool access via the central registry
   useEffect(() => {
     const api = excalidrawAPIRef.current;
     if (api) {
-      host.registerEditorAPI(api);
+      host.registerEditorAPI(createWrappedAPI(api));
       return () => {
         host.registerEditorAPI(null);
       };
     }
-  }, [filePath, initialData]); // Re-register when initialData changes (means API is set)
+  }, [filePath, initialData, createWrappedAPI]); // Re-register when initialData changes (means API is set)
 
   if (isLoading) {
     return (
@@ -251,7 +275,7 @@ export const ExcalidrawEditor = forwardRef<any, EditorHostProps>(function Excali
         onChange={onChange}
         excalidrawAPI={(api: any) => {
           excalidrawAPIRef.current = api;
-          if (api) host.registerEditorAPI(api);
+          if (api) host.registerEditorAPI(createWrappedAPI(api));
         }}
         initialData={initialData ?? undefined}
         theme={theme}

@@ -14,7 +14,7 @@
 import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { EditorHost } from '@nimbalyst/runtime';
-import { getExtensionLoader, getBaseThemeColors, hasExtensionEditorAPI, type ExtendedThemeColors } from '@nimbalyst/runtime';
+import { getExtensionLoader, getBaseThemeColors, hasExtensionEditorAPI, getExtensionEditorAPI, type ExtendedThemeColors } from '@nimbalyst/runtime';
 // Note: Window globals for mockup annotations are declared in @nimbalyst/runtime
 
 /**
@@ -419,6 +419,12 @@ class OffscreenEditorRendererImpl {
   public async captureScreenshot(filePath: string, selector?: string, theme?: string): Promise<string> {
     const electronAPI = (window as any).electronAPI;
 
+    // If the editor's registered API supports direct PNG export, use it.
+    // This produces a clean, auto-cropped image with no toolbar UI.
+    // Extensions opt in by adding an exportToPngBlob method to their registered API.
+    const apiExport = await this.tryExportViaEditorAPI(filePath, theme);
+    if (apiExport) return apiExport;
+
     // Apply theme if requested (for the capture window)
     if (theme) {
       this.applyTheme(theme);
@@ -520,6 +526,47 @@ class OffscreenEditorRendererImpl {
       if (this.hiddenContainer) {
         this.hiddenContainer.style.visibility = 'hidden';
       }
+    }
+  }
+
+  /**
+   * Try to export a screenshot via the editor's registered API.
+   * Extensions can opt into clean export by adding an `exportToPngBlob` method
+   * to the API they register via host.registerEditorAPI(). This produces an
+   * auto-cropped image with no toolbar UI -- much better than a DOM capture.
+   * Returns null if the API doesn't support export (falls back to DOM capture).
+   */
+  private async tryExportViaEditorAPI(filePath: string, theme?: string): Promise<string | null> {
+    const api = getExtensionEditorAPI(filePath) as any;
+    if (!api?.exportToPngBlob) {
+      return null;
+    }
+
+    try {
+      if (theme) {
+        this.applyTheme(theme);
+        await new Promise<void>(resolve => {
+          requestAnimationFrame(() => setTimeout(resolve, 200));
+        });
+      }
+
+      console.log('[OffscreenEditorRenderer] Using editor API exportToPngBlob for', filePath);
+      const blob: Blob = await api.exportToPngBlob({ padding: 20, maxWidthOrHeight: 1920 });
+
+      // Convert blob to base64
+      const arrayBuffer = await blob.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const base64 = btoa(binary);
+
+      console.log(`[OffscreenEditorRenderer] Editor API export: ${base64.length} base64 chars`);
+      return base64;
+    } catch (error) {
+      console.warn('[OffscreenEditorRenderer] Editor API export failed, falling back to DOM capture:', error);
+      return null;
     }
   }
 
