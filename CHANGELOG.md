@@ -20,6 +20,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.3] - 2026-04-01
+
+
+### Added
+- Running tool calls now show elapsed time indicator
+- Queued prompts now bundle into a single prompt instead of running sequentially
+- Queued prompts can be sent immediately via SDK interrupt
+- Clean screenshot export for extensions via exportToPngBlob convention
+- GIF images in transcript now have play/pause and frame scrub controls
+
+### Changed
+- Single write path for transcript canonical events (refactored dual-write to unified pipeline)
+
+### Fixed
+- Elapsed timer no longer runs indefinitely after tool completes
+- EditorScreenshotWidget now displays images correctly in transcript
+- Excalidraw tools no longer fail on valid file paths
+- Default model no longer resets from Opus 4.6 1M to Opus 4.6
+- Session metadata widget now displays in Claude Code sessions
+- Pending/error sessions no longer re-query indefinitely
+- Codex sessions now produce canonical transcript events
+- Added gifuct-js type declaration to fix pre-push typecheck
+
 ## [0.57.2] - 2026-03-30
 
 
