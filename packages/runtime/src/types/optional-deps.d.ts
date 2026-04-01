@@ -66,6 +66,11 @@ declare module '@modelcontextprotocol/sdk/types.js' {
   export type Tool = any;
 }
 
+declare module 'gifuct-js' {
+  export function parseGIF(data: ArrayBuffer): any;
+  export function decompressFrames(gif: any, buildImagePatches?: boolean): any[];
+}
+
 declare module '@openai/codex-sdk' {
   export class Codex {
     constructor(options?: Record<string, unknown>);
