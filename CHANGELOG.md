@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.4] - 2026-04-01
+
+
+### Fixed
+- CI unit tests broken by canonical transcript migration
+
 ## [0.57.3] - 2026-04-01
 
 
