@@ -55,6 +55,40 @@ export type TrackerItemSyncStatus = 'local' | 'synced' | 'pending';
 export type TrackerItemSource = 'native' | 'inline' | 'frontmatter' | 'import';
 
 /**
+ * Identity record for tracker item authorship and attribution.
+ * Email is the canonical key for matching users across orgs and login states.
+ * Display info is snapshotted at write time for offline rendering.
+ */
+export interface TrackerIdentity {
+  /** Email -- stable cross-org identifier, canonical key for "is this the same person?" */
+  email: string | null;
+  /** Display name snapshotted at write time */
+  displayName: string;
+  /** Git user.name (fallback matching when no email) */
+  gitName: string | null;
+  /** Git user.email (fallback matching when no email) */
+  gitEmail: string | null;
+}
+
+/**
+ * Activity log entry for tracker item mutations.
+ * Stored as a JSONB array on the tracker item's data.activity field.
+ */
+export interface TrackerActivity {
+  id: string;
+  authorIdentity: TrackerIdentity;
+  action: 'created' | 'updated' | 'commented' | 'status_changed' | 'assigned' | 'archived';
+  /** Which field changed (for 'updated' actions) */
+  field?: string;
+  /** Previous value */
+  oldValue?: string;
+  /** New value */
+  newValue?: string;
+  /** Epoch ms */
+  timestamp: number;
+}
+
+/**
  * Tracker item entry in the database cache
  */
 export interface TrackerItem {
@@ -91,10 +125,22 @@ export interface TrackerItem {
   /** Origin reference: file path for inline/frontmatter, 'linear:NIM-123' for imports */
   sourceRef?: string;
 
+  // Identity fields
+  /** Structured author identity (who created this item) */
+  authorIdentity?: TrackerIdentity | null;
+  /** Structured last-modifier identity */
+  lastModifiedBy?: TrackerIdentity | null;
+  /** Whether this item was created by an AI agent on behalf of the user */
+  createdByAgent?: boolean;
+
   // Collaborative fields (populated when item is synced via TrackerRoom)
-  /** Assignee org member ID */
+  /** Assignee email (stable cross-org identifier) */
+  assigneeEmail?: string;
+  /** Reporter email (stable cross-org identifier) */
+  reporterEmail?: string;
+  /** @deprecated Use assigneeEmail instead. Org member ID, per-team scoped. */
   assigneeId?: string;
-  /** Reporter org member ID */
+  /** @deprecated Use reporterEmail instead. Org member ID, per-team scoped. */
   reporterId?: string;
   /** Labels for categorization */
   labels?: string[];

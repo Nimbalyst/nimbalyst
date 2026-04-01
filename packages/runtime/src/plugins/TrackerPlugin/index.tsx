@@ -963,6 +963,10 @@ export { StatusBar } from './components/StatusBar';
 export { TrackerTable, convertFullDocumentToTrackerItems, resolveTrackerFrontmatter } from './components/TrackerTable';
 export type { SortColumn, SortDirection } from './components/TrackerTable';
 export { TrackerFieldEditor } from './components/TrackerFieldEditor';
+export { UserAvatar } from './components/UserAvatar';
+export { DisplayOptionsPanel } from './components/DisplayOptionsPanel';
+export { getDefaultColumnConfig, resolveColumnsForType, BUILTIN_COLUMNS, DEFAULT_VISIBLE_COLUMNS } from './components/trackerColumns';
+export type { TrackerColumnDef, TypeColumnConfig, ColumnRenderType } from './components/trackerColumns';
 export type { TrackerFieldEditorProps } from './components/TrackerFieldEditor';
 
 // Export tracker data atoms (cross-platform reactive state)

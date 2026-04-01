@@ -127,6 +127,7 @@ describe('trackerItemToPayload', () => {
 
     const expectedFields = [
       'title', 'status', 'priority', 'description',
+      'assigneeEmail', 'reporterEmail', 'authorIdentity', 'lastModifiedBy',
       'assigneeId', 'reporterId', 'labels', 'linkedSessions',
       'linkedCommitSha', 'documentId', 'archived', 'comments', 'customFields',
     ];

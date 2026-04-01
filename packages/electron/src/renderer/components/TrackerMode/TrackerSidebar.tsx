@@ -45,7 +45,7 @@ export const TrackerSidebar: React.FC<TrackerSidebarProps> = ({
   onViewModeChange,
 }) => {
   return (
-    <div className="tracker-sidebar w-[220px] min-w-[180px] flex flex-col bg-nim-secondary border-r border-nim overflow-hidden" data-testid="tracker-sidebar">
+    <div className="tracker-sidebar w-full h-full flex flex-col bg-nim-secondary overflow-hidden" data-testid="tracker-sidebar">
       {workspacePath && (
         <WorkspaceSummaryHeader
           workspacePath={workspacePath}

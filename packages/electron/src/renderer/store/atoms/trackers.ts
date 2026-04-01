@@ -264,6 +264,9 @@ export async function initTrackerPanelLayout(workspacePath: string): Promise<voi
           : DEFAULT_MODE_LAYOUT.activeFilters,
         viewMode: savedModeLayout.viewMode ?? DEFAULT_MODE_LAYOUT.viewMode,
         selectedItemId: savedModeLayout.selectedItemId ?? DEFAULT_MODE_LAYOUT.selectedItemId,
+        sidebarWidth: savedModeLayout.sidebarWidth ?? DEFAULT_MODE_LAYOUT.sidebarWidth,
+        detailPanelWidth: savedModeLayout.detailPanelWidth ?? DEFAULT_MODE_LAYOUT.detailPanelWidth,
+        typeColumnConfigs: savedModeLayout.typeColumnConfigs ?? DEFAULT_MODE_LAYOUT.typeColumnConfigs,
       });
     }
   } catch (err) {
@@ -282,6 +285,10 @@ export async function initTrackerPanelLayout(workspacePath: string): Promise<voi
 /** Filter chips that can be toggled independently */
 export type TrackerFilterChip = 'mine' | 'high-priority' | 'recently-updated' | 'archived';
 
+/** Per-type column configuration (re-exported from runtime) */
+export type { TypeColumnConfig } from '@nimbalyst/runtime/plugins/TrackerPlugin/components/trackerColumns';
+import type { TypeColumnConfig } from '@nimbalyst/runtime/plugins/TrackerPlugin/components/trackerColumns';
+
 export interface TrackerModeLayout {
   /** Selected type filter in sidebar ('all' or specific type) */
   selectedType: string;
@@ -291,6 +298,12 @@ export interface TrackerModeLayout {
   viewMode: 'table' | 'kanban';
   /** Currently selected tracker item ID (opens detail panel when non-null) */
   selectedItemId: string | null;
+  /** Sidebar width in pixels */
+  sidebarWidth: number;
+  /** Detail panel width in pixels */
+  detailPanelWidth: number;
+  /** Per-type column configuration (keyed by tracker type, 'all' for the all-types view) */
+  typeColumnConfigs: Record<string, TypeColumnConfig>;
 }
 
 const DEFAULT_MODE_LAYOUT: TrackerModeLayout = {
@@ -298,6 +311,9 @@ const DEFAULT_MODE_LAYOUT: TrackerModeLayout = {
   activeFilters: [],
   viewMode: 'table',
   selectedItemId: null,
+  sidebarWidth: 220,
+  detailPanelWidth: 400,
+  typeColumnConfigs: {},
 };
 
 /** Main atom for tracker mode layout. */

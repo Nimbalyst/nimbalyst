@@ -1,7 +1,34 @@
+import { getCurrentIdentity } from '../../services/TrackerIdentityService';
+
 type McpToolResult = {
   content: Array<{ type: string; text?: string }>;
   isError: boolean;
 };
+
+/** Append an activity entry to a tracker item's data.activity array */
+function appendActivity(
+  data: Record<string, any>,
+  authorIdentity: any,
+  action: string,
+  details?: { field?: string; oldValue?: string; newValue?: string }
+): void {
+  const activity = data.activity || [];
+  activity.push({
+    id: `activity_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    authorIdentity,
+    action,
+    field: details?.field,
+    oldValue: details?.oldValue,
+    newValue: details?.newValue,
+    timestamp: Date.now(),
+  });
+  // Keep activity log bounded (last 100 entries)
+  if (activity.length > 100) {
+    data.activity = activity.slice(-100);
+  } else {
+    data.activity = activity;
+  }
+}
 
 /**
  * Create a bidirectional link between a tracker item and an AI session.
@@ -87,6 +114,13 @@ function rowToTrackerItem(row: any): any {
     archivedAt: row.archived_at ? new Date(row.archived_at).toISOString() : undefined,
     source: row.source || (row.document_path ? 'inline' : 'native'),
     sourceRef: row.source_ref || undefined,
+    // Identity fields
+    authorIdentity: data.authorIdentity || undefined,
+    lastModifiedBy: data.lastModifiedBy || undefined,
+    createdByAgent: data.createdByAgent || false,
+    assigneeEmail: data.assigneeEmail || undefined,
+    reporterEmail: data.reporterEmail || undefined,
+    // Deprecated but kept for backward compat
     assigneeId: data.assigneeId || undefined,
     reporterId: data.reporterId || undefined,
     labels: data.labels || undefined,
@@ -261,6 +295,14 @@ export const trackerToolSchemas = [
           type: "number",
           description: "Progress percentage (0-100)",
         },
+        assigneeEmail: {
+          type: "string",
+          description: "Assignee email address (stable cross-org identifier)",
+        },
+        reporterEmail: {
+          type: "string",
+          description: "Reporter email address (stable cross-org identifier)",
+        },
         assigneeId: {
           type: "string",
           description: "Assignee org member ID",
@@ -335,6 +377,14 @@ export const trackerToolSchemas = [
           type: "number",
           description: "New progress percentage (0-100)",
         },
+        assigneeEmail: {
+          type: "string",
+          description: "New assignee email address (stable cross-org identifier)",
+        },
+        reporterEmail: {
+          type: "string",
+          description: "New reporter email address (stable cross-org identifier)",
+        },
         assigneeId: {
           type: "string",
           description: "New assignee org member ID",
@@ -389,6 +439,25 @@ export const trackerToolSchemas = [
         },
       },
       required: ["filePath"],
+    },
+  },
+  {
+    name: "tracker_add_comment",
+    description:
+      "Add a comment to a tracker item. Comments support markdown.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        trackerId: {
+          type: "string",
+          description: "The tracker item ID to comment on",
+        },
+        body: {
+          type: "string",
+          description: "Comment body (supports markdown)",
+        },
+      },
+      required: ["trackerId", "body"],
     },
   },
 ];
@@ -706,22 +775,34 @@ export async function handleTrackerCreate(
       };
     }
 
+    // Resolve current user identity for authorship
+    // getCurrentIdentity imported statically at top of file
+    const authorIdentity = getCurrentIdentity(workspacePath);
+
     const id = `${args.type}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const data: Record<string, any> = {
       title: args.title,
       status: args.status || "to-do",
       priority: args.priority || "medium",
       created: new Date().toISOString().split("T")[0],
+      authorIdentity,
+      createdByAgent: true, // Items created via MCP tools are agent-created
     };
     if (args.tags?.length) data.tags = args.tags;
     if (args.description) data.description = args.description;
     if (args.owner) data.owner = args.owner;
     if (args.dueDate) data.dueDate = args.dueDate;
     if (args.progress !== undefined) data.progress = args.progress;
+    if (args.assigneeEmail) data.assigneeEmail = args.assigneeEmail;
+    if (args.reporterEmail) data.reporterEmail = args.reporterEmail;
+    // Keep deprecated fields for backward compat
     if (args.assigneeId) data.assigneeId = args.assigneeId;
     if (args.reporterId) data.reporterId = args.reporterId;
     if (args.labels?.length) data.labels = args.labels;
     if (args.linkedCommitSha) data.linkedCommitSha = args.linkedCommitSha;
+
+    // Record creation activity
+    appendActivity(data, authorIdentity, 'created');
 
     // Build type_tags: always includes primary type + any additional tags
     const typeTags: string[] = [args.type];
@@ -830,6 +911,10 @@ export async function handleTrackerUpdate(
         ? JSON.parse(row.data)
         : row.data || {};
 
+    // Stamp lastModifiedBy with current identity
+    // getCurrentIdentity imported statically at top of file
+    data.lastModifiedBy = getCurrentIdentity(workspacePath);
+
     // Capture before-state for changed fields
     const changes: Record<string, { from: any; to: any }> = {};
     const trackableFields = ['title', 'status', 'priority', 'tags', 'owner', 'dueDate', 'progress', 'description', 'archived'] as const;
@@ -850,10 +935,26 @@ export async function handleTrackerUpdate(
     if (args.owner !== undefined) data.owner = args.owner;
     if (args.dueDate !== undefined) data.dueDate = args.dueDate;
     if (args.progress !== undefined) data.progress = args.progress;
+    if (args.assigneeEmail !== undefined) data.assigneeEmail = args.assigneeEmail;
+    if (args.reporterEmail !== undefined) data.reporterEmail = args.reporterEmail;
+    // Keep deprecated fields for backward compat
     if (args.assigneeId !== undefined) data.assigneeId = args.assigneeId;
     if (args.reporterId !== undefined) data.reporterId = args.reporterId;
     if (args.labels !== undefined) data.labels = args.labels;
     if (args.linkedCommitSha !== undefined) data.linkedCommitSha = args.linkedCommitSha;
+
+    // Record activity for each changed field
+    const modifierIdentity = getCurrentIdentity(workspacePath);
+    for (const [field, change] of Object.entries(changes)) {
+      const action = field === 'status' ? 'status_changed'
+        : field === 'archived' ? 'archived'
+        : 'updated';
+      appendActivity(data, modifierIdentity, action, {
+        field,
+        oldValue: change.from != null ? String(change.from) : undefined,
+        newValue: change.to != null ? String(change.to) : undefined,
+      });
+    }
 
     // Update type_tags if provided
     if (args.typeTags !== undefined) {
@@ -1147,6 +1248,85 @@ export async function handleTrackerLinkFile(
           text: `Error linking file: ${error instanceof Error ? error.message : String(error)}`,
         },
       ],
+      isError: true,
+    };
+  }
+}
+
+export async function handleTrackerAddComment(
+  args: any,
+  workspacePath: string | undefined
+): Promise<McpToolResult> {
+  try {
+    const { getDatabase } = await import("../../database/initialize");
+    const db = getDatabase();
+
+    // Read existing item
+    const existing = await db.query<any>(
+      `SELECT * FROM tracker_items WHERE id = $1`,
+      [args.trackerId]
+    );
+    if (existing.rows.length === 0) {
+      return {
+        content: [{ type: "text", text: `Tracker item not found: ${args.trackerId}` }],
+        isError: true,
+      };
+    }
+
+    const row = existing.rows[0];
+    const data = typeof row.data === "string" ? JSON.parse(row.data) : row.data || {};
+
+    // Resolve current identity for the comment
+    // getCurrentIdentity imported statically at top of file
+    const authorIdentity = getCurrentIdentity(workspacePath);
+
+    // Add comment to the comments array
+    const comments = data.comments || [];
+    const commentId = `comment_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const newComment = {
+      id: commentId,
+      authorIdentity,
+      body: args.body,
+      createdAt: Date.now(),
+      updatedAt: null,
+      deleted: false,
+    };
+    comments.push(newComment);
+    data.comments = comments;
+
+    // Also stamp lastModifiedBy and record activity
+    data.lastModifiedBy = authorIdentity;
+    appendActivity(data, authorIdentity, 'commented');
+
+    await db.query(
+      `UPDATE tracker_items SET data = $1, updated = NOW() WHERE id = $2`,
+      [JSON.stringify(data), args.trackerId]
+    );
+
+    // Notify renderer
+    await notifyTrackerItemUpdated(workspacePath, args.trackerId);
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            structured: {
+              action: "commented" as const,
+              trackerId: args.trackerId,
+              commentId,
+              author: authorIdentity.displayName,
+            },
+            summary: `Added comment to ${args.trackerId} by ${authorIdentity.displayName}`,
+          }),
+        },
+      ],
+      isError: false,
+    };
+  } catch (error) {
+    console.error("[MCP Server] tracker_add_comment failed:", error);
+    return {
+      content: [{ type: "text", text: `Error adding comment: ${error instanceof Error ? error.message : String(error)}` }],
       isError: true,
     };
   }

@@ -15,6 +15,20 @@ import type {
 import { trackerItemsByTypeAtom, trackerDataLoadedAtom } from '../trackerDataAtoms';
 import { globalRegistry, parseDate } from '../models';
 import {usePostHog} from "posthog-js/react";
+import {
+  resolveColumnsForType,
+  getDefaultColumnConfig,
+  getStatusColor as getStatusColorFromRegistry,
+  getPriorityColor as getPriorityColorFromRegistry,
+  getTypeColor as getTypeColorFromRegistry,
+  getTypeIcon as getTypeIconFromRegistry,
+  formatRelativeDate,
+  getCellValue,
+  type TrackerColumnDef,
+  type TypeColumnConfig,
+} from './trackerColumns';
+import { UserAvatar } from './UserAvatar';
+import { DisplayOptionsPanel } from './DisplayOptionsPanel';
 
 export type SortColumn = 'title' | 'type' | 'status' | 'priority' | 'progress' | 'module' | 'lastIndexed' | (string & {});
 export type SortDirection = 'asc' | 'desc';
@@ -40,6 +54,10 @@ interface TrackerTableProps {
   onDeleteItems?: (itemIds: string[]) => void;
   /** External search query from parent toolbar (replaces internal search input) */
   searchQuery?: string;
+  /** Column configuration (visible columns, order, widths) */
+  columnConfig?: import('./trackerColumns').TypeColumnConfig;
+  /** Callback when column config changes (from display options panel) */
+  onColumnConfigChange?: (config: import('./trackerColumns').TypeColumnConfig) => void;
 }
 
 /**
@@ -404,6 +422,174 @@ export function convertFullDocumentToTrackerItems(metadata: any[], trackerType: 
     });
 }
 
+/**
+ * Render a cell value based on column definition.
+ * Extracted to keep the row rendering clean.
+ */
+function renderCell(
+  col: TrackerColumnDef,
+  item: TrackerItem,
+  value: any,
+  editingCell: { itemId: string; field: string } | null,
+  isItemEditable: (item: TrackerItem) => boolean,
+  setEditingCell: (cell: { itemId: string; field: 'status' | 'priority' | 'title' } | null) => void,
+  editingTitle: string,
+  setEditingTitle: (title: string) => void,
+  titleInputRef: React.RefObject<HTMLInputElement>,
+  handleFieldUpdate: (item: TrackerItem, field: string, value: string) => void,
+): React.ReactNode {
+  switch (col.id) {
+    case 'type':
+      return (
+        <span className={`type-icon flex items-center justify-center w-5 h-5 rounded`} style={{ color: getTypeColor(item.type) }}>
+          <span className="material-symbols-outlined text-sm">{getTypeIcon(item.type)}</span>
+        </span>
+      );
+
+    case 'title':
+      if (editingCell?.itemId === item.id && editingCell?.field === 'title') {
+        return (
+          <input
+            ref={titleInputRef}
+            type="text"
+            value={editingTitle}
+            onChange={(e) => setEditingTitle(e.target.value)}
+            onBlur={() => {
+              if (editingTitle.trim() && editingTitle !== item.title) handleFieldUpdate(item, 'title', editingTitle.trim());
+              else setEditingCell(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { if (editingTitle.trim() && editingTitle !== item.title) handleFieldUpdate(item, 'title', editingTitle.trim()); else setEditingCell(null); }
+              else if (e.key === 'Escape') setEditingCell(null);
+            }}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full bg-[var(--nim-bg-secondary)] border border-[var(--nim-primary)] rounded px-1 py-0.5 text-[var(--nim-text)] font-medium outline-none"
+          />
+        );
+      }
+      return <div className="title-text font-medium text-[var(--nim-text)]">{item.title}</div>;
+
+    case 'status': {
+      if (isItemEditable(item) && editingCell?.itemId === item.id && editingCell?.field === 'status') {
+        const tracker = globalRegistry.get(item.type);
+        const statusField = tracker?.fields.find(f => f.name === 'status');
+        const rawOptions = statusField?.options || ['to-do', 'in-progress', 'done', 'blocked'];
+        return (
+          <select
+            autoFocus
+            value={item.status}
+            onChange={(e) => handleFieldUpdate(item, 'status', e.target.value)}
+            onBlur={() => setEditingCell(null)}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[var(--nim-bg-secondary)] border border-[var(--nim-primary)] rounded text-[11px] text-[var(--nim-text)] px-1 py-0.5 outline-none"
+          >
+            {rawOptions.map(opt => {
+              const val = typeof opt === 'string' ? opt : opt.value;
+              const label = typeof opt === 'string' ? opt.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : opt.label;
+              return <option key={val} value={val}>{label}</option>;
+            })}
+          </select>
+        );
+      }
+      const statusColor = getStatusColor(item.status, item.type);
+      return (
+        <span
+          className={`status-badge inline-block py-0.5 px-2 rounded-[10px] text-[11px] font-medium border ${isItemEditable(item) ? 'cursor-pointer hover:opacity-80' : ''}`}
+          style={{ backgroundColor: `${statusColor}20`, color: statusColor, borderColor: statusColor }}
+          onClick={(e) => { if (isItemEditable(item)) { e.stopPropagation(); setEditingCell({ itemId: item.id, field: 'status' }); } }}
+        >
+          {item.status.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+        </span>
+      );
+    }
+
+    case 'priority': {
+      if (isItemEditable(item) && editingCell?.itemId === item.id && editingCell?.field === 'priority') {
+        return (
+          <select
+            autoFocus
+            value={item.priority || 'medium'}
+            onChange={(e) => handleFieldUpdate(item, 'priority', e.target.value)}
+            onBlur={() => setEditingCell(null)}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[var(--nim-bg-secondary)] border border-[var(--nim-primary)] rounded text-xs text-[var(--nim-text)] px-1 py-0.5 outline-none"
+          >
+            {['low', 'medium', 'high', 'critical'].map(p => (
+              <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
+            ))}
+          </select>
+        );
+      }
+      return (
+        <span
+          className={`priority-badge font-semibold text-xs ${isItemEditable(item) ? 'cursor-pointer hover:opacity-80' : ''}`}
+          style={{ color: getPriorityColor(item.priority || 'medium') }}
+          onClick={(e) => { if (isItemEditable(item)) { e.stopPropagation(); setEditingCell({ itemId: item.id, field: 'priority' }); } }}
+        >
+          {(item.priority || 'medium').charAt(0).toUpperCase() + (item.priority || 'medium').slice(1)}
+        </span>
+      );
+    }
+
+    case 'owner':
+      return <UserAvatar identity={item.authorIdentity || item.owner} showName />;
+
+    case 'assignee':
+      return <UserAvatar identity={item.assigneeEmail} showName />;
+
+    case 'progress':
+      if (item.progress == null) return null;
+      return (
+        <div className="flex flex-col items-center gap-0.5">
+          <span className="text-[11px] font-semibold text-[var(--nim-text)]">{item.progress}%</span>
+          <div className="w-full h-1 bg-[var(--nim-bg-tertiary)] rounded-sm relative overflow-hidden">
+            <div className="absolute top-0 left-0 h-full bg-[var(--nim-primary)] rounded-sm" style={{ width: `${item.progress}%` }}></div>
+          </div>
+        </div>
+      );
+
+    case 'labels':
+      if (!item.labels?.length) return null;
+      return (
+        <div className="flex flex-wrap gap-0.5">
+          {item.labels.map(l => (
+            <span key={l} className="inline-block px-1.5 py-0.5 text-[10px] rounded bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)]">{l}</span>
+          ))}
+        </div>
+      );
+
+    case 'module':
+      if (item.module) {
+        return <span className="text-[var(--nim-text-muted)] text-xs font-mono whitespace-nowrap overflow-hidden text-ellipsis block">{item.module}</span>;
+      }
+      return (
+        <span className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ backgroundColor: '#6b728015', color: '#9ca3af' }} title="Stored in database" data-testid="tracker-source-db-badge">
+          <span className="material-symbols-outlined text-[11px]">storage</span>
+          Database
+        </span>
+      );
+
+    case 'updated':
+      return <span className="text-[var(--nim-text-faint)] text-xs">{formatRelativeDate(item.lastIndexed)}</span>;
+
+    case 'created':
+      if (!value) return null;
+      if (typeof value === 'string') {
+        const d = new Date(value);
+        return <span className="text-[var(--nim-text-faint)] text-xs">{isNaN(d.getTime()) ? value : formatRelativeDate(d)}</span>;
+      }
+      return <span className="text-[var(--nim-text-faint)] text-xs">{formatRelativeDate(value as Date)}</span>;
+
+    default: {
+      // Custom field rendering
+      if (value == null) return null;
+      if (value instanceof Date) return <span className="text-[var(--nim-text-muted)] text-xs">{value.toLocaleDateString()}</span>;
+      if (Array.isArray(value)) return <span className="text-[var(--nim-text-muted)] text-xs">{value.join(', ')}</span>;
+      return <span className="text-[var(--nim-text-muted)] text-xs">{String(value)}</span>;
+    }
+  }
+}
+
 export function TrackerTable({
   filterType = 'all',
   sortBy = 'lastIndexed',
@@ -418,10 +604,33 @@ export function TrackerTable({
   onArchiveItems,
   onDeleteItems,
   searchQuery: externalSearchQuery,
+  columnConfig: externalColumnConfig,
+  onColumnConfigChange,
 }: TrackerTableProps): JSX.Element {
   // Type filter: use prop filterType when hideTypeTabs is true, otherwise use internal state
   const [internalTypeFilter, setInternalTypeFilter] = useState<TrackerItemType | 'all'>('all');
   const activeTypeFilter = hideTypeTabs ? filterType : internalTypeFilter;
+
+  // Display options panel state
+  const [showDisplayOptions, setShowDisplayOptions] = useState(false);
+
+  // Column configuration: use external config or derive from type
+  const effectiveColumnConfig = useMemo(() => {
+    if (externalColumnConfig) return externalColumnConfig;
+    return getDefaultColumnConfig(activeTypeFilter === 'all' ? '' : activeTypeFilter);
+  }, [externalColumnConfig, activeTypeFilter]);
+
+  // Resolve all available columns for the current type
+  const allColumns = useMemo(() => {
+    return resolveColumnsForType(activeTypeFilter === 'all' ? '' : activeTypeFilter);
+  }, [activeTypeFilter]);
+
+  // Get the visible column defs in order
+  const visibleColumnDefs = useMemo(() => {
+    return effectiveColumnConfig.visibleColumns
+      .map(id => allColumns.find(c => c.id === id))
+      .filter((c): c is TrackerColumnDef => c !== undefined);
+  }, [effectiveColumnConfig.visibleColumns, allColumns]);
 
   // Read tracker items from cross-platform atoms (populated by host adapter)
   const atomItems = useAtomValue(trackerItemsByTypeAtom(activeTypeFilter));
@@ -1034,6 +1243,18 @@ export function TrackerTable({
 
   return (
     <div className="tracker-table-wrapper flex flex-col h-full w-full bg-[var(--nim-bg)]" data-testid="tracker-table">
+      {/* Display options panel (positioned relative to wrapper) */}
+      {showDisplayOptions && onColumnConfigChange && (
+        <div className="relative">
+          <DisplayOptionsPanel
+            availableColumns={allColumns}
+            config={effectiveColumnConfig}
+            onConfigChange={(config) => onColumnConfigChange(config)}
+            onClose={() => setShowDisplayOptions(false)}
+          />
+        </div>
+      )}
+
       {/* Type filter tabs */}
       {!hideTypeTabs && (
         <div className="tracker-type-tabs flex gap-1 py-3 px-4 bg-[var(--nim-bg)] border-b border-[var(--nim-border)]">
@@ -1058,177 +1279,117 @@ export function TrackerTable({
         <table ref={tableRef} tabIndex={0} className="tracker-table w-full border-collapse text-[13px] outline-none">
           <thead>
             <tr>
-              <th
-                className="tracker-table-header type sticky top-0 bg-[var(--nim-bg-secondary)] py-1 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 select-none"
-              >
-                <span className="header-content inline-flex items-center gap-1 whitespace-nowrap">
-                  {/* Show + New button when a specific type is selected and onNewItem is provided */}
-                  {onNewItem && activeTypeFilter !== 'all' && globalRegistry.get(activeTypeFilter)?.creatable !== false ? (
-                    <button
-                      className="tracker-new-button inline-flex items-center gap-0.5 px-1.5 py-px rounded text-[10px] font-semibold border-none cursor-pointer transition-all duration-150 hover:opacity-90"
-                      style={{
-                        backgroundColor: `${getTypeColor(activeTypeFilter as TrackerItemType)}15`,
-                        color: getTypeColor(activeTypeFilter as TrackerItemType),
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onNewItem(activeTypeFilter as TrackerItemType);
-                      }}
-                      title={`Create new ${activeTypeFilter}`}
-                    >
-                      <span className="material-symbols-outlined text-xs">add</span>
-                      <span>New</span>
-                    </button>
-                  ) : (
-                    <>
-                      <span
-                        className="cursor-pointer hover:text-[var(--nim-text)]"
-                        onClick={() => handleColumnClick('type')}
+              {visibleColumnDefs.map(col => {
+                const sortKey = (col.sortKey || col.id) as SortColumn;
+                const thStyle: React.CSSProperties = {};
+                const configWidth = effectiveColumnConfig.columnWidths[col.id];
+                if (configWidth) {
+                  thStyle.width = configWidth;
+                } else if (col.width !== 'auto') {
+                  thStyle.width = col.width;
+                }
+                if (col.minWidth) thStyle.minWidth = col.minWidth;
+
+                // Special rendering for type column (+ New button)
+                if (col.id === 'type' && onNewItem && activeTypeFilter !== 'all' && globalRegistry.get(activeTypeFilter)?.creatable !== false) {
+                  return (
+                    <th key={col.id} className="tracker-table-header type sticky top-0 bg-[var(--nim-bg-secondary)] py-1 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 select-none" style={thStyle}>
+                      <button
+                        className="tracker-new-button inline-flex items-center gap-0.5 px-1.5 py-px rounded text-[10px] font-semibold border-none cursor-pointer transition-all duration-150 hover:opacity-90"
+                        style={{
+                          backgroundColor: `${getTypeColor(activeTypeFilter as TrackerItemType)}15`,
+                          color: getTypeColor(activeTypeFilter as TrackerItemType),
+                        }}
+                        onClick={(e) => { e.stopPropagation(); onNewItem(activeTypeFilter as TrackerItemType); }}
+                        title={`Create new ${activeTypeFilter}`}
                       >
-                        TYPE
-                      </span>
-                      <span
-                        className="cursor-pointer"
-                        onClick={() => handleColumnClick('type')}
-                      >
-                        {getSortIndicator('type')}
-                      </span>
-                    </>
-                  )}
-                </span>
-              </th>
-              <th
-                className="tracker-table-header title sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
-                onClick={() => handleColumnClick('title')}
-              >
-                <span className="header-content inline-flex items-center gap-1 whitespace-nowrap">
-                  <span>TITLE</span>
-                  {getSortIndicator('title')}
-                </span>
-              </th>
-              <th
-                className="tracker-table-header status sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
-                onClick={() => handleColumnClick('status')}
-              >
-                <span className="header-content inline-flex items-center gap-1 whitespace-nowrap">
-                  <span>STATUS</span>
-                  {getSortIndicator('status')}
-                </span>
-              </th>
-              <th
-                className="tracker-table-header priority sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
-                onClick={() => handleColumnClick('priority')}
-              >
-                <span className="header-content inline-flex items-center gap-1 whitespace-nowrap">
-                  <span>PRIORITY</span>
-                  {getSortIndicator('priority')}
-                </span>
-              </th>
-              <th
-                className="tracker-table-header progress sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
-                onClick={() => handleColumnClick('progress')}
-              >
-                <span className="header-content inline-flex items-center gap-1 whitespace-nowrap">
-                  <span>PROGRESS</span>
-                  {getSortIndicator('progress')}
-                </span>
-              </th>
-              {extraColumns.map(col => (
-                <th
-                  key={col.key}
-                  className="tracker-table-header sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
-                  onClick={() => handleColumnClick(col.key as SortColumn)}
-                >
-                  <span className="header-content inline-flex items-center gap-1 whitespace-nowrap">
-                    <span>{col.label.toUpperCase()}</span>
-                    {getSortIndicator(col.key as SortColumn)}
-                  </span>
+                        <span className="material-symbols-outlined text-xs">add</span>
+                        <span>New</span>
+                      </button>
+                    </th>
+                  );
+                }
+
+                return (
+                  <th
+                    key={col.id}
+                    className={`tracker-table-header ${col.id} ${col.sortable ? 'sortable cursor-pointer hover:bg-[var(--nim-bg-hover)]' : ''} sticky top-0 bg-[var(--nim-bg-secondary)] py-1 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 select-none`}
+                    style={thStyle}
+                    onClick={col.sortable ? () => handleColumnClick(sortKey) : undefined}
+                  >
+                    <span className="header-content inline-flex items-center gap-1 whitespace-nowrap">
+                      <span>{col.label.toUpperCase()}</span>
+                      {col.sortable && getSortIndicator(sortKey)}
+                    </span>
+                  </th>
+                );
+              })}
+              {/* Display options button in last header cell */}
+              {onColumnConfigChange && (
+                <th className="tracker-table-header sticky top-0 bg-[var(--nim-bg-secondary)] py-1 px-1 border-b border-[var(--nim-border)] z-10 w-[28px]">
+                  <button
+                    className="inline-flex items-center justify-center w-5 h-5 rounded hover:bg-[var(--nim-bg-hover)] text-[var(--nim-text-faint)] hover:text-[var(--nim-text)] transition-colors"
+                    onClick={() => setShowDisplayOptions(!showDisplayOptions)}
+                    title="Display options"
+                  >
+                    <span className="material-symbols-outlined text-sm">tune</span>
+                  </button>
                 </th>
-              ))}
-              <th
-                className="tracker-table-header module sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
-                onClick={() => handleColumnClick('module')}
-              >
-                <span className="header-content inline-flex items-center gap-1 whitespace-nowrap">
-                  <span>MODULE</span>
-                  {getSortIndicator('module')}
-                </span>
-              </th>
-              <th
-                className="tracker-table-header updated sortable sticky top-0 bg-[var(--nim-bg-secondary)] py-1 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 cursor-pointer select-none hover:bg-[var(--nim-bg-hover)]"
-                onClick={() => handleColumnClick('lastIndexed')}
-              >
-                <span className="header-content inline-flex items-center gap-1 whitespace-nowrap">
-                  <span>UPDATED</span>
-                  {getSortIndicator('lastIndexed')}
-                </span>
-              </th>
+              )}
             </tr>
             {/* Only show filter row when there are items to filter */}
             {items.length > 0 && (
               <tr className="filter-row">
-                <th className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]"></th>
-                <th className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]">
-                  {!hasExternalSearch && (
-                    <input
-                      type="text"
-                      className="filter-input w-full py-1 px-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] text-xs focus:outline-none focus:border-[var(--nim-primary)]"
-                      placeholder="Search..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                  )}
-                </th>
-                <th className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]">
-                  <select
-                    className="filter-select w-full py-1 px-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] text-xs focus:outline-none focus:border-[var(--nim-primary)]"
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                  >
-                    {statusOptions.map(option => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </th>
-                <th className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]">
-                  <select
-                    className="filter-select w-full py-1 px-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] text-xs focus:outline-none focus:border-[var(--nim-primary)]"
-                    value={priorityFilter}
-                    onChange={(e) => setPriorityFilter(e.target.value)}
-                  >
-                    {priorityOptions.map(option => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </th>
-                <th className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]"></th>
-                {extraColumns.map(col => (
-                  <th key={col.key} className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]">
-                    {extraColumnValues[col.key] && (
+                {visibleColumnDefs.map(col => (
+                  <th key={col.id} className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]">
+                    {col.id === 'title' && !hasExternalSearch && (
+                      <input
+                        type="text"
+                        className="filter-input w-full py-1 px-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] text-xs focus:outline-none focus:border-[var(--nim-primary)]"
+                        placeholder="Search..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                      />
+                    )}
+                    {col.id === 'status' && (
+                      <select
+                        className="filter-select w-full py-1 px-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] text-xs focus:outline-none focus:border-[var(--nim-primary)]"
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                      >
+                        {statusOptions.map(option => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    )}
+                    {col.id === 'priority' && (
+                      <select
+                        className="filter-select w-full py-1 px-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] text-xs focus:outline-none focus:border-[var(--nim-primary)]"
+                        value={priorityFilter}
+                        onChange={(e) => setPriorityFilter(e.target.value)}
+                      >
+                        {priorityOptions.map(option => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    )}
+                    {!col.builtin && extraColumnValues[col.id] && (
                       <MultiSelectFilter
-                        values={extraColumnValues[col.key]}
-                        selected={customFieldFilters[col.key] || new Set()}
-                        onChange={(selected) => setCustomFieldFilters(prev => ({
-                          ...prev,
-                          [col.key]: selected,
-                        }))}
+                        values={extraColumnValues[col.id]}
+                        selected={customFieldFilters[col.id] || new Set()}
+                        onChange={(selected) => setCustomFieldFilters(prev => ({ ...prev, [col.id]: selected }))}
                       />
                     )}
                   </th>
                 ))}
-                <th className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]"></th>
-                <th className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]"></th>
+                {onColumnConfigChange && <th className="tracker-table-header filter-cell py-1 px-1 bg-[var(--nim-bg)]"></th>}
               </tr>
             )}
           </thead>
           <tbody>
           {sortedItems.length === 0 ? (
             <tr>
-              <td colSpan={7 + extraColumns.length} className="tracker-table-empty-cell !p-0 !border-none">
+              <td colSpan={visibleColumnDefs.length + (onColumnConfigChange ? 1 : 0)} className="tracker-table-empty-cell !p-0 !border-none">
                 {loading ? (
                   // Still loading - show loading indicator instead of empty state
                   <div className="tracker-table-loading flex items-center justify-center gap-3 py-6 px-6 text-[var(--nim-text-muted)]">
@@ -1317,170 +1478,15 @@ export function TrackerTable({
                 }}
                 onContextMenu={(e) => handleContextMenu(e, item, index)}
               >
-                <td className="tracker-table-cell type pl-2 pr-1 py-1 text-[var(--nim-text)] align-middle w-[28px]">
-                  <span className={`type-icon type-${item.type} flex items-center justify-center w-5 h-5 rounded ${
-                    item.type === 'bug' ? 'text-[#dc2626]' :
-                    item.type === 'task' ? 'text-[#2563eb]' :
-                    item.type === 'plan' ? 'text-[#7c3aed]' :
-                    item.type === 'idea' ? 'text-[#ca8a04]' :
-                    'bg-[var(--nim-bg-tertiary)]'
-                  }`}>
-                    <span className="material-symbols-outlined text-sm">{getTypeIcon(item.type)}</span>
-                  </span>
-                </td>
-                <td className="tracker-table-cell title pl-1 pr-2 py-1 text-[var(--nim-text)] align-middle min-w-[200px]">
-                  <div className="title-info flex flex-col gap-0.5">
-                    {editingCell !== null && editingCell.itemId === item.id && editingCell.field === 'title' ? (
-                      <input
-                        ref={titleInputRef}
-                        type="text"
-                        value={editingTitle}
-                        onChange={(e) => setEditingTitle(e.target.value)}
-                        onBlur={() => {
-                          if (editingTitle.trim() && editingTitle !== item.title) {
-                            handleFieldUpdate(item, 'title', editingTitle.trim());
-                          } else {
-                            setEditingCell(null);
-                          }
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            if (editingTitle.trim() && editingTitle !== item.title) {
-                              handleFieldUpdate(item, 'title', editingTitle.trim());
-                            } else {
-                              setEditingCell(null);
-                            }
-                          } else if (e.key === 'Escape') {
-                            setEditingCell(null);
-                          }
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                        className="w-full bg-[var(--nim-bg-secondary)] border border-[var(--nim-primary)] rounded px-1 py-0.5 text-[var(--nim-text)] font-medium outline-none"
-                      />
-                    ) : (
-                      <div className="title-text font-medium text-[var(--nim-text)]">{item.title}</div>
-                    )}
-                  </div>
-                </td>
-                <td className="tracker-table-cell status p-[5px] text-[var(--nim-text)] align-middle w-[120px]">
-                  {isItemEditable(item) && editingCell !== null && editingCell.itemId === item.id && editingCell.field === 'status' ? (
-                    <select
-                      autoFocus
-                      value={item.status}
-                      onChange={(e) => {
-                        handleFieldUpdate(item, 'status', e.target.value);
-                      }}
-                      onBlur={() => setEditingCell(null)}
-                      onClick={(e) => e.stopPropagation()}
-                      className="bg-[var(--nim-bg-secondary)] border border-[var(--nim-primary)] rounded text-[11px] text-[var(--nim-text)] px-1 py-0.5 outline-none"
-                    >
-                      {(() => {
-                        const tracker = globalRegistry.get(item.type);
-                        const statusField = tracker?.fields.find(f => f.name === 'status');
-                        const rawOptions = statusField?.options || ['to-do', 'in-progress', 'done', 'blocked'];
-                        return rawOptions.map(opt => {
-                          const val = typeof opt === 'string' ? opt : opt.value;
-                          const label = typeof opt === 'string' ? opt.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : opt.label;
-                          return <option key={val} value={val}>{label}</option>;
-                        });
-                      })()}
-                    </select>
-                  ) : (
-                    <span
-                      className={`status-badge inline-block py-0.5 px-2 rounded-[10px] text-[11px] font-medium border ${isItemEditable(item) ? 'cursor-pointer hover:opacity-80' : ''}`}
-                      style={{
-                        backgroundColor: `${getStatusColor(item.status, item.type)}20`,
-                        color: getStatusColor(item.status, item.type),
-                        borderColor: getStatusColor(item.status, item.type)
-                      }}
-                      onClick={(e) => {
-                        if (isItemEditable(item)) {
-                          e.stopPropagation();
-                          setEditingCell({ itemId: item.id, field: 'status' });
-                        }
-                      }}
-                    >
-                      {item.status.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
-                    </span>
-                  )}
-                </td>
-                <td className="tracker-table-cell priority p-[5px] text-[var(--nim-text)] align-middle w-[100px]">
-                  {isItemEditable(item) && editingCell !== null && editingCell.itemId === item.id && editingCell.field === 'priority' ? (
-                    <select
-                      autoFocus
-                      value={item.priority || 'medium'}
-                      onChange={(e) => {
-                        handleFieldUpdate(item, 'priority', e.target.value);
-                      }}
-                      onBlur={() => setEditingCell(null)}
-                      onClick={(e) => e.stopPropagation()}
-                      className="bg-[var(--nim-bg-secondary)] border border-[var(--nim-primary)] rounded text-xs text-[var(--nim-text)] px-1 py-0.5 outline-none"
-                    >
-                      {['low', 'medium', 'high', 'critical'].map(p => (
-                        <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span
-                      className={`priority-badge font-semibold text-xs ${isItemEditable(item) ? 'cursor-pointer hover:opacity-80' : ''}`}
-                      style={{ color: getPriorityColor(item.priority || 'medium') }}
-                      onClick={(e) => {
-                        if (isItemEditable(item)) {
-                          e.stopPropagation();
-                          setEditingCell({ itemId: item.id, field: 'priority' });
-                        }
-                      }}
-                    >
-                      {(item.priority || 'medium').charAt(0).toUpperCase() + (item.priority || 'medium').slice(1)}
-                    </span>
-                  )}
-                </td>
-                <td className="tracker-table-cell progress p-[5px] text-[var(--nim-text)] align-middle w-[60px] min-w-[60px]">
-                  {item.progress !== undefined && item.progress !== null && (
-                    <div className="progress-bar-container flex flex-col items-center gap-0.5">
-                      <span className="progress-text text-[11px] font-semibold text-[var(--nim-text)]">{item.progress}%</span>
-                      <div className="progress-bar-fill w-full h-1 bg-[var(--nim-bg-tertiary)] rounded-sm relative overflow-hidden" style={{ '--progress-width': `${item.progress}%` } as React.CSSProperties}>
-                        <div className="absolute top-0 left-0 h-full bg-[var(--nim-primary)] rounded-sm transition-all duration-300" style={{ width: `${item.progress}%` }}></div>
-                      </div>
-                    </div>
-                  )}
-                </td>
-                {extraColumns.map(col => {
-                  const value = item.customFields?.[col.key];
-                  let display = '';
-                  if (value == null) {
-                    // leave empty
-                  } else if (value instanceof Date) {
-                    display = value.toLocaleDateString();
-                  } else if (Array.isArray(value)) {
-                    display = value.join(', ');
-                  } else {
-                    display = String(value);
-                  }
+                {visibleColumnDefs.map(col => {
+                  const value = getCellValue(item, col.id);
                   return (
-                    <td key={col.key} className="tracker-table-cell p-[5px] text-[var(--nim-text)] align-middle">
-                      <span className="text-[var(--nim-text-muted)] text-xs">{display}</span>
+                    <td key={col.id} className={`tracker-table-cell ${col.id} p-[5px] text-[var(--nim-text)] align-middle`}>
+                      {renderCell(col, item, value, editingCell, isItemEditable, setEditingCell, editingTitle, setEditingTitle, titleInputRef, handleFieldUpdate)}
                     </td>
                   );
                 })}
-                <td className="tracker-table-cell module p-[5px] text-[var(--nim-text)] align-middle min-w-[150px] max-w-[250px]">
-                  {item.module ? (
-                    <span className="module-text text-[var(--nim-text-muted)] text-xs font-mono whitespace-nowrap overflow-hidden text-ellipsis block">{item.module}</span>
-                  ) : (
-                    <span
-                      className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded"
-                      style={{ backgroundColor: '#6b728015', color: '#9ca3af' }}
-                      title="Stored in database — not backed by a file"
-                      data-testid="tracker-source-db-badge"
-                    >
-                      <span className="material-symbols-outlined text-[11px]">storage</span>
-                      Database
-                    </span>
-                  )}
-                </td>
-                <td className="tracker-table-cell updated p-[5px] text-[var(--nim-text)] align-middle w-[120px]">
-                  <span className="updated-text text-[var(--nim-text-faint)] text-xs">{formatDate(item.lastIndexed)}</span>
-                </td>
+                {onColumnConfigChange && <td className="tracker-table-cell p-[5px] w-[28px]"></td>}
               </tr>
             ))
           )}

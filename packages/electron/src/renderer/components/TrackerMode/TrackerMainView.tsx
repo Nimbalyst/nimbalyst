@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
-import type { TrackerItem } from '@nimbalyst/runtime';
+import type { TrackerItem, TrackerIdentity } from '@nimbalyst/runtime';
 import {
   TrackerTable,
   SortColumn as TrackerSortColumn,
@@ -19,7 +19,9 @@ import {
   trackerModeLayoutAtom,
   setTrackerModeLayoutAtom,
   type TrackerFilterChip,
+  type TypeColumnConfig,
 } from '../../store/atoms/trackers';
+import { getDefaultColumnConfig } from '@nimbalyst/runtime/plugins/TrackerPlugin';
 import { setSelectedWorkstreamAtom, sessionRegistryAtom, refreshSessionListAtom } from '../../store/atoms/sessions';
 import { trackerItemsMapAtom } from '@nimbalyst/runtime/plugins/TrackerPlugin/trackerDataAtoms';
 import { workstreamStateAtom } from '../../store/atoms/workstreamState';
@@ -52,10 +54,36 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [quickAddType, setQuickAddType] = useState<string | null>(null);
 
+
+
+  // Current user identity for "mine" filter
+  const [currentIdentity, setCurrentIdentity] = useState<TrackerIdentity | null>(null);
+  useEffect(() => {
+    window.electronAPI.invoke('document-service:get-current-identity').then((result: any) => {
+      if (result?.success) setCurrentIdentity(result.identity);
+    });
+  }, []);
+
   // Selected item for detail panel
   const modeLayout = useAtomValue(trackerModeLayoutAtom);
   const setModeLayout = useSetAtom(setTrackerModeLayoutAtom);
   const selectedItemId = modeLayout.selectedItemId;
+  const detailPanelWidth = modeLayout.detailPanelWidth;
+
+  // Column config for the current type (persisted per-type)
+  const columnConfigKey = filterType === 'all' ? 'all' : filterType;
+  const columnConfig = useMemo(() => {
+    return modeLayout.typeColumnConfigs[columnConfigKey] ?? getDefaultColumnConfig(columnConfigKey === 'all' ? '' : columnConfigKey);
+  }, [modeLayout.typeColumnConfigs, columnConfigKey]);
+
+  const handleColumnConfigChange = useCallback((config: TypeColumnConfig) => {
+    setModeLayout({
+      typeColumnConfigs: {
+        ...modeLayout.typeColumnConfigs,
+        [columnConfigKey]: config,
+      },
+    });
+  }, [setModeLayout, modeLayout.typeColumnConfigs, columnConfigKey]);
 
   // Navigation atoms for tracker-session linking
   const setSelectedWorkstream = useSetAtom(setSelectedWorkstreamAtom);
@@ -145,10 +173,32 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
     const showArchived = activeFilters.includes('archived');
     let items = showArchived ? archivedItems : activeItems;
 
-    if (activeFilters.includes('mine')) {
-      // Show items where owner is unset (assumed mine in single-user context)
-      // or owner matches current user. TODO: wire up actual user identity for teams.
-      items = items.filter(item => !item.owner || item.owner === 'me');
+    if (activeFilters.includes('mine') && currentIdentity) {
+      items = items.filter(item => {
+        // Match by email (strongest)
+        if (currentIdentity.email && item.authorIdentity?.email) {
+          if (currentIdentity.email === item.authorIdentity.email) return true;
+        }
+        // Match assignee email
+        if (currentIdentity.email && item.assigneeEmail) {
+          if (currentIdentity.email === item.assigneeEmail) return true;
+        }
+        // Fall back to git email
+        if (currentIdentity.gitEmail && item.authorIdentity?.gitEmail) {
+          if (currentIdentity.gitEmail === item.authorIdentity.gitEmail) return true;
+        }
+        // Fall back to git name
+        if (currentIdentity.gitName && item.authorIdentity?.gitName) {
+          if (currentIdentity.gitName === item.authorIdentity.gitName) return true;
+        }
+        // Legacy: match owner field
+        if (currentIdentity.displayName && item.owner) {
+          if (currentIdentity.displayName === item.owner) return true;
+        }
+        // In single-user context, items with no author are assumed mine
+        if (!item.authorIdentity && !item.owner) return true;
+        return false;
+      });
     }
 
     if (activeFilters.includes('high-priority')) {
@@ -162,7 +212,7 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
     }
 
     return items;
-  }, [activeItems, archivedItems, activeFilters]);
+  }, [activeItems, archivedItems, activeFilters, currentIdentity]);
 
 
   const handleItemSelect = useCallback((itemId: string) => {
@@ -447,6 +497,8 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
               onArchiveItems={handleArchiveItems}
               onDeleteItems={handleDeleteItems}
               searchQuery={searchQuery}
+              columnConfig={columnConfig}
+              onColumnConfigChange={handleColumnConfigChange}
             />
           ) : (
             <KanbanBoard
@@ -474,9 +526,13 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
 
         {/* Detail panel (right side, shown when item selected) */}
         {selectedItemId && (
-          <div className="w-[400px] min-w-[360px] border-l border-nim shrink-0 overflow-hidden">
+          <DetailPanelResizable
+            width={detailPanelWidth}
+            onWidthChange={(w) => setModeLayout({ detailPanelWidth: w })}
+          >
             <TrackerItemDetail
               itemId={selectedItemId}
+              workspacePath={workspacePath}
               onClose={handleCloseDetail}
               onSwitchToFilesMode={onSwitchToFilesMode}
               onSwitchToAgentMode={handleSwitchToAgentMode}
@@ -484,8 +540,73 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
               onArchive={handleArchiveItem}
               onDelete={handleDeleteItem}
             />
-          </div>
+          </DetailPanelResizable>
         )}
+      </div>
+    </div>
+  );
+};
+
+/**
+ * Resizable wrapper for the detail panel (right side).
+ * Drag the left edge to resize.
+ */
+const DetailPanelResizable: React.FC<{
+  width: number;
+  onWidthChange: (width: number) => void;
+  children: React.ReactNode;
+}> = ({ width, onWidthChange, children }) => {
+  const [isDragging, setIsDragging] = useState(false);
+  const [currentWidth, setCurrentWidth] = useState(width);
+  const startXRef = useRef(0);
+  const startWidthRef = useRef(width);
+  const MIN_WIDTH = 300;
+  const MAX_WIDTH = 700;
+
+  useEffect(() => { setCurrentWidth(width); }, [width]);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    startXRef.current = e.clientX;
+    startWidthRef.current = currentWidth;
+    document.body.style.cursor = 'ew-resize';
+    document.body.style.userSelect = 'none';
+  }, [currentWidth]);
+
+  useEffect(() => {
+    if (!isDragging) return;
+    const handleMouseMove = (e: MouseEvent) => {
+      // Dragging left increases width, dragging right decreases
+      const deltaX = startXRef.current - e.clientX;
+      const newWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, startWidthRef.current + deltaX));
+      setCurrentWidth(newWidth);
+    };
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      onWidthChange(currentWidth);
+    };
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, currentWidth, onWidthChange]);
+
+  return (
+    <div className="flex shrink-0" style={{ width: `${currentWidth}px` }}>
+      <div
+        className={`relative w-0.5 cursor-ew-resize bg-nim-border shrink-0 transition-colors duration-150 hover:bg-nim-accent ${isDragging ? 'bg-nim-accent' : ''}`}
+        onMouseDown={handleMouseDown}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize detail panel"
+      />
+      <div className="flex-1 overflow-hidden">
+        {children}
       </div>
     </div>
   );

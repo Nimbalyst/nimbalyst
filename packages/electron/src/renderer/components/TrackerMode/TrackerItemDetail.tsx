@@ -14,13 +14,15 @@ import type { EditorConfig } from '@nimbalyst/runtime/editor';
 import type { TrackerItem, TrackerItemType } from '@nimbalyst/runtime';
 import { globalRegistry } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
 import type { FieldDefinition } from '@nimbalyst/runtime/plugins/TrackerPlugin/models/TrackerDataModel';
-import { TrackerFieldEditor } from '@nimbalyst/runtime/plugins/TrackerPlugin/components/TrackerFieldEditor';
+import { TrackerFieldEditor, type TeamMemberOption } from '@nimbalyst/runtime/plugins/TrackerPlugin/components/TrackerFieldEditor';
+import { UserAvatar } from '@nimbalyst/runtime/plugins/TrackerPlugin/components/UserAvatar';
 import { trackerItemByIdAtom } from '@nimbalyst/runtime/plugins/TrackerPlugin/trackerDataAtoms';
 import { sessionRegistryAtom, type SessionMeta } from '../../store/atoms/sessions';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
 
 interface TrackerItemDetailProps {
   itemId: string;
+  workspacePath?: string;
   onClose: () => void;
   onSwitchToFilesMode?: () => void;
   onSwitchToAgentMode?: (sessionId: string) => void;
@@ -164,6 +166,7 @@ const TypeTagsEditor: React.FC<{
 
 export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
   itemId,
+  workspacePath,
   onClose,
   onSwitchToFilesMode,
   onSwitchToAgentMode,
@@ -177,6 +180,27 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
   const sessionRegistry = useAtomValue(sessionRegistryAtom);
 
   const model = useMemo(() => globalRegistry.get(item?.type ?? ''), [item?.type]);
+
+  // Fetch team members for user picker dropdowns via IPC
+  const [teamMembers, setTeamMembers] = useState<TeamMemberOption[]>([]);
+  useEffect(() => {
+    if (!workspacePath) return;
+    (async () => {
+      try {
+        const teamResult = await window.electronAPI.invoke('team:find-for-workspace', workspacePath);
+        if (!teamResult?.success || !teamResult.team?.orgId) return;
+        const membersResult = await window.electronAPI.invoke('team:list-members', teamResult.team.orgId);
+        if (!membersResult?.success || !membersResult.members) return;
+        setTeamMembers(
+          membersResult.members
+            .filter((m: any) => m.email)
+            .map((m: any) => ({ email: m.email, name: m.name || undefined }))
+        );
+      } catch {
+        // Not in a team context -- no dropdown
+      }
+    })();
+  }, [workspacePath]);
   const typeColor = TYPE_COLORS[item?.type ?? ''] || '#6b7280';
   const icon = model?.icon || getTypeIcon(item?.type ?? '');
 
@@ -398,13 +422,13 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
     if (!model) return { primaryFields: [] as FieldDefinition[], customFields: [] as FieldDefinition[] };
 
     const builtinNames = new Set(['title', 'description', 'created', 'updated']);
+    const primaryNames = new Set(['status', 'priority', 'owner', 'assigneeEmail', 'reporterEmail', 'dueDate']);
     const primary: FieldDefinition[] = [];
     const custom: FieldDefinition[] = [];
 
     for (const field of model.fields) {
       if (builtinNames.has(field.name)) continue;
-      // Status, priority, owner go in primary grid
-      if (field.name === 'status' || field.name === 'priority' || field.name === 'owner') {
+      if (primaryNames.has(field.name)) {
         primary.push(field);
       } else {
         custom.push(field);
@@ -425,6 +449,8 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
     if (fieldName === 'status') return item.status;
     if (fieldName === 'priority') return item.priority;
     if (fieldName === 'owner') return item.owner;
+    if (fieldName === 'assigneeEmail') return item.assigneeEmail;
+    if (fieldName === 'reporterEmail') return item.reporterEmail;
     if (fieldName === 'tags') return item.tags;
     if (fieldName === 'progress') return item.progress;
     if (fieldName === 'dueDate') return item.dueDate;
@@ -599,6 +625,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
                     field={field}
                     value={getFieldValue(field.name)}
                     onChange={(value) => handleFieldChange(field, value)}
+                    teamMembers={teamMembers}
                   />
                 ) : (
                   <ReadOnlyField
@@ -637,6 +664,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
                     field={field}
                     value={getFieldValue(field.name)}
                     onChange={(value) => handleFieldChange(field, value)}
+                    teamMembers={teamMembers}
                   />
                 ) : (
                   <ReadOnlyField
@@ -724,9 +752,58 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
           </div>
         )}
 
+        {/* Comments section */}
+        {item.source !== 'inline' && item.source !== 'frontmatter' && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-medium text-nim-muted uppercase tracking-wide">Comments</h4>
+            </div>
+            <CommentsSection itemId={item.id} comments={(item as any).comments} />
+          </div>
+        )}
+
+        {/* Activity log */}
+        {(item as any).activity?.length > 0 && (
+          <div className="space-y-2">
+            <h4 className="text-xs font-medium text-nim-muted uppercase tracking-wide">Activity</h4>
+            <div className="space-y-1">
+              {((item as any).activity as any[]).slice(-10).reverse().map((entry: any) => (
+                <div key={entry.id} className="flex items-start gap-2 text-[11px]">
+                  <span className="text-nim-muted shrink-0">{entry.authorIdentity?.displayName || 'Unknown'}</span>
+                  <span className="text-nim-faint">
+                    {entry.action === 'created' ? 'created this item' :
+                     entry.action === 'commented' ? 'added a comment' :
+                     entry.action === 'status_changed' ? `changed status to ${entry.newValue}` :
+                     entry.action === 'archived' ? (entry.newValue === 'true' ? 'archived' : 'unarchived') :
+                     entry.field ? `updated ${entry.field}` : entry.action}
+                  </span>
+                  <span className="text-nim-faint ml-auto shrink-0">{getRelativeTimeString(entry.timestamp)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Metadata footer */}
         <div className="pt-1 border-t border-nim">
           <div className="grid grid-cols-2 gap-2 text-[11px]">
+            {/* Author identity */}
+            {item.authorIdentity && (
+              <div className="col-span-2 flex items-center gap-1.5">
+                <span className="text-nim-faint shrink-0">Created by</span>
+                <UserAvatar identity={item.authorIdentity} showName size={16} />
+                {item.createdByAgent && (
+                  <span className="text-[10px] text-nim-faint bg-nim-tertiary px-1 py-0.5 rounded">via AI</span>
+                )}
+              </div>
+            )}
+            {/* Last modifier */}
+            {item.lastModifiedBy && item.lastModifiedBy.displayName !== item.authorIdentity?.displayName && (
+              <div className="col-span-2 flex items-center gap-1.5">
+                <span className="text-nim-faint shrink-0">Modified by</span>
+                <UserAvatar identity={item.lastModifiedBy} showName size={16} />
+              </div>
+            )}
             <div>
               <span className="text-nim-faint">Created</span>
               <div className="text-nim-muted">{formatTimestamp(item.created)}</div>
@@ -820,6 +897,61 @@ const ReadOnlyField: React.FC<{ field: FieldDefinition; value: any }> = ({ field
     <div className="flex flex-col gap-1">
       <span className="text-[11px] font-medium text-[var(--nim-text-muted)] uppercase tracking-[0.5px]">{label}</span>
       <span className="text-[13px] text-[var(--nim-text)]">{displayValue}</span>
+    </div>
+  );
+};
+
+/** Inline comments section for tracker items */
+const CommentsSection: React.FC<{ itemId: string; comments?: any[] }> = ({ itemId, comments }) => {
+  const [newComment, setNewComment] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const visibleComments = (comments || []).filter((c: any) => !c.deleted);
+
+  const handleSubmit = useCallback(async () => {
+    if (!newComment.trim() || submitting) return;
+    setSubmitting(true);
+    try {
+      await window.electronAPI.invoke('document-service:tracker-item-add-comment', {
+        itemId,
+        body: newComment.trim(),
+      });
+      setNewComment('');
+    } catch (err) {
+      console.error('Failed to add comment:', err);
+    } finally {
+      setSubmitting(false);
+    }
+  }, [itemId, newComment, submitting]);
+
+  return (
+    <div className="space-y-2">
+      {visibleComments.map((comment: any) => (
+        <div key={comment.id} className="rounded bg-nim-tertiary p-2 space-y-1">
+          <div className="flex items-center gap-2 text-[11px]">
+            <span className="font-medium text-nim-muted">{comment.authorIdentity?.displayName || 'Unknown'}</span>
+            <span className="text-nim-faint">{getRelativeTimeString(comment.createdAt)}</span>
+            {comment.updatedAt && <span className="text-nim-faint">(edited)</span>}
+          </div>
+          <p className="text-xs text-nim m-0 whitespace-pre-wrap">{comment.body}</p>
+        </div>
+      ))}
+      <div className="flex gap-1">
+        <input
+          type="text"
+          value={newComment}
+          onChange={e => setNewComment(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
+          placeholder="Add a comment..."
+          className="flex-1 bg-nim-secondary border border-nim rounded px-2 py-1 text-xs text-nim placeholder:text-nim-faint outline-none focus:border-nim-primary"
+        />
+        <button
+          onClick={handleSubmit}
+          disabled={!newComment.trim() || submitting}
+          className="px-2 py-1 rounded text-xs bg-nim-primary text-white disabled:opacity-40 hover:opacity-90 transition-opacity"
+        >
+          Post
+        </button>
+      </div>
     </div>
   );
 };

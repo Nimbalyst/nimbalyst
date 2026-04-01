@@ -104,6 +104,7 @@ export function mergeTrackerItems(
 
   const mergeableFields: (keyof TrackerItemPayload)[] = [
     'title', 'description', 'status', 'priority',
+    'assigneeEmail', 'reporterEmail', 'authorIdentity', 'lastModifiedBy',
     'assigneeId', 'reporterId', 'labels', 'linkedSessions',
     'linkedCommitSha', 'documentId', 'comments', 'customFields',
     'archived', 'archivedAt',

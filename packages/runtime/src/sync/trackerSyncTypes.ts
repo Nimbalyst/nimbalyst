@@ -84,10 +84,25 @@ export interface TrackerItemPayload {
   /** Priority value (from tracker YAML data model) */
   priority: string;
 
-  /** Assignee user ID (org member) */
+  /** Assignee email (stable cross-org identifier) */
+  assigneeEmail?: string;
+
+  /** Reporter email (stable cross-org identifier) */
+  reporterEmail?: string;
+
+  /** Structured author identity */
+  authorIdentity?: TrackerIdentity | null;
+
+  /** Structured last-modifier identity */
+  lastModifiedBy?: TrackerIdentity | null;
+
+  /** Whether this item was created by an AI agent */
+  createdByAgent?: boolean;
+
+  /** @deprecated Use assigneeEmail instead */
   assigneeId?: string;
 
-  /** Reporter user ID (org member) */
+  /** @deprecated Use reporterEmail instead */
   reporterId?: string;
 
   /** Labels */
@@ -125,9 +140,15 @@ export interface TrackerItemPayload {
 
 export interface TrackerComment {
   id: string;
-  authorId: string;
+  /** Structured author identity for offline rendering */
+  authorIdentity: TrackerIdentity;
   body: string;
   createdAt: number;
+  updatedAt?: number | null;
+  /** Soft delete for sync compatibility */
+  deleted?: boolean;
+  /** @deprecated Use authorIdentity instead */
+  authorId?: string;
 }
 
 // ============================================================================
@@ -207,7 +228,7 @@ export interface EncryptedTrackerItem {
 // TrackerItem <-> TrackerItemPayload Mapping
 // ============================================================================
 
-import type { TrackerItem } from '../core/DocumentService';
+import type { TrackerItem, TrackerIdentity } from '../core/DocumentService';
 
 /**
  * Convert a local TrackerItem (PGLite shape) to a TrackerItemPayload (sync wire shape).
@@ -222,6 +243,12 @@ export function trackerItemToPayload(item: TrackerItem, userId: string): Tracker
     description: item.description,
     status: item.status,
     priority: item.priority || 'medium',
+    assigneeEmail: item.assigneeEmail,
+    reporterEmail: item.reporterEmail,
+    authorIdentity: item.authorIdentity || null,
+    lastModifiedBy: item.lastModifiedBy || null,
+    createdByAgent: item.createdByAgent || false,
+    // Keep deprecated fields for backward compat with older clients
     assigneeId: item.assigneeId,
     reporterId: item.reporterId || userId,
     labels: item.labels || [],
@@ -237,6 +264,11 @@ export function trackerItemToPayload(item: TrackerItem, userId: string): Tracker
       status: now,
       priority: now,
       description: now,
+      assigneeEmail: now,
+      reporterEmail: now,
+      authorIdentity: now,
+      lastModifiedBy: now,
+      // Keep deprecated field timestamps for backward compat
       assigneeId: now,
       reporterId: now,
       labels: now,
@@ -266,13 +298,18 @@ export function payloadToTrackerItem(
     description: payload.description,
     status: payload.status,
     priority: payload.priority as TrackerItem['priority'],
-    owner: payload.assigneeId,
+    owner: payload.assigneeEmail || payload.assigneeId,
     module: '',  // Synced items don't have a source file
     workspace,
     tags: undefined,
     created: undefined,
     updated: undefined,
     lastIndexed: new Date(),
+    authorIdentity: payload.authorIdentity || null,
+    lastModifiedBy: payload.lastModifiedBy || null,
+    createdByAgent: payload.createdByAgent || false,
+    assigneeEmail: payload.assigneeEmail,
+    reporterEmail: payload.reporterEmail,
     assigneeId: payload.assigneeId,
     reporterId: payload.reporterId,
     labels: payload.labels,

@@ -13,6 +13,7 @@ import {
   TrackerItemType
 } from '@nimbalyst/runtime';
 import crypto from 'crypto';
+import { getCurrentIdentity } from './TrackerIdentityService';
 import { extractFrontmatter, extractCommonFields } from '../utils/frontmatterReader';
 import { VIRTUAL_DOCS, isVirtualPath } from '@nimbalyst/runtime';
 import { updateTrackerInFrontmatter, updateInlineTrackerItem, removeInlineTrackerItem } from '@nimbalyst/runtime/plugins/TrackerPlugin/documentHeader/frontmatterUtils';
@@ -936,6 +937,10 @@ export class ElectronDocumentService implements DocumentService {
       );
     }
 
+    // Stamp lastModifiedBy with current identity
+    // getCurrentIdentity imported statically at top of file
+    data.lastModifiedBy = getCurrentIdentity(row.workspace);
+
     // Merge remaining updates into data (skip typeTags since it's a column)
     for (const [key, value] of Object.entries(updates)) {
       if (key === 'typeTags') continue;
@@ -1429,11 +1434,16 @@ export class ElectronDocumentService implements DocumentService {
       throw new Error(`Cannot create items of type '${payload.type}': type is not creatable`);
     }
 
+    // Stamp author identity on creation
+    // getCurrentIdentity imported statically at top of file
+    const authorIdentity = getCurrentIdentity(payload.workspace);
+
     const data: Record<string, any> = {
       title: payload.title,
       status: payload.status,
       priority: payload.priority,
       created: new Date().toISOString().split('T')[0],
+      authorIdentity,
     };
     if (payload.description) data.description = payload.description;
     if (payload.owner) data.owner = payload.owner;
@@ -2109,6 +2119,19 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
     }
   });
 
+  // Get the current user's TrackerIdentity for "my items" filtering
+  safeHandle('document-service:get-current-identity', async (event) => {
+    try {
+      // getCurrentIdentity imported statically at top of file
+      const service = resolveDocumentService?.(event);
+      // Pass workspace path for git config resolution if available
+      const workspacePath = (service as any)?.workspacePath as string | undefined;
+      return { success: true, identity: getCurrentIdentity(workspacePath) };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
   // Create tracker item directly in PGLite (bypassing markdown files)
   safeHandle('document-service:create-tracker-item', async (event, payload: {
     id: string;
@@ -2283,6 +2306,76 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
       return { success: true, ...result };
     } catch (error) {
       console.error('[DocumentService] tracker-item-bulk-import failed:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  // Comment management handlers
+  safeHandle('document-service:tracker-item-add-comment', async (event, payload: {
+    itemId: string;
+    body: string;
+  }) => {
+    try {
+      const row = await database.query<any>(`SELECT * FROM tracker_items WHERE id = $1`, [payload.itemId]);
+      if (row.rows.length === 0) return { success: false, error: 'Item not found' };
+
+      const data = typeof row.rows[0].data === 'string' ? JSON.parse(row.rows[0].data) : row.rows[0].data || {};
+      // getCurrentIdentity imported statically at top of file
+      const authorIdentity = getCurrentIdentity(row.rows[0].workspace);
+
+      const comments = data.comments || [];
+      const commentId = `comment_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      comments.push({
+        id: commentId,
+        authorIdentity,
+        body: payload.body,
+        createdAt: Date.now(),
+        updatedAt: null,
+        deleted: false,
+      });
+      data.comments = comments;
+      data.lastModifiedBy = authorIdentity;
+
+      await database.query(
+        `UPDATE tracker_items SET data = $1, updated = NOW() WHERE id = $2`,
+        [JSON.stringify(data), payload.itemId]
+      );
+      return { success: true, commentId };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  safeHandle('document-service:tracker-item-update-comment', async (_event, payload: {
+    itemId: string;
+    commentId: string;
+    body?: string;
+    deleted?: boolean;
+  }) => {
+    try {
+      const row = await database.query<any>(`SELECT * FROM tracker_items WHERE id = $1`, [payload.itemId]);
+      if (row.rows.length === 0) return { success: false, error: 'Item not found' };
+
+      const data = typeof row.rows[0].data === 'string' ? JSON.parse(row.rows[0].data) : row.rows[0].data || {};
+      const comments = data.comments || [];
+      const idx = comments.findIndex((c: any) => c.id === payload.commentId);
+      if (idx === -1) return { success: false, error: 'Comment not found' };
+
+      if (payload.body !== undefined) {
+        comments[idx].body = payload.body;
+        comments[idx].updatedAt = Date.now();
+      }
+      if (payload.deleted !== undefined) {
+        comments[idx].deleted = payload.deleted;
+      }
+      data.comments = comments;
+
+      await database.query(
+        `UPDATE tracker_items SET data = $1, updated = NOW() WHERE id = $2`,
+        [JSON.stringify(data), payload.itemId]
+      );
+      return { success: true };
+    } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   });

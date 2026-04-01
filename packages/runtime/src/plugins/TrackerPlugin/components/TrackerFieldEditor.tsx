@@ -4,9 +4,17 @@
  * Used by both StatusBar (document headers) and TrackerItemDetail (edit panel).
  */
 
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { FieldDefinition } from '../models/TrackerDataModel';
 import { CustomSelect } from './CustomSelect';
+import { UserAvatar } from './UserAvatar';
+import { getInitials, stringToColor } from './trackerColumns';
+
+/** Team member info for user picker dropdown */
+export interface TeamMemberOption {
+  email: string;
+  name?: string;
+}
 
 export interface TrackerFieldEditorProps {
   field: FieldDefinition;
@@ -14,6 +22,8 @@ export interface TrackerFieldEditorProps {
   onChange: (value: any) => void;
   /** 'vertical' = label on top (default), 'horizontal' = label on left */
   layout?: 'horizontal' | 'vertical';
+  /** Team members for user picker dropdowns (when available) */
+  teamMembers?: TeamMemberOption[];
 }
 
 const labelClasses = "text-[11px] font-medium text-[var(--nim-text-muted)] uppercase tracking-[0.5px]";
@@ -63,21 +73,27 @@ export function formatDateTimeDisplay(value: any): { display: string; title: str
   return { display, title };
 }
 
+/** Fields that should always render as user pickers regardless of declared type */
+const USER_FIELD_NAMES = new Set(['owner', 'assigneeEmail', 'reporterEmail']);
+
 export const TrackerFieldEditor: React.FC<TrackerFieldEditorProps> = ({
   field,
   value,
   onChange,
   layout = 'vertical',
+  teamMembers,
 }) => {
   const fieldId = `field-${field.name}`;
   const label = formatFieldLabel(field.name);
+  // Override field type for known user fields (ModelLoader may declare them as 'string')
+  const effectiveType = USER_FIELD_NAMES.has(field.name) ? 'user' : field.type;
 
   const wrapperClasses = layout === 'horizontal'
     ? "flex flex-row items-center gap-2 min-w-[120px]"
     : "flex flex-col gap-1 min-w-[120px]";
 
   // Read-only datetime fields show a formatted display instead of an input
-  if (field.readOnly && (field.type === 'datetime' || field.type === 'date')) {
+  if (field.readOnly && (effectiveType === 'datetime' || effectiveType === 'date')) {
     const { display, title } = formatDateTimeDisplay(value);
     return (
       <div className={wrapperClasses}>
@@ -92,7 +108,7 @@ export const TrackerFieldEditor: React.FC<TrackerFieldEditorProps> = ({
     );
   }
 
-  switch (field.type) {
+  switch (effectiveType) {
     case 'select':
       return (
         <div className={wrapperClasses}>
@@ -194,8 +210,20 @@ export const TrackerFieldEditor: React.FC<TrackerFieldEditorProps> = ({
         </div>
       );
 
-    case 'string':
     case 'user':
+      return (
+        <div className={wrapperClasses}>
+          <label htmlFor={fieldId} className={labelClasses}>{label}</label>
+          <UserFieldInput
+            value={value || ''}
+            onChange={onChange}
+            placeholder={field.required ? 'Required' : 'Optional'}
+            teamMembers={teamMembers}
+          />
+        </div>
+      );
+
+    case 'string':
       return (
         <div className={wrapperClasses}>
           <label htmlFor={fieldId} className={labelClasses}>{label}</label>
@@ -210,28 +238,16 @@ export const TrackerFieldEditor: React.FC<TrackerFieldEditorProps> = ({
         </div>
       );
 
-    case 'array': {
-      const arrayValue = Array.isArray(value) ? value.join(', ') : '';
+    case 'array':
       return (
         <div className={wrapperClasses}>
           <label htmlFor={fieldId} className={labelClasses}>{label}</label>
-          <input
-            id={fieldId}
-            type="text"
-            className={inputClasses}
-            value={arrayValue}
-            onChange={(e) => {
-              const newValue = e.target.value
-                .split(',')
-                .map(v => v.trim())
-                .filter(v => v.length > 0);
-              onChange(newValue);
-            }}
-            placeholder="Comma-separated values"
+          <TagChipsInput
+            value={Array.isArray(value) ? value : []}
+            onChange={onChange}
           />
         </div>
       );
-    }
 
     case 'boolean':
       return (
@@ -252,4 +268,164 @@ export const TrackerFieldEditor: React.FC<TrackerFieldEditorProps> = ({
     default:
       return null;
   }
+};
+
+/**
+ * Tag chips input with add/remove for array fields (labels, tags).
+ */
+const TagChipsInput: React.FC<{
+  value: string[];
+  onChange: (value: string[]) => void;
+}> = ({ value, onChange }) => {
+  const [inputValue, setInputValue] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleAdd = () => {
+    const trimmed = inputValue.trim();
+    if (trimmed && !value.includes(trimmed)) {
+      onChange([...value, trimmed]);
+    }
+    setInputValue('');
+  };
+
+  const handleRemove = (tag: string) => {
+    onChange(value.filter(v => v !== tag));
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      handleAdd();
+    } else if (e.key === 'Backspace' && !inputValue && value.length > 0) {
+      onChange(value.slice(0, -1));
+    }
+  };
+
+  return (
+    <div
+      className="flex flex-wrap items-center gap-1 p-1.5 border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] min-h-[32px] cursor-text"
+      onClick={() => inputRef.current?.focus()}
+    >
+      {value.map(tag => (
+        <span
+          key={tag}
+          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)] text-[11px]"
+        >
+          {tag}
+          <button
+            className="text-[var(--nim-text-faint)] hover:text-[var(--nim-text)] ml-0.5"
+            onClick={(e) => { e.stopPropagation(); handleRemove(tag); }}
+          >
+            <span className="material-symbols-outlined text-[10px]">close</span>
+          </button>
+        </span>
+      ))}
+      <input
+        ref={inputRef}
+        type="text"
+        className="flex-1 min-w-[60px] bg-transparent border-none text-[var(--nim-text)] text-[12px] outline-none p-0"
+        value={inputValue}
+        onChange={(e) => setInputValue(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={handleAdd}
+        placeholder={value.length === 0 ? 'Add tag...' : ''}
+      />
+    </div>
+  );
+};
+
+/**
+ * User field input with avatar display and optional team member dropdown.
+ * Shows avatar + text input. When team members are available, clicking shows a dropdown.
+ */
+const UserFieldInput: React.FC<{
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  teamMembers?: TeamMemberOption[];
+}> = ({ value, onChange, placeholder, teamMembers }) => {
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [filterText, setFilterText] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showDropdown) return;
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showDropdown]);
+
+  const displayName = value || '';
+  const hasMembers = teamMembers && teamMembers.length > 0;
+
+  const filteredMembers = hasMembers
+    ? teamMembers.filter(m => {
+        const q = filterText.toLowerCase();
+        return (m.name?.toLowerCase().includes(q) || m.email.toLowerCase().includes(q));
+      })
+    : [];
+
+  return (
+    <div ref={containerRef} className="relative">
+      <div className="flex items-center gap-1.5">
+        {displayName && <UserAvatar identity={displayName} size={18} />}
+        <input
+          type="text"
+          className={`${inputClasses} flex-1 min-w-0`}
+          value={displayName}
+          onChange={(e) => {
+            onChange(e.target.value);
+            setFilterText(e.target.value);
+            if (hasMembers && !showDropdown) setShowDropdown(true);
+          }}
+          onFocus={() => { if (hasMembers) setShowDropdown(true); }}
+          onMouseDown={(e) => {
+            // Prevent focus theft by stopping propagation
+            e.stopPropagation();
+            if (hasMembers) setShowDropdown(true);
+          }}
+          placeholder={placeholder}
+        />
+        {displayName && (
+          <button
+            className="text-[var(--nim-text-faint)] hover:text-[var(--nim-text)] p-0.5"
+            onClick={() => { onChange(''); setFilterText(''); }}
+            title="Clear"
+          >
+            <span className="material-symbols-outlined text-sm">close</span>
+          </button>
+        )}
+      </div>
+      {showDropdown && filteredMembers.length > 0 && (
+        <div
+          className="absolute top-full left-0 right-0 mt-1 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded-md shadow-lg z-30 max-h-[200px] overflow-auto py-1"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          {filteredMembers.map(member => (
+            <button
+              key={member.email}
+              className="w-full flex items-center gap-2 px-2 py-1.5 text-left hover:bg-[var(--nim-bg-hover)] text-xs text-[var(--nim-text)]"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onChange(member.email);
+                setShowDropdown(false);
+                setFilterText('');
+              }}
+            >
+              <UserAvatar identity={member.name || member.email} size={18} />
+              <div className="flex flex-col min-w-0">
+                {member.name && <span className="truncate">{member.name}</span>}
+                <span className="text-[var(--nim-text-faint)] truncate">{member.email}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 };

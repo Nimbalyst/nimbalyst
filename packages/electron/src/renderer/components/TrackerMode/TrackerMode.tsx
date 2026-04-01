@@ -3,6 +3,7 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import { globalRegistry, loadBuiltinTrackers } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
 import { TrackerSidebar } from './TrackerSidebar';
 import { TrackerMainView, type ViewMode } from './TrackerMainView';
+import { ResizablePanel } from '../AgenticCoding/ResizablePanel';
 import type { TrackerItemType } from '@nimbalyst/runtime';
 import {
   trackerModeLayoutAtom,
@@ -43,6 +44,7 @@ export const TrackerMode: React.FC<TrackerModeProps> = ({
   const selectedType = modeLayout.selectedType;
   const activeFilters = modeLayout.activeFilters;
   const viewMode = modeLayout.viewMode;
+  const sidebarWidth = modeLayout.sidebarWidth;
 
   const handleSelectType = useCallback((type: string | 'all') => {
     setModeLayout({ selectedType: type, selectedItemId: null });
@@ -60,29 +62,47 @@ export const TrackerMode: React.FC<TrackerModeProps> = ({
     setModeLayout({ viewMode: mode });
   }, [setModeLayout]);
 
+  const handleSidebarWidthChange = useCallback((width: number) => {
+    setModeLayout({ sidebarWidth: width });
+  }, [setModeLayout]);
+
   const filterType = selectedType as TrackerItemType | 'all';
+
+  const sidebarContent = (
+    <TrackerSidebar
+      workspacePath={workspacePath || undefined}
+      workspaceName={workspaceName}
+      trackerTypes={trackerTypes}
+      selectedType={selectedType}
+      activeFilters={activeFilters}
+      viewMode={viewMode}
+      onSelectType={handleSelectType}
+      onToggleFilter={handleToggleFilter}
+      onViewModeChange={handleViewModeChange}
+    />
+  );
+
+  const mainContent = (
+    <TrackerMainView
+      filterType={filterType}
+      activeFilters={activeFilters}
+      viewMode={viewMode}
+      onViewModeChange={handleViewModeChange}
+      onSwitchToFilesMode={onSwitchToFilesMode}
+      workspacePath={workspacePath || undefined}
+      trackerTypes={trackerTypes}
+    />
+  );
 
   return (
     <div className="tracker-mode flex-1 flex flex-row overflow-hidden min-h-0">
-      <TrackerSidebar
-        workspacePath={workspacePath || undefined}
-        workspaceName={workspaceName}
-        trackerTypes={trackerTypes}
-        selectedType={selectedType}
-        activeFilters={activeFilters}
-        viewMode={viewMode}
-        onSelectType={handleSelectType}
-        onToggleFilter={handleToggleFilter}
-        onViewModeChange={handleViewModeChange}
-      />
-      <TrackerMainView
-        filterType={filterType}
-        activeFilters={activeFilters}
-        viewMode={viewMode}
-        onViewModeChange={handleViewModeChange}
-        onSwitchToFilesMode={onSwitchToFilesMode}
-        workspacePath={workspacePath || undefined}
-        trackerTypes={trackerTypes}
+      <ResizablePanel
+        leftPanel={sidebarContent}
+        rightPanel={mainContent}
+        leftWidth={sidebarWidth}
+        minWidth={160}
+        maxWidth={350}
+        onWidthChange={handleSidebarWidthChange}
       />
     </div>
   );

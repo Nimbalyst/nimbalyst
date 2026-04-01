@@ -41,6 +41,7 @@ import {
   handleTrackerUpdate,
   handleTrackerLinkSession,
   handleTrackerLinkFile,
+  handleTrackerAddComment,
   trackerToolSchemas,
 } from "./tools/trackerToolHandlers";
 import {
@@ -373,6 +374,9 @@ function createSharedMcpServer(
 
       case "tracker_link_file":
         return handleTrackerLinkFile(args, sessionId, workspacePath);
+
+      case "tracker_add_comment":
+        return handleTrackerAddComment(args, workspacePath);
 
       default:
         return handleExtensionTool(toolName, name, args, sessionId, workspacePath);
