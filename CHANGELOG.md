@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.5] - 2026-04-01
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Codex SDK missing from packaged builds
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.57.4] - 2026-04-01
 
 
