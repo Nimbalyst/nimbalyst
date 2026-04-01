@@ -49,12 +49,16 @@ import { triggerWorktreeRefreshAtom } from './atoms/gitOperations';
 // Prevents duplicate IPC calls when multiple children complete near-simultaneously.
 const blitzAnalysisTriggered = new Set<string>();
 
-// Per-session debounce timers for reloadSessionDataAtom.
+// Per-session throttle state for reloadSessionDataAtom.
 // During active streaming, message-logged fires on every chunk, which would
-// trigger a full DB reload of ALL messages each time. Debouncing collapses
-// these into one reload per RELOAD_DEBOUNCE_MS window per session.
-const reloadDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
-const RELOAD_DEBOUNCE_MS = 1000;
+// trigger a full DB reload of ALL messages each time. PGLite is
+// single-threaded, so these reads queue up and block writes, causing a
+// cascading slowdown. Throttling (leading + trailing edge) ensures at most
+// one reload per RELOAD_THROTTLE_MS while still responding promptly to
+// the first event (e.g., a tool result arriving mid-stream).
+const reloadThrottleTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const reloadLastFiredAt = new Map<string, number>();
+const RELOAD_THROTTLE_MS = 1000;
 
 // Per-session verification reload timers.
 // After session:completed fires the immediate reload, a second "verification" reload
@@ -160,18 +164,19 @@ export function initSessionStateListeners(): () => void {
         // Also clear pending interactive prompt state - if session ended, no longer waiting
         store.set(sessionHasPendingInteractivePromptAtom(sessionId), false);
 
-        // Clear any pending debounce timer for this session - the final reload below
-        // will fetch the complete state, so a stale debounced reload is unnecessary
+        // Clear any pending throttle timer for this session - the final reload below
+        // will fetch the complete state, so a stale throttled reload is unnecessary
         {
-          const pendingTimer = reloadDebounceTimers.get(sessionId);
+          const pendingTimer = reloadThrottleTimers.get(sessionId);
           if (pendingTimer) {
             clearTimeout(pendingTimer);
-            reloadDebounceTimers.delete(sessionId);
+            reloadThrottleTimers.delete(sessionId);
           }
+          reloadLastFiredAt.delete(sessionId);
         }
 
         // Trigger a final session data reload as a safety net.
-        // During streaming, ai:message-logged events trigger debounced reloads.
+        // During streaming, ai:message-logged events trigger throttled reloads.
         // But those events can be silently dropped if sessionListWorkspaceAtom
         // is null (e.g., after HMR re-evaluates the sessions module, or during
         // a race between listener init and session list init). This final reload
@@ -310,19 +315,36 @@ export function initSessionStateListeners(): () => void {
       return;
     }
 
-    // Debounce session data reload per session.
+    // Throttle session data reload per session (leading + trailing edge).
     // During active streaming, message-logged fires on every chunk which would
     // trigger a full DB reload of ALL messages (2000+) each time. PGLite is
     // single-threaded, so these reads queue up and block writes, causing a
-    // cascading slowdown. Debouncing collapses rapid events into one reload.
-    const existingTimer = reloadDebounceTimers.get(sessionId);
-    if (existingTimer) {
-      clearTimeout(existingTimer);
+    // cascading slowdown. Throttling limits to one reload per RELOAD_THROTTLE_MS
+    // while firing immediately on the first event after a quiet period (so tool
+    // results are picked up promptly, not delayed until streaming stops).
+    {
+      const now = Date.now();
+      const lastFired = reloadLastFiredAt.get(sessionId) ?? 0;
+
+      // Cancel any pending trailing-edge reload
+      const existingTimer = reloadThrottleTimers.get(sessionId);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
+      }
+
+      if (now - lastFired >= RELOAD_THROTTLE_MS) {
+        // Enough time since last reload — fire immediately (leading edge)
+        reloadLastFiredAt.set(sessionId, now);
+        store.set(reloadSessionDataAtom, { sessionId, workspacePath });
+      }
+
+      // Always schedule a trailing-edge reload to catch the final event
+      reloadThrottleTimers.set(sessionId, setTimeout(() => {
+        reloadThrottleTimers.delete(sessionId);
+        reloadLastFiredAt.set(sessionId, Date.now());
+        store.set(reloadSessionDataAtom, { sessionId, workspacePath });
+      }, RELOAD_THROTTLE_MS));
     }
-    reloadDebounceTimers.set(sessionId, setTimeout(() => {
-      reloadDebounceTimers.delete(sessionId);
-      store.set(reloadSessionDataAtom, { sessionId, workspacePath });
-    }, RELOAD_DEBOUNCE_MS));
 
     // Update session metadata with updatedAt timestamp and ensure it's unarchived
     // The database layer already sets is_archived = FALSE when a message is added,
@@ -687,11 +709,12 @@ export function initSessionStateListeners(): () => void {
 
   // Return cleanup function
   return () => {
-    // Clear all pending debounce timers
-    for (const timer of reloadDebounceTimers.values()) {
+    // Clear all pending throttle timers
+    for (const timer of reloadThrottleTimers.values()) {
       clearTimeout(timer);
     }
-    reloadDebounceTimers.clear();
+    reloadThrottleTimers.clear();
+    reloadLastFiredAt.clear();
 
     for (const timer of verificationReloadTimers.values()) {
       clearTimeout(timer);

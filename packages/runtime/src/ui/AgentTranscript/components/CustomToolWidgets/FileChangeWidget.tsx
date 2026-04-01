@@ -12,7 +12,7 @@ import React, { useState, useCallback } from 'react';
 import { useAtomValue } from 'jotai';
 import type { CustomToolWidgetProps } from './index';
 import { interactiveWidgetHostAtom } from '../../../../store/atoms/interactiveWidgetHost';
-import { useElapsedTime } from './useElapsedTime';
+import { useElapsedTimeRef } from './useElapsedTime';
 
 /**
  * Maximum number of lines to show before adding "show more"
@@ -146,7 +146,7 @@ export const FileChangeWidget: React.FC<CustomToolWidgetProps> = ({
 
   const tool = message.toolCall;
   const running = tool ? isToolRunning(tool) : false;
-  const elapsed = useElapsedTime(running, message.timestamp);
+  const elapsedRef = useElapsedTimeRef(running ? message.timestamp : undefined);
 
   if (!tool) return null;
 
@@ -231,7 +231,7 @@ export const FileChangeWidget: React.FC<CustomToolWidgetProps> = ({
           {running && (
             <span className="flex items-center gap-1 text-[0.7rem] font-medium font-sans text-nim-primary">
               <span className="w-2.5 h-2.5 border-[1.5px] border-[color-mix(in_srgb,var(--nim-primary)_30%,transparent)] border-t-nim-primary rounded-full animate-spin" />
-              {elapsed && <span className="tabular-nums">{elapsed}</span>}
+              <span ref={elapsedRef} className="tabular-nums" />
             </span>
           )}
           {!running && !hasError && (
@@ -313,7 +313,7 @@ export const FileChangeWidget: React.FC<CustomToolWidgetProps> = ({
           {running && (
             <span className="flex items-center gap-1 text-[0.7rem] font-medium font-sans text-nim-primary">
               <span className="w-2.5 h-2.5 border-[1.5px] border-[color-mix(in_srgb,var(--nim-primary)_30%,transparent)] border-t-nim-primary rounded-full animate-spin" />
-              Running{elapsed && <span className="tabular-nums">{elapsed}</span>}
+              Running <span ref={elapsedRef} className="tabular-nums" />
             </span>
           )}
           {!running && !hasError && (

@@ -14,7 +14,7 @@ import type { CustomToolWidgetProps } from './index';
 import { copyToClipboard } from '../../../../utils/clipboard';
 import { ToolCallChanges } from '../ToolCallChanges';
 import { unwrapShellCommand } from '../../utils/unwrapShellCommand';
-import { useElapsedTime } from './useElapsedTime';
+import { useElapsedTimeRef } from './useElapsedTime';
 
 /**
  * Maximum number of lines to show before adding "show more" in expanded view
@@ -183,7 +183,7 @@ export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpande
 
   const tool = message.toolCall;
   const isRunning = tool ? isToolRunning(tool) : false;
-  const elapsed = useElapsedTime(isRunning, message.timestamp);
+  const elapsedRef = useElapsedTimeRef(isRunning ? message.timestamp : undefined);
 
   // Reset copied state after timeout
   useEffect(() => {
@@ -272,7 +272,7 @@ export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpande
           {isRunning && (
             <span className="flex items-center gap-1 text-[0.7rem] font-medium font-sans text-nim-primary">
               <span className="w-2.5 h-2.5 border-[1.5px] border-[color-mix(in_srgb,var(--nim-primary)_30%,transparent)] border-t-nim-primary rounded-full animate-spin" />
-              {elapsed && <span className="tabular-nums">{elapsed}</span>}
+              <span ref={elapsedRef} className="tabular-nums" />
             </span>
           )}
           {!isRunning && !hasError && (
@@ -316,7 +316,7 @@ export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpande
           {isRunning && (
             <span className="flex items-center gap-1 text-[0.7rem] font-medium font-sans text-nim-primary">
               <span className="w-2.5 h-2.5 border-[1.5px] border-[color-mix(in_srgb,var(--nim-primary)_30%,transparent)] border-t-nim-primary rounded-full animate-spin" />
-              Running{elapsed && <span className="tabular-nums">{elapsed}</span>}
+              Running <span ref={elapsedRef} className="tabular-nums" />
             </span>
           )}
           {!isRunning && !hasError && (
