@@ -119,7 +119,7 @@ import {
 import { setStorageBackend } from '@nimbalyst/runtime';
 import { store, editorDirtyAtom, makeEditorKey } from '@nimbalyst/runtime/store';
 import { extensionPanelAIContextAtom } from './store/atoms/extensionPanels';
-import { setDiffTreeGroupByDirectoryAtom, setAgentFileScopeModeAtom } from './store/atoms/projectState';
+import { setDiffTreeGroupByDirectoryAtom, setAgentFileScopeModeAtom, setHiddenGutterButtonsAtom } from './store/atoms/projectState';
 import { toggleSessionHistoryCollapsedAtom, scrollToMessageAtom } from './store/atoms/agentMode';
 import { setDeveloperFeatureSettingsAtom } from './store/atoms/appSettings';
 import { isCollabUri } from './utils/collabUri';
@@ -379,9 +379,10 @@ export default function App() {
   // Extension panel AI context (synced from PanelContainer when aiSupported panels are active)
   const extensionPanelAIContext = useAtomValue(extensionPanelAIContextAtom);
 
-  // Diff tree grouping state - setter for hydration from workspace state
+  // Workspace state hydration setters
   const setDiffTreeGroupByDirectory = useSetAtom(setDiffTreeGroupByDirectoryAtom);
   const setAgentFileScopeMode = useSetAtom(setAgentFileScopeModeAtom);
+  const setHiddenGutterButtons = useSetAtom(setHiddenGutterButtonsAtom);
 
   // Check if a fullscreen extension panel is active (hides other content modes)
   const activeFullscreenPanel = activeExtensionPanel ? getPanelById(activeExtensionPanel) : null;
@@ -490,11 +491,15 @@ export default function App() {
         if (state?.agentFileScopeMode !== undefined) {
           setAgentFileScopeMode({ fileScopeMode: state.agentFileScopeMode, workspacePath });
         }
+        // Hydrate hidden gutter buttons into Jotai atom
+        if (state?.hiddenGutterButtons?.length) {
+          setHiddenGutterButtons(state.hiddenGutterButtons);
+        }
       })
       .catch(error => {
         console.error('[App] Failed to load workspace state:', error);
       });
-  }, [workspacePath, setDiffTreeGroupByDirectory, setAgentFileScopeMode]);
+  }, [workspacePath, setDiffTreeGroupByDirectory, setAgentFileScopeMode, setHiddenGutterButtons]);
 
   // Save active mode when it changes
   useEffect(() => {

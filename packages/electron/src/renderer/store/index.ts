@@ -249,29 +249,9 @@ export {
   type AgentModeLayout,
 } from './atoms/agentMode';
 
-// Project state atoms (Electron persistence)
+// Project state atoms
 export {
   projectStateAtom,
-  persistNow,
-  sidebarWidthAtom,
-  sidebarCollapsedAtom,
-  aiPanelWidthAtom,
-  aiPanelCollapsedAtom,
-  bottomPanelHeightAtom,
-  bottomPanelTypeAtom,
-  persistedExpandedDirsAtom,
-  recentFilesAtom,
-  setSidebarWidthAtom,
-  setSidebarCollapsedAtom,
-  setAiPanelWidthAtom,
-  setAiPanelCollapsedAtom,
-  setBottomPanelHeightAtom,
-  setBottomPanelTypeAtom,
-  setExpandedDirsAtom,
-  addRecentFileAtom,
-  updateContextTabsAtom,
-  loadProjectStateAtom,
-  resetProjectStateAtom,
   type ProjectState,
   type PanelLayout,
   type FileTreeState,
@@ -458,3 +438,18 @@ export {
   clearVoiceActiveSession,
   persistAndClearVoiceSession,
 } from './listeners/voiceModeListeners';
+
+// Background task atoms (dev-only tracker shell)
+export {
+  backgroundTaskSyncStatusAtom,
+  backgroundTaskAiTasksAtom,
+  backgroundTaskSyncTaskAtom,
+  backgroundTasksAtom,
+  backgroundTasksByCategoryAtom,
+  backgroundTaskCountAtom,
+  backgroundTaskHasErrorAtom,
+  type BackgroundTask,
+  type BackgroundTaskCategory,
+  type BackgroundTaskStatus,
+  type BackgroundTaskSyncState,
+} from './atoms/backgroundTasks';

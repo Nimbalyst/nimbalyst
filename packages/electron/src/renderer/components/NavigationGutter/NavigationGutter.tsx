@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { usePostHog } from 'posthog-js/react';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import type { ContentMode } from '../../types/WindowModeTypes';
 import type { SettingsCategory } from '../Settings/SettingsSidebar';
@@ -12,9 +12,11 @@ import { TrustIndicator } from '../TrustIndicator';
 import { ExtensionDevIndicator } from '../ExtensionDevIndicator';
 import { ClaudeUsageIndicator } from '../ClaudeUsageIndicator';
 import { CodexUsageIndicator } from '../CodexUsageIndicator';
+import { BackgroundTaskIndicator } from '../BackgroundTaskIndicator';
 import { VoiceModeButton } from '../UnifiedAI/VoiceModeButton';
 import { useExtensionGutterButtons, useExtensionBottomPanelButtons } from '../../extensions/panels/usePanels';
 import { HelpTooltip } from '../../help';
+import { setActiveSessionAtom } from '../../store';
 import { terminalFeatureAvailableAtom, syncEnabledAtom, syncEnabledProjectsAtom } from '../../store/atoms/appSettings';
 import { workspaceHasTeamAtom } from '../../store/atoms/collabDocuments';
 import { useAlphaFeature } from '../../hooks/useAlphaFeature';
@@ -90,6 +92,8 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   onExtensionBottomPanelChange,
 }) => {
   const posthog = usePostHog();
+  const isDevMode = import.meta.env.DEV || window.IS_DEV_MODE;
+  const setActiveSession = useSetAtom(setActiveSessionAtom);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -540,6 +544,16 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
           </div>
         )}
 
+        {isDevMode && (
+          <BackgroundTaskIndicator
+            workspacePath={workspacePath || undefined}
+            onOpenSession={(sessionId) => {
+              setActiveSession(sessionId);
+              onContentModeChange('agent');
+            }}
+          />
+        )}
+
         {/* Trust Indicator - Shows agent trust status */}
         {!isHidden('trust-indicator') && (
           <div onContextMenu={(e) => openContextMenu(e, 'trust-indicator')}>
@@ -622,6 +636,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
           y={contextMenu.y}
           targetButton={contextMenu.targetButton}
           onClose={() => setContextMenu(null)}
+          workspacePath={workspacePath || ''}
         />
       )}
     </div>

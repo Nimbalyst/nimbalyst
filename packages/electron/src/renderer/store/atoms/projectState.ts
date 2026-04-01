@@ -1,14 +1,11 @@
 /**
  * Project State Atom
  *
- * Unified project state persisted as a single blob via IPC.
- * This consolidates all window-level state that should survive app restart.
+ * Holds in-memory project state with per-field persistence via workspace:update-state IPC.
+ * Each setter atom that needs persistence calls workspace:update-state directly
+ * (the same pattern used by every other piece of state that survives restart).
  *
- * Key principles:
- * - Single IPC call for persistence (atomic load/save)
- * - Debounced writes to avoid excessive IPC traffic
- * - Derived atoms for specific pieces (read-only slices)
- * - Setter atoms that update slice and trigger persist
+ * Types are still exported for use elsewhere even when the atom itself is internal.
  */
 
 import { atom } from 'jotai';
@@ -88,10 +85,10 @@ export type HideableGutterButton =
   | 'extension-dev';
 
 /**
- * Complete project state for persistence.
+ * Complete project state.
  */
 export interface ProjectState {
-  version: number; // Schema version for migrations
+  version: number;
   contexts: Record<EditorContext, ContextTabState>;
   layout: PanelLayout;
   fileTree: FileTreeState;
@@ -130,7 +127,7 @@ const defaultProjectState: ProjectState = {
     groupByDirectory: true,
   },
   agentMode: {
-    fileScopeMode: 'session-files', // Default to showing all session edits
+    fileScopeMode: 'session-files',
   },
   lastOpenedFile: null,
   recentFiles: [],
@@ -138,102 +135,11 @@ const defaultProjectState: ProjectState = {
 };
 
 /**
- * The main project state atom.
- * Should be initialized from IPC on window load.
+ * The main project state atom (in-memory only).
  */
 export const projectStateAtom = atom<ProjectState>(defaultProjectState);
 
-/**
- * Debounce timer for persistence.
- */
-let persistDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-const PERSIST_DEBOUNCE_MS = 1000;
-
-/**
- * Persist project state to main process.
- * Debounced to avoid excessive IPC calls during rapid changes.
- */
-function schedulePersist(state: ProjectState): void {
-  if (persistDebounceTimer) {
-    clearTimeout(persistDebounceTimer);
-  }
-  persistDebounceTimer = setTimeout(() => {
-    persistDebounceTimer = null;
-    // Only persist if electronAPI is available (not in tests)
-    if (typeof window !== 'undefined' && window.electronAPI) {
-      window.electronAPI.send('project-state:save', state);
-    }
-  }, PERSIST_DEBOUNCE_MS);
-}
-
-/**
- * Force immediate persist (e.g., on window close).
- */
-export function persistNow(state: ProjectState): void {
-  if (persistDebounceTimer) {
-    clearTimeout(persistDebounceTimer);
-    persistDebounceTimer = null;
-  }
-  if (typeof window !== 'undefined' && window.electronAPI) {
-    window.electronAPI.send('project-state:save', state);
-  }
-}
-
-// === Derived read-only atoms (slices) ===
-
-/**
- * Sidebar width.
- */
-export const sidebarWidthAtom = atom(
-  (get) => get(projectStateAtom).layout.sidebarWidth
-);
-
-/**
- * Sidebar collapsed state.
- */
-export const sidebarCollapsedAtom = atom(
-  (get) => get(projectStateAtom).layout.sidebarCollapsed
-);
-
-/**
- * AI panel width.
- */
-export const aiPanelWidthAtom = atom(
-  (get) => get(projectStateAtom).layout.aiPanelWidth
-);
-
-/**
- * AI panel collapsed state.
- */
-export const aiPanelCollapsedAtom = atom(
-  (get) => get(projectStateAtom).layout.aiPanelCollapsed
-);
-
-/**
- * Bottom panel height.
- */
-export const bottomPanelHeightAtom = atom(
-  (get) => get(projectStateAtom).layout.bottomPanelHeight
-);
-
-/**
- * Bottom panel type.
- */
-export const bottomPanelTypeAtom = atom(
-  (get) => get(projectStateAtom).layout.bottomPanelType
-);
-
-/**
- * File tree expanded directories.
- */
-export const persistedExpandedDirsAtom = atom(
-  (get) => get(projectStateAtom).fileTree.expandedDirs
-);
-
-/**
- * Recent files list.
- */
-export const recentFilesAtom = atom((get) => get(projectStateAtom).recentFiles);
+// === Derived read-only atoms ===
 
 /**
  * Diff tree group by directory setting.
@@ -244,135 +150,33 @@ export const diffTreeGroupByDirectoryAtom = atom(
 
 /**
  * Agent mode file scope mode setting.
- * Workspace-level setting that persists across all sessions.
  */
 export const agentFileScopeModeAtom = atom(
   (get) => get(projectStateAtom).agentMode.fileScopeMode
 );
 
-// === Setter atoms (update slice + trigger persist) ===
-
 /**
- * Set sidebar width.
+ * Which gutter buttons are currently hidden.
  */
-export const setSidebarWidthAtom = atom(
-  null,
-  (get, set, width: number) => {
-    const state = get(projectStateAtom);
-    const newState = {
-      ...state,
-      layout: { ...state.layout, sidebarWidth: width },
-    };
-    set(projectStateAtom, newState);
-    schedulePersist(newState);
-  }
+export const hiddenGutterButtonsAtom = atom(
+  (get) => get(projectStateAtom).hiddenGutterButtons ?? []
 );
 
-/**
- * Set sidebar collapsed.
- */
-export const setSidebarCollapsedAtom = atom(
-  null,
-  (get, set, collapsed: boolean) => {
-    const state = get(projectStateAtom);
-    const newState = {
-      ...state,
-      layout: { ...state.layout, sidebarCollapsed: collapsed },
-    };
-    set(projectStateAtom, newState);
-    schedulePersist(newState);
-  }
-);
-
-/**
- * Set AI panel width.
- */
-export const setAiPanelWidthAtom = atom(null, (get, set, width: number) => {
-  const state = get(projectStateAtom);
-  const newState = {
-    ...state,
-    layout: { ...state.layout, aiPanelWidth: width },
-  };
-  set(projectStateAtom, newState);
-  schedulePersist(newState);
-});
-
-/**
- * Set AI panel collapsed.
- */
-export const setAiPanelCollapsedAtom = atom(
-  null,
-  (get, set, collapsed: boolean) => {
-    const state = get(projectStateAtom);
-    const newState = {
-      ...state,
-      layout: { ...state.layout, aiPanelCollapsed: collapsed },
-    };
-    set(projectStateAtom, newState);
-    schedulePersist(newState);
-  }
-);
-
-/**
- * Set bottom panel height.
- */
-export const setBottomPanelHeightAtom = atom(
-  null,
-  (get, set, height: number) => {
-    const state = get(projectStateAtom);
-    const newState = {
-      ...state,
-      layout: { ...state.layout, bottomPanelHeight: height },
-    };
-    set(projectStateAtom, newState);
-    schedulePersist(newState);
-  }
-);
-
-/**
- * Set bottom panel type.
- */
-export const setBottomPanelTypeAtom = atom(
-  null,
-  (get, set, type: TrackerType | null) => {
-    const state = get(projectStateAtom);
-    const newState = {
-      ...state,
-      layout: { ...state.layout, bottomPanelType: type },
-    };
-    set(projectStateAtom, newState);
-    schedulePersist(newState);
-  }
-);
-
-/**
- * Update file tree expanded directories.
- */
-export const setExpandedDirsAtom = atom(null, (get, set, dirs: string[]) => {
-  const state = get(projectStateAtom);
-  const newState = {
-    ...state,
-    fileTree: { ...state.fileTree, expandedDirs: dirs },
-  };
-  set(projectStateAtom, newState);
-  schedulePersist(newState);
-});
+// === Setter atoms (each persists its own field via workspace:update-state) ===
 
 /**
  * Set diff tree group by directory.
- * Also persists to workspace state via IPC.
+ * Persists to workspace state via IPC.
  */
 export const setDiffTreeGroupByDirectoryAtom = atom(
   null,
   (get, set, payload: { groupByDirectory: boolean; workspacePath: string }) => {
     const { groupByDirectory, workspacePath } = payload;
     const state = get(projectStateAtom);
-    const newState = {
+    set(projectStateAtom, {
       ...state,
       diffTree: { ...state.diffTree, groupByDirectory },
-    };
-    set(projectStateAtom, newState);
-    // Persist to workspace state via IPC
+    });
     if (workspacePath && typeof window !== 'undefined' && window.electronAPI) {
       window.electronAPI.invoke('workspace:update-state', workspacePath, {
         diffTreeGroupByDirectory: groupByDirectory,
@@ -385,19 +189,17 @@ export const setDiffTreeGroupByDirectoryAtom = atom(
 
 /**
  * Set agent file scope mode.
- * Also persists to workspace state via IPC.
+ * Persists to workspace state via IPC.
  */
 export const setAgentFileScopeModeAtom = atom(
   null,
   (get, set, payload: { fileScopeMode: AgentFileScopeMode; workspacePath: string }) => {
     const { fileScopeMode, workspacePath } = payload;
     const state = get(projectStateAtom);
-    const newState = {
+    set(projectStateAtom, {
       ...state,
       agentMode: { ...state.agentMode, fileScopeMode },
-    };
-    set(projectStateAtom, newState);
-    // Persist to workspace state via IPC
+    });
     if (workspacePath && typeof window !== 'undefined' && window.electronAPI) {
       window.electronAPI.invoke('workspace:update-state', workspacePath, {
         agentFileScopeMode: fileScopeMode,
@@ -408,116 +210,57 @@ export const setAgentFileScopeModeAtom = atom(
   }
 );
 
-// === Hidden Gutter Buttons ===
-
 /**
- * Which gutter buttons are currently hidden.
+ * Set hidden gutter buttons from persisted workspace state.
+ * Called on startup hydration.
  */
-export const hiddenGutterButtonsAtom = atom(
-  (get) => get(projectStateAtom).hiddenGutterButtons ?? []
+export const setHiddenGutterButtonsAtom = atom(
+  null,
+  (get, set, buttons: HideableGutterButton[]) => {
+    const state = get(projectStateAtom);
+    set(projectStateAtom, { ...state, hiddenGutterButtons: buttons });
+  }
 );
 
 /**
  * Toggle a gutter button's hidden state.
+ * Persists to workspace state via IPC.
  */
 export const toggleGutterButtonHiddenAtom = atom(
   null,
-  (get, set, buttonId: HideableGutterButton) => {
+  (get, set, payload: { buttonId: HideableGutterButton; workspacePath: string }) => {
+    const { buttonId, workspacePath } = payload;
     const state = get(projectStateAtom);
     const current = state.hiddenGutterButtons ?? [];
     const hidden = current.includes(buttonId)
       ? current.filter((id) => id !== buttonId)
       : [...current, buttonId];
-    const newState = { ...state, hiddenGutterButtons: hidden };
-    set(projectStateAtom, newState);
-    schedulePersist(newState);
+    set(projectStateAtom, { ...state, hiddenGutterButtons: hidden });
+    if (workspacePath && typeof window !== 'undefined' && window.electronAPI) {
+      window.electronAPI.invoke('workspace:update-state', workspacePath, {
+        hiddenGutterButtons: hidden,
+      }).catch((err: unknown) => {
+        console.error('[projectState] Failed to persist hiddenGutterButtons:', err);
+      });
+    }
   }
 );
 
 /**
  * Show all hidden gutter buttons (reset).
+ * Persists to workspace state via IPC.
  */
-export const showAllGutterButtonsAtom = atom(null, (get, set) => {
-  const state = get(projectStateAtom);
-  const newState = { ...state, hiddenGutterButtons: [] };
-  set(projectStateAtom, newState);
-  schedulePersist(newState);
-});
-
-/**
- * Add a file to recent files.
- */
-export const addRecentFileAtom = atom(null, (get, set, filePath: string) => {
-  const state = get(projectStateAtom);
-  const recentFiles = state.recentFiles.filter((f) => f !== filePath);
-  recentFiles.unshift(filePath);
-  // Keep only last 20
-  const newRecentFiles = recentFiles.slice(0, 20);
-  const newState = {
-    ...state,
-    recentFiles: newRecentFiles,
-    lastOpenedFile: filePath,
-  };
-  set(projectStateAtom, newState);
-  schedulePersist(newState);
-});
-
-/**
- * Update tabs for a context.
- */
-export const updateContextTabsAtom = atom(
+export const showAllGutterButtonsAtom = atom(
   null,
-  (
-    get,
-    set,
-    {
-      context,
-      tabs,
-      activeTabKey,
-    }: {
-      context: EditorContext;
-      tabs: PersistedTabInfo[];
-      activeTabKey: EditorKey | null;
-    }
-  ) => {
+  (get, set, workspacePath: string) => {
     const state = get(projectStateAtom);
-    const newState = {
-      ...state,
-      contexts: {
-        ...state.contexts,
-        [context]: { tabs, activeTabKey },
-      },
-    };
-    set(projectStateAtom, newState);
-    schedulePersist(newState);
+    set(projectStateAtom, { ...state, hiddenGutterButtons: [] });
+    if (workspacePath && typeof window !== 'undefined' && window.electronAPI) {
+      window.electronAPI.invoke('workspace:update-state', workspacePath, {
+        hiddenGutterButtons: [],
+      }).catch((err: unknown) => {
+        console.error('[projectState] Failed to persist hiddenGutterButtons:', err);
+      });
+    }
   }
 );
-
-/**
- * Load project state from persisted data.
- * Called on window init with data from main process.
- */
-export const loadProjectStateAtom = atom(
-  null,
-  (_get, set, state: Partial<ProjectState>) => {
-    // Merge with defaults to handle missing fields from older versions
-    const merged: ProjectState = {
-      ...defaultProjectState,
-      ...state,
-      layout: { ...defaultProjectState.layout, ...state.layout },
-      fileTree: { ...defaultProjectState.fileTree, ...state.fileTree },
-      diffTree: { ...defaultProjectState.diffTree, ...state.diffTree },
-      agentMode: { ...defaultProjectState.agentMode, ...state.agentMode },
-      contexts: { ...defaultProjectState.contexts, ...state.contexts },
-    };
-    set(projectStateAtom, merged);
-  }
-);
-
-/**
- * Reset to default state.
- */
-export const resetProjectStateAtom = atom(null, (_get, set) => {
-  set(projectStateAtom, defaultProjectState);
-  schedulePersist(defaultProjectState);
-});

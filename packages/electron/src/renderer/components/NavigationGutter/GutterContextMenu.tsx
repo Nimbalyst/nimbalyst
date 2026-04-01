@@ -27,9 +27,10 @@ interface GutterContextMenuProps {
   onClose: () => void;
   /** When set, show "Hide <button>" as the primary action */
   targetButton?: HideableGutterButton;
+  workspacePath: string;
 }
 
-export function GutterContextMenu({ x, y, onClose, targetButton }: GutterContextMenuProps) {
+export function GutterContextMenu({ x, y, onClose, targetButton, workspacePath }: GutterContextMenuProps) {
   const hiddenButtons = useAtomValue(hiddenGutterButtonsAtom);
   const toggleHidden = useSetAtom(toggleGutterButtonHiddenAtom);
   const showAll = useSetAtom(showAllGutterButtonsAtom);
@@ -63,7 +64,7 @@ export function GutterContextMenu({ x, y, onClose, targetButton }: GutterContext
             <button
               className="w-full flex items-center gap-2 px-2.5 py-1.5 text-nim hover:bg-nim-tertiary cursor-pointer border-none bg-transparent text-left rounded-sm transition-colors duration-75"
               onClick={() => {
-                toggleHidden(targetButton);
+                toggleHidden({ buttonId: targetButton, workspacePath });
                 onClose();
               }}
             >
@@ -82,7 +83,7 @@ export function GutterContextMenu({ x, y, onClose, targetButton }: GutterContext
                 key={id}
                 className="w-full flex items-center gap-2 px-2.5 py-1.5 text-nim hover:bg-nim-tertiary cursor-pointer border-none bg-transparent text-left rounded-sm transition-colors duration-75"
                 onClick={() => {
-                  toggleHidden(id);
+                  toggleHidden({ buttonId: id, workspacePath });
                   onClose();
                 }}
               >
@@ -94,7 +95,7 @@ export function GutterContextMenu({ x, y, onClose, targetButton }: GutterContext
             <button
               className="w-full flex items-center gap-2 px-2.5 py-1.5 text-nim hover:bg-nim-tertiary cursor-pointer border-none bg-transparent text-left rounded-sm transition-colors duration-75"
               onClick={() => {
-                showAll();
+                showAll(workspacePath);
                 onClose();
               }}
             >

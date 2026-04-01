@@ -19,6 +19,11 @@ export type { SessionState, SessionWindow } from '../types';
 export type CompletionSoundType = 'chime' | 'bell' | 'pop' | 'alert' | 'none';
 export type ReleaseChannel = 'stable' | 'alpha';
 export type WorkspaceFileTreeFilter = 'all' | 'markdown' | 'known' | 'git-uncommitted' | 'git-worktree' | 'ai-read' | 'ai-written';
+export type TrackerSyncModeSetting = 'local' | 'shared' | 'hybrid';
+export interface TrackerSyncPolicySetting {
+  mode: TrackerSyncModeSetting;
+  scope?: 'project' | 'workspace';
+}
 
 /**
  * Extension settings stored per extension.
@@ -370,10 +375,13 @@ export interface WorkspaceState {
     mergedUpdateBase64: string;
     updatedAt: number;
   }>;
+  trackerSyncPolicies?: Record<string, TrackerSyncModeSetting | TrackerSyncPolicySetting>;
   // Account identity bound to this workspace (personalOrgId).
   // Set once when the workspace is first synced. Different workspaces can use different accounts.
   // Defaults to the primary account if not set.
   accountId?: string;
+  // Hidden gutter buttons (navigation sidebar)
+  hiddenGutterButtons?: string[];
   lastUpdated: number;
 }
 
