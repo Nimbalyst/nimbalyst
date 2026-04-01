@@ -756,16 +756,32 @@ export class TranscriptTransformer {
       return 0;
     }
 
-    const eventId = toolEventIds.get(toolUseId);
+    let eventId = toolEventIds.get(toolUseId);
+    // On resume, the tool_use may have been processed in a previous batch.
+    // Fall back to a DB lookup so the result still gets attached.
+    if (!eventId) {
+      const existing = await this.transcriptStore.findByProviderToolCallId(toolUseId);
+      if (existing) {
+        eventId = existing.id;
+        toolEventIds.set(toolUseId, eventId);
+      }
+    }
     if (!eventId) return 0;
 
     let resultText = '';
     if (typeof block.content === 'string') {
       resultText = block.content;
     } else if (Array.isArray(block.content)) {
-      for (const inner of block.content) {
-        if (inner.type === 'text' && inner.text) {
-          resultText += inner.text;
+      const hasNonText = block.content.some((inner: any) => inner.type !== 'text');
+      if (hasNonText) {
+        // Preserve non-text content (e.g. image blocks) as JSON so
+        // CanonicalTranscriptConverter.parseToolResult() can reconstruct it
+        resultText = JSON.stringify(block.content);
+      } else {
+        for (const inner of block.content) {
+          if (inner.type === 'text' && inner.text) {
+            resultText += inner.text;
+          }
         }
       }
     } else if (block.content != null) {

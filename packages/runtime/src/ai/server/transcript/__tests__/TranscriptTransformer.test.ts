@@ -508,6 +508,128 @@ describe('TranscriptTransformer', () => {
       expect(payload.result).toBe('File contents here');
     });
 
+    it('preserves image content in tool results as JSON', async () => {
+      const imageData = 'iVBORw0KGgoAAAANSUhEUg=='; // fake base64
+      const rawStore = createMockRawStore([
+        // Tool use
+        makeRawMessage({
+          id: 1,
+          sessionId: SESSION_ID,
+          direction: 'output',
+          content: JSON.stringify({
+            type: 'assistant',
+            message: {
+              content: [
+                {
+                  type: 'tool_use',
+                  id: 'tool-img',
+                  name: 'mcp__nimbalyst-mcp__capture_editor_screenshot',
+                  input: { file_path: '/test.excalidraw' },
+                },
+              ],
+            },
+          }),
+        }),
+        // Tool result with image content block (no text blocks)
+        makeRawMessage({
+          id: 2,
+          sessionId: SESSION_ID,
+          direction: 'input',
+          content: JSON.stringify({
+            type: 'user',
+            message: {
+              role: 'user',
+              content: [
+                {
+                  type: 'tool_result',
+                  tool_use_id: 'tool-img',
+                  content: [{ type: 'image', data: imageData, mimeType: 'image/png' }],
+                },
+              ],
+            },
+          }),
+        }),
+      ]);
+      const transformer = new TranscriptTransformer(rawStore, transcriptStore, metadataStore);
+
+      await transformer.ensureTransformed(SESSION_ID, PROVIDER);
+
+      const events = await transcriptStore.getSessionEvents(SESSION_ID);
+      expect(events).toHaveLength(1);
+
+      const payload = events[0].payload as any;
+      expect(payload.status).toBe('completed');
+      // Result should be JSON-stringified array preserving image data
+      const parsed = JSON.parse(payload.result);
+      expect(parsed).toEqual([{ type: 'image', data: imageData, mimeType: 'image/png' }]);
+    });
+
+    it('attaches tool result from a resume batch to a tool_use from a previous batch', async () => {
+      // Batch 1: only the tool_use
+      const batch1Messages = [
+        makeRawMessage({
+          id: 1,
+          sessionId: SESSION_ID,
+          direction: 'output',
+          content: JSON.stringify({
+            type: 'assistant',
+            message: {
+              content: [
+                {
+                  type: 'tool_use',
+                  id: 'tool-resume',
+                  name: 'Read',
+                  input: { file_path: '/src/index.ts' },
+                },
+              ],
+            },
+          }),
+        }),
+      ];
+      const rawStore1 = createMockRawStore(batch1Messages);
+      const transformer = new TranscriptTransformer(rawStore1, transcriptStore, metadataStore);
+
+      // First transform: processes tool_use only
+      await transformer.ensureTransformed(SESSION_ID, PROVIDER);
+
+      const eventsAfterBatch1 = await transcriptStore.getSessionEvents(SESSION_ID);
+      expect(eventsAfterBatch1).toHaveLength(1);
+      expect((eventsAfterBatch1[0].payload as any).status).toBe('running');
+
+      // Batch 2: tool_result arrives later
+      const batch2Messages = [
+        ...batch1Messages,
+        makeRawMessage({
+          id: 2,
+          sessionId: SESSION_ID,
+          direction: 'input',
+          content: JSON.stringify({
+            type: 'user',
+            message: {
+              role: 'user',
+              content: [
+                {
+                  type: 'tool_result',
+                  tool_use_id: 'tool-resume',
+                  content: [{ type: 'text', text: 'File contents here' }],
+                },
+              ],
+            },
+          }),
+        }),
+      ];
+      const rawStore2 = createMockRawStore(batch2Messages);
+      const transformer2 = new TranscriptTransformer(rawStore2, transcriptStore, metadataStore);
+
+      // Resume transform: should attach result to existing tool_call event
+      await transformer2.ensureTransformed(SESSION_ID, PROVIDER);
+
+      const eventsAfterBatch2 = await transcriptStore.getSessionEvents(SESSION_ID);
+      expect(eventsAfterBatch2).toHaveLength(1);
+      expect((eventsAfterBatch2[0].payload as any).status).toBe('completed');
+      expect((eventsAfterBatch2[0].payload as any).result).toBe('File contents here');
+    });
+
     it('transforms system messages', async () => {
       const rawStore = createMockRawStore([
         makeRawMessage({
