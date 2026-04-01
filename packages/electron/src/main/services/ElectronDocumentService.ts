@@ -19,7 +19,7 @@ import { updateTrackerInFrontmatter, updateInlineTrackerItem, removeInlineTracke
 import { database } from '../database/PGLiteDatabaseWorker';
 import { shouldExcludeDir } from '../utils/fileFilters';
 import { isPathInWorkspace, getRelativeWorkspacePath } from '../utils/workspaceDetection';
-import { syncTrackerItem, isTrackerSyncActive } from './TrackerSyncManager';
+import { syncTrackerItem, unsyncTrackerItem, isTrackerSyncActive } from './TrackerSyncManager';
 
 export class ElectronDocumentService implements DocumentService {
   private workspacePath: string;
@@ -1096,6 +1096,15 @@ export class ElectronDocumentService implements DocumentService {
       `DELETE FROM tracker_items WHERE id = $1`,
       [itemId]
     );
+
+    // Notify sync server so other clients remove the item too
+    if (isTrackerSyncActive(this.workspacePath)) {
+      try {
+        await unsyncTrackerItem(itemId, this.workspacePath);
+      } catch (syncErr) {
+        console.error('[DocumentService] deleteTrackerItem sync failed:', syncErr);
+      }
+    }
 
     const changeEvent: TrackerItemChangeEvent = {
       added: [],

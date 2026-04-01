@@ -159,14 +159,46 @@ export async function getOrgScopedJwt(orgId: string, accountOrgId?: string): Pro
     throw new Error('Not authenticated. Sign in first.');
   }
 
-  const response = await net.fetch(`${httpUrl}/api/teams/${orgId}/switch`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${personalJwt}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ sessionToken }),
-  });
+  const doExchange = async (jwt: string, token: string) =>
+    net.fetch(`${httpUrl}/api/teams/${orgId}/switch`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${jwt}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ sessionToken: token }),
+    });
+
+  let response = await doExchange(personalJwt, sessionToken);
+
+  // On 401, refresh the personal session and retry once.
+  // The personal JWT expires after ~5 minutes; reconnecting tracker sync
+  // after a WebSocket drop hits this path routinely.
+  if (response.status === 401) {
+    logger.main.info(`[TeamService] getOrgScopedJwt: 401 for ${orgId}, refreshing session...`);
+    let refreshed = false;
+    try {
+      if (accountOrgId) {
+        const freshJwt = await refreshSessionForAccount(accountOrgId);
+        refreshed = !!freshJwt;
+      } else {
+        refreshed = await refreshSession();
+      }
+    } catch {
+      // Network error -- can't retry
+    }
+    if (refreshed) {
+      const freshJwt = accountOrgId
+        ? getSessionJwtForAccount(accountOrgId)
+        : getSessionJwt();
+      const freshToken = accountOrgId
+        ? getSessionTokenForAccount(accountOrgId)
+        : getSessionToken();
+      if (freshJwt && freshToken) {
+        response = await doExchange(freshJwt, freshToken);
+      }
+    }
+  }
 
   if (!response.ok) {
     const errData = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { error?: string };

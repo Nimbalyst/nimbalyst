@@ -160,13 +160,10 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
     return;
   }
 
-  // Check sync config - tracker sync works if global sync is enabled OR if this
-  // specific project has sync enabled (enabledProjects list)
+  // Read sync config for server URL / environment only.
+  // Tracker sync connects whenever the workspace is matched to a team --
+  // it does NOT require session/document sync to be enabled.
   const config = getSessionSyncConfig();
-  const projectSyncEnabled = config?.enabledProjects?.includes(workspacePath);
-  if (!config?.enabled && !projectSyncEnabled) {
-    return;
-  }
 
   // Require authentication
   if (!isAuthenticated()) {
