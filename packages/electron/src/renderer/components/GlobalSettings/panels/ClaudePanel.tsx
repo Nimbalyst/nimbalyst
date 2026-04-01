@@ -1,5 +1,6 @@
 import React from 'react';
 import { ProviderConfig, Model } from '../../Settings/SettingsView';
+import { SettingsToggle } from '../SettingsToggle';
 
 interface ClaudePanelProps {
   config: ProviderConfig;
@@ -36,18 +37,12 @@ export function ClaudePanel({
         </p>
       </div>
 
-      <div className="provider-enable flex items-center justify-between gap-4 py-4 mb-4 border-b border-[var(--nim-border)]">
-        <span className="provider-enable-label text-sm font-medium text-[var(--nim-text)]">Enable Claude</span>
-        <label className="provider-toggle relative inline-block w-11 h-6 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={config.enabled}
-            onChange={(e) => onToggle(e.target.checked)}
-            className="opacity-0 w-0 h-0 absolute"
-          />
-          <span className="provider-toggle-slider absolute cursor-pointer inset-0 rounded-full transition-all bg-[var(--nim-bg-tertiary)] before:absolute before:content-[''] before:h-5 before:w-5 before:left-0.5 before:bottom-0.5 before:rounded-full before:transition-all before:bg-white before:shadow-sm"></span>
-        </label>
-      </div>
+      <SettingsToggle
+        variant="enable"
+        name="Enable Claude"
+        checked={config.enabled}
+        onChange={onToggle}
+      />
 
       {config.enabled && (
         <>

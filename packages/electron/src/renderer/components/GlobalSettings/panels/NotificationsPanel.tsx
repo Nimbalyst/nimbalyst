@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAtom } from 'jotai';
 import { getSoundPlayer } from '../../../services/SoundPlayer';
+import { SettingsToggle } from '../SettingsToggle';
 import {
   notificationSettingsAtom,
   setNotificationSettingsAtom,
@@ -88,22 +89,12 @@ export function NotificationsPanel() {
           Play a sound when the AI or agent completes a turn and is ready for more input.
         </p>
 
-        <div className="setting-item py-3">
-          <label className="setting-label flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={completionSoundEnabled}
-              onChange={(e) => updateSettings({ completionSoundEnabled: e.target.checked })}
-              className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
-            />
-            <div className="setting-text flex flex-col gap-0.5">
-              <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Enable Completion Sounds</span>
-              <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
-                Play an audio notification when AI chat or agentic panel completes a response.
-              </span>
-            </div>
-          </label>
-        </div>
+        <SettingsToggle
+          checked={completionSoundEnabled}
+          onChange={(checked) => updateSettings({ completionSoundEnabled: checked })}
+          name="Enable Completion Sounds"
+          description="Play an audio notification when AI chat or agent completes a response."
+        />
 
         {completionSoundEnabled && (
           <div className="setting-item py-3 mt-4">
@@ -145,51 +136,28 @@ export function NotificationsPanel() {
           Show system notifications when AI responses complete while the app is in the background.
         </p>
 
-        <div className="setting-item py-3">
-          <label className="setting-label flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={osNotificationsEnabled}
-              onChange={(e) => {
-                const enabled = e.target.checked;
-                updateSettings({ osNotificationsEnabled: enabled });
-                if (enabled) {
-                  void handleTestNotification();
-                } else {
-                  setNotificationHelp(null);
-                }
-              }}
-              className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
-            />
-            <div className="setting-text flex flex-col gap-0.5">
-              <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Enable OS Notifications</span>
-              <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
-                Display native system notifications when AI completes a response and the app window is not focused.
-                Respects system Do Not Disturb settings.
-              </span>
-            </div>
-          </label>
-        </div>
+        <SettingsToggle
+          checked={osNotificationsEnabled}
+          onChange={(checked) => {
+            updateSettings({ osNotificationsEnabled: checked });
+            if (checked) {
+              void handleTestNotification();
+            } else {
+              setNotificationHelp(null);
+            }
+          }}
+          name="Enable OS Notifications"
+          description="Native system notifications when AI completes a response. Respects Do Not Disturb."
+        />
 
         {osNotificationsEnabled && (
           <>
-            <div className="setting-item py-3">
-              <label className="setting-label flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={notifyWhenFocused}
-                  onChange={(e) => updateSettings({ notifyWhenFocused: e.target.checked })}
-                  className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
-                />
-                <div className="setting-text flex flex-col gap-0.5">
-                  <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Notify Even When Focused</span>
-                  <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
-                    Show notifications even when the app is focused, unless you are already viewing that session.
-                    Useful when working in one session and waiting for another to complete.
-                  </span>
-                </div>
-              </label>
-            </div>
+            <SettingsToggle
+              checked={notifyWhenFocused}
+              onChange={(checked) => updateSettings({ notifyWhenFocused: checked })}
+              name="Notify Even When Focused"
+              description="Show notifications even when the app is focused, unless viewing that session."
+            />
 
             <div className="setting-item py-3">
               <div className="setting-text flex flex-col gap-2">
@@ -220,23 +188,12 @@ export function NotificationsPanel() {
           Show system notifications when an AI session needs your input.
         </p>
 
-        <div className="setting-item py-3">
-          <label className="setting-label flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={settings.sessionBlockedNotificationsEnabled}
-              onChange={(e) => updateSettings({ sessionBlockedNotificationsEnabled: e.target.checked })}
-              className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
-            />
-            <div className="setting-text flex flex-col gap-0.5">
-              <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Notify When Session Needs Attention</span>
-              <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
-                Show a notification when an AI session is waiting for your input, such as permission approvals,
-                questions, plan reviews, or commit proposals.
-              </span>
-            </div>
-          </label>
-        </div>
+        <SettingsToggle
+          checked={settings.sessionBlockedNotificationsEnabled}
+          onChange={(checked) => updateSettings({ sessionBlockedNotificationsEnabled: checked })}
+          name="Notify When Session Needs Attention"
+          description="Notify when a session is waiting for input (permissions, questions, plan reviews, commits)."
+        />
       </div>
     </div>
   );

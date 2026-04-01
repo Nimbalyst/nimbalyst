@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ProviderConfig } from '../../Settings/SettingsView';
+import { SettingsToggle } from '../SettingsToggle';
 
 interface OpenCodePanelProps {
   config: ProviderConfig;
@@ -127,18 +128,12 @@ export function OpenCodePanel({
         </p>
       </div>
 
-      <div className="provider-enable flex items-center justify-between gap-4 py-4 mb-4 border-b border-[var(--nim-border)]">
-        <span className="provider-enable-label text-sm font-medium text-[var(--nim-text)]">Enable OpenCode</span>
-        <label className="provider-toggle relative inline-block w-11 h-6 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={config.enabled || false}
-            onChange={(e) => onToggle(e.target.checked)}
-            className="opacity-0 w-0 h-0 absolute"
-          />
-          <span className="provider-toggle-slider absolute cursor-pointer inset-0 rounded-full transition-all bg-[var(--nim-bg-tertiary)]"></span>
-        </label>
-      </div>
+      <SettingsToggle
+        variant="enable"
+        name="Enable OpenCode"
+        checked={config.enabled || false}
+        onChange={onToggle}
+      />
 
       {config.enabled && (
         <>

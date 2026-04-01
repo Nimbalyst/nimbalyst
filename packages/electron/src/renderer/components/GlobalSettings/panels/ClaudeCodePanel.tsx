@@ -7,6 +7,7 @@ import {
   claudeUsageIndicatorEnabledAtom,
   setClaudeUsageIndicatorEnabledAtom,
 } from '../../../store/atoms/claudeUsageAtoms';
+import { SettingsToggle, ToggleSwitch } from '../SettingsToggle';
 
 // Built-in SDK version (injected at build time via electron.vite.config.ts define)
 declare const __CLAUDE_AGENT_SDK_VERSION__: string;
@@ -301,41 +302,25 @@ export function ClaudeCodePanel({
         </p>
       </div>
 
-      <div className="provider-enable flex items-center justify-between gap-4 py-4 mb-4 border-b border-[var(--nim-border)]">
-        <span className="provider-enable-label text-sm font-medium text-[var(--nim-text)]">Enable Claude Agent</span>
-        <label className="provider-toggle relative inline-block w-11 h-6 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={config.enabled || false}
-            onChange={(e) => {
-              console.log('[ClaudeCodePanel] Toggle changed to:', e.target.checked);
-              onToggle(e.target.checked);
-            }}
-            className="hidden peer"
-          />
-          <span className="provider-toggle-slider absolute cursor-pointer inset-0 rounded-full transition-all bg-[var(--nim-bg-tertiary)] before:absolute before:content-[''] before:h-5 before:w-5 before:left-0.5 before:bottom-0.5 before:rounded-full before:transition-all before:bg-white before:shadow-sm peer-checked:bg-[var(--nim-primary)] peer-checked:before:translate-x-5"></span>
-        </label>
-      </div>
+      <SettingsToggle
+        variant="enable"
+        name="Enable Claude Agent"
+        checked={config.enabled || false}
+        onChange={(checked) => {
+          // console.log('[ClaudeCodePanel] Toggle changed to:', checked);
+          onToggle(checked);
+        }}
+      />
 
       {/* Usage Indicator Toggle - macOS only */}
       {isMacOS && (
-        <div className="provider-enable flex items-center justify-between gap-4 py-4 mb-4 border-b border-[var(--nim-border)]">
-          <div>
-            <span className="provider-enable-label text-sm font-medium text-[var(--nim-text)]">Show Usage Indicator</span>
-            <p className="text-xs text-[var(--nim-text-muted)] mt-1">
-              Display API usage limits in the navigation gutter
-            </p>
-          </div>
-          <label className="provider-toggle relative inline-block w-11 h-6 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={usageIndicatorEnabled}
-              onChange={(e) => setUsageIndicatorEnabled(e.target.checked)}
-              className="hidden peer"
-            />
-            <span className="provider-toggle-slider absolute cursor-pointer inset-0 rounded-full transition-all bg-[var(--nim-bg-tertiary)] before:absolute before:content-[''] before:h-5 before:w-5 before:left-0.5 before:bottom-0.5 before:rounded-full before:transition-all before:bg-white before:shadow-sm peer-checked:bg-[var(--nim-primary)] peer-checked:before:translate-x-5"></span>
-          </label>
-        </div>
+        <SettingsToggle
+          variant="enable"
+          name="Show Usage Indicator"
+          description="Display API usage limits in the navigation gutter"
+          checked={usageIndicatorEnabled}
+          onChange={setUsageIndicatorEnabled}
+        />
       )}
 
       {/* Standalone Binary Toggle */}
@@ -348,15 +333,7 @@ export function ClaudeCodePanel({
               {isMacOS && ' (prevents dock icon)'}
             </p>
           </div>
-          <label className="provider-toggle relative inline-block w-11 h-6 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={useStandaloneBinary}
-              onChange={(e) => handleSetUseStandaloneBinary(e.target.checked)}
-              className="hidden peer"
-            />
-            <span className="provider-toggle-slider absolute cursor-pointer inset-0 rounded-full transition-all bg-[var(--nim-bg-tertiary)] before:absolute before:content-[''] before:h-5 before:w-5 before:left-0.5 before:bottom-0.5 before:rounded-full before:transition-all before:bg-white before:shadow-sm peer-checked:bg-[var(--nim-primary)] peer-checked:before:translate-x-5"></span>
-          </label>
+          <ToggleSwitch checked={useStandaloneBinary} onChange={handleSetUseStandaloneBinary} />
         </div>
         {useStandaloneBinary && !isStandaloneBinaryAvailable && (
           <div className="p-3 rounded-lg bg-[rgba(245,158,11,0.08)] border border-[rgba(245,158,11,0.2)]">
@@ -404,46 +381,22 @@ export function ClaudeCodePanel({
       </div>
 
       {/* Plan Tracking Toggle */}
-      <div className="provider-enable flex items-center justify-between gap-4 py-4 mb-4 border-b border-[var(--nim-border)]">
-        <div>
-          <span className="provider-enable-label text-sm font-medium text-[var(--nim-text)]">Plan Tracking</span>
-          <p className="text-xs text-[var(--nim-text-muted)] mt-1">
-            Save plans to <code className="text-xs bg-[var(--nim-bg-tertiary)] px-1 py-0.5 rounded">nimbalyst-local/plans/</code> with
-            tracking frontmatter for status, progress, and priority.
-            When disabled, plans use Claude Code's default behavior and are saved in your home directory instead of the project.
-          </p>
-        </div>
-        <label className="provider-toggle relative inline-block w-11 h-6 cursor-pointer">
-          <input
-            data-testid="plan-tracking-toggle"
-            type="checkbox"
-            checked={planTrackingEnabled}
-            onChange={(e) => handleSetPlanTrackingEnabled(e.target.checked)}
-            className="hidden peer"
-          />
-          <span className="provider-toggle-slider absolute cursor-pointer inset-0 rounded-full transition-all bg-[var(--nim-bg-tertiary)] before:absolute before:content-[''] before:h-5 before:w-5 before:left-0.5 before:bottom-0.5 before:rounded-full before:transition-all before:bg-white before:shadow-sm peer-checked:bg-[var(--nim-primary)] peer-checked:before:translate-x-5"></span>
-        </label>
-      </div>
+      <SettingsToggle
+        variant="enable"
+        name="Plan Tracking"
+        description="Save plans to nimbalyst-local/plans/ with tracking frontmatter. When disabled, plans use Claude Code's default behavior."
+        checked={planTrackingEnabled}
+        onChange={handleSetPlanTrackingEnabled}
+      />
 
       {/* Agent Teams Toggle (Experimental) */}
-      <div className="provider-enable flex items-center justify-between gap-4 py-4 mb-4 border-b border-[var(--nim-border)]">
-        <div>
-          <span className="provider-enable-label text-sm font-medium text-[var(--nim-text)]">Agent Teams (Experimental)</span>
-          <p className="text-xs text-[var(--nim-text-muted)] mt-1">
-            Allow Claude to coordinate multiple agents working together as a team.
-            Uses more tokens but enables parallel work on complex tasks.
-          </p>
-        </div>
-        <label className="provider-toggle relative inline-block w-11 h-6 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={agentTeamsEnabled}
-            onChange={(e) => handleToggleAgentTeams(e.target.checked)}
-            className="hidden peer"
-          />
-          <span className="provider-toggle-slider absolute cursor-pointer inset-0 rounded-full transition-all bg-[var(--nim-bg-tertiary)] before:absolute before:content-[''] before:h-5 before:w-5 before:left-0.5 before:bottom-0.5 before:rounded-full before:transition-all before:bg-white before:shadow-sm peer-checked:bg-[var(--nim-primary)] peer-checked:before:translate-x-5"></span>
-        </label>
-      </div>
+      <SettingsToggle
+        variant="enable"
+        name="Agent Teams (Experimental)"
+        description="Allow Claude to coordinate multiple agents working together as a team. Uses more tokens but enables parallel work."
+        checked={agentTeamsEnabled}
+        onChange={handleToggleAgentTeams}
+      />
 
       { isWindowsPlatform && isCheckingClaudeWindowsStatus && (
         <div className="installation-status p-4 rounded-lg bg-[rgba(245,158,11,0.05)] border border-[rgba(245,158,11,0.2)]">

@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAtom } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
+import { SettingsToggle } from '../SettingsToggle';
 import {
   advancedSettingsAtom,
   setAdvancedSettingsAtom,
@@ -39,32 +40,23 @@ export function BetaFeaturesPanel() {
       <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
         <div className="p-3 bg-nim-secondary rounded-md border border-nim">
           {/* "Enable All Beta Features" master toggle */}
-          <div className="setting-item mb-3 pb-3 border-b border-nim">
-            <label className="setting-label flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={enableAllBetaFeatures}
-                onChange={(e) => {
-                  const enabled = e.target.checked;
-                  const newFeatures = enabled ? enableAllBetaFeaturesUtil() : disableAllBetaFeatures();
-                  updateSettings({
-                    enableAllBetaFeatures: enabled,
-                    betaFeatures: newFeatures,
-                  });
-                  posthog?.capture('beta_feature_toggled', {
-                    feature_tag: 'all',
-                    enabled,
-                  });
-                }}
-                className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
-              />
-              <div className="setting-text flex flex-col gap-0.5">
-                <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Enable All Beta Features</span>
-                <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
-                  Automatically enable all current and future beta features. Individual features can still be toggled below.
-                </span>
-              </div>
-            </label>
+          <div className="mb-3 pb-3 border-b border-nim">
+            <SettingsToggle
+              checked={enableAllBetaFeatures}
+              onChange={(enabled) => {
+                const newFeatures = enabled ? enableAllBetaFeaturesUtil() : disableAllBetaFeatures();
+                updateSettings({
+                  enableAllBetaFeatures: enabled,
+                  betaFeatures: newFeatures,
+                });
+                posthog?.capture('beta_feature_toggled', {
+                  feature_tag: 'all',
+                  enabled,
+                });
+              }}
+              name="Enable All Beta Features"
+              description="Automatically enable all current and future beta features."
+            />
           </div>
 
           {/* Individual beta feature toggles */}

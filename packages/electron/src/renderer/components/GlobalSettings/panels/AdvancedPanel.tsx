@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
+import { SettingsToggle } from '../SettingsToggle';
 import {
   advancedSettingsAtom,
   setAdvancedSettingsAtom,
@@ -25,6 +26,43 @@ import {
   autoCommitEnabledAtom,
   setAutoCommitEnabledAtom,
 } from '../../../store/atoms/autoCommitAtoms';
+
+/** Reusable compact dropdown row */
+function DropdownRow({
+  value,
+  onChange,
+  name,
+  description,
+  options,
+}: {
+  value: string | number;
+  onChange: (value: string) => void;
+  name: string;
+  description: string;
+  options: { value: string | number; label: string }[];
+}) {
+  return (
+    <div className="setting-item py-2">
+      <div className="flex items-center justify-between gap-4">
+        <div className="setting-text flex flex-col gap-0 min-w-0">
+          <span className="setting-name text-sm font-medium text-[var(--nim-text)]">{name}</span>
+          <span className="setting-description text-xs leading-snug text-[var(--nim-text-muted)]">
+            {description}
+          </span>
+        </div>
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="setting-select shrink-0 py-1.5 px-2 pr-7 rounded-md text-sm bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] outline-none appearance-none bg-[url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M3%204.5L6%207.5L9%204.5%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_8px_center] focus:border-[var(--nim-primary)]"
+        >
+          {options.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
+}
 
 /**
  * AdvancedPanel - Self-contained settings panel for advanced options.
@@ -499,294 +537,141 @@ export function AdvancedPanel() {
         </div>
       )}
 
+      {/* ── General ── */}
       <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
-        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Privacy</h4>
-        <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-4">
-          Control how Nimbalyst collects anonymous usage data.
-        </p>
+        <h4 className="provider-panel-section-title text-base font-semibold mb-2 text-[var(--nim-text)]">General</h4>
 
-        <div className="setting-item py-3">
-          <label className="setting-label flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={analyticsEnabled}
-              onChange={(e) => updateSettings({ analyticsEnabled: e.target.checked })}
-              className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
-            />
-            <div className="setting-text flex flex-col gap-0.5">
-              <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Send Anonymous Usage Data</span>
-              <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
-                Help improve Nimbalyst by sending anonymous usage data. No prompts, content, or personal information is ever collected.
-              </span>
-            </div>
-          </label>
-        </div>
-      </div>
+        <SettingsToggle
+          checked={analyticsEnabled}
+          onChange={(checked) => updateSettings({ analyticsEnabled: checked })}
+          name="Send Anonymous Usage Data"
+          description="Help improve Nimbalyst by sending anonymous usage data. No prompts or personal info collected."
+        />
 
-      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
-        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Editor</h4>
-        <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-4">
-          Configure editor behavior.
-        </p>
+        <SettingsToggle
+          checked={spellcheckEnabled}
+          onChange={(checked) => updateSettings({ spellcheckEnabled: checked })}
+          name="Spellcheck"
+          description="Enable the system spellchecker in editors and text inputs."
+        />
 
-        <div className="setting-item py-3">
-          <label className="setting-label flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={spellcheckEnabled}
-              onChange={(e) => updateSettings({ spellcheckEnabled: e.target.checked })}
-              className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
-            />
-            <div className="setting-text flex flex-col gap-0.5">
-              <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Spellcheck</span>
-              <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
-                Enable the system spellchecker in editors and text inputs. Applies to the markdown editor, code editor, and prompt input.
-              </span>
-            </div>
-          </label>
-        </div>
-      </div>
+        <SettingsToggle
+          checked={autoCommitEnabled}
+          onChange={(checked) => {
+            setAutoCommitEnabled(checked);
+            posthog?.capture('auto_commit_toggled', { enabled: checked });
+          }}
+          name="Auto-approve Commits"
+          description="Automatically approve when Claude proposes git commits."
+        />
 
-      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
-        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Agent Behavior</h4>
-        <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-4">
-          Control how AI agents handle certain actions.
-        </p>
-
-        <div className="setting-item py-3">
-          <label className="setting-label flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={autoCommitEnabled}
-              onChange={(e) => {
-                setAutoCommitEnabled(e.target.checked);
-                posthog?.capture('auto_commit_toggled', {
-                  enabled: e.target.checked,
-                });
-              }}
-              className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
-            />
-            <div className="setting-text flex flex-col gap-0.5">
-              <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Auto-approve Commits</span>
-              <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
-                Automatically approve when Claude proposes git commits, without requiring manual confirmation.
-              </span>
-            </div>
-          </label>
-        </div>
-      </div>
-
-      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
-        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Feature Guides</h4>
-        <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-4">
-          Contextual guides that help you discover features.
-          {walkthroughsTotalCount > 0 && (
-            <span className="ml-2 text-[var(--nim-text-faint)]">
-              ({walkthroughsViewedCount} of {walkthroughsTotalCount} viewed)
-            </span>
-          )}
-        </p>
-
-        <div className="setting-item py-3">
-          <label className="setting-label flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={walkthroughsEnabled}
-              onChange={(e) => updateSettings({ walkthroughsEnabled: e.target.checked })}
-              className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
-            />
-            <div className="setting-text flex flex-col gap-0.5">
-              <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Show Feature Guides</span>
-              <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
-                Display walkthrough guides for new features and tips to help you get the most out of Nimbalyst.
-              </span>
-            </div>
-          </label>
-        </div>
+        <SettingsToggle
+          checked={walkthroughsEnabled}
+          onChange={(checked) => updateSettings({ walkthroughsEnabled: checked })}
+          name="Show Feature Guides"
+          description={`Walkthrough guides for new features and tips.${walkthroughsTotalCount > 0 ? ` (${walkthroughsViewedCount}/${walkthroughsTotalCount} viewed)` : ''}`}
+        />
 
         {walkthroughsViewedCount > 0 && (
-          <div className="setting-item py-3 flex items-center gap-3">
-            <button onClick={() => resetWalkthroughs()} className="nim-btn-secondary text-sm">
+          <div className="py-1 pl-7">
+            <button onClick={() => resetWalkthroughs()} className="nim-btn-secondary text-xs">
               Reset All Guides
             </button>
-            <span className="text-[13px] text-[var(--nim-text-faint)]">
-              Show all guides again from the beginning
-            </span>
           </div>
         )}
       </div>
 
+      {/* ── Tools & Environment ── */}
       <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
-        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">External Editor</h4>
-        <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-4">
-          Configure a preferred external editor to open files from the file tree context menu.
-        </p>
+        <h4 className="provider-panel-section-title text-base font-semibold mb-2 text-[var(--nim-text)]">Tools & Environment</h4>
 
-        <div className="setting-item py-3">
-          <div className="setting-text flex flex-col gap-0.5">
-            <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Preferred Editor</span>
-            <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
-              Select an external editor for the "Open in..." context menu option.
-            </span>
-          </div>
-          <select
-            value={externalEditorType}
-            onChange={(e) => updateExternalEditorSettings({ editorType: e.target.value as ExternalEditorType })}
-            className="setting-select mt-2 w-full py-2 px-3 pr-9 rounded-md text-sm bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] outline-none appearance-none bg-[url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M3%204.5L6%207.5L9%204.5%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_12px_center] focus:border-[var(--nim-primary)]"
-          >
-            <option value="none">None</option>
-            <option value="vscode">VS Code</option>
-            <option value="cursor">Cursor</option>
-            <option value="webstorm">WebStorm</option>
-            <option value="sublime">Sublime Text</option>
-            <option value="vim">Vim (opens in Terminal)</option>
-            <option value="nvim">Neovim (opens in Terminal)</option>
-            <option value="custom">Custom...</option>
-          </select>
-        </div>
+        <DropdownRow
+          value={externalEditorType}
+          onChange={(val) => updateExternalEditorSettings({ editorType: val as ExternalEditorType })}
+          name="External Editor"
+          description="Editor for the 'Open in...' context menu option."
+          options={[
+            { value: 'none', label: 'None' },
+            { value: 'vscode', label: 'VS Code' },
+            { value: 'cursor', label: 'Cursor' },
+            { value: 'webstorm', label: 'WebStorm' },
+            { value: 'sublime', label: 'Sublime Text' },
+            { value: 'vim', label: 'Vim (Terminal)' },
+            { value: 'nvim', label: 'Neovim (Terminal)' },
+            { value: 'custom', label: 'Custom...' },
+          ]}
+        />
 
         {externalEditorType === 'custom' && (
-          <div className="setting-item py-3">
-            <div className="setting-text flex flex-col gap-0.5 mb-2">
-              <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Custom Editor Command</span>
-              <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
-                Enter the command or path to your preferred editor executable.
-                The file path will be passed as the first argument.
-              </span>
-            </div>
+          <div className="py-2 pl-7">
             <input
               type="text"
               value={externalEditorCustomPath || ''}
               onChange={(e) => updateExternalEditorSettings({ customPath: e.target.value })}
               placeholder={process.platform === 'win32' ? 'C:\\Program Files\\Editor\\editor.exe' : '/usr/local/bin/myeditor'}
-              className="w-full py-2 px-3 rounded-md text-sm bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] outline-none focus:border-[var(--nim-primary)] font-mono"
+              className="w-full py-1.5 px-3 rounded-md text-sm bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] outline-none focus:border-[var(--nim-primary)] font-mono"
             />
           </div>
         )}
-      </div>
 
-      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
-        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Extension Development</h4>
-        <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-4">
-          Tools for building and testing Nimbalyst extensions.
-        </p>
+        <SettingsToggle
+          checked={extensionDevToolsEnabled}
+          onChange={(checked) => updateSettings({ extensionDevToolsEnabled: checked })}
+          name="Extension Dev Tools"
+          description="Enable MCP tools for building, installing, and hot-reloading extensions."
+        />
 
-        <div className="setting-item py-3">
-          <label className="setting-label flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={extensionDevToolsEnabled}
-              onChange={(e) => updateSettings({ extensionDevToolsEnabled: e.target.checked })}
-              className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
-            />
-            <div className="setting-text flex flex-col gap-0.5">
-              <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Enable Extension Dev Tools</span>
-              <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
-                Enables MCP tools for building, installing, and hot-reloading extensions during development.
-                When enabled, Claude Code can use extension_build, extension_install, extension_reload, and
-                extension_uninstall tools to develop extensions in real-time.
-              </span>
-            </div>
-          </label>
-        </div>
-      </div>
+        <DropdownRow
+          value={maxHeapSizeMB}
+          onChange={(val) => updateSettings({ maxHeapSizeMB: parseInt(val, 10) })}
+          name="Max Heap Size"
+          description="V8 memory limit. Increase if you get out-of-memory crashes. Requires restart."
+          options={[
+            { value: 2048, label: '2 GB' },
+            { value: 4096, label: '4 GB (Default)' },
+            { value: 6144, label: '6 GB' },
+            { value: 8192, label: '8 GB' },
+            { value: 12288, label: '12 GB' },
+            { value: 16384, label: '16 GB' },
+          ]}
+        />
 
-      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
-        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Memory</h4>
-        <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-4">
-          Configure memory limits for the application.
-        </p>
+        <DropdownRow
+          value={historyMaxAgeDays}
+          onChange={(val) => updateSettings({ historyMaxAgeDays: parseInt(val, 10) })}
+          name="History Retention"
+          description="Max age of file history snapshots before automatic cleanup."
+          options={[
+            { value: 7, label: '7 days' },
+            { value: 14, label: '14 days' },
+            { value: 30, label: '30 days (Default)' },
+            { value: 60, label: '60 days' },
+            { value: 90, label: '90 days' },
+            { value: 180, label: '180 days' },
+            { value: 365, label: '1 year' },
+          ]}
+        />
 
-        <div className="setting-item py-3">
-          <div className="setting-text flex flex-col gap-0.5">
-            <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Maximum Heap Size (MB)</span>
-            <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
-              V8 JavaScript heap memory limit. Increase if you experience out-of-memory crashes
-              with large AI sessions. Default is 4096 MB (4 GB). Requires restart to take effect.
-            </span>
-          </div>
-          <select
-            value={maxHeapSizeMB}
-            onChange={(e) => updateSettings({ maxHeapSizeMB: parseInt(e.target.value, 10) })}
-            className="setting-select mt-2 w-full py-2 px-3 pr-9 rounded-md text-sm bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] outline-none appearance-none bg-[url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M3%204.5L6%207.5L9%204.5%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_12px_center] focus:border-[var(--nim-primary)]"
-          >
-            <option value={2048}>2 GB</option>
-            <option value={4096}>4 GB (Default)</option>
-            <option value={6144}>6 GB</option>
-            <option value={8192}>8 GB</option>
-            <option value={12288}>12 GB</option>
-            <option value={16384}>16 GB</option>
-          </select>
-        </div>
-      </div>
+        <DropdownRow
+          value={historyMaxSnapshots}
+          onChange={(val) => updateSettings({ historyMaxSnapshots: parseInt(val, 10) })}
+          name="Max Snapshots Per File"
+          description="Oldest snapshots beyond this limit are deleted."
+          options={[
+            { value: 50, label: '50' },
+            { value: 100, label: '100' },
+            { value: 250, label: '250 (Default)' },
+            { value: 500, label: '500' },
+            { value: 1000, label: '1,000' },
+          ]}
+        />
 
-      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
-        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Document History</h4>
-        <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-4">
-          Configure how long file history snapshots are retained. Older snapshots are cleaned up on app startup.
-        </p>
-
-        <div className="setting-item py-3">
-          <div className="setting-text flex flex-col gap-0.5">
-            <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Retention Period</span>
-            <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
-              Maximum age of history snapshots before they are automatically deleted.
-            </span>
-          </div>
-          <select
-            value={historyMaxAgeDays}
-            onChange={(e) => updateSettings({ historyMaxAgeDays: parseInt(e.target.value, 10) })}
-            className="setting-select mt-2 w-full py-2 px-3 pr-9 rounded-md text-sm bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] outline-none appearance-none bg-[url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M3%204.5L6%207.5L9%204.5%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_12px_center] focus:border-[var(--nim-primary)]"
-          >
-            <option value={7}>7 days</option>
-            <option value={14}>14 days</option>
-            <option value={30}>30 days (Default)</option>
-            <option value={60}>60 days</option>
-            <option value={90}>90 days</option>
-            <option value={180}>180 days</option>
-            <option value={365}>1 year</option>
-          </select>
-        </div>
-
-        <div className="setting-item py-3">
-          <div className="setting-text flex flex-col gap-0.5">
-            <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Max Snapshots Per File</span>
-            <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
-              Maximum number of history snapshots kept per file. Oldest snapshots beyond this limit are deleted.
-            </span>
-          </div>
-          <select
-            value={historyMaxSnapshots}
-            onChange={(e) => updateSettings({ historyMaxSnapshots: parseInt(e.target.value, 10) })}
-            className="setting-select mt-2 w-full py-2 px-3 pr-9 rounded-md text-sm bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] outline-none appearance-none bg-[url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M3%204.5L6%207.5L9%204.5%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_12px_center] focus:border-[var(--nim-primary)]"
-          >
-            <option value={50}>50</option>
-            <option value={100}>100</option>
-            <option value={250}>250 (Default)</option>
-            <option value={500}>500</option>
-            <option value={1000}>1,000</option>
-          </select>
-        </div>
-
-        <p className="text-xs text-[var(--nim-text-faint)] mt-2">
-          Changes take effect on next app restart when cleanup runs.
-        </p>
-      </div>
-
-      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
-        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Environment</h4>
-        <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-4">
-          Configure environment variables for AI tools and CLI commands.
-        </p>
-
-        <div className="setting-item py-3">
-          <div className="setting-text flex flex-col gap-0.5 mb-2">
+        {/* Custom PATH */}
+        <div className="setting-item py-2">
+          <div className="setting-text flex flex-col gap-0 mb-2">
             <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Custom PATH Directories</span>
-            <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
-              Additional directories to add to the PATH environment variable for MCP server installation, CLI tool detection, and agent SDK operations.
-              {process.platform === 'win32'
-                ? ' Separate multiple directories with semicolons (;). Example: C:\\MyTools;C:\\Programs\\bin'
-                : ' Separate multiple directories with colons (:). Example: /opt/mytools/bin:/usr/local/custom/bin'}
+            <span className="setting-description text-xs leading-snug text-[var(--nim-text-muted)]">
+              Additional directories for MCP server installation, CLI tool detection, and agent SDK operations.
             </span>
           </div>
           <textarea
@@ -795,27 +680,10 @@ export function AdvancedPanel() {
             placeholder={process.platform === 'win32'
               ? 'C:\\MyTools;C:\\Programs\\bin'
               : '/opt/mytools/bin:/usr/local/custom/bin'}
-            rows={3}
-            className="w-full py-2 px-3 rounded-md text-sm bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] outline-none focus:border-[var(--nim-primary)] font-mono resize-none"
-            style={{
-              minHeight: '60px',
-              lineHeight: '1.5',
-            }}
+            rows={2}
+            className="w-full py-1.5 px-3 rounded-md text-sm bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] outline-none focus:border-[var(--nim-primary)] font-mono resize-none"
           />
-          <div className="mt-2 space-y-1">
-            <p className="text-xs text-[var(--nim-text-faint)]">
-              Changes take effect immediately for new sessions. These paths are added with highest priority.
-            </p>
-            <p className="text-xs text-[var(--nim-text-faint)]">
-              <strong>What uses this PATH:</strong> MCP server spawning (uvx, npx), Claude Code CLI detection, npm package installation.
-            </p>
-            <p className="text-xs text-[var(--nim-text-faint)]">
-              <strong>What doesn't use this:</strong> Claude Code's Bash tool commands (those use your shell's PATH).
-            </p>
-          </div>
-
-          {/* Show current PATH toggle */}
-          <div className="mt-4">
+          <div className="mt-1">
             <button
               onClick={() => setShowEnhancedPath(!showEnhancedPath)}
               className="text-xs text-[var(--nim-link)] hover:text-[var(--nim-link-hover)] cursor-pointer"
@@ -825,9 +693,6 @@ export function AdvancedPanel() {
 
             {showEnhancedPath && enhancedPath && (
               <div className="mt-2">
-                <div className="text-xs text-[var(--nim-text-muted)] mb-1">
-                  Current PATH used by Nimbalyst:
-                </div>
                 <div
                   className="p-2 rounded-md text-xs bg-[var(--nim-bg-tertiary)] border border-[var(--nim-border)] text-[var(--nim-text-muted)] font-mono overflow-x-auto"
                   style={{
@@ -837,9 +702,9 @@ export function AdvancedPanel() {
                     whiteSpace: 'pre-wrap',
                   }}
                 >
-                  {enhancedPath.split(process.platform === 'win32' ? ';' : ':').map((path, index) => (
+                  {enhancedPath.split(process.platform === 'win32' ? ';' : ':').map((p, index) => (
                     <div key={index} className="py-0.5">
-                      {path}
+                      {p}
                     </div>
                   ))}
                 </div>
@@ -849,69 +714,34 @@ export function AdvancedPanel() {
         </div>
       </div>
 
+      {/* ── Developer Options (dev mode only) ── */}
       {isDevelopment ? (
         <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
-          <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Developer Options</h4>
-          <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-4">
-            These options are only available in development mode.
+          <h4 className="provider-panel-section-title text-base font-semibold mb-2 text-[var(--nim-text)]">Developer Options</h4>
+          <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-2">
+            Only available in development mode.
           </p>
 
-          <div className="setting-item py-3">
-            <label className="setting-label flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showToolCalls}
-                onChange={(e) => updateAIDebugSettings({ showToolCalls: e.target.checked })}
-                className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
-              />
-              <div className="setting-text flex flex-col gap-0.5">
-                <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Show All Tool Calls</span>
-                <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
-                  Display all MCP tool calls in the AI chat sidebar, including Edit/applyDiff calls.
-                  When disabled, edit operations are shown without the underlying tool call details to reduce clutter.
-                  Useful for debugging and understanding exactly what tools the AI is using.
-                </span>
-              </div>
-            </label>
-          </div>
+          <SettingsToggle
+            checked={showToolCalls}
+            onChange={(checked) => updateAIDebugSettings({ showToolCalls: checked })}
+            name="Show All Tool Calls"
+            description="Display all MCP tool calls in the AI chat sidebar, including Edit/applyDiff calls."
+          />
 
-          <div className="setting-item py-3">
-            <label className="setting-label flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={aiDebugLogging}
-                onChange={(e) => updateAIDebugSettings({ aiDebugLogging: e.target.checked })}
-                className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
-              />
-              <div className="setting-text flex flex-col gap-0.5">
-                <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Enable AI Debug Logging</span>
-                <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
-                  Capture detailed logs of all AI editing operations including LLM requests/responses,
-                  diff applications, and streaming operations. Logs are saved per session in your
-                  application support directory for troubleshooting integration issues.
-                </span>
-              </div>
-            </label>
-          </div>
+          <SettingsToggle
+            checked={aiDebugLogging}
+            onChange={(checked) => updateAIDebugSettings({ aiDebugLogging: checked })}
+            name="AI Debug Logging"
+            description="Capture detailed logs of all AI editing operations including LLM requests/responses."
+          />
 
-          <div className="setting-item py-3">
-            <label className="setting-label flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showPromptAdditions}
-                onChange={(e) => updateAIDebugSettings({ showPromptAdditions: e.target.checked })}
-                className="setting-checkbox w-4 h-4 mt-0.5 cursor-pointer shrink-0 accent-[var(--nim-primary)]"
-              />
-              <div className="setting-text flex flex-col gap-0.5">
-                <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Show Prompt Additions</span>
-                <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
-                  Display system prompt additions and user message context that Nimbalyst appends
-                  to Claude Code requests. Shows as collapsible sections in the AI chat transcript.
-                  Useful for debugging prompt engineering and understanding what context is being sent.
-                </span>
-              </div>
-            </label>
-          </div>
+          <SettingsToggle
+            checked={showPromptAdditions}
+            onChange={(checked) => updateAIDebugSettings({ showPromptAdditions: checked })}
+            name="Show Prompt Additions"
+            description="Display system prompt additions and context that Nimbalyst appends to Claude Code requests."
+          />
         </div>
       ) : (
         <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
