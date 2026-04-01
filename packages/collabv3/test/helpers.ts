@@ -25,6 +25,7 @@ export async function startWrangler(port = DEFAULT_PORT): Promise<void> {
       ['wrangler', 'dev', '--local', '--port', String(port)],
       {
         cwd: new URL('..', import.meta.url).pathname,
+        detached: true,
         stdio: ['ignore', 'pipe', 'pipe'],
         env: { ...process.env, NO_COLOR: '1' },
       }
@@ -68,6 +69,13 @@ export async function startWrangler(port = DEFAULT_PORT): Promise<void> {
 /**
  * Stop the wrangler dev process.
  */
+function killProcessGroup(p: ChildProcess, signal: NodeJS.Signals) {
+  if (p.pid) {
+    try { process.kill(-p.pid, signal); return; } catch { /* already gone */ }
+  }
+  try { p.kill(signal); } catch { /* already dead */ }
+}
+
 export async function stopWrangler(): Promise<void> {
   if (!wranglerProcess) return;
 
@@ -76,10 +84,10 @@ export async function stopWrangler(): Promise<void> {
 
   return new Promise<void>((resolve) => {
     proc.on('exit', () => resolve());
-    proc.kill('SIGTERM');
+    killProcessGroup(proc, 'SIGTERM');
     // Force kill after 3s
     setTimeout(() => {
-      proc.kill('SIGKILL');
+      killProcessGroup(proc, 'SIGKILL');
       resolve();
     }, 3000);
   });
