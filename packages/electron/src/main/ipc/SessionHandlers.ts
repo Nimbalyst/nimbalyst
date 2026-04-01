@@ -1,5 +1,6 @@
 import { SessionManager, ProviderFactory } from '@nimbalyst/runtime/ai/server';
-import { AISessionsRepository } from '@nimbalyst/runtime';
+import { AISessionsRepository, TranscriptMigrationRepository } from '@nimbalyst/runtime';
+import { TranscriptProjector, convertCanonicalToLegacyMessages } from '@nimbalyst/runtime/ai/server/transcript';
 import {
     ModelIdentifier,
     shouldBlockStartedSessionProviderSwitch,
@@ -1451,7 +1452,6 @@ export async function registerSessionHandlers() {
     });
 
     safeHandle('transcript:get-tail-messages', async (_event, sessionId: string, count: number = 10) => {
-        const { TranscriptMigrationRepository, AISessionsRepository } = await import('@nimbalyst/runtime');
         if (!TranscriptMigrationRepository.hasService()) return [];
 
         const session = await AISessionsRepository.get(sessionId);
@@ -1466,7 +1466,6 @@ export async function registerSessionHandlers() {
             { excludeEventTypes: ['tool_progress'] },
         );
 
-        const { TranscriptProjector } = await import('@nimbalyst/runtime/ai/server/transcript');
         const viewModel = TranscriptProjector.project(tailEvents);
         return viewModel.messages;
     });
