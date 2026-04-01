@@ -824,7 +824,7 @@ describe('OpenAICodexProvider', () => {
       chunks.push(chunk);
     }
 
-    expect(chunks.some((chunk) => chunk.type === 'tool_call' && chunk.toolCall?.name === 'readFile')).toBe(true);
+    expect(chunks.some((chunk) => chunk.type === 'tool_call' && chunk.toolCall?.name === 'mcp__nimbalyst__readFile')).toBe(true);
     expect(chunks.some((chunk) => chunk.type === 'complete')).toBe(true);
   });
 
