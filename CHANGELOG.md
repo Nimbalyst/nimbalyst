@@ -20,6 +20,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.7] - 2026-04-02
+
+
+### Added
+- Meta-agent session type for orchestrating multiple AI coding sessions
+
+### Fixed
+- Git commit proposal no longer hangs when transport drops during commit
+- MCP config lookup now uses parent project path in worktree sessions
+- Codex session meta widget and duplicate AskUserQuestion prompt
+
 ## [0.57.6] - 2026-04-02
 
 
