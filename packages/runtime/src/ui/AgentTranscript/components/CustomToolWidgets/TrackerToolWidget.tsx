@@ -744,7 +744,7 @@ export const TrackerToolWidget: React.FC<CustomToolWidgetProps> = ({ message }) 
   // Error state
   const resultText = getResultText(tool.result);
   if (isError) {
-    const label = getToolLabel(tool.name);
+    const label = getToolLabel(tool.toolName);
     return (
       <div
         style={{
@@ -774,7 +774,7 @@ export const TrackerToolWidget: React.FC<CustomToolWidgetProps> = ({ message }) 
   }
 
   // Fallback: plain text for old sessions
-  return <FallbackView toolName={tool.name} resultText={resultText} args={args} />;
+  return <FallbackView toolName={tool.toolName} resultText={resultText} args={args} />;
 };
 
 TrackerToolWidget.displayName = 'TrackerToolWidget';
