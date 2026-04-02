@@ -102,7 +102,23 @@ export class SessionStateManager extends EventEmitter {
 
     const state = this.activeSessions.get(sessionId);
     if (!state) {
-      console.warn(`[SessionStateManager] Cannot update activity for unknown session: ${sessionId}`);
+      // Session not in memory -- still update DB and emit events so subscribers
+      // (e.g. MetaAgentService) are notified even if the session was created
+      // via queue processing or the state manager lost track after restart.
+      if (status !== undefined) {
+        console.warn(`[SessionStateManager] Session ${sessionId} not in activeSessions, updating DB and emitting event directly`);
+        await this.updateDatabase(sessionId, status);
+        const workspacePath = await this.getWorkspacePathForSession(sessionId) ?? undefined;
+        if (status === 'waiting_for_input') {
+          this.emitEvent({ type: 'session:waiting', sessionId, workspacePath, timestamp: new Date() });
+        } else if (status === 'error') {
+          this.emitEvent({ type: 'session:error', sessionId, workspacePath, error: 'Session error', timestamp: new Date() });
+        } else if (status === 'running') {
+          this.emitEvent({ type: isStreaming ? 'session:streaming' : 'session:started', sessionId, workspacePath, timestamp: new Date() });
+        }
+      } else {
+        console.warn(`[SessionStateManager] Cannot update activity for unknown session: ${sessionId}`);
+      }
       return;
     }
 
@@ -167,12 +183,13 @@ export class SessionStateManager extends EventEmitter {
       // and emit session:completed so the renderer updates sessionProcessingAtom.
       // Without the event, the renderer thinks the session is still running and
       // queued prompts will never be triggered.
+      const workspacePath = await this.getWorkspacePathForSession(sessionId);
       console.warn(`[SessionStateManager] endSession called for session not in activeSessions: ${sessionId}, updating DB directly`);
       await this.updateDatabase(sessionId, 'idle');
       this.emitEvent({
         type: 'session:completed',
         sessionId,
-        workspacePath: undefined,
+        workspacePath: workspacePath || undefined,
         timestamp: new Date(),
       });
       return;
@@ -388,6 +405,26 @@ export class SessionStateManager extends EventEmitter {
    */
   private emitEvent(event: SessionStateEvent): void {
     this.emit(event.type, event);
+  }
+
+  private async getWorkspacePathForSession(sessionId: string): Promise<string | null> {
+    if (!this.database) {
+      return null;
+    }
+
+    try {
+      const result = await this.database.query<{ workspace_id: string | null }>(
+        `SELECT workspace_id
+         FROM ai_sessions
+         WHERE id = $1
+         LIMIT 1`,
+        [sessionId]
+      );
+      return result.rows[0]?.workspace_id ?? null;
+    } catch (error) {
+      console.error(`[SessionStateManager] Failed to load workspace path for session ${sessionId}:`, error);
+      return null;
+    }
   }
 }
 

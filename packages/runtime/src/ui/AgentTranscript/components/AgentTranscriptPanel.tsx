@@ -74,6 +74,10 @@ interface AgentTranscriptPanelProps {
     toolCallItemId: string,
     toolCallTimestamp?: number
   ) => Promise<ToolCallDiffResult[] | null>;
+  /** Optional: merged teammate/worker statuses to drive transcript status UI */
+  currentTeammates?: Array<{ agentId: string; status: 'running' | 'completed' | 'errored' | 'idle' }>;
+  /** Optional: noun used in waiting text when teammates/workers are still running */
+  waitingForNoun?: string;
   /** Current session phase for the kanban board */
   currentPhase?: string | null;
   /** Available phase columns for the kanban board picker */
@@ -115,6 +119,8 @@ const AgentTranscriptPanelComponent = React.forwardRef<
   promptAdditions,
   appStartTime,
   getToolCallDiffs,
+  currentTeammates,
+  waitingForNoun,
   currentPhase,
   phaseColumns,
   onSetPhase,
@@ -341,7 +347,8 @@ const AgentTranscriptPanelComponent = React.forwardRef<
           onOpenFile={onFileClick}
           onCompact={onCompact}
           promptAdditions={promptAdditions}
-          currentTeammates={sessionData.metadata?.currentTeammates as Array<{ agentId: string; status: 'running' | 'completed' | 'errored' | 'idle' }> | undefined}
+          currentTeammates={currentTeammates ?? sessionData.metadata?.currentTeammates as Array<{ agentId: string; status: 'running' | 'completed' | 'errored' | 'idle' }> | undefined}
+          waitingForNoun={waitingForNoun}
           appStartTime={appStartTime}
           getToolCallDiffs={getToolCallDiffs}
         />

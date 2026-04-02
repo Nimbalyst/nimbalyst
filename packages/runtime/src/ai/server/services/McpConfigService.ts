@@ -28,6 +28,9 @@ export interface McpConfigServiceDeps {
   /** Port for the session context MCP server (provides session summary, workstream overview, etc.) */
   sessionContextServerPort: number | null;
 
+  /** Port for the meta-agent MCP server */
+  metaAgentServerPort?: number | null;
+
   /** Loader for user and workspace MCP server configs */
   mcpConfigLoader: ((workspacePath?: string) => Promise<Record<string, any>>) | null;
 
@@ -63,11 +66,14 @@ export class McpConfigService {
    * @param options.workspacePath - Workspace path for workspace-specific servers
    * @returns Merged MCP server configuration object
    */
-  async getMcpServersConfig(options: { sessionId?: string; workspacePath?: string }): Promise<Record<string, any>> {
-    const { sessionId, workspacePath } = options;
+  async getMcpServersConfig(
+    options: { sessionId?: string; workspacePath?: string; profile?: 'standard' | 'meta-agent' }
+  ): Promise<Record<string, any>> {
+    const { sessionId, workspacePath, profile = 'standard' } = options;
     const config: any = {};
+    const isMetaAgent = profile === 'meta-agent';
 
-    // Include shared MCP server if it's started (provides capture_editor_screenshot tool only)
+    // Include shared MCP server if it's started (provides capture_editor_screenshot, display_to_user, etc.)
     // applyDiff and streamContent are NOT exposed via MCP - they're only for chat providers via IPC
     if (this.deps.mcpServerPort !== null && workspacePath) {
       let mcpUrl = `http://127.0.0.1:${this.deps.mcpServerPort}/mcp?workspacePath=${encodeURIComponent(workspacePath)}`;
@@ -96,7 +102,7 @@ export class McpConfigService {
     }
 
     // Include extension dev MCP server if it's started (provides build, install, reload tools)
-    if (this.deps.extensionDevServerPort !== null) {
+    if (!isMetaAgent && this.deps.extensionDevServerPort !== null) {
       const params = workspacePath ? `?workspacePath=${encodeURIComponent(workspacePath)}` : '';
       config['nimbalyst-extension-dev'] = {
         type: 'sse',
@@ -116,6 +122,17 @@ export class McpConfigService {
         url: `http://127.0.0.1:${this.deps.sessionContextServerPort}/mcp?sessionId=${encodeURIComponent(sessionId)}&workspaceId=${encodeURIComponent(workspacePath)}`
       };
     }
+
+    if ((this.deps.metaAgentServerPort ?? null) !== null && sessionId && workspacePath) {
+      config['nimbalyst-meta-agent'] = {
+        type: 'sse',
+        transport: 'sse',
+        url: `http://127.0.0.1:${this.deps.metaAgentServerPort}/mcp?sessionId=${encodeURIComponent(sessionId)}&workspaceId=${encodeURIComponent(workspacePath)}`
+      };
+    }
+
+    // Meta-agent gets nimbalyst-mcp (for display_to_user, capture_editor_screenshot),
+    // user/workspace custom MCPs, but skips extension-dev server (guarded above).
 
     // Load user and workspace MCP servers using the injected loader (if available)
     // This merges user-level (global) servers with workspace-level servers

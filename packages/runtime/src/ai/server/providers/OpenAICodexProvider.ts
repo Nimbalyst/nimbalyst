@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import OpenAI from 'openai';
 import { BaseAgentProvider } from './BaseAgentProvider';
 import { buildUserMessageAddition } from './documentContextUtils';
-import { buildClaudeCodeSystemPrompt } from '../../prompt';
+import { buildClaudeCodeSystemPrompt, buildMetaAgentSystemPrompt } from '../../prompt';
 import { DEFAULT_MODELS } from '../../modelConstants';
 import { AIToolCall, AIToolResult } from '../../types';
 import {
@@ -112,6 +112,9 @@ export class OpenAICodexProvider extends BaseAgentProvider {
   // Session context MCP server port (injected from electron main process)
   private static sessionContextServerPort: number | null = null;
 
+  // Meta-agent MCP server port (injected from electron main process)
+  private static metaAgentServerPort: number | null = null;
+
   // MCP config loader (injected from electron main process)
   // Returns merged user + workspace MCP servers
   private static mcpConfigLoader: ((workspacePath?: string) => Promise<Record<string, MCPServerConfig>>) | null = null;
@@ -186,6 +189,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
       extensionDevServerPort: OpenAICodexProvider.extensionDevServerPort,
       superLoopProgressServerPort: null, // Disabled - was leaking into non-super-loop sessions
       sessionContextServerPort: OpenAICodexProvider.sessionContextServerPort,
+      metaAgentServerPort: OpenAICodexProvider.metaAgentServerPort,
       mcpConfigLoader: OpenAICodexProvider.mcpConfigLoader,
       extensionPluginsLoader: null,
       claudeSettingsEnvLoader: OpenAICodexProvider.claudeSettingsEnvLoader,
@@ -231,6 +235,10 @@ export class OpenAICodexProvider extends BaseAgentProvider {
 
   public static setSessionContextServerPort(port: number | null): void {
     OpenAICodexProvider.sessionContextServerPort = port;
+  }
+
+  public static setMetaAgentServerPort(port: number | null): void {
+    OpenAICodexProvider.metaAgentServerPort = port;
   }
 
   public static setMCPConfigLoader(loader: ((workspacePath?: string) => Promise<Record<string, MCPServerConfig>>) | null): void {
@@ -720,7 +728,9 @@ export class OpenAICodexProvider extends BaseAgentProvider {
       return;
     }
 
-    const systemPrompt = this.buildSystemPrompt(documentContext);
+    const agentRole = await this.getAgentRole(sessionId);
+    const isMetaAgent = agentRole === 'meta-agent';
+    const systemPrompt = this.buildSystemPrompt(documentContext, isMetaAgent);
     const { userMessageAddition, messageWithContext } = buildUserMessageAddition(message, documentContext);
     const unsupportedAttachmentHints = attachments?.filter((attachment) => attachment.type !== 'image');
     const messageWithAttachmentHints = this.appendAttachmentHints(messageWithContext, unsupportedAttachmentHints);
@@ -800,7 +810,11 @@ export class OpenAICodexProvider extends BaseAgentProvider {
         action: existingSessionId ? 'RESUME' : 'CREATE'
       });
 
-      const mcpServers = await this.mcpConfigService.getMcpServersConfig({ sessionId, workspacePath: mcpConfigWorkspacePath });
+      const mcpServers = await this.mcpConfigService.getMcpServersConfig({
+        sessionId,
+        workspacePath: mcpConfigWorkspacePath,
+        profile: isMetaAgent ? 'meta-agent' : 'standard',
+      });
       const hasSessionNamingServer = Object.prototype.hasOwnProperty.call(mcpServers, 'nimbalyst-session-naming');
       let usedSessionNamingToolThisTurn = false;
 
@@ -816,6 +830,10 @@ export class OpenAICodexProvider extends BaseAgentProvider {
         model: resolvedModel,
         ...(permissionDecision.permissionMode ? { permissionMode: permissionDecision.permissionMode } : {}),
         mcpServers,
+        ...(isMetaAgent ? {
+          allowedTools: BaseAgentProvider.META_AGENT_ALLOWED_TOOLS,
+          disallowedTools: ['Read', 'Write', 'Edit', 'MultiEdit', 'Glob', 'Grep', 'LS', 'Bash', 'WebFetch', 'WebSearch', 'Task', 'Agent'].filter(t => !BaseAgentProvider.META_AGENT_ALLOWED_TOOLS.includes(t)),
+        } : {}),
         raw: {
           systemPrompt,
           abortSignal: abortController.signal,
@@ -1272,7 +1290,15 @@ export class OpenAICodexProvider extends BaseAgentProvider {
    * Uses buildClaudeCodeSystemPrompt to include Nimbalyst-specific instructions
    * for visual tools, worktrees, session naming, etc.
    */
-  protected buildSystemPrompt(documentContext?: DocumentContext): string {
+  protected buildSystemPrompt(documentContext?: DocumentContext, isMetaAgent: boolean = false): string {
+    if (isMetaAgent) {
+      // TODO: Get workflowPreset from session metadata or documentContext
+      return buildMetaAgentSystemPrompt('codex', 'default', {
+        provider: 'openai-codex',
+        model: this.config?.model ?? undefined,
+      });
+    }
+
     const hasSessionNaming = OpenAICodexProvider.sessionNamingServerPort !== null;
     const worktreePath = documentContext?.worktreePath;
     const isVoiceMode = (documentContext as any)?.isVoiceMode;

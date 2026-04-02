@@ -65,6 +65,8 @@ export async function getAllSessionsForSync(includeMessages = false): Promise<Ar
   mode?: string;
   sessionType?: string;
   parentSessionId?: string;
+  agentRole?: string;
+  createdBySessionId?: string | null;
   worktreeId?: string;
   isArchived?: boolean;
   isPinned?: boolean;
@@ -94,11 +96,15 @@ export async function getAllSessionsForSync(includeMessages = false): Promise<Ar
 
   const queryStart = performance.now();
   const { rows } = await moduleDb.query<any>(
-    `SELECT s.id, s.provider, s.model, s.mode, s.session_type, s.parent_session_id, s.title, s.workspace_id, s.draft_input,
+    `SELECT s.id, s.provider, s.model, s.mode, s.session_type, s.parent_session_id, s.agent_role, s.created_by_session_id, s.title, s.workspace_id, s.draft_input,
             s.worktree_id, s.is_archived, s.is_pinned, s.branched_from_session_id, s.branch_point_message_id, s.branched_at,
-            s.created_at, s.updated_at, s.metadata
+            s.created_at, s.updated_at, s.metadata, COUNT(m.id) as message_count
      FROM ai_sessions s
+     LEFT JOIN ai_agent_messages m ON s.id = m.session_id AND m.direction = 'input' AND (m.hidden = FALSE OR m.hidden IS NULL)
      WHERE (s.is_archived = FALSE OR s.is_archived IS NULL)
+     GROUP BY s.id, s.provider, s.model, s.mode, s.session_type, s.parent_session_id, s.agent_role, s.created_by_session_id, s.title, s.workspace_id, s.draft_input,
+              s.worktree_id, s.is_archived, s.is_pinned, s.branched_from_session_id, s.branch_point_message_id, s.branched_at,
+              s.created_at, s.updated_at, s.metadata
      ORDER BY s.updated_at DESC`
   );
   const queryTime = performance.now() - queryStart;
@@ -122,6 +128,8 @@ export async function getAllSessionsForSync(includeMessages = false): Promise<Ar
       mode: row.mode,
       sessionType: row.session_type || 'session',
       parentSessionId: row.parent_session_id || undefined,
+      agentRole: row.agent_role || 'standard',
+      createdBySessionId: row.created_by_session_id || undefined,
       worktreeId: row.worktree_id || undefined,
       isArchived: row.is_archived ?? false,
       isPinned: row.is_pinned ?? false,
@@ -302,19 +310,21 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       const createdAt = new Date(createdAtMs);
       const updatedAt = new Date(updatedAtMs);
 
-      const branchedAt = (payload as any).branchedAt ? new Date((payload as any).branchedAt) : null;
+      const branchedAt = payload.branchedAt ? new Date(payload.branchedAt) : null;
 
       await db.query(
         `INSERT INTO ai_sessions (
           id, workspace_id, file_path, worktree_id, parent_session_id, provider, model, title, session_type, mode,
+          agent_role, created_by_session_id,
           document_context, provider_config, provider_session_id, draft_input, metadata,
           has_been_named, created_at, updated_at,
           branched_from_session_id, branch_point_message_id, branched_at
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-          $11, $12, $13, $14, $15,
-          $16, $17, $18,
-          $19, $20, $21
+          $11, $12,
+          $13, $14, $15, $16, $17,
+          $18, $19, $20,
+          $21, $22, $23
         )
         ON CONFLICT (id) DO UPDATE SET
           workspace_id = EXCLUDED.workspace_id,
@@ -326,6 +336,8 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           title = EXCLUDED.title,
           session_type = EXCLUDED.session_type,
           mode = EXCLUDED.mode,
+          agent_role = EXCLUDED.agent_role,
+          created_by_session_id = EXCLUDED.created_by_session_id,
           document_context = EXCLUDED.document_context,
           provider_config = EXCLUDED.provider_config,
           provider_session_id = EXCLUDED.provider_session_id,
@@ -341,13 +353,15 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           payload.id,
           payload.workspaceId,
           payload.filePath ?? null,
-          (payload as any).worktreeId ?? null,
+          payload.worktreeId ?? null,
           payload.parentSessionId ?? null,  // Parent session ID for hierarchical workstreams
           payload.provider,
           payload.model ?? null,
           payload.title ?? 'New conversation',
-          (payload as any).sessionType ?? 'session',
-          (payload as any).mode ?? 'agent',
+          payload.sessionType ?? 'session',
+          payload.mode ?? 'agent',
+          payload.agentRole ?? 'standard',
+          payload.createdBySessionId ?? null,
           payload.documentContext ?? null,
           payload.providerConfig ?? null,
           payload.providerSessionId ?? null,
@@ -356,8 +370,8 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           (payload as any).hasBeenNamed ?? false,
           createdAt,
           updatedAt,
-          (payload as any).branchedFromSessionId ?? null,  // Branch tracking - separate from parent
-          (payload as any).branchPointMessageId ?? null,
+          payload.branchedFromSessionId ?? null,  // Branch tracking - separate from parent
+          payload.branchPointMessageId ?? null,
           branchedAt,
         ]
       );
@@ -380,8 +394,10 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       if (metadata.provider !== undefined) pushUpdate('provider =', metadata.provider);
       if (metadata.model !== undefined) pushUpdate('model =', metadata.model);
       if (metadata.title !== undefined) pushUpdate('title =', metadata.title ?? 'New conversation');
-      if ((metadata as any).sessionType !== undefined) pushUpdate('session_type =', (metadata as any).sessionType);
-      if ((metadata as any).mode !== undefined) pushUpdate('mode =', (metadata as any).mode);
+      if (metadata.sessionType !== undefined) pushUpdate('session_type =', metadata.sessionType);
+      if (metadata.mode !== undefined) pushUpdate('mode =', metadata.mode);
+      if (metadata.agentRole !== undefined) pushUpdate('agent_role =', metadata.agentRole);
+      if (metadata.createdBySessionId !== undefined) pushUpdate('created_by_session_id =', metadata.createdBySessionId ?? null);
       if (metadata.workspaceId !== undefined) pushUpdate('workspace_id =', metadata.workspaceId);
       if (metadata.filePath !== undefined) pushUpdate('file_path =', metadata.filePath ?? null);
       if (metadata.providerConfig !== undefined) pushUpdate('provider_config =', metadata.providerConfig ?? null);
@@ -391,15 +407,15 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       // NOTE: tokenUsage removed - it's derived from ai_agent_messages /context responses
       // NOTE: queuedPrompts removed - now uses separate queued_prompts table for atomic operations
       // Handle metadata field (the JSON blob) - do a shallow merge
-      if ((metadata as any).metadata !== undefined) {
+      if (metadata.metadata !== undefined) {
         updates.push(`metadata = COALESCE(metadata, '{}'::jsonb) || $${values.length + 1}::jsonb`);
-        values.push(JSON.stringify((metadata as any).metadata));
+        values.push(JSON.stringify(metadata.metadata));
       }
       if ((metadata as any).hasBeenNamed !== undefined) pushUpdate('has_been_named =', (metadata as any).hasBeenNamed);
       if (metadata.isArchived !== undefined) pushUpdate('is_archived =', metadata.isArchived);
       if ((metadata as any).isPinned !== undefined) pushUpdate('is_pinned =', (metadata as any).isPinned);
-      if ((metadata as any).parentSessionId !== undefined) pushUpdate('parent_session_id =', (metadata as any).parentSessionId);
-      if ((metadata as any).lastDocumentState !== undefined) pushUpdate('last_document_state =', (metadata as any).lastDocumentState);
+      if (metadata.parentSessionId !== undefined) pushUpdate('parent_session_id =', metadata.parentSessionId);
+      if (metadata.lastDocumentState !== undefined) pushUpdate('last_document_state =', metadata.lastDocumentState);
       // Canonical transcript transform status columns
       if (metadata.canonicalTransformVersion !== undefined) pushUpdate('canonical_transform_version =', metadata.canonicalTransformVersion);
       if (metadata.canonicalTransformStatus !== undefined) pushUpdate('canonical_transform_status =', metadata.canonicalTransformStatus);
@@ -448,6 +464,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
         model: row.model ?? undefined,
         sessionType: row.session_type ?? undefined,
         mode: row.mode ?? undefined,
+        agentRole: row.agent_role ?? 'standard',
         title: row.title ?? undefined,
         draftInput: row.draft_input ?? undefined,
         messages: [], // Messages are now stored in ai_agent_messages table
@@ -456,6 +473,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
         worktreePath: row.worktree_path ?? undefined,
         worktreeProjectPath: row.worktree_project_path ?? undefined,
         parentSessionId: row.parent_session_id ?? null,  // Hierarchical workstream support
+        createdBySessionId: row.created_by_session_id ?? null,
         createdAt: toMillis(row.created_at),
         updatedAt: toMillis(row.updated_at),
         metadata,
@@ -502,6 +520,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           model: row.model ?? undefined,
           sessionType: row.session_type ?? undefined,
           mode: row.mode ?? undefined,
+          agentRole: row.agent_role ?? 'standard',
           title: row.title ?? undefined,
           draftInput: row.draft_input ?? undefined,
           messages: [],
@@ -510,6 +529,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           worktreePath: row.worktree_path ?? undefined,
           worktreeProjectPath: row.worktree_project_path ?? undefined,
           parentSessionId: row.parent_session_id ?? null,
+          createdBySessionId: row.created_by_session_id ?? null,
           createdAt: toMillis(row.created_at),
           updatedAt: toMillis(row.updated_at),
           metadata,
@@ -544,7 +564,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       // NOTE: message_count removed - it required an expensive LEFT JOIN on ai_agent_messages
       // that was slow with many sessions. The count is not essential for the list view.
       const { rows } = await db.query<any>(
-        `SELECT s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
+        `SELECT s.id, s.provider, s.model, s.session_type, s.mode, s.agent_role, s.created_by_session_id, s.title, s.workspace_id,
                 s.worktree_id, s.parent_session_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned,
                 s.branched_from_session_id, s.branch_point_message_id, s.branched_at, s.metadata,
                 COALESCE(child_stats.child_count, 0) as child_count,
@@ -580,10 +600,12 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           model: row.model ?? undefined,
           sessionType: row.session_type || 'session',
           mode: row.mode ?? undefined,
+          agentRole: row.agent_role ?? 'standard',
           title: row.title || 'Untitled Session',
           workspaceId: row.workspace_id,
           worktreeId: row.worktree_id ?? null,
           parentSessionId: row.parent_session_id ?? null,
+          createdBySessionId: row.created_by_session_id ?? null,
           childCount,
           uncommittedCount: 0,
           createdAt,
@@ -645,6 +667,8 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           s.model,
           s.session_type,
           s.mode,
+          s.agent_role,
+          s.created_by_session_id,
           s.title,
           s.workspace_id,
           s.worktree_id,
@@ -723,6 +747,8 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
             s.model,
             s.session_type,
             s.mode,
+            s.agent_role,
+            s.created_by_session_id,
             s.title,
             s.workspace_id,
             s.worktree_id,
@@ -787,10 +813,12 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           model: row.model ?? undefined,
           sessionType: row.session_type || 'session',
           mode: row.mode ?? undefined,
+          agentRole: row.agent_role ?? 'standard',
           title: row.title || 'Untitled Session',
           workspaceId: row.workspace_id,
           worktreeId: row.worktree_id ?? null,
           parentSessionId: row.parent_session_id ?? null,
+          createdBySessionId: row.created_by_session_id ?? null,
           childCount,
           uncommittedCount: 0,
           createdAt,
@@ -809,7 +837,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       await ensureReady();
       // Find all sessions that were branched FROM this session (not hierarchical children)
       const { rows } = await db.query<any>(
-        `SELECT s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
+        `SELECT s.id, s.provider, s.model, s.session_type, s.mode, s.agent_role, s.created_by_session_id, s.title, s.workspace_id,
                 s.worktree_id, s.parent_session_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned,
                 s.branched_from_session_id, s.branch_point_message_id, s.branched_at
          FROM ai_sessions s
@@ -827,10 +855,12 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           model: row.model ?? undefined,
           sessionType: row.session_type || 'session',
           mode: row.mode ?? undefined,
+          agentRole: row.agent_role ?? 'standard',
           title: row.title || 'Untitled Session',
           workspaceId: row.workspace_id,
           worktreeId: row.worktree_id ?? null,
           parentSessionId: row.parent_session_id ?? null,
+          createdBySessionId: row.created_by_session_id ?? null,
           childCount: 0,  // Not computed in branch query
           uncommittedCount: 0,
           createdAt,

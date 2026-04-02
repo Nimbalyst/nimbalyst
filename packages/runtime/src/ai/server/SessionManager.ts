@@ -21,6 +21,7 @@ import {
   SessionType,
   ModelIdentifier,
   shouldBlockStartedSessionProviderSwitch,
+  AgentRole,
 } from './types';
 import type { TranscriptViewMessage } from './transcript/TranscriptProjector';
 import type { SessionData as ChatSession } from './types';
@@ -139,6 +140,8 @@ function sessionDataFromChatSession(session: ChatSession, fallbackWorkspace: str
     model: session.model ?? undefined,
     sessionType: session.sessionType,
     mode: session.mode,
+    agentRole: session.agentRole ?? 'standard',
+    createdBySessionId: session.createdBySessionId ?? null,
     createdAt: toTimestampMillis(session.createdAt),
     updatedAt: toTimestampMillis(session.updatedAt),
     messages: session.messages.map(viewMessageFromServerMessage),
@@ -153,15 +156,15 @@ function sessionDataFromChatSession(session: ChatSession, fallbackWorkspace: str
     metadata: session.metadata ?? {},
     isArchived: session.isArchived ?? false,
     // Worktree fields - passed through from database query
-    worktreeId: (session as any).worktreeId ?? undefined,
-    worktreePath: (session as any).worktreePath ?? undefined,
+    worktreeId: session.worktreeId ?? undefined,
+    worktreePath: session.worktreePath ?? undefined,
     // Hierarchical workstream parent (separate from branch)
-    parentSessionId: (session as any).parentSessionId ?? undefined,
+    parentSessionId: session.parentSessionId ?? undefined,
     // Branch tracking fields - passed through from database query
-    branchedFromSessionId: (session as any).branchedFromSessionId ?? undefined,
-    branchPointMessageId: (session as any).branchPointMessageId ?? undefined,
-    branchedAt: (session as any).branchedAt ?? undefined,
-    branchedFromProviderSessionId: (session as any).branchedFromProviderSessionId ?? undefined,
+    branchedFromSessionId: session.branchedFromSessionId ?? undefined,
+    branchPointMessageId: session.branchPointMessageId ?? undefined,
+    branchedAt: session.branchedAt ?? undefined,
+    branchedFromProviderSessionId: session.branchedFromProviderSessionId ?? undefined,
   } satisfies SessionData;
 }
 
@@ -836,7 +839,9 @@ export class SessionManager {
     mode?: 'planning' | 'agent',
     worktreeId?: string,
     worktreePath?: string,
-    worktreeProjectPath?: string
+    worktreeProjectPath?: string,
+    agentRole: AgentRole = 'standard',
+    createdBySessionId?: string | null
   ): Promise<SessionData> {
     // workspacePath is REQUIRED - sessions cannot exist outside of a workspace
     if (!workspacePath) {
@@ -859,6 +864,8 @@ export class SessionManager {
       worktreeId,
       worktreePath,
       worktreeProjectPath,
+      agentRole,
+      createdBySessionId,
     });
 
     // Canonical transform columns default to null in the DB schema, so new
@@ -886,6 +893,8 @@ export class SessionManager {
       worktreeId,
       worktreePath,
       worktreeProjectPath,
+      agentRole,
+      createdBySessionId: createdBySessionId ?? null,
     };
 
     this.currentSession = session;

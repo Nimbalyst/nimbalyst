@@ -178,6 +178,13 @@ export interface SessionTranscriptProps {
   // On-demand getter for document context (preferred over static documentContext)
   // Async because it reads file content from disk for consistency across all editor types
   getDocumentContext?: () => Promise<SerializableDocumentContext>;
+
+  // Optional: additional active workers to merge into transcript teammate status.
+  // Used by meta-agent mode to surface delegated child sessions.
+  additionalTeammates?: Array<{ agentId: string; status: 'running' | 'completed' | 'errored' | 'idle' }>;
+
+  // Optional: noun used in waiting text when other workers are still running.
+  waitingForNoun?: string;
 }
 
 /**
@@ -277,6 +284,8 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   onCreateWorktreeSession,
   documentContext,
   getDocumentContext,
+  additionalTeammates,
+  waitingForNoun,
 }, ref) => {
   const posthog = usePostHog();
   const inputRef = useRef<AIInputRef>(null);
@@ -1512,6 +1521,14 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     );
   }
 
+  const transcriptTeammates = [
+    ...(((sessionData.metadata?.currentTeammates as Array<{
+      agentId: string;
+      status: 'running' | 'completed' | 'errored' | 'idle';
+    }> | undefined) ?? [])),
+    ...(additionalTeammates ?? []),
+  ];
+
   return (
     <div
       style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', minHeight: 0 }}
@@ -1553,6 +1570,8 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
             externalEditorName={externalEditorName}
             onCompact={handleCompact}
             promptAdditions={showPromptAdditions ? promptAdditions : null}
+            currentTeammates={transcriptTeammates}
+            waitingForNoun={waitingForNoun}
             appStartTime={appStartTime ?? undefined}
             getToolCallDiffs={getToolCallDiffs}
             currentPhase={currentPhase}

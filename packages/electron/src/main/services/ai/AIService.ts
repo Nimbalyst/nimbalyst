@@ -660,6 +660,159 @@ export class AIService {
     }
   }
 
+  public async queuePromptForSession(
+    sessionId: string,
+    prompt: string,
+    attachments?: any[],
+    documentContext?: any
+  ): Promise<{ id: string; prompt: string; createdAt: number }> {
+    const { getQueuedPromptsStore } = await import('../RepositoryManager');
+    const queueStore = getQueuedPromptsStore();
+    const promptId = `meta-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const created = await queueStore.create({
+      id: promptId,
+      sessionId,
+      prompt,
+      attachments,
+      documentContext,
+    });
+    return { id: created.id, prompt: created.prompt, createdAt: created.createdAt };
+  }
+
+  public async triggerQueuedPromptProcessingForSession(sessionId: string, workspacePath: string): Promise<boolean> {
+    const targetWindow = findWindowByWorkspace(workspacePath);
+    if (!targetWindow || targetWindow.isDestroyed()) {
+      return false;
+    }
+    return this.processQueuedPrompt(sessionId, workspacePath, targetWindow);
+  }
+
+  public async respondToInteractivePrompt(params: {
+    sessionId: string;
+    promptId: string;
+    promptType: 'permission_request' | 'ask_user_question_request' | 'exit_plan_mode_request';
+    response: any;
+    respondedBy?: 'desktop' | 'mobile';
+  }): Promise<{ success: boolean; error?: string }> {
+    const { sessionId, promptId, promptType, response, respondedBy = 'desktop' } = params;
+    const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
+    const { database } = await import('../../database/PGLiteDatabaseWorker');
+    const session = await AISessionsRepository.get(sessionId);
+    if (!session) {
+      return { success: false, error: 'Session not found' };
+    }
+
+    let responseContent: Record<string, unknown>;
+    if (promptType === 'permission_request') {
+      responseContent = {
+        type: 'permission_response',
+        requestId: promptId,
+        decision: response.decision,
+        scope: response.scope,
+        respondedAt: Date.now(),
+        respondedBy,
+      };
+    } else if (promptType === 'ask_user_question_request') {
+      responseContent = {
+        type: 'ask_user_question_response',
+        questionId: promptId,
+        answers: response.answers || response,
+        cancelled: response.cancelled || false,
+        respondedAt: Date.now(),
+        respondedBy,
+      };
+    } else {
+      responseContent = {
+        type: 'exit_plan_mode_response',
+        requestId: promptId,
+        approved: response.approved,
+        clearContext: response.clearContext,
+        feedback: response.feedback,
+        respondedAt: Date.now(),
+        respondedBy,
+      };
+    }
+
+    await database.query(
+      `INSERT INTO ai_agent_messages (session_id, source, direction, content, created_at, hidden)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [sessionId, 'nimbalyst', 'output', JSON.stringify(responseContent), new Date(), false]
+    );
+
+    if (promptType === 'permission_request') {
+      const provider = ProviderFactory.getProvider(session.provider as AIProviderType, sessionId);
+      if (!provider) {
+        return { success: false, error: 'Provider not found' };
+      }
+      if (typeof (provider as any).resolveToolPermission !== 'function') {
+        return { success: false, error: 'Provider does not support tool permission responses' };
+      }
+      (provider as any).resolveToolPermission(promptId, response, sessionId, respondedBy);
+      return { success: true };
+    }
+
+    if (promptType === 'ask_user_question_request') {
+      const provider = ProviderFactory.getProvider(session.provider as AIProviderType, sessionId);
+      const resolved = isAskUserQuestionProvider(provider)
+        ? provider.resolveAskUserQuestion(promptId, response.answers || response, sessionId, respondedBy)
+        : false;
+
+      const { rows: askRequestRows } = await database.query<{ id: string }>(
+        `SELECT id
+         FROM ai_agent_messages
+         WHERE session_id = $1
+           AND content LIKE '%"type":"ask_user_question_request"%'
+           AND content LIKE $2
+         LIMIT 1`,
+        [sessionId, `%"questionId":"${promptId}"%`]
+      );
+      const hasPersistedQuestionRequest = askRequestRows.length > 0;
+
+      const askUserQuestionChannel = `ask-user-question-response:${sessionId}:${promptId}`;
+      const hasAskUserQuestionWaiter = ipcMain.listenerCount(askUserQuestionChannel) > 0;
+      if (hasAskUserQuestionWaiter) {
+        ipcMain.emit(askUserQuestionChannel, {} as any, {
+          questionId: promptId,
+          answers: response.answers || response,
+          cancelled: response.cancelled || false,
+          respondedBy,
+          sessionId,
+        });
+      }
+
+      const sessionFallbackChannel = `ask-user-question:${sessionId}`;
+      const hasSessionFallbackWaiter = ipcMain.listenerCount(sessionFallbackChannel) > 0;
+      if (hasSessionFallbackWaiter) {
+        ipcMain.emit(sessionFallbackChannel, {} as any, {
+          questionId: promptId,
+          answers: response.answers || response,
+          cancelled: response.cancelled || false,
+          respondedBy,
+          sessionId,
+        });
+      }
+
+      return resolved || hasAskUserQuestionWaiter || hasSessionFallbackWaiter || hasPersistedQuestionRequest
+        ? { success: true }
+        : { success: false, error: 'Question not found' };
+    }
+
+    const provider = ProviderFactory.getProvider(session.provider as AIProviderType, sessionId);
+    if (!provider) {
+      return { success: false, error: 'Provider not found' };
+    }
+
+    if (typeof (provider as any).resolveExitPlanModeConfirmation !== 'function') {
+      return { success: false, error: 'Provider does not support ExitPlanMode responses' };
+    }
+
+    (provider as any).resolveExitPlanModeConfirmation(promptId, response, sessionId, respondedBy);
+    if (response.approved) {
+      await AISessionsRepository.updateMetadata(sessionId, { mode: 'agent' });
+    }
+    return { success: true };
+  }
+
   private getSettingsStore(): Store<Record<string, unknown>> {
     if (!this.settingsStore) {
       this.settingsStore = new Store<Record<string, unknown>>({
@@ -933,6 +1086,29 @@ export class AIService {
           await this.continueQueuedPromptChain(sessionId, workspacePath, targetWindow, 'processQueuedPrompt finally');
         } catch (chainErr) {
           logger.main.error('[AIService] processQueuedPrompt finally: error checking for pending prompts:', chainErr);
+        }
+
+        // If this was a meta-agent child session, ensure the meta-agent
+        // processes any queued notifications (wakeup safety net).
+        try {
+          const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
+          const childSession = await AISessionsRepository.get(sessionId);
+          if (childSession?.createdBySessionId) {
+            const metaSession = await AISessionsRepository.get(childSession.createdBySessionId);
+            if (metaSession?.workspacePath) {
+              const stateManager = getSessionStateManager();
+              const metaState = stateManager.getSessionState(metaSession.id);
+              const metaStatus = metaState?.status || 'idle';
+              if (metaStatus === 'idle' || metaStatus === 'error') {
+                logger.main.info(`[AIService] processQueuedPrompt: waking meta-agent ${metaSession.id} after child ${sessionId} completed`);
+                this.triggerQueuedPromptProcessingForSession(metaSession.id, metaSession.workspacePath).catch((err) => {
+                  logger.main.error('[AIService] Failed to trigger meta-agent queue processing:', err);
+                });
+              }
+            }
+          }
+        } catch (metaErr) {
+          logger.main.error('[AIService] processQueuedPrompt: error checking meta-agent wakeup:', metaErr);
         }
       }
     });
@@ -2282,7 +2458,9 @@ export class AIService {
         getSessionStateManager().updateActivity({
           sessionId: data.sessionId,
           status: 'waiting_for_input',
-        }).catch(() => {});
+        }).catch((err) => {
+          logger.main.error('[AIService] Failed to update session status to waiting_for_input:', err);
+        });
 
         // Show OS notification if app is backgrounded
         const sessionTitle = session.title || 'AI Session';
@@ -2307,7 +2485,9 @@ export class AIService {
         getSessionStateManager().updateActivity({
           sessionId: data.sessionId,
           status: 'waiting_for_input',
-        }).catch(() => {});
+        }).catch((err) => {
+          logger.main.error('[AIService] Failed to update session status to waiting_for_input:', err);
+        });
 
         // Show OS notification if app is backgrounded
         const sessionTitle = session.title || 'AI Session';
@@ -2349,7 +2529,9 @@ export class AIService {
         getSessionStateManager().updateActivity({
           sessionId: data.sessionId,
           status: 'waiting_for_input',
-        }).catch(() => {});
+        }).catch((err) => {
+          logger.main.error('[AIService] Failed to update session status to waiting_for_input:', err);
+        });
 
         // Show OS notification if app is backgrounded
         const sessionTitle = session.title || 'AI Session';

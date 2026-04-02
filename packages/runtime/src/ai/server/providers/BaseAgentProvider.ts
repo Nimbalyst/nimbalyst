@@ -14,6 +14,7 @@
 
 import { BaseAIProvider } from '../AIProvider';
 import { ProviderCapabilities } from '../types';
+import { AISessionsRepository } from '../../../storage/repositories/AISessionsRepository';
 import {
   ProviderPermissionMixin,
   PermissionDecision,
@@ -26,6 +27,11 @@ import { ProviderSessionManager, ProviderSessionData } from './ProviderSessionMa
 import { AgentMessagesRepository } from '../../../storage/repositories/AgentMessagesRepository';
 
 export abstract class BaseAgentProvider extends BaseAIProvider {
+  protected static readonly META_AGENT_ALLOWED_TOOLS: string[] = [
+    'TaskCreate', 'TaskGet', 'TaskUpdate', 'TaskList',
+    'TodoRead', 'TodoWrite',
+  ];
+
   // Abort management
   protected abortController: AbortController | null = null;
 
@@ -255,6 +261,18 @@ export abstract class BaseAgentProvider extends BaseAIProvider {
    */
   protected logSecurity(message: string, data?: Record<string, unknown>): void {
     BaseAgentProvider.securityLogger?.(message, data);
+  }
+
+  protected async getAgentRole(sessionId?: string): Promise<'standard' | 'meta-agent'> {
+    if (!sessionId) {
+      return 'standard';
+    }
+    try {
+      const session = await AISessionsRepository.get(sessionId);
+      return session?.agentRole === 'meta-agent' ? 'meta-agent' : 'standard';
+    } catch {
+      return 'standard';
+    }
   }
 
   /**

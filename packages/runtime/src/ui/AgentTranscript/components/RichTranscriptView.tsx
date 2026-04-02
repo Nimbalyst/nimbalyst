@@ -408,6 +408,8 @@ interface RichTranscriptViewProps {
   } | null;
   /** Optional: Current teammates/agents from session metadata, used to show status on spawn cards */
   currentTeammates?: Array<{ agentId: string; status: 'running' | 'completed' | 'errored' | 'idle' }>;
+  /** Optional: noun used in waiting text when teammates/workers are still running */
+  waitingForNoun?: string;
   /** Optional: App start time (epoch ms) for rendering restart indicator line (dev mode only) */
   appStartTime?: number;
   /** Optional: Fetch file diffs caused by a specific tool call */
@@ -702,7 +704,7 @@ export const extractEditsFromToolMessage = (message: TranscriptViewMessage): any
 export const RichTranscriptView = React.forwardRef<
   { scrollToMessage: (index: number) => void; scrollToTop: () => void },
   RichTranscriptViewProps
->(({ sessionId, sessionStatus, isProcessing, hasPendingInteractivePrompt, messages, provider, settings: propsSettings, onSettingsChange, showSettings, documentContext, workspacePath, renderEmptyExtra, readFile, onOpenFile, onCompact, promptAdditions, currentTeammates, appStartTime, getToolCallDiffs }, ref) => {
+>(({ sessionId, sessionStatus, isProcessing, hasPendingInteractivePrompt, messages, provider, settings: propsSettings, onSettingsChange, showSettings, documentContext, workspacePath, renderEmptyExtra, readFile, onOpenFile, onCompact, promptAdditions, currentTeammates, waitingForNoun, appStartTime, getToolCallDiffs }, ref) => {
   const [collapsedMessages, setCollapsedMessages] = useState<Set<number>>(new Set());
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
   const scrollButtonRef = useRef<HTMLDivElement>(null);
@@ -745,6 +747,11 @@ export const RichTranscriptView = React.forwardRef<
     return () => io.disconnect();
   }, []);
 
+  const runningTeammates = useMemo(
+    () => currentTeammates?.filter(t => t.status === 'running') ?? [],
+    [currentTeammates]
+  );
+
   // Determine if we're waiting for a response (used for scroll behavior and UI)
   const isWaitingForResponse = useMemo(() => {
     // Session is waiting for the USER to answer — not thinking, don't show the indicator.
@@ -761,23 +768,21 @@ export const RichTranscriptView = React.forwardRef<
       const lastMessage = messages[messages.length - 1];
       return lastMessage.type === 'user_message';
     }
+    if (runningTeammates.length > 0) return true;
     return false;
-  }, [messages, sessionStatus, isProcessing, hasPendingInteractivePrompt]);
+  }, [messages, sessionStatus, isProcessing, hasPendingInteractivePrompt, runningTeammates]);
 
   // Compute waiting indicator text — show agent/teammate count when lead is idle but agents are running
   const waitingText = useMemo(() => {
     if (!isWaitingForResponse) return '';
-    const runningAgents = currentTeammates?.filter(t => t.status === 'running') ?? [];
-    if (runningAgents.length > 0) {
-      // Check if the last message is from the assistant (lead finished, waiting for agents)
-      const lastMsg = messages[messages.length - 1];
-      if (lastMsg?.type === 'assistant_message') {
-        const label = runningAgents.length === 1 ? 'agent' : 'agents';
-        return `Waiting for ${runningAgents.length} ${label} to finish`;
-      }
+    if (runningTeammates.length > 0 && !isProcessing && sessionStatus !== 'running') {
+      const singular = waitingForNoun || 'agent';
+      const plural = singular.endsWith('s') ? singular : `${singular}s`;
+      const label = runningTeammates.length === 1 ? singular : plural;
+      return `Waiting for ${runningTeammates.length} ${label} to complete...`;
     }
     return 'Thinking...';
-  }, [isWaitingForResponse, currentTeammates, messages]);
+  }, [isProcessing, isWaitingForResponse, runningTeammates, sessionStatus, waitingForNoun]);
 
 
   // Compute effective target index for prompt additions display

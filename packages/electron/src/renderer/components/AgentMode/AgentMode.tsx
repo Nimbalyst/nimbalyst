@@ -62,6 +62,7 @@ import { initTrayListeners, trayNewSessionRequestAtom } from '../../store/listen
 import { fetchSessionSharesAtom } from '../../store';
 import type { WorktreeCreateResult, SessionCreateResult } from '../../../shared/ipc/types';
 import { BlitzDialog } from '../BlitzDialog/BlitzDialog';
+import { MetaAgentMode } from '../MetaAgentMode/MetaAgentMode';
 
 export interface AgentModeRef {
   createNewSession: (initialDraft?: string) => Promise<string | undefined>;
@@ -969,21 +970,38 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
     refreshSessions();
   }, [refreshSessions]);
 
+  // Check if the selected session is a meta-agent
+  const sessionRegistry = useAtomValue(sessionRegistryAtom);
+  const isSelectedMetaAgent = useMemo(() => {
+    if (!selectedWorkstream) return false;
+    return sessionRegistry.get(selectedWorkstream.id)?.agentRole === 'meta-agent';
+  }, [selectedWorkstream?.id, sessionRegistry]);
+
   // Content for the right side
   const rightContent = selectedWorkstream ? (
-    <AgentWorkstreamPanel
-      ref={workstreamPanelRef}
-      workspacePath={workspacePath}
-      workstreamId={selectedWorkstream.id}
-      workstreamType={selectedWorkstream.type}
-      onFileOpen={onFileOpen}
-      onAddSessionToWorktree={addSessionToWorktree}
-      onCreateWorktreeSession={createWorktreeSession}
-      onWorktreeArchived={handleWorktreeArchived}
-      isGitRepo={isGitRepo}
-      onSwitchToAgentMode={onSwitchToAgentMode}
-      onOpenSessionInChat={onOpenSessionInChat}
-    />
+    isSelectedMetaAgent ? (
+      <MetaAgentMode
+        key={selectedWorkstream.id}
+        workspacePath={workspacePath}
+        isActive={isActive}
+        sessionId={selectedWorkstream.id}
+        onOpenSessionInAgent={(sessionId) => handleSessionSelect(sessionId)}
+      />
+    ) : (
+      <AgentWorkstreamPanel
+        ref={workstreamPanelRef}
+        workspacePath={workspacePath}
+        workstreamId={selectedWorkstream.id}
+        workstreamType={selectedWorkstream.type}
+        onFileOpen={onFileOpen}
+        onAddSessionToWorktree={addSessionToWorktree}
+        onCreateWorktreeSession={createWorktreeSession}
+        onWorktreeArchived={handleWorktreeArchived}
+        isGitRepo={isGitRepo}
+        onSwitchToAgentMode={onSwitchToAgentMode}
+        onOpenSessionInChat={onOpenSessionInChat}
+      />
+    )
   ) : (
     <div className="agent-mode-empty flex flex-col items-center justify-center h-full gap-4 text-nim-muted">
       <p className="m-0 text-sm">Select a session or create a new one to get started</p>

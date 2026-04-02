@@ -6,6 +6,7 @@ import { SessionListItem } from './SessionListItem';
 import { WorkstreamGroup } from './WorkstreamGroup';
 import { BlitzGroup } from './BlitzGroup';
 import { SuperLoopGroup } from './SuperLoopGroup';
+import { MetaAgentGroup } from './MetaAgentGroup';
 import { NewSuperLoopDialog } from './NewSuperLoopDialog';
 import { ArchiveProgress } from './ArchiveProgress';
 import { IndexBuildDialog } from './IndexBuildDialog';
@@ -30,6 +31,7 @@ import {
   viewModeAtom,
   setViewModeAtom,
   worktreeActiveSessionAtom,
+  addSessionFullAtom,
   type SessionMeta,
 } from '../../store';
 import { alphaFeatureEnabledAtom, worktreesFeatureAvailableAtom } from '../../store/atoms/appSettings';
@@ -37,7 +39,9 @@ import { superLoopListAtom, upsertSuperLoopAtom, removeSuperLoopAtom } from '../
 import { useSuperLoopDialog } from '../../hooks/useSuperLoop';
 import type { SuperLoop } from '../../../shared/types/superLoop';
 import { store } from '@nimbalyst/runtime/store';
+import { createMetaAgentSession } from '../../utils/metaAgentUtils';
 import { HelpTooltip } from '../../help';
+import { defaultAgentModelAtom } from '../../store/atoms/appSettings';
 import { usePostHog } from 'posthog-js/react';
 import { WorkspaceSummaryHeader, generateWorkspaceAccentColor } from '../WorkspaceSummaryHeader';
 import './SessionHistory.css';
@@ -262,12 +266,47 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const isWorktreesAvailable = useAtomValue(worktreesFeatureAvailableAtom);
   const isSuperLoopsAlphaEnabled = useAtomValue(alphaFeatureEnabledAtom('super-loops'));
   const isSuperLoopsAvailable = isWorktreesAvailable && isSuperLoopsAlphaEnabled;
+  const isMetaAgentEnabled = useAtomValue(alphaFeatureEnabledAtom('meta-agent'));
 
   // === Super Loop state ===
   const superLoops = useAtomValue(superLoopListAtom);
   const upsertSuperLoop = useSetAtom(upsertSuperLoopAtom);
   const removeSuperLoop = useSetAtom(removeSuperLoopAtom);
   const { openDialog: openSuperLoopDialog } = useSuperLoopDialog();
+
+  // === Meta-agent session creation ===
+  const defaultAgentModel = useAtomValue(defaultAgentModelAtom);
+  const addSession = useSetAtom(addSessionFullAtom);
+
+  const handleNewMetaAgent = useCallback(async () => {
+    try {
+      const result = await createMetaAgentSession(workspacePath, defaultAgentModel);
+      if (result) {
+        const now = Date.now();
+        addSession({
+          id: result.id,
+          title: 'Meta Agent',
+          createdAt: now,
+          updatedAt: now,
+          provider: result.provider,
+          model: defaultAgentModel,
+          sessionType: 'session',
+          agentRole: 'meta-agent',
+          messageCount: 0,
+          workspaceId: workspacePath,
+          isArchived: false,
+          isPinned: false,
+          parentSessionId: null,
+          worktreeId: null,
+          childCount: 0,
+          uncommittedCount: 0,
+        });
+        onSessionSelect(result.id);
+      }
+    } catch (error) {
+      console.error('[SessionHistory] Failed to create meta-agent session:', error);
+    }
+  }, [defaultAgentModel, workspacePath, onSessionSelect, addSession]);
 
   // Get the session registry to look up parent session IDs
   const sessionRegistry = useAtomValue(sessionRegistryAtom);
@@ -981,6 +1020,17 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     // Non-worktree blitz child (e.g. analysis sessions without worktreeId)
     if (activeSession.parentSessionId && blitzCache.has(activeSession.parentSessionId)) {
       return `blitz:${activeSession.parentSessionId}`;
+    }
+
+    // Meta-agent session or child of meta-agent
+    if (activeSession.agentRole === 'meta-agent') {
+      return `meta-agent:${activeSession.id}`;
+    }
+    if (activeSession.createdBySessionId) {
+      const parentSession = allSessions.find(s => s.id === activeSession.createdBySessionId);
+      if (parentSession?.agentRole === 'meta-agent') {
+        return `meta-agent:${parentSession.id}`;
+      }
     }
 
     // Workstream (has children, no worktreeId)
@@ -1863,18 +1913,62 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     | { type: 'workstream'; session: SessionItem; sessions: SessionItem[]; timestamp: number }
     | { type: 'worktree'; worktreeId: string; sessions: SessionItem[]; timestamp: number }
     | { type: 'blitz'; blitzId: string; worktrees: { worktreeId: string; sessions: SessionItem[] }[]; timestamp: number }
-    | { type: 'superLoop'; loop: SuperLoop; timestamp: number };
+    | { type: 'superLoop'; loop: SuperLoop; timestamp: number }
+    | { type: 'metaAgent'; metaSession: SessionItem; childSessions: SessionItem[]; timestamp: number };
 
   // Build unified time-grouped data with both sessions and worktrees interleaved
   const groupedItems = useMemo(() => {
     const timestampField = sortBy === 'updated' ? 'updatedAt' : 'createdAt';
     const items: UnifiedListItem[] = [];
     const pinnedItems: UnifiedListItem[] = [];
+    const metaAgentItems: UnifiedListItem[] = [];
+
+    // Identify meta-agent sessions and their child sessions
+    const metaAgentSessionIds = new Set<string>();
+    const metaAgentChildSessionIds = new Set<string>();
+    if (isMetaAgentEnabled) {
+      for (const session of sessions) {
+        if (session.agentRole === 'meta-agent') {
+          metaAgentSessionIds.add(session.id);
+        }
+      }
+      // Collect children (sessions created by meta-agent sessions)
+      for (const session of sessions) {
+        if (session.createdBySessionId && metaAgentSessionIds.has(session.createdBySessionId)) {
+          metaAgentChildSessionIds.add(session.id);
+        }
+      }
+      // Build meta-agent group items (always at top)
+      for (const session of sessions) {
+        if (session.agentRole === 'meta-agent') {
+          const childSessions = sessions
+            .filter(s => s.createdBySessionId === session.id)
+            .sort((a, b) => b.updatedAt - a.updatedAt);
+          const latestChildTimestamp = childSessions.length > 0
+            ? Math.max(...childSessions.map(s => s.updatedAt || s.createdAt))
+            : 0;
+          const timestamp = Math.max(
+            timestampField === 'updatedAt' ? (session.updatedAt || session.createdAt) : session.createdAt,
+            latestChildTimestamp
+          );
+          metaAgentItems.push({
+            type: 'metaAgent' as const,
+            metaSession: session,
+            childSessions,
+            timestamp,
+          });
+        }
+      }
+      // Sort meta-agent items by timestamp (newest first)
+      metaAgentItems.sort((a, b) => b.timestamp - a.timestamp);
+    }
 
     // Add regular sessions and workstreams (those without worktreeId)
     for (const session of sessions) {
       // Skip blitz sessions - they're rendered via BlitzGroup, not as individual items
       if (session.sessionType === 'blitz') continue;
+      // Skip meta-agent sessions and their children - they're rendered via MetaAgentGroup
+      if (metaAgentSessionIds.has(session.id) || metaAgentChildSessionIds.has(session.id)) continue;
 
       if (!session.worktreeId) {
         // Check if this is a workstream (has children)
@@ -1923,6 +2017,11 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     for (const [worktreeId, data] of worktreeGroupsData) {
       // Skip worktrees that belong to Super Loops
       if (superLoopWorktreeIds.has(worktreeId)) {
+        continue;
+      }
+
+      // Skip worktrees whose sessions are all meta-agent children
+      if (metaAgentChildSessionIds.size > 0 && data.sessions.every(s => metaAgentChildSessionIds.has(s.id))) {
         continue;
       }
 
@@ -2052,8 +2151,15 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     // Sort pinned items by timestamp (newest first)
     pinnedItems.sort((a, b) => b.timestamp - a.timestamp);
 
-    // If we have pinned items, add them as a "Pinned" group at the beginning
+    // Build the result with meta-agent items always first
     const result: Record<string, UnifiedListItem[]> = {};
+
+    // Meta-agent sessions always appear at the very top
+    if (metaAgentItems.length > 0) {
+      result['Meta Agent'] = metaAgentItems;
+    }
+
+    // If we have pinned items, add them as a "Pinned" group
     if (pinnedItems.length > 0) {
       result['Pinned'] = pinnedItems;
     }
@@ -2065,10 +2171,10 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       }
     }
 
-    return result as Record<TimeGroupKey | 'Pinned', UnifiedListItem[]>;
-  }, [sessions, worktreeGroupsData, sortBy, worktreeCache, workstreamChildrenCache, blitzCache, superLoops, showArchived]);
+    return result as Record<TimeGroupKey | 'Pinned' | 'Meta Agent', UnifiedListItem[]>;
+  }, [sessions, worktreeGroupsData, sortBy, worktreeCache, workstreamChildrenCache, blitzCache, superLoops, showArchived, isMetaAgentEnabled]);
 
-  const groupKeys = Object.keys(groupedItems) as (TimeGroupKey | 'Pinned')[];
+  const groupKeys = Object.keys(groupedItems) as (TimeGroupKey | 'Pinned' | 'Meta Agent')[];
 
   // Flatten groups and their visible items into a single array for Virtuoso.
   // Group headers are included as items; collapsed groups omit their children.
@@ -2969,6 +3075,9 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                   } else if (item.type === 'superLoop') {
                     // Super Loop card (in card view, we skip these for now - they show in list view)
                     return null;
+                  } else if (item.type === 'metaAgent') {
+                    // Meta Agent card (in card view, we skip these for now - they show in list view)
+                    return null;
                   } else {
                     // Regular session card
                     const session = item.session;
@@ -3178,6 +3287,25 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                       projectPath={session.workspaceId}
                       onWorkstreamArchive={handleArchiveSession}
                       onWorkstreamPinToggle={handleSessionPinToggle}
+                    />
+                  );
+                }
+                if (item.type === 'metaAgent') {
+                  const isMetaExpanded = !collapsedGroups.includes(`meta-agent:${item.metaSession.id}`);
+                  const isMetaActive = item.metaSession.id === activeSessionId
+                    || item.childSessions.some(s => s.id === activeSessionId);
+
+                  return (
+                    <MetaAgentGroup
+                      metaSession={item.metaSession}
+                      childSessions={item.childSessions}
+                      isExpanded={isMetaExpanded}
+                      isActive={isMetaActive}
+                      isSelected={selectedGroupIds.has(`meta-agent:${item.metaSession.id}`)}
+                      onToggle={() => handleToggleGroup(`meta-agent:${item.metaSession.id}`)}
+                      onMultiSelect={() => handleGroupMultiSelect(`meta-agent:${item.metaSession.id}`)}
+                      activeSessionId={activeSessionId}
+                      onSessionSelect={onSessionSelect}
                     />
                   );
                 }
@@ -3536,6 +3664,16 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                 <path d="M3 10.5H6.5M3 10.5L5.5 8M3 10.5L5.5 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
               <span>New Super Loop</span>
+            </button>
+          )}
+          {isMetaAgentEnabled && (
+            <button
+              className="session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1"
+              data-testid="new-meta-agent-button"
+              onClick={() => { void handleNewMetaAgent(); setNewDropdownOpen(false); setNewDropdownPosition(null); }}
+            >
+              <MaterialSymbol icon="hub" size={14} />
+              <span>New Meta Agent</span>
             </button>
           )}
         </div>

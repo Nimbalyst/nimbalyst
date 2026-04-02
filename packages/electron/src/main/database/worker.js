@@ -449,6 +449,8 @@ class PGLiteWorker {
         model TEXT,
         title TEXT NOT NULL DEFAULT 'New conversation',
         session_type TEXT DEFAULT 'session',
+        agent_role TEXT DEFAULT 'standard',
+        created_by_session_id TEXT REFERENCES ai_sessions(id) ON DELETE SET NULL,
         document_context JSONB,
         provider_config JSONB,
         provider_session_id TEXT,
@@ -1261,6 +1263,38 @@ class PGLiteWorker {
       console.log('[PGLite Worker] parent_session_id column added to ai_sessions');
     } catch (error) {
       console.error('[PGLite Worker] Failed to add parent_session_id column:', error);
+      throw error;
+    }
+
+    // Add meta-agent session tracking columns to ai_sessions (migration)
+    try {
+      await this.db.exec(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'ai_sessions' AND column_name = 'agent_role'
+          ) THEN
+            ALTER TABLE ai_sessions ADD COLUMN agent_role TEXT DEFAULT 'standard';
+          END IF;
+
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'ai_sessions' AND column_name = 'created_by_session_id'
+          ) THEN
+            ALTER TABLE ai_sessions ADD COLUMN created_by_session_id TEXT REFERENCES ai_sessions(id) ON DELETE SET NULL;
+          END IF;
+        END $$;
+      `);
+
+      await this.db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_ai_sessions_agent_role ON ai_sessions(agent_role);
+        CREATE INDEX IF NOT EXISTS idx_ai_sessions_created_by ON ai_sessions(created_by_session_id);
+        CREATE INDEX IF NOT EXISTS idx_ai_sessions_created_by_workspace ON ai_sessions(created_by_session_id, workspace_id) WHERE created_by_session_id IS NOT NULL;
+      `);
+
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to add meta-agent session columns:', error);
       throw error;
     }
 

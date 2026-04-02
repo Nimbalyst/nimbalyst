@@ -44,7 +44,7 @@ import { TeammateManager, type TeammateToLeadMessage } from './TeammateManager';
 import path from 'path';
 import os from 'os';
 import { app } from 'electron';
-import { buildClaudeCodeSystemPrompt } from '../../prompt';
+import { buildClaudeCodeSystemPrompt, buildMetaAgentSystemPrompt } from '../../prompt';
 import type { ClaudeHelperMethod } from '../../../electron/claudeCodeEnvironment';
 import { SessionManager } from '../SessionManager';
 import { parseBashForFileOps, hasShellChainingOperators, splitOnShellOperators } from '../permissions/BashCommandAnalyzer';
@@ -257,6 +257,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       extensionDevServerPort: ClaudeCodeDeps.extensionDevServerPort,
       superLoopProgressServerPort: null, // Disabled - was leaking into non-super-loop sessions
       sessionContextServerPort: ClaudeCodeDeps.sessionContextServerPort,
+      metaAgentServerPort: ClaudeCodeDeps.metaAgentServerPort,
       mcpConfigLoader: ClaudeCodeDeps.mcpConfigLoader,
       extensionPluginsLoader: ClaudeCodeDeps.extensionPluginsLoader,
       claudeSettingsEnvLoader: ClaudeCodeDeps.claudeSettingsEnvLoader,
@@ -354,6 +355,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   public static setExtensionDevServerPort(port: number | null): void { ClaudeCodeDeps.setExtensionDevServerPort(port); }
   public static setSuperLoopProgressServerPort(port: number | null): void { ClaudeCodeDeps.setSuperLoopProgressServerPort(port); }
   public static setSessionContextServerPort(port: number | null): void { ClaudeCodeDeps.setSessionContextServerPort(port); }
+  public static setMetaAgentServerPort(port: number | null): void { ClaudeCodeDeps.setMetaAgentServerPort(port); }
   public static setMCPConfigLoader(loader: ((workspacePath?: string) => Promise<Record<string, any>>) | null): void { ClaudeCodeDeps.setMCPConfigLoader(loader); }
   public static setExtensionPluginsLoader(loader: ((workspacePath?: string) => Promise<Array<{ type: 'local'; path: string }>>) | null): void { ClaudeCodeDeps.setExtensionPluginsLoader(loader); }
   public static setClaudeCodeSettingsLoader(loader: (() => Promise<{ projectCommandsEnabled: boolean; userCommandsEnabled: boolean }>) | null): void { ClaudeCodeDeps.setClaudeCodeSettingsLoader(loader); }
@@ -502,7 +504,9 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       // console.log('[CLAUDE-CODE] sendMessage - documentContext keys:', documentContext ? Object.keys(documentContext) : 'undefined');
       // console.log('[CLAUDE-CODE] sendMessage - documentContext.sessionType:', (documentContext as any)?.sessionType);
       const enableAgentTeams = settingsEnv.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS === '1';
-      const systemPrompt = this.buildSystemPrompt(documentContext, enableAgentTeams);
+      const agentRole = await this.getAgentRole(sessionId);
+      const isMetaAgent = agentRole === 'meta-agent';
+      const systemPrompt = this.buildSystemPrompt(documentContext, enableAgentTeams, isMetaAgent);
 
       // Note: Attachments (images/documents) are NOT added to the message text.
       // They're sent as separate content blocks via the API's multimodal format.
@@ -560,10 +564,25 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
           documentContentBlocks,
           permissionsPath,
           mcpConfigWorkspacePath,
+          isMetaAgent,
         }
       );
       const { options, promptInput } = sdkResult;
       this.helperMethod = sdkResult.helperMethod;
+
+      // Meta-agent: override MCP config with meta-agent profile and apply tool restrictions
+      if (isMetaAgent) {
+        options.mcpServers = await this.mcpConfigService.getMcpServersConfig({
+          sessionId,
+          workspacePath,
+          profile: 'meta-agent',
+        });
+        const allowedSet = new Set(BaseAgentProvider.META_AGENT_ALLOWED_TOOLS);
+        const blockedNativeTools = SDK_NATIVE_TOOLS.filter(t => !allowedSet.has(t));
+        (options as any).allowedTools = BaseAgentProvider.META_AGENT_ALLOWED_TOOLS;
+        (options as any).disallowedTools = blockedNativeTools;
+        (options as any).blockedTools = blockedNativeTools;
+      }
 
       const queryStartTime = Date.now();
 
@@ -2923,7 +2942,15 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   }
 
 
-  protected buildSystemPrompt(documentContext?: DocumentContext, enableAgentTeams?: boolean): string {
+  protected buildSystemPrompt(documentContext?: DocumentContext, enableAgentTeams?: boolean, isMetaAgent: boolean = false): string {
+    if (isMetaAgent) {
+      // TODO: Get workflowPreset from session metadata or documentContext
+      return buildMetaAgentSystemPrompt('claude', 'default', {
+        provider: 'claude-code',
+        model: this.config.model ?? undefined,
+      });
+    }
+
     const hasSessionNaming = ClaudeCodeDeps.sessionNamingServerPort !== null;
     const worktreePath = documentContext?.worktreePath;
     const isVoiceMode = (documentContext as any)?.isVoiceMode;

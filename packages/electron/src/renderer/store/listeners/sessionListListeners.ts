@@ -67,6 +67,8 @@ export function initSessionListListeners(): () => void {
         ...(updates.sessionType !== undefined && {
           sessionType: updates.sessionType as 'session' | 'workstream' | 'blitz' | 'voice'
         }),
+        ...(updates.agentRole !== undefined && { agentRole: updates.agentRole as 'standard' | 'meta-agent' }),
+        ...(updates.createdBySessionId !== undefined && { createdBySessionId: updates.createdBySessionId as string | null }),
         ...(updates.parentSessionId !== undefined && { parentSessionId: updates.parentSessionId as string | null }),
         ...(updates.worktreeId !== undefined && { worktreeId: updates.worktreeId as string | null }),
         ...(updates.updatedAt !== undefined && { updatedAt: updates.updatedAt as number }),

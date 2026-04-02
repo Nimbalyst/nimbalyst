@@ -323,6 +323,15 @@ export async function switchToAgentMode(page: Page): Promise<void> {
 }
 
 /**
+ * Switch to Meta Agent mode.
+ * @deprecated Meta-agent is now a session type in the agent panel, not a separate mode.
+ * This just switches to agent mode for backward compatibility.
+ */
+export async function switchToMetaAgentMode(page: Page): Promise<void> {
+  await switchToAgentMode(page);
+}
+
+/**
  * Submit a chat prompt in the currently active session.
  * Uses data-testid selectors to unambiguously target the correct chat input
  * (Agent mode vs Files mode), since both are always in the DOM.

@@ -399,6 +399,8 @@ export class CodexSDKProtocol implements AgentProtocol {
     return {
       ...baseOptions,
       ...(systemPrompt ? { developer_instructions: systemPrompt } : {}),
+      ...(options.allowedTools ? { allowedTools: options.allowedTools } : {}),
+      ...(options.disallowedTools ? { disallowedTools: options.disallowedTools } : {}),
       ...otherRawOptions,
     };
   }

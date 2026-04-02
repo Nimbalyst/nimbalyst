@@ -1763,6 +1763,8 @@ export const sessionListRootAtom = atom<SessionListItem[]>((get) => {
   return Array.from(registry.values())
     .filter(s => {
       if (!showArchived && s.isArchived) return false;
+      // Meta-agent sessions are included - they're rendered via MetaAgentGroup in SessionHistory
+      if (s.agentRole === 'meta-agent') return true;
       // Root sessions (no parent) are always included
       if (!s.parentSessionId) return true;
       // Blitz child sessions must also be included so they appear in worktreeGroupsData
@@ -1785,6 +1787,7 @@ export const sessionListChatAtom = atom<SessionMeta[]>((get) => {
 
   return Array.from(registry.values())
     .filter(s => {
+      if (s.agentRole === 'meta-agent') return false;
       // Exclude worktree sessions
       if (s.worktreeId) return false;
       // Exclude workstream parents (childCount > 0 means it's a parent)
@@ -1845,6 +1848,8 @@ export const refreshSessionListAtom = atom(
             provider: s.provider || 'claude',
             model: s.model,
             sessionType: s.sessionType || 'session',
+            agentRole: s.agentRole || 'standard',
+            createdBySessionId: s.createdBySessionId || null,
             messageCount: s.messageCount || 0,
             workspaceId: workspacePath,
             isArchived: s.isArchived || false,
@@ -1858,6 +1863,8 @@ export const refreshSessionListAtom = atom(
             ...(s.tags && { tags: s.tags }),
             // Linked tracker item IDs from metadata JSONB
             ...(s.linkedTrackerItemIds && { linkedTrackerItemIds: s.linkedTrackerItemIds }),
+            ...(s.agentRole && { agentRole: s.agentRole }),
+            ...(s.createdBySessionId !== undefined && { createdBySessionId: s.createdBySessionId }),
           });
 
           // Initialize unread state from database metadata (for cross-device sync)

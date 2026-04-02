@@ -222,6 +222,8 @@ export type SessionType = 'session' | 'workstream' | 'blitz' | 'voice';
 
 export type SessionMode = 'planning' | 'agent';
 
+export type AgentRole = 'standard' | 'meta-agent';
+
 export interface QueuedPrompt {
   id: string;           // Unique ID for this queued item
   prompt: string;       // The user's message
@@ -242,6 +244,8 @@ export interface SessionData {
   model?: string;  // Specific model used (e.g., 'gpt-4', 'claude-3-5-sonnet')
   sessionType?: SessionType;  // Structural type: 'session', 'workstream', 'blitz'
   mode?: SessionMode;  // Session behavior mode: 'planning' | 'agent'
+  agentRole?: AgentRole;
+  createdBySessionId?: string | null;
   messages: TranscriptViewMessage[];
   documentContext?: DocumentContext;
   workspacePath?: string;

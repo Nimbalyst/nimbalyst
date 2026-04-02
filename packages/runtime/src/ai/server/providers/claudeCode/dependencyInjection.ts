@@ -59,6 +59,9 @@ export const ClaudeCodeDeps = {
   // Session context MCP server port (session summary, workstream overview, recent sessions)
   sessionContextServerPort: null as number | null,
 
+  // Meta-agent MCP server port
+  metaAgentServerPort: null as number | null,
+
   // ---- Loaders ----
 
   // Returns merged user + workspace MCP servers
@@ -139,6 +142,10 @@ export const ClaudeCodeDeps = {
 
   setSessionContextServerPort(port: number | null): void {
     this.sessionContextServerPort = port;
+  },
+
+  setMetaAgentServerPort(port: number | null): void {
+    this.metaAgentServerPort = port;
   },
 
   setMCPConfigLoader(loader: McpConfigLoader | null): void {

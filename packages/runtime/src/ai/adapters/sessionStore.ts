@@ -1,4 +1,4 @@
-import type { SessionData, SessionMode, SessionType, TranscriptViewMessage } from '../server/types';
+import type { AgentRole, SessionData, SessionMode, SessionType, TranscriptViewMessage } from '../server/types';
 
 // Type aliases for compatibility
 export type ChatMessage = TranscriptViewMessage;
@@ -15,6 +15,8 @@ export interface SessionMeta {
   model?: string;
   sessionType: SessionType;
   mode?: SessionMode;
+  agentRole?: AgentRole;
+  createdBySessionId?: string | null;
   workspaceId: string;
   worktreeId: string | null;
   parentSessionId: string | null;
@@ -46,6 +48,8 @@ export interface CreateSessionPayload {
   model?: string;
   sessionType?: SessionType;
   mode?: SessionMode;
+  agentRole?: AgentRole;
+  createdBySessionId?: string | null;
   title?: string;
   workspaceId: string;
   filePath?: string;

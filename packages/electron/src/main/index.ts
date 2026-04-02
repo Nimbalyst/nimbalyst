@@ -78,6 +78,7 @@ import { registerWorkspaceWindow, registerExtensionTools, shutdownHttpServer, st
 import { startSessionContextServer, cleanupSessionContextServer, shutdownSessionContextServer } from './mcp/sessionContextServer';
 import { SessionNamingService } from './services/SessionNamingService';
 import { ExtensionDevService } from './services/ExtensionDevService';
+import { MetaAgentService } from './services/MetaAgentService';
 // SuperLoopProgressService import removed - server disabled (leaking into non-super-loop sessions)
 import { registerMockupHandlers } from './ipc/MockupHandlers';
 import { registerOffscreenEditorHandlers } from './ipc/OffscreenEditorHandlers';
@@ -1380,6 +1381,13 @@ app.whenReady().then(async () => {
     } catch (error) {
         logger.mcp.error('Failed to start session context MCP server:', error);
     }
+
+    try {
+        const metaAgentService = MetaAgentService.getInstance();
+        await metaAgentService.start(aiService);
+    } catch (error) {
+        logger.mcp.error('Failed to start meta-agent MCP server:', error);
+    }
     markEnd('mcp-servers');
 
     // Set up IPC handler to update document state for MCP
@@ -2066,6 +2074,18 @@ app.on('before-quit', async (event) => {
         console.log('[QUIT] Session context MCP server shutdown complete');
     } catch (error) {
         console.error('[QUIT] Error closing session context MCP server:', error);
+    }
+
+    try {
+        const metaAgentService = MetaAgentService.getInstance();
+        const shutdownPromise = metaAgentService.shutdown();
+        const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 500));
+        await Promise.race([shutdownPromise, timeoutPromise]);
+        ClaudeCodeProvider.setMetaAgentServerPort(null);
+        OpenAICodexProvider.setMetaAgentServerPort(null);
+        console.log('[QUIT] Meta-agent MCP server shutdown complete');
+    } catch (error) {
+        console.error('[QUIT] Error closing meta-agent MCP server:', error);
     }
 
     try {

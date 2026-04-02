@@ -79,6 +79,12 @@ export const ALPHA_FEATURES: readonly AlphaFeatureDefinition[] = [
     description: 'Enable the open source OpenCode coding agent with multi-model support.',
     icon: 'code',
   },
+  {
+    tag: 'meta-agent',
+    name: 'Meta Agent',
+    description: 'Enable meta-agent sessions that orchestrate and delegate work to child sessions.',
+    icon: 'hub',
+  },
 ] as const;
 
 /**

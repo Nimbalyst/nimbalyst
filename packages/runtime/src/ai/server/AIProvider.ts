@@ -41,7 +41,7 @@ export interface AskUserQuestionProvider {
  * Type guard to check if a provider supports AskUserQuestion
  */
 export function isAskUserQuestionProvider(provider: AIProvider): provider is AIProvider & AskUserQuestionProvider {
-  return typeof (provider as any).resolveAskUserQuestion === 'function';
+  return !!provider && typeof (provider as any).resolveAskUserQuestion === 'function';
 }
 
 export interface AIProvider extends EventEmitter {

@@ -55,11 +55,13 @@ interface ParsedCodexToolLookupId {
 function trackCreateAISession(provider: AIProviderType, options?: {
     worktreeId?: string | null;
     parentSessionId?: string | null;
+    agentRole?: string | null;
 }): void {
     analyticsService.sendEvent('create_ai_session', {
         provider,
         is_worktree_session: !!options?.worktreeId,
         is_workstream_child: !!options?.parentSessionId,
+        is_meta_agent_session: options?.agentRole === 'meta-agent',
     });
 }
 
@@ -320,7 +322,9 @@ export async function registerSessionHandlers() {
                 workspaceId: workspaceId,
                 providerConfig: session.providerConfig,
                 providerSessionId: session.providerSessionId,
-                worktreeId: session.worktreeId || null
+                worktreeId: session.worktreeId || null,
+                agentRole: session.agentRole || 'standard',
+                createdBySessionId: session.createdBySessionId || null,
             };
             // console.log('[SessionHandlers] Creating session with payload:', JSON.stringify(createPayload));
 
@@ -328,6 +332,7 @@ export async function registerSessionHandlers() {
             trackCreateAISession(provider, {
                 worktreeId: createPayload.worktreeId,
                 parentSessionId: (session.parentSessionId as string | null | undefined) ?? null,
+                agentRole: createPayload.agentRole,
             });
 
             // Update with full metadata
@@ -437,9 +442,11 @@ export async function registerSessionHandlers() {
             if (updates.title !== undefined) rendererUpdate.title = updates.title;
             if (updates.provider !== undefined) rendererUpdate.provider = updates.provider;
             if (updates.model !== undefined) rendererUpdate.model = updates.model;
-            if ((updates as any).sessionType !== undefined) rendererUpdate.sessionType = (updates as any).sessionType;
-            if ((updates as any).parentSessionId !== undefined) rendererUpdate.parentSessionId = (updates as any).parentSessionId;
-            if ((updates as any).worktreeId !== undefined) rendererUpdate.worktreeId = (updates as any).worktreeId;
+            if (updates.sessionType !== undefined) rendererUpdate.sessionType = updates.sessionType;
+            if (updates.parentSessionId !== undefined) rendererUpdate.parentSessionId = updates.parentSessionId;
+            if (updates.worktreeId !== undefined) rendererUpdate.worktreeId = updates.worktreeId;
+            if (updates.agentRole !== undefined) rendererUpdate.agentRole = updates.agentRole;
+            if (updates.createdBySessionId !== undefined) rendererUpdate.createdBySessionId = updates.createdBySessionId;
             if ((updates as any).isPinned !== undefined) rendererUpdate.isPinned = (updates as any).isPinned;
             if (updates.isArchived !== undefined) rendererUpdate.isArchived = updates.isArchived;
 
@@ -572,18 +579,20 @@ export async function registerSessionHandlers() {
                     provider: entry.provider,
                     model: entry.model,
                     sessionType: entry.sessionType || 'session',
+                    agentRole: entry.agentRole || 'standard',
+                    createdBySessionId: entry.createdBySessionId || null,
                     messageCount: entry.messageCount || 0,
                     isArchived: entry.isArchived || false,
-                    isPinned: (entry as any).isPinned || false,  // Include isPinned from repository
+                    isPinned: entry.isPinned || false,  // Include isPinned from repository
                     worktreeId: entry.worktreeId,  // Include worktreeId from repository
                     parentSessionId: entry.parentSessionId || null,  // Hierarchical workstream support
                     childCount: entry.childCount || 0,  // Number of child sessions
                     uncommittedCount,  // Number of uncommitted files
-                    hasUnread: (entry as any).hasUnread || false,  // Unread state from metadata
+                    hasUnread: entry.hasUnread || false,  // Unread state from metadata
                     hasPendingQuestion: (entry as any).hasPendingQuestion || false,  // Pending AskUserQuestion state from metadata
                     hasPendingInteractivePrompt: (entry as any).hasPendingQuestion || false,
                     // Branch tracking - SEPARATE from hierarchical parentSessionId
-                    branchedFromSessionId: (entry as any).branchedFromSessionId,
+                    branchedFromSessionId: entry.branchedFromSessionId,
                     branchPointMessageId: entry.branchPointMessageId,
                     branchedAt: entry.branchedAt,
                     // Kanban board phase and tags
@@ -608,10 +617,14 @@ export async function registerSessionHandlers() {
             const { database } = await import('../database/PGLiteDatabaseWorker');
 
             const { rows } = await database.query<any>(
-                `SELECT s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
-                        s.worktree_id, s.parent_session_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned
+                `SELECT s.id, s.provider, s.model, s.session_type, s.mode, s.agent_role, s.created_by_session_id, s.title, s.workspace_id,
+                        s.worktree_id, s.parent_session_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned,
+                        COUNT(m.id) as message_count
                  FROM ai_sessions s
+                 LEFT JOIN ai_agent_messages m ON s.id = m.session_id AND m.direction = 'input' AND (m.hidden = FALSE OR m.hidden IS NULL)
                  WHERE s.parent_session_id = $1 AND s.workspace_id = $2
+                 GROUP BY s.id, s.provider, s.model, s.session_type, s.mode, s.agent_role, s.created_by_session_id, s.title, s.workspace_id,
+                          s.worktree_id, s.parent_session_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned
                  ORDER BY s.created_at ASC`,
                 [parentSessionId, workspacePath]
             );
@@ -648,6 +661,8 @@ export async function registerSessionHandlers() {
                 title: row.title || 'Untitled Session',
                 provider: row.provider,
                 model: row.model,
+                agentRole: row.agent_role || 'standard',
+                createdBySessionId: row.created_by_session_id || null,
                 createdAt: row.created_at instanceof Date ? row.created_at.getTime() : new Date(row.created_at).getTime(),
                 updatedAt: row.updated_at instanceof Date ? row.updated_at.getTime() : new Date(row.updated_at).getTime(),
                 parentSessionId: row.parent_session_id,
@@ -1024,6 +1039,7 @@ export async function registerSessionHandlers() {
 
     const isTestEnv = process.env.NODE_ENV === 'development' ||
                       process.env.NODE_ENV === 'test' ||
+                      process.env.PLAYWRIGHT === '1' ||
                       process.env.PLAYWRIGHT_TEST === 'true';
 
     if (!isTestEnv) {
@@ -1040,15 +1056,38 @@ export async function registerSessionHandlers() {
         provider?: string;
         model?: string;
         title?: string;
+        agentRole?: 'standard' | 'meta-agent';
+        createdBySessionId?: string | null;
+        status?: 'idle' | 'running' | 'waiting_for_input' | 'error' | 'interrupted';
+        createdAt?: number;
+        updatedAt?: number;
+        lastActivity?: number;
     }) => {
         try {
             const { database } = await import('../database/PGLiteDatabaseWorker');
-            const { id, workspaceId, provider = 'claude-code', model = 'opus', title = 'Test Session' } = payload;
+            const {
+                id,
+                workspaceId,
+                provider = 'claude-code',
+                model = 'opus',
+                title = 'Test Session',
+                agentRole = 'standard',
+                createdBySessionId = null,
+                status = 'idle',
+                createdAt,
+                updatedAt,
+                lastActivity,
+            } = payload;
+
+            const createdAtDate = createdAt ? new Date(createdAt) : new Date();
+            const updatedAtDate = updatedAt ? new Date(updatedAt) : createdAtDate;
+            const lastActivityDate = lastActivity ? new Date(lastActivity) : updatedAtDate;
 
             await database.query(
-                `INSERT INTO ai_sessions (id, workspace_id, provider, model, title, session_type, created_at, updated_at)
-                 VALUES ($1, $2, $3, $4, $5, 'chat', NOW(), NOW())`,
-                [id, workspaceId, provider, model, title]
+                `INSERT INTO ai_sessions (
+                    id, workspace_id, provider, model, title, session_type, agent_role, created_by_session_id, status, created_at, updated_at, last_activity
+                 ) VALUES ($1, $2, $3, $4, $5, 'session', $6, $7, $8, $9, $10, $11)`,
+                [id, workspaceId, provider, model, title, agentRole, createdBySessionId, status, createdAtDate, updatedAtDate, lastActivityDate]
             );
 
             // Notify renderer to refresh session list

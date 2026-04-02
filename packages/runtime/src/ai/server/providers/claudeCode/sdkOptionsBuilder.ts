@@ -52,6 +52,7 @@ export interface BuildSdkOptionsParams {
   documentContentBlocks: ContentBlockParam[];
   permissionsPath?: string;
   mcpConfigWorkspacePath?: string;
+  isMetaAgent?: boolean;
 }
 
 export interface BuildSdkOptionsResult {
@@ -88,6 +89,7 @@ export async function buildSdkOptions(
     documentContentBlocks,
     permissionsPath,
     mcpConfigWorkspacePath,
+    isMetaAgent,
   } = params;
 
   let helperMethod: ClaudeHelperMethod = 'electron';
@@ -113,11 +115,13 @@ export async function buildSdkOptions(
 
   const options: any = {
     pathToClaudeCodeExecutable: ClaudeCodeDeps.customClaudeCodePath || await resolveClaudeAgentCliPath().catch(() => undefined),
-    systemPrompt: {
-      type: 'preset',
-      preset: 'claude_code',
-      append: systemPrompt
-    },
+    systemPrompt: isMetaAgent
+      ? systemPrompt  // Plain string — fully replaces CC system prompt
+      : {
+          type: 'preset',
+          preset: 'claude_code',
+          append: systemPrompt
+        },
     settingSources,
     mcpServers: await mcpConfigService.getMcpServersConfig({ sessionId, workspacePath: mcpConfigWorkspacePath || workspacePath }),
     cwd: workspacePath,
