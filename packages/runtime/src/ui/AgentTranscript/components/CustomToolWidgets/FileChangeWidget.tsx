@@ -146,7 +146,7 @@ export const FileChangeWidget: React.FC<CustomToolWidgetProps> = ({
 
   const tool = message.toolCall;
   const running = tool ? isToolRunning(tool) : false;
-  const elapsedRef = useElapsedTimeRef(running ? message.createdAt : undefined);
+  const elapsedRef = useElapsedTimeRef(running ? message.createdAt.getTime() : undefined);
 
   if (!tool) return null;
 
