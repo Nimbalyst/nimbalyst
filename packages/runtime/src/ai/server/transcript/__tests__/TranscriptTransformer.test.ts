@@ -1208,6 +1208,158 @@ describe('TranscriptTransformer', () => {
     });
   });
 
+  describe('nimbalyst_tool_use deduplication', () => {
+    it('deduplicates nimbalyst_tool_use when SDK also emits tool_use with same ID', async () => {
+      const rawStore = createMockRawStore([
+        // SDK emits tool_use in the assistant content block
+        makeRawMessage({
+          id: 1,
+          sessionId: SESSION_ID,
+          direction: 'output',
+          content: JSON.stringify({
+            type: 'assistant',
+            message: {
+              model: 'claude-opus-4-6',
+              id: 'msg_1',
+              content: [
+                { type: 'tool_use', id: 'ask-123', name: 'AskUserQuestion', input: { questions: [{ text: 'Confirm?' }] } },
+              ],
+            },
+          }),
+        }),
+        // Nimbalyst also logs the same tool as nimbalyst_tool_use
+        makeRawMessage({
+          id: 2,
+          sessionId: SESSION_ID,
+          direction: 'output',
+          content: JSON.stringify({
+            type: 'nimbalyst_tool_use',
+            id: 'ask-123',
+            name: 'AskUserQuestion',
+            input: { questions: [{ text: 'Confirm?' }] },
+          }),
+        }),
+      ]);
+
+      const transformer = new TranscriptTransformer(rawStore, transcriptStore, metadataStore);
+      await transformer.ensureTransformed(SESSION_ID, PROVIDER);
+
+      const events = await transcriptStore.getSessionEvents(SESSION_ID);
+      const toolEvents = events.filter((e) => e.eventType === 'tool_call');
+      expect(toolEvents).toHaveLength(1);
+      expect((toolEvents[0].payload as any).toolName).toBe('AskUserQuestion');
+    });
+  });
+
+  describe('Codex MCP tool result unwrapping', () => {
+    const CODEX_PROVIDER = 'openai-codex';
+
+    it('unwraps Codex MCP tool result envelope for session meta', async () => {
+      const innerJson = JSON.stringify({ summary: 'Set name', before: { name: null, tags: [], phase: null }, after: { name: 'Test', tags: ['bug-fix'], phase: 'implementing' } });
+      // Codex SDK delivers MCP results as the content envelope object
+      const mcpContentEnvelope = { content: [{ type: 'text', text: innerJson }], structured_content: null };
+      const rawStore = createMockRawStore([
+        makeRawMessage({
+          id: 1,
+          sessionId: SESSION_ID,
+          source: 'openai-codex',
+          direction: 'output',
+          content: JSON.stringify({
+            type: 'item.completed',
+            item: {
+              id: 'mcp-1',
+              type: 'mcp_tool_call',
+              server: 'nimbalyst-session-naming',
+              tool: 'update_session_meta',
+              arguments: { name: 'Test' },
+              result: mcpContentEnvelope,
+              status: 'completed',
+            },
+          }),
+        }),
+      ]);
+      const transformer = new TranscriptTransformer(rawStore, transcriptStore, metadataStore);
+
+      await transformer.ensureTransformed(SESSION_ID, CODEX_PROVIDER);
+
+      const events = await transcriptStore.getSessionEvents(SESSION_ID);
+      const toolEvents = events.filter((e) => e.eventType === 'tool_call');
+      expect(toolEvents).toHaveLength(1);
+      const payload = toolEvents[0].payload as any;
+      expect(payload.toolName).toBe('mcp__nimbalyst-session-naming__update_session_meta');
+      // Result should be the extracted inner text, not wrapped in envelopes
+      expect(payload.result).toBe(innerJson);
+      expect(payload.status).toBe('completed');
+    });
+
+    it('unwraps string MCP results without content envelope', async () => {
+      const mcpResult = JSON.stringify({ summary: 'Set name', before: { name: null, tags: [], phase: null }, after: { name: 'Test', tags: [], phase: null } });
+      const rawStore = createMockRawStore([
+        makeRawMessage({
+          id: 1,
+          sessionId: SESSION_ID,
+          source: 'openai-codex',
+          direction: 'output',
+          content: JSON.stringify({
+            type: 'item.completed',
+            item: {
+              id: 'mcp-2',
+              type: 'mcp_tool_call',
+              server: 'nimbalyst-session-naming',
+              tool: 'update_session_meta',
+              arguments: { name: 'Test' },
+              result: mcpResult,
+              status: 'completed',
+            },
+          }),
+        }),
+      ]);
+      const transformer = new TranscriptTransformer(rawStore, transcriptStore, metadataStore);
+
+      await transformer.ensureTransformed(SESSION_ID, CODEX_PROVIDER);
+
+      const events = await transcriptStore.getSessionEvents(SESSION_ID);
+      const toolEvents = events.filter((e) => e.eventType === 'tool_call');
+      expect(toolEvents).toHaveLength(1);
+      const payload = toolEvents[0].payload as any;
+      expect(payload.result).toBe(mcpResult);
+    });
+
+    it('preserves non-MCP Codex tool results as-is', async () => {
+      const rawStore = createMockRawStore([
+        makeRawMessage({
+          id: 1,
+          sessionId: SESSION_ID,
+          source: 'openai-codex',
+          direction: 'output',
+          content: JSON.stringify({
+            type: 'item.completed',
+            item: {
+              id: 'cmd-1',
+              type: 'command_execution',
+              command: 'ls -la',
+              aggregated_output: 'file1.txt\nfile2.txt',
+              exit_code: 0,
+            },
+          }),
+        }),
+      ]);
+      const transformer = new TranscriptTransformer(rawStore, transcriptStore, metadataStore);
+
+      await transformer.ensureTransformed(SESSION_ID, CODEX_PROVIDER);
+
+      const events = await transcriptStore.getSessionEvents(SESSION_ID);
+      const toolEvents = events.filter((e) => e.eventType === 'tool_call');
+      expect(toolEvents).toHaveLength(1);
+      const payload = toolEvents[0].payload as any;
+      expect(payload.toolName).toBe('command_execution');
+      // Non-MCP results keep their original structure
+      const resultObj = JSON.parse(payload.result);
+      expect(resultObj.success).toBe(true);
+      expect(resultObj.command).toBe('ls -la');
+    });
+  });
+
   describe('error handling', () => {
     it('marks session as error when transformation fails', async () => {
       // Create a raw store that throws on getMessages (called before per-message loop)

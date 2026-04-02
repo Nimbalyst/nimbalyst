@@ -80,6 +80,23 @@ function extractResult(tool: { result?: unknown }): StructuredResult | null {
     if (parsed.before && parsed.after) {
       return parsed as StructuredResult;
     }
+    // MCP content wrapper: { content: [{ type: "text", text: "{...}" }] }
+    if (parsed.content && Array.isArray(parsed.content)) {
+      const innerText = getResultText(parsed);
+      if (innerText) {
+        try {
+          const inner = JSON.parse(innerText);
+          if (inner.before && inner.after) return inner as StructuredResult;
+        } catch { /* not JSON inner text */ }
+      }
+    }
+    // Codex SDK wraps MCP results in { success, result, status }.
+    if (parsed.result) {
+      const inner = typeof parsed.result === 'string' ? JSON.parse(parsed.result) : parsed.result;
+      if (inner && inner.before && inner.after) {
+        return inner as StructuredResult;
+      }
+    }
   } catch {
     // Not JSON - old format, can't show transitions
   }

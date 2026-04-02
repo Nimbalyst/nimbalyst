@@ -662,10 +662,41 @@ export class TranscriptTransformer {
     eventId: number,
     result: unknown,
   ): Promise<void> {
-    const resultText = typeof result === 'string'
-      ? result
-      : JSON.stringify(result);
-    const isError = typeof result === 'object' && result !== null && !Array.isArray(result) && 'error' in result;
+    // Codex SDK wraps MCP tool results in { success, result, status, error? }.
+    // Unwrap to store the canonical MCP response text, consistent with Claude Code.
+    let actualResult = result;
+    let isError = false;
+
+    if (typeof result === 'object' && result !== null && !Array.isArray(result)) {
+      const r = result as Record<string, unknown>;
+      if ('success' in r && 'result' in r) {
+        actualResult = r.result;
+        isError = r.success === false || !!r.error;
+      } else {
+        isError = 'error' in r;
+      }
+    }
+
+    // MCP content envelope: { content: [{ type: "text", text: "..." }] }
+    // Extract inner text, matching how handleToolResult processes Claude Code results.
+    if (typeof actualResult === 'object' && actualResult !== null && !Array.isArray(actualResult)) {
+      const obj = actualResult as Record<string, unknown>;
+      if (Array.isArray(obj.content)) {
+        let extracted = '';
+        for (const block of obj.content) {
+          if (block && typeof block === 'object' && (block as any).type === 'text' && (block as any).text) {
+            extracted += (block as any).text;
+          }
+        }
+        if (extracted) {
+          actualResult = extracted;
+        }
+      }
+    }
+
+    const resultText = typeof actualResult === 'string'
+      ? actualResult
+      : actualResult != null ? JSON.stringify(actualResult) : '';
 
     await writer.updateToolCall(eventId, {
       status: isError ? 'error' : 'completed',
@@ -836,6 +867,11 @@ export class TranscriptTransformer {
   ): Promise<number> {
     const toolName = parsed.name ?? 'unknown';
     const args = parsed.input ?? {};
+
+    // Deduplicate: the SDK may also emit this tool as a regular tool_use block
+    // in the assistant content. handleToolUse would have already created a
+    // canonical event for it using the same providerToolCallId.
+    if (parsed.id && toolEventIds.has(parsed.id)) return 0;
 
     const event = await writer.createToolCall(sessionId, {
       toolName,

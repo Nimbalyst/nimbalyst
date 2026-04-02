@@ -356,8 +356,8 @@ function createSessionNamingMcpServer(aiSessionId: string): Server {
 
     if (toolName === "update_session_meta") {
       const sessionName = args?.name as string | undefined;
-      const addTags = args?.add as string[] | undefined;
-      const removeTags = args?.remove as string[] | undefined;
+      const addTags = Array.isArray(args?.add) ? args.add as string[] : typeof args?.add === 'string' ? [args.add] : undefined;
+      const removeTags = Array.isArray(args?.remove) ? args.remove as string[] : typeof args?.remove === 'string' ? [args.remove] : undefined;
       const phase = args?.phase as string | undefined;
 
       // Require at least one parameter
