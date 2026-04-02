@@ -44,22 +44,11 @@ export const ExitPlanModeWidget: React.FC<CustomToolWidgetProps> = ({
   const planFilePath = args?.planFilePath || '';
 
   // Parse the tool result
-  const rawToolResult = toolCall.result;
-  const toolResult = useMemo(() => {
-    if (typeof rawToolResult === 'string') return rawToolResult;
-    if (Array.isArray(rawToolResult)) {
-      // Extract text from content blocks
-      return rawToolResult
-        .filter((block: any) => block.type === 'text' && block.text)
-        .map((block: any) => block.text)
-        .join('\n');
-    }
-    return '';
-  }, [rawToolResult]);
+  const toolResult = toolCall.result ?? '';
   const isCompleted = toolResult !== '';
 
   // The requestId is the tool call ID
-  const requestId = toolCall.id || `exit-plan-${Date.now()}`;
+  const requestId = toolCall.providerToolCallId || `exit-plan-${Date.now()}`;
 
   // Widget is interactive if the tool hasn't completed yet
   const isPending = !isCompleted;

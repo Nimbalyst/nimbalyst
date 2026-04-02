@@ -1,4 +1,4 @@
-import type { Message, SessionData } from '../../ai/server/types';
+import type { SessionData } from '../../ai/server/types';
 import {
   type CreateSessionPayload,
   type SessionMeta,

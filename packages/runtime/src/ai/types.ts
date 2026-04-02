@@ -1,6 +1,7 @@
 // Import and re-export types from server types to avoid duplication
 import type {
   Message,
+  TranscriptViewMessage,
   DocumentContext,
   SessionData,
   AgentMessage,
@@ -17,6 +18,7 @@ import type {
 } from './server/types';
 export type {
   Message,
+  TranscriptViewMessage,
   DocumentContext,
   SessionData,
   AgentMessage,

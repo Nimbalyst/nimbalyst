@@ -31,7 +31,8 @@ import {
   ErrorBar
 } from 'recharts';
 import type { CustomToolWidgetProps } from './index';
-import type { ToolCall } from '../../../../ai/server/types';
+import type { TranscriptViewMessage } from '../../../../ai/server/transcript/TranscriptProjector';
+type ToolCall = NonNullable<TranscriptViewMessage['toolCall']>;
 import { isDarkThemeAtom } from '../../../../store/atoms/theme';
 import { GifPlayer } from './GifPlayer';
 
@@ -864,7 +865,7 @@ export const VisualDisplayWidget: React.FC<CustomToolWidgetProps> = ({ message, 
     const serverErrorMessage = extractErrorMessage(tool.result);
 
     // Try to extract path information from tool arguments for better error context
-    const args = tool.arguments as DisplayArgs | undefined;
+    const args = tool.arguments as unknown as DisplayArgs | undefined;
     const pathInfo = args?.items
       ?.map((item, i) => item.image?.path ? `items[${i}].image.path: "${item.image.path}"` : null)
       .filter(Boolean)
@@ -908,14 +909,14 @@ export const VisualDisplayWidget: React.FC<CustomToolWidgetProps> = ({ message, 
     if (isExpectedValidationError) {
       console.log('[VisualDisplayWidget] Server rejected request:', {
         serverErrorMessage,
-        toolName: tool.name
+        toolName: tool.toolName
       });
     } else {
       console.error('[VisualDisplayWidget] Unexpected display failure:', {
         hasError,
         hasItems: !!items,
         serverErrorMessage,
-        toolName: tool.name,
+        toolName: tool.toolName,
         toolResult: tool.result,
         toolArguments: tool.arguments
       });

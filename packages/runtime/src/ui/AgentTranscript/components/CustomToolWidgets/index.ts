@@ -38,7 +38,7 @@
  * ```
  */
 
-import type { Message } from '../../../../ai/server/types';
+import type { TranscriptViewMessage } from '../../../../ai/server/transcript/TranscriptProjector';
 
 // Re-export widgets
 export { EditorScreenshotWidget, MockupScreenshotWidget } from './EditorScreenshotWidget';
@@ -77,7 +77,7 @@ export interface ToolCallDiffResult {
  */
 export interface CustomToolWidgetProps {
   /** The message containing the tool call */
-  message: Message;
+  message: TranscriptViewMessage;
   /** Whether the widget is expanded (for collapsible widgets) */
   isExpanded: boolean;
   /** Toggle expand/collapse state */
@@ -127,7 +127,7 @@ import { TrackerToolWidget } from './TrackerToolWidget';
 /**
  * Registry of custom tool widgets
  *
- * Keys are tool names (as they appear in message.toolCall.name)
+ * Keys are tool names (as they appear in message.toolCall.toolName)
  * Values are React components that render the custom widget
  *
  * Note: MCP tools may have prefixed names (e.g., mcp__nimbalyst-mcp__capture_editor_screenshot)

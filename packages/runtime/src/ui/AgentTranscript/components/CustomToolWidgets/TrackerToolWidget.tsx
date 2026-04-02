@@ -110,8 +110,8 @@ export const TrackerToolWidget: React.FC<CustomToolWidgetProps> = ({ message }) 
   const resultText = getResultText(tool.result);
   const isError = (tool.result as any)?.isError === true;
   const args = (tool.arguments || {}) as Record<string, any>;
-  const baseName = getBaseName(tool.name);
-  const label = getToolLabel(tool.name);
+  const baseName = getBaseName(tool.toolName);
+  const label = getToolLabel(tool.toolName);
 
   // Pending state (no result yet)
   if (!resultText) {

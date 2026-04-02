@@ -6,9 +6,11 @@ import type { ToolDefinition } from '../tools';
 import type { EffortLevel } from './effortLevels';
 import type { ToolResult } from './protocols/ProtocolInterface';
 import { ModelIdentifier } from './ModelIdentifier';
+import type { TranscriptViewMessage } from './transcript/TranscriptProjector';
 export type { ToolDefinition } from '../tools';
 export { ModelIdentifier } from './ModelIdentifier';
 export type { ToolResult } from './protocols/ProtocolInterface';
+export type { TranscriptViewMessage } from './transcript/TranscriptProjector';
 
 export interface DocumentContext {
   filePath?: string;
@@ -240,7 +242,7 @@ export interface SessionData {
   model?: string;  // Specific model used (e.g., 'gpt-4', 'claude-3-5-sonnet')
   sessionType?: SessionType;  // Structural type: 'session', 'workstream', 'blitz'
   mode?: SessionMode;  // Session behavior mode: 'planning' | 'agent'
-  messages: Message[];
+  messages: TranscriptViewMessage[];
   documentContext?: DocumentContext;
   workspacePath?: string;
   title?: string;

@@ -109,7 +109,7 @@ export const ToolPermissionWidget: React.FC<CustomToolWidgetProps> = ({
 
   // Parse tool call data
   const args = (toolCall.arguments || {}) as Record<string, any>;
-  const requestId = (args.requestId || toolCall.id || '') as string;
+  const requestId = (args.requestId || toolCall.providerToolCallId || '') as string;
   const toolName = (args.toolName || '') as string;
   const rawCommand = unwrapShellCommand((args.rawCommand || '') as string);
   const pattern = (args.pattern || toolName) as string;

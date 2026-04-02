@@ -5,4 +5,4 @@ export type { TranscriptViewModel, TranscriptViewMessage } from './TranscriptPro
 export { TranscriptTransformer } from './TranscriptTransformer';
 export type { IRawMessageStore, RawMessage, ISessionMetadataStore } from './TranscriptTransformer';
 export { TranscriptMigrationService } from './TranscriptMigrationService';
-export { convertCanonicalToLegacyMessages } from './CanonicalTranscriptConverter';
+export { parseToolResult } from './toolResultParser';

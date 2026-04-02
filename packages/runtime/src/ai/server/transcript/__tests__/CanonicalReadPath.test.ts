@@ -1,19 +1,18 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { TranscriptWriter } from '../TranscriptWriter';
 import { TranscriptProjector } from '../TranscriptProjector';
-import { convertCanonicalToLegacyMessages } from '../CanonicalTranscriptConverter';
+import type { TranscriptViewMessage } from '../TranscriptProjector';
 import type { ITranscriptEventStore } from '../types';
 import { createMockStore } from './helpers/createMockStore';
 
 // ---------------------------------------------------------------------------
-// Helper: full pipeline read
+// Helper: project canonical events into view messages
 // ---------------------------------------------------------------------------
 
-async function readCanonicalPipeline(store: ITranscriptEventStore, sessionId: string) {
+async function projectSession(store: ITranscriptEventStore, sessionId: string) {
   const events = await store.getSessionEvents(sessionId);
   const viewModel = TranscriptProjector.project(events);
-  const legacyMessages = convertCanonicalToLegacyMessages(viewModel.messages);
-  return { events, viewModel, legacyMessages };
+  return { events, messages: viewModel.messages };
 }
 
 // ---------------------------------------------------------------------------
@@ -31,36 +30,34 @@ describe('Canonical Read Path Integration', () => {
   });
 
   describe('simple conversation', () => {
-    it('user message followed by assistant response produces correct legacy messages', async () => {
+    it('user message followed by assistant response produces correct view messages', async () => {
       await writer.appendUserMessage(SESSION, 'What does this function do?');
       await writer.appendAssistantMessage(SESSION, 'It calculates the factorial of a number.');
 
-      const { legacyMessages } = await readCanonicalPipeline(store, SESSION);
+      const { messages } = await projectSession(store, SESSION);
 
-      expect(legacyMessages).toHaveLength(2);
+      expect(messages).toHaveLength(2);
 
-      expect(legacyMessages[0].role).toBe('user');
-      expect(legacyMessages[0].content).toBe('What does this function do?');
-      expect(legacyMessages[0].isUserInput).toBe(true);
+      expect(messages[0].type).toBe('user_message');
+      expect(messages[0].text).toBe('What does this function do?');
 
-      expect(legacyMessages[1].role).toBe('assistant');
-      expect(legacyMessages[1].content).toBe('It calculates the factorial of a number.');
-      expect(legacyMessages[1].isComplete).toBe(true);
+      expect(messages[1].type).toBe('assistant_message');
+      expect(messages[1].text).toBe('It calculates the factorial of a number.');
     });
 
     it('preserves mode on messages', async () => {
       await writer.appendUserMessage(SESSION, 'Plan the refactoring', { mode: 'planning' });
       await writer.appendAssistantMessage(SESSION, 'Here is my plan', { mode: 'planning' });
 
-      const { legacyMessages } = await readCanonicalPipeline(store, SESSION);
+      const { messages } = await projectSession(store, SESSION);
 
-      expect(legacyMessages[0].mode).toBe('planning');
-      expect(legacyMessages[1].mode).toBe('planning');
+      expect(messages[0].mode).toBe('planning');
+      expect(messages[1].mode).toBe('planning');
     });
   });
 
   describe('tool call lifecycle', () => {
-    it('createToolCall then updateToolCall produces a complete tool message', async () => {
+    it('createToolCall then updateToolCall produces a complete tool_call view message', async () => {
       await writer.appendUserMessage(SESSION, 'Read the config file');
 
       const toolEvent = await writer.createToolCall(SESSION, {
@@ -80,25 +77,25 @@ describe('Canonical Read Path Integration', () => {
 
       await writer.appendAssistantMessage(SESSION, 'The config exports a port setting.');
 
-      const { legacyMessages } = await readCanonicalPipeline(store, SESSION);
+      const { messages } = await projectSession(store, SESSION);
 
-      expect(legacyMessages).toHaveLength(3);
+      expect(messages).toHaveLength(3);
 
       // User message
-      expect(legacyMessages[0].role).toBe('user');
+      expect(messages[0].type).toBe('user_message');
 
       // Tool call
-      const toolMsg = legacyMessages[1];
-      expect(toolMsg.role).toBe('tool');
+      const toolMsg = messages[1];
+      expect(toolMsg.type).toBe('tool_call');
       expect(toolMsg.toolCall).toBeDefined();
-      expect(toolMsg.toolCall!.name).toBe('Read');
-      expect(toolMsg.toolCall!.id).toBe('tc_001');
+      expect(toolMsg.toolCall!.toolName).toBe('Read');
+      expect(toolMsg.toolCall!.providerToolCallId).toBe('tc_001');
       expect(toolMsg.toolCall!.arguments).toEqual({ file_path: '/src/config.ts' });
       expect(toolMsg.toolCall!.result).toBe('export const config = { port: 3000 };');
       expect(toolMsg.toolCall!.targetFilePath).toBe('/src/config.ts');
 
       // Assistant response
-      expect(legacyMessages[2].role).toBe('assistant');
+      expect(messages[2].type).toBe('assistant_message');
     });
 
     it('tool call with progress attaches progress data', async () => {
@@ -129,11 +126,12 @@ describe('Canonical Read Path Integration', () => {
         durationMs: 20000,
       });
 
-      const { legacyMessages } = await readCanonicalPipeline(store, SESSION);
+      const { messages } = await projectSession(store, SESSION);
 
-      expect(legacyMessages).toHaveLength(1);
-      const tc = legacyMessages[0].toolCall!;
-      expect(tc.toolProgress).toEqual({ toolName: 'Bash', elapsedSeconds: 15 });
+      expect(messages).toHaveLength(1);
+      const tc = messages[0].toolCall!;
+      expect(tc.progress).toHaveLength(2);
+      expect(tc.progress[1].elapsedSeconds).toBe(15);
     });
 
     it('tool call with error status sets isError', async () => {
@@ -150,14 +148,15 @@ describe('Canonical Read Path Integration', () => {
         exitCode: 1,
       });
 
-      const { legacyMessages } = await readCanonicalPipeline(store, SESSION);
+      const { messages } = await projectSession(store, SESSION);
 
-      expect(legacyMessages[0].isError).toBe(true);
+      expect(messages[0].toolCall!.isError).toBe(true);
+      expect(messages[0].toolCall!.exitCode).toBe(1);
     });
   });
 
   describe('interactive prompt lifecycle', () => {
-    it('permission request produces correct widget data', async () => {
+    it('permission request produces correct interactive prompt data', async () => {
       const promptEvent = await writer.createInteractivePrompt(SESSION, {
         promptType: 'permission_request',
         requestId: 'perm-1',
@@ -176,20 +175,17 @@ describe('Canonical Read Path Integration', () => {
         scope: 'session',
       } as any);
 
-      const { legacyMessages } = await readCanonicalPipeline(store, SESSION);
+      const { messages } = await projectSession(store, SESSION);
 
-      expect(legacyMessages).toHaveLength(1);
-      expect(legacyMessages[0].role).toBe('tool');
-      expect(legacyMessages[0].toolCall!.name).toBe('ToolPermission');
-      expect(legacyMessages[0].toolCall!.id).toBe('perm-1');
-
-      // Result contains decision
-      const result = JSON.parse(legacyMessages[0].toolCall!.result as string);
-      expect(result.decision).toBe('allow');
-      expect(result.scope).toBe('session');
+      expect(messages).toHaveLength(1);
+      expect(messages[0].type).toBe('interactive_prompt');
+      expect(messages[0].interactivePrompt).toBeDefined();
+      expect(messages[0].interactivePrompt!.requestId).toBe('perm-1');
+      expect((messages[0].interactivePrompt as any).decision).toBe('allow');
+      expect((messages[0].interactivePrompt as any).scope).toBe('session');
     });
 
-    it('ask user question produces correct widget data', async () => {
+    it('ask user question produces correct data', async () => {
       const promptEvent = await writer.createInteractivePrompt(SESSION, {
         promptType: 'ask_user_question',
         requestId: 'ask-1',
@@ -202,16 +198,14 @@ describe('Canonical Read Path Integration', () => {
         answers: { '0': 'src/index.ts' },
       } as any);
 
-      const { legacyMessages } = await readCanonicalPipeline(store, SESSION);
+      const { messages } = await projectSession(store, SESSION);
 
-      expect(legacyMessages).toHaveLength(1);
-      expect(legacyMessages[0].toolCall!.name).toBe('AskUserQuestion');
-
-      const result = JSON.parse(legacyMessages[0].toolCall!.result as string);
-      expect(result.answers).toEqual({ '0': 'src/index.ts' });
+      expect(messages).toHaveLength(1);
+      expect(messages[0].type).toBe('interactive_prompt');
+      expect((messages[0].interactivePrompt as any).answers).toEqual({ '0': 'src/index.ts' });
     });
 
-    it('git commit proposal produces correct widget data', async () => {
+    it('git commit proposal produces correct data', async () => {
       const promptEvent = await writer.createInteractivePrompt(SESSION, {
         promptType: 'git_commit_proposal',
         requestId: 'commit-1',
@@ -226,20 +220,17 @@ describe('Canonical Read Path Integration', () => {
         commitSha: 'abc123',
       } as any);
 
-      const { legacyMessages } = await readCanonicalPipeline(store, SESSION);
+      const { messages } = await projectSession(store, SESSION);
 
-      expect(legacyMessages).toHaveLength(1);
-      expect(legacyMessages[0].toolCall!.name).toBe('GitCommitProposal');
-
-      const result = legacyMessages[0].toolCall!.result as any;
-      expect(result.success).toBe(true);
-      expect(result.result.action).toBe('committed');
-      expect(result.result.commitHash).toBe('abc123');
+      expect(messages).toHaveLength(1);
+      expect(messages[0].type).toBe('interactive_prompt');
+      expect((messages[0].interactivePrompt as any).decision).toBe('committed');
+      expect((messages[0].interactivePrompt as any).commitSha).toBe('abc123');
     });
   });
 
   describe('subagent with children', () => {
-    it('creates nested structure in legacy format', async () => {
+    it('creates nested structure with child events', async () => {
       await writer.appendUserMessage(SESSION, 'Find all test files');
 
       const subagentEvent = await writer.createSubagent(SESSION, {
@@ -268,26 +259,27 @@ describe('Canonical Read Path Integration', () => {
 
       await writer.appendAssistantMessage(SESSION, 'The subagent found 12 test files.');
 
-      const { legacyMessages } = await readCanonicalPipeline(store, SESSION);
+      const { messages } = await projectSession(store, SESSION);
 
       // User, subagent, assistant
-      expect(legacyMessages).toHaveLength(3);
+      expect(messages).toHaveLength(3);
 
-      expect(legacyMessages[0].role).toBe('user');
+      expect(messages[0].type).toBe('user_message');
 
       // Subagent message
-      const subMsg = legacyMessages[1];
-      expect(subMsg.role).toBe('tool');
-      expect(subMsg.toolCall!.isSubAgent).toBe(true);
-      expect(subMsg.toolCall!.subAgentType).toBe('Explore');
-      expect(subMsg.toolCall!.teammateName).toBe('explorer');
-      expect(subMsg.toolCall!.result).toBe('Found 12 test files');
+      const subMsg = messages[1];
+      expect(subMsg.type).toBe('subagent');
+      expect(subMsg.subagent).toBeDefined();
+      expect(subMsg.subagent!.agentType).toBe('Explore');
+      expect(subMsg.subagent!.teammateName).toBe('explorer');
+      expect(subMsg.subagent!.resultSummary).toBe('Found 12 test files');
 
-      // Child tool calls nested
-      expect(subMsg.toolCall!.childToolCalls).toHaveLength(1);
-      expect(subMsg.toolCall!.childToolCalls![0].toolCall?.name).toBe('Glob');
+      // Child tool calls nested in subagent
+      expect(subMsg.subagent!.childEvents).toHaveLength(1);
+      expect(subMsg.subagent!.childEvents[0].type).toBe('tool_call');
+      expect(subMsg.subagent!.childEvents[0].toolCall?.toolName).toBe('Glob');
 
-      expect(legacyMessages[2].role).toBe('assistant');
+      expect(messages[2].type).toBe('assistant_message');
     });
   });
 
@@ -358,25 +350,34 @@ describe('Canonical Read Path Integration', () => {
       // Final assistant message
       await writer.appendAssistantMessage(SESSION, 'The refactoring is complete.');
 
-      const { legacyMessages } = await readCanonicalPipeline(store, SESSION);
+      const { messages } = await projectSession(store, SESSION);
 
-      const roles = legacyMessages.map((m) => m.role);
-      expect(roles).toEqual(['user', 'tool', 'assistant', 'tool', 'tool', 'tool', 'system', 'assistant']);
+      const types = messages.map((m) => m.type);
+      expect(types).toEqual([
+        'user_message',
+        'tool_call',
+        'assistant_message',
+        'interactive_prompt',
+        'tool_call',
+        'subagent',
+        'system_message',
+        'assistant_message',
+      ]);
 
       // Verify specific messages
-      expect(legacyMessages[0].content).toBe('Help me refactor this module');
-      expect(legacyMessages[1].toolCall!.name).toBe('Read');
-      expect(legacyMessages[2].content).toBe('I see the issue. Let me fix it.');
-      expect(legacyMessages[3].toolCall!.name).toBe('ToolPermission');
-      expect(legacyMessages[4].toolCall!.name).toBe('Edit');
-      expect(legacyMessages[5].toolCall!.isSubAgent).toBe(true);
-      expect(legacyMessages[6].isSystem).toBe(true);
-      expect(legacyMessages[7].content).toBe('The refactoring is complete.');
+      expect(messages[0].text).toBe('Help me refactor this module');
+      expect(messages[1].toolCall!.toolName).toBe('Read');
+      expect(messages[2].text).toBe('I see the issue. Let me fix it.');
+      expect(messages[3].interactivePrompt!.promptType).toBe('permission_request');
+      expect(messages[4].toolCall!.toolName).toBe('Edit');
+      expect(messages[5].subagent!.agentType).toBe('general-purpose');
+      expect(messages[6].systemMessage!.systemType).toBe('status');
+      expect(messages[7].text).toBe('The refactoring is complete.');
     });
   });
 
   describe('turn ended data', () => {
-    it('turn_ended events are available in projected view model but skipped in legacy', async () => {
+    it('turn_ended events are filtered from projected view model (metadata-only)', async () => {
       await writer.appendUserMessage(SESSION, 'Hello');
       await writer.appendAssistantMessage(SESSION, 'Hi there');
 
@@ -399,27 +400,22 @@ describe('Canonical Read Path Integration', () => {
         },
       });
 
-      const { viewModel, legacyMessages } = await readCanonicalPipeline(store, SESSION);
+      const { events, messages } = await projectSession(store, SESSION);
 
-      // View model includes turn_ended
-      const turnEndedMsg = viewModel.messages.find((m) => m.type === 'turn_ended');
-      expect(turnEndedMsg).toBeDefined();
-      expect(turnEndedMsg!.turnEnded!.contextWindow).toBe(200000);
-      expect(turnEndedMsg!.turnEnded!.cumulativeUsage.costUSD).toBe(0.02);
-
-      // Legacy messages skip turn_ended
-      expect(legacyMessages).toHaveLength(2);
-      expect(legacyMessages.every((m) => (m.role as string) !== 'turn_ended')).toBe(true);
+      // turn_ended is stored in DB but filtered from the projected view model
+      // (it has no renderable content and would create empty bubbles)
+      expect(events.some(e => e.eventType === 'turn_ended')).toBe(true);
+      expect(messages.find(m => m.type === 'turn_ended')).toBeUndefined();
+      expect(messages).toHaveLength(2); // only user + assistant
     });
   });
 
   describe('empty session', () => {
     it('produces empty message list', async () => {
-      const { events, viewModel, legacyMessages } = await readCanonicalPipeline(store, SESSION);
+      const { events, messages } = await projectSession(store, SESSION);
 
       expect(events).toHaveLength(0);
-      expect(viewModel.messages).toHaveLength(0);
-      expect(legacyMessages).toHaveLength(0);
+      expect(messages).toHaveLength(0);
     });
   });
 });

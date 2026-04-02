@@ -6,7 +6,7 @@ import type {
   SessionMeta,
   UpdateSessionMetadataPayload,
 } from '../../adapters/sessionStore';
-import { shouldBlockStartedSessionProviderSwitch, type Message, type SessionData } from '../types';
+import { shouldBlockStartedSessionProviderSwitch, type Message, type SessionData, type TranscriptViewMessage } from '../types';
 
 class InMemorySessionStore implements SessionStore {
   private sessions = new Map<string, SessionData>();
@@ -34,14 +34,14 @@ class InMemorySessionStore implements SessionStore {
     });
   }
 
-  async appendMessage(sessionId: string, message: Message): Promise<void> {
+  async appendMessage(sessionId: string, message: TranscriptViewMessage): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error('Session not found');
     session.messages.push(message);
     session.updatedAt = Date.now();
   }
 
-  async replaceMessages(sessionId: string, messages: Message[]): Promise<void> {
+  async replaceMessages(sessionId: string, messages: TranscriptViewMessage[]): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error('Session not found');
     session.messages = [...messages];
@@ -110,7 +110,7 @@ class InMemorySessionStore implements SessionStore {
         }
         // Search in messages
         return session.messages.some(msg => {
-          const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+          const content = msg.text ?? '';
           return content.toLowerCase().includes(lowerQuery);
         });
       })

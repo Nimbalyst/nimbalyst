@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { MaterialSymbol } from '../../icons/MaterialSymbol';
-import type { Message } from '../../../ai/server/types';
+import type { TranscriptViewMessage } from '../../../ai/server/transcript/TranscriptProjector';
 
 // Augment the HighlightRegistry interface to add Map-like methods
 // (TypeScript's lib.dom.d.ts has the interface but not the full Map extension without DOM.Iterable)
@@ -58,7 +58,7 @@ interface SearchMatch {
 
 interface TranscriptSearchBarProps {
   isVisible: boolean;
-  messages: Message[];
+  messages: TranscriptViewMessage[];
   containerRef: React.RefObject<HTMLDivElement>;
   onClose: () => void;
   onScrollToMessage: (index: number) => void;
@@ -161,9 +161,9 @@ export const TranscriptSearchBar: React.FC<TranscriptSearchBarProps> = ({
       // Search through user and assistant messages only (skip tool messages for now)
       messages.forEach((message, messageIndex) => {
         // Skip tool messages - their content is in collapsed UI elements
-        if (message.role === 'tool') return;
+        if (message.type === 'tool_call' || message.type === 'interactive_prompt' || message.type === 'subagent') return;
 
-        const content = message.content || '';
+        const content = message.text || '';
         let match: RegExpExecArray | null;
 
         searchRegex.lastIndex = 0;

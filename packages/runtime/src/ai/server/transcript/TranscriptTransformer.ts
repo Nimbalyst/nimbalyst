@@ -493,6 +493,31 @@ export class TranscriptTransformer {
 
     try {
       const parsed = JSON.parse(msg.content);
+
+      // Handle todo_list items directly from raw JSON (not in ParsedCodexEvent)
+      const item = parsed.item;
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        const itemRecord = item as Record<string, unknown>;
+        if (itemRecord.type === 'todo_list' && Array.isArray(itemRecord.items)) {
+          const todoItems = (itemRecord.items as Array<Record<string, unknown>>)
+            .filter((t): t is Record<string, unknown> => t != null && typeof t === 'object')
+            .map(t => ({
+              text: typeof t.text === 'string' ? t.text : String(t.text ?? ''),
+              completed: !!t.completed,
+            }));
+          if (todoItems.length > 0) {
+            const todoText = todoItems
+              .map(t => `- [${t.completed ? 'x' : ' '}] ${t.text}`)
+              .join('\n');
+            const event = await writer.appendAssistantMessage(sessionId, todoText, {
+              createdAt: msg.createdAt,
+            });
+            if (event) eventsWritten++;
+          }
+          return eventsWritten;
+        }
+      }
+
       const codexEvents = parseCodexEvent(parsed);
 
       if (codexEvents.length === 0) {
@@ -549,7 +574,12 @@ export class TranscriptTransformer {
           eventsWritten++;
         }
 
-        // reasoning is internal thinking -- skip
+        if (ce.reasoning) {
+          const event = await writer.appendAssistantMessage(sessionId, ce.reasoning, {
+            createdAt: msg.createdAt,
+          });
+          if (event) eventsWritten++;
+        }
       }
     } catch {
       // Not JSON -- treat as plain text assistant message

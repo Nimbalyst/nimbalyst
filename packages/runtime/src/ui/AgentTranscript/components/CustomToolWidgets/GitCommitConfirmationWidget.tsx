@@ -496,8 +496,8 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
   }, [isCompleted, toolResult, structuredResult]);
 
   // The proposalId is simply the tool call ID - no need for a separate atom
-  // The MCP server uses toolUseId (which equals toolCall.id) as the proposalId
-  const proposalId = toolCall.id || '';
+  // The MCP server uses toolUseId (which equals toolCall.providerToolCallId) as the proposalId
+  const proposalId = toolCall.providerToolCallId || '';
 
   // If no proposal ID, cannot proceed
   if (!proposalId) {

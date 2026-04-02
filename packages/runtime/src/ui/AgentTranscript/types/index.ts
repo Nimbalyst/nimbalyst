@@ -3,10 +3,10 @@
  * Extends core runtime types for rich transcript rendering
  */
 
-import type { Message, SessionData } from '../../../ai/server/types';
+import type { SessionData } from '../../../ai/server/types';
 
 // Re-export core runtime types
-export type { Message, SessionData, DocumentContext } from '../../../ai/server/types';
+export type { SessionData, DocumentContext, TranscriptViewMessage } from '../../../ai/server/types';
 export type { AIProviderType } from '../../../ai/server/types';
 
 /**

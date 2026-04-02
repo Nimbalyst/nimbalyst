@@ -165,7 +165,7 @@ const AgentTranscriptPanelComponent = React.forwardRef<
   useEffect(() => {
     const userMessages = sessionData.messages
       .map((msg, index) => ({ msg, index }))
-      .filter(({ msg }) => msg.role === 'user' && msg.isUserInput !== false);
+      .filter(({ msg }) => msg.type === 'user_message');
 
     const allMessages = sessionData.messages;
     const markers: PromptMarker[] = userMessages.map(({ msg, index }, promptIndex) => {
@@ -176,8 +176,8 @@ const AgentTranscriptPanelComponent = React.forwardRef<
       // Walk backward from endBound to find the last assistant/tool message in this turn
       let completionTimestamp: string | undefined;
       for (let i = endBound - 1; i > index; i--) {
-        if (allMessages[i].role !== 'user') {
-          completionTimestamp = formatISO(allMessages[i].timestamp) || undefined;
+        if (allMessages[i].type !== 'user_message') {
+          completionTimestamp = formatISO(allMessages[i].createdAt.getTime()) || undefined;
           break;
         }
       }
@@ -190,9 +190,9 @@ const AgentTranscriptPanelComponent = React.forwardRef<
       return {
         id: promptIndex + 1,
         sessionId,
-        promptText: msg.content,
+        promptText: msg.text ?? '',
         outputIndex: index,
-        timestamp: formatISO(msg.timestamp) || new Date().toISOString(),
+        timestamp: formatISO(msg.createdAt.getTime()) || new Date().toISOString(),
         completionTimestamp
       };
     });

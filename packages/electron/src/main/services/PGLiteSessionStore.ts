@@ -9,7 +9,6 @@ import type {
   SessionSearchOptions,
   CreateSessionPayload,
   UpdateSessionMetadataPayload,
-  ChatMessage,
   ChatSession,
   AgentMessage
 } from '@nimbalyst/runtime';

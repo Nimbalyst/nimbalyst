@@ -17,7 +17,7 @@
 import { atom } from 'jotai';
 import { atomFamily } from '../debug/atomFamilyRegistry';
 import { store } from '@nimbalyst/runtime/store';
-import { ModelIdentifier, type ChatAttachment, type Message } from '@nimbalyst/runtime/ai/server/types';
+import { ModelIdentifier, type ChatAttachment, type Message, type TranscriptViewMessage } from '@nimbalyst/runtime/ai/server/types';
 import type { SessionMeta } from '@nimbalyst/runtime';
 import { workstreamStateAtom, setWorkstreamActiveChildAtom } from './workstreamState';
 
@@ -201,7 +201,13 @@ export const refreshPendingPromptsAtom = atom(
     // Update the unified pending interactive prompt state from session messages.
     const messages = get(sessionMessagesAtom(sessionId));
     const hasPendingPrompt = messages.some(
-      msg => msg.role === 'tool' && msg.toolCall?.name && INTERACTIVE_PROMPT_TOOLS.has(msg.toolCall.name) && !msg.toolCall.result
+      msg => {
+        // Interactive prompts projected from canonical events
+        if (msg.type === 'interactive_prompt' && msg.interactivePrompt?.status === 'pending') return true;
+        // Interactive tools stored as tool_calls (from TranscriptTransformer)
+        if (msg.toolCall?.toolName && INTERACTIVE_PROMPT_TOOLS.has(msg.toolCall.toolName) && !msg.toolCall.result) return true;
+        return false;
+      }
     );
     set(sessionHasPendingInteractivePromptAtom(sessionId), hasPendingPrompt);
   }
@@ -404,7 +410,7 @@ export const navigateSessionHistoryAtom = atom(
     const sessionData = get(sessionStoreAtom(sessionId));
     if (!sessionData?.messages) return;
 
-    const userMessages = sessionData.messages.filter(m => m.role === 'user');
+    const userMessages = sessionData.messages.filter(m => m.type === 'user_message');
     if (userMessages.length === 0) return;
 
     const currentIndex = get(sessionHistoryIndexAtom(sessionId));
@@ -441,7 +447,7 @@ export const navigateSessionHistoryAtom = atom(
       set(sessionHistoryIndexAtom(sessionId), newIndex);
       // Strip system message additions when recalling history
       // so user only sees what they originally typed
-      const cleanContent = stripSystemMessageAdditions(userMessages[newIndex].content);
+      const cleanContent = stripSystemMessageAdditions(userMessages[newIndex].text ?? '');
       set(sessionDraftInputAtom(sessionId), cleanContent);
     }
   }
@@ -1566,38 +1572,36 @@ export const reloadSessionDataAtom = atom(
       if (sessionData) {
         const current = get(sessionStoreAtom(sessionId));
 
-        // Merge messages: preserve local-only messages not yet in database
+        // Merge messages: preserve local-only optimistic messages not yet in database.
+        // Optimistic messages (added in-memory by the renderer before the provider
+        // persists them) have negative IDs (id < 0). They must be preserved across
+        // DB reloads so chat bubbles don't flicker away while waiting for the
+        // provider to persist the canonical version.
         if (current) {
           const dbMessages = sessionData.messages || [];
           const localMessages = current.messages || [];
 
-          // Use message count as a simple heuristic - DB should always have >= messages
-          // If DB has fewer messages than local, something is wrong - use DB as truth
-          // This prevents stale local state from overwriting fresh DB state
-          const dbMessageCount = dbMessages.length;
-          const localMessageCount = localMessages.length;
+          // Collect optimistic messages (negative IDs) that aren't yet in the DB.
+          // These were added locally before the provider persisted them.
+          // Drop any optimistic message whose text+type now appears in the DB
+          // (the canonical version has arrived with a real positive ID).
+          const optimisticMessages = localMessages.filter(
+            (m: TranscriptViewMessage) =>
+              m.id < 0 &&
+              !dbMessages.some(
+                (db: TranscriptViewMessage) =>
+                  db.type === m.type && db.text === m.text
+              )
+          );
 
-          if (dbMessageCount >= localMessageCount) {
-            // DB has all messages - just use DB state
-            sessionData.messages = dbMessages;
+          if (optimisticMessages.length > 0) {
+            // Append optimistic messages after DB messages so they appear at
+            // the correct position (end of transcript). They'll be naturally
+            // replaced on the next reload once the provider has persisted
+            // canonical versions with real positive IDs.
+            sessionData.messages = [...dbMessages, ...optimisticMessages];
           } else {
-            // DB has fewer messages - this could indicate:
-            // 1. Optimistic messages not yet persisted (normal case)
-            // 2. A bug in persistence (concerning)
-            // Preserve local-only messages that have timestamps newer than any DB message
-            const latestDbTimestamp = dbMessages.length > 0
-              ? Math.max(...dbMessages.map((m: Message) => m.timestamp || 0))
-              : 0;
-
-            const localOnlyMessages = localMessages.filter((localMsg: Message) => {
-              const localTs = localMsg.timestamp || 0;
-              // Only keep if timestamp is newer than all DB messages
-              // AND it doesn't match any DB message timestamp (to avoid duplicates)
-              return localTs > latestDbTimestamp &&
-                !dbMessages.some((dbMsg: Message) => dbMsg.timestamp === localTs);
-            });
-
-            sessionData.messages = [...dbMessages, ...localOnlyMessages];
+            sessionData.messages = dbMessages;
           }
 
           // Preserve read state

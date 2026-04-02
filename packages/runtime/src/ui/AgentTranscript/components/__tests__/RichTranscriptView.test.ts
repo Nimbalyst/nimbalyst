@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import type { Message } from '../../../../ai/server/types';
+import type { TranscriptViewMessage } from '../../../../ai/server/transcript/TranscriptProjector';
 import { extractEditsFromToolMessage } from '../RichTranscriptView';
+
+function makeTestMessage(overrides: Partial<TranscriptViewMessage> = {}): TranscriptViewMessage {
+  return {
+    id: 1,
+    sequence: 1,
+    createdAt: new Date(),
+    type: 'tool_call',
+    subagentId: null,
+    ...overrides,
+  };
+}
 
 describe('extractEditsFromToolMessage', () => {
   it('deduplicates identical edits present on both message.edits and tool result payloads', () => {
@@ -14,39 +25,47 @@ describe('extractEditsFromToolMessage', () => {
       ],
     };
 
-    const message: Message = {
-      role: 'tool',
-      content: '',
-      timestamp: 1,
-      edits: [duplicateEdit],
+    const message = makeTestMessage({
       toolCall: {
-        id: 'tool-1',
-        name: 'Edit',
+        toolName: 'Edit',
+        toolDisplayName: 'Edit',
+        status: 'completed',
+        description: null,
         arguments: {
           file_path: '/workspace/checkboxes.md',
         },
-        result: {
+        targetFilePath: null,
+        mcpServer: null,
+        mcpTool: null,
+        providerToolCallId: 'tool-1',
+        progress: [],
+        result: JSON.stringify({
           success: true,
           edits: [duplicateEdit],
-        } as any,
+        }),
+        changes: [{ path: duplicateEdit.filePath, patch: '' }],
       },
-    };
+    });
 
     expect(extractEditsFromToolMessage(message)).toEqual([duplicateEdit]);
   });
 
   it('keeps distinct edits for the same file', () => {
-    const message: Message = {
-      role: 'tool',
-      content: '',
-      timestamp: 1,
+    const message = makeTestMessage({
       toolCall: {
-        id: 'tool-2',
-        name: 'Edit',
+        toolName: 'Edit',
+        toolDisplayName: 'Edit',
+        status: 'completed',
+        description: null,
         arguments: {
           file_path: '/workspace/checkboxes.md',
         },
-        result: {
+        targetFilePath: null,
+        mcpServer: null,
+        mcpTool: null,
+        providerToolCallId: 'tool-2',
+        progress: [],
+        result: JSON.stringify({
           success: true,
           edits: [
             {
@@ -58,9 +77,9 @@ describe('extractEditsFromToolMessage', () => {
               replacements: [{ oldText: 'Beta', newText: 'Beta updated' }],
             },
           ],
-        } as any,
+        }),
       },
-    };
+    });
 
     const edits = extractEditsFromToolMessage(message);
     expect(edits).toHaveLength(2);

@@ -61,6 +61,14 @@ export interface TranscriptViewMessage {
   turnEnded?: TurnEndedPayload;
   systemMessage?: SystemMessagePayload;
   subagentId: string | null;
+
+  // -- Optimistic/live UI state (not from database) --
+  /** True when this message represents an error (auth failure, API error, etc.) */
+  isError?: boolean;
+  /** True when the error is an authentication failure */
+  isAuthError?: boolean;
+  /** Provider-specific metadata (e.g., Codex raw events) */
+  metadata?: Record<string, unknown>;
 }
 
 // ---------------------------------------------------------------------------
@@ -91,11 +99,11 @@ export class TranscriptProjector {
       }
     }
 
-    // Build view messages for non-progress events
+    // Build view messages for non-progress, non-turn-ended events
     const allMessages: TranscriptViewMessage[] = [];
     for (const event of events) {
-      if (event.eventType === 'tool_progress') {
-        continue; // grouped under parent tool_call
+      if (event.eventType === 'tool_progress' || event.eventType === 'turn_ended') {
+        continue; // progress grouped under parent tool_call; turn_ended is metadata-only
       }
       allMessages.push(projectEvent(event, progressByParent));
     }
@@ -211,7 +219,12 @@ function projectEvent(
       break;
     }
     case 'interactive_prompt': {
-      base.interactivePrompt = event.payload as unknown as InteractivePromptPayload;
+      const prompt = event.payload as unknown as InteractivePromptPayload;
+      base.interactivePrompt = prompt;
+      // Populate a synthetic toolCall so that existing custom widgets
+      // (ToolPermissionWidget, AskUserQuestionWidget, etc.) can render
+      // without changes -- they access data via message.toolCall.
+      base.toolCall = interactivePromptToToolCall(prompt, event.providerToolCallId);
       break;
     }
     case 'subagent': {
@@ -229,5 +242,47 @@ function projectEvent(
   }
 
   return base;
+}
+
+// ---------------------------------------------------------------------------
+// Map an InteractivePromptPayload into a synthetic toolCall so that
+// existing custom widgets (which read message.toolCall) keep working.
+// ---------------------------------------------------------------------------
+
+const PROMPT_TYPE_TO_TOOL_NAME: Record<string, string> = {
+  permission_request: 'ToolPermission',
+  ask_user_question: 'AskUserQuestion',
+  git_commit_proposal: 'GitCommitProposal',
+  exit_plan_mode: 'ExitPlanMode',
+};
+
+function interactivePromptToToolCall(
+  prompt: InteractivePromptPayload,
+  providerToolCallId: string | null,
+): TranscriptViewMessage['toolCall'] {
+  const toolName = PROMPT_TYPE_TO_TOOL_NAME[prompt.promptType] ?? prompt.promptType;
+  const status: 'running' | 'completed' | 'error' =
+    prompt.status === 'pending' ? 'running' : 'completed';
+
+  // Build result from prompt resolution data
+  let result: string | undefined;
+  if (prompt.status !== 'pending') {
+    const { promptType: _pt, status: _s, requestId: _r, ...rest } = prompt as Record<string, unknown>;
+    result = JSON.stringify(rest);
+  }
+
+  return {
+    toolName,
+    toolDisplayName: toolName,
+    status,
+    description: null,
+    arguments: prompt as unknown as Record<string, unknown>,
+    targetFilePath: null,
+    mcpServer: null,
+    mcpTool: null,
+    result,
+    providerToolCallId: providerToolCallId ?? (prompt as any).requestId ?? null,
+    progress: [],
+  };
 }
 

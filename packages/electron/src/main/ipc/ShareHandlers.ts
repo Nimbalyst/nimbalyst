@@ -8,7 +8,7 @@ import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { AISessionsRepository } from '@nimbalyst/runtime';
 import type { SessionData } from '@nimbalyst/runtime/ai/server/types';
 import { exportSessionToHtml } from '../services/SessionHtmlExporter';
-import { loadLegacyMessages } from '../utils/transcriptHelpers';
+import { loadViewMessages } from '../utils/transcriptHelpers';
 import { exportFileToHtml } from '../services/FileHtmlExporter';
 import { getSessionJwt, refreshSession } from '../services/StytchAuthService';
 import { store } from '../utils/store';
@@ -294,7 +294,7 @@ export function registerShareHandlers() {
           return { success: false, error: `Session not found: ${sessionId}` };
         }
 
-        const msgResult = await loadLegacyMessages(sessionId, chatSession.provider ?? 'unknown');
+        const msgResult = await loadViewMessages(sessionId, chatSession.provider ?? 'unknown');
         if (!msgResult.success) {
           return { success: false, error: msgResult.error };
         }

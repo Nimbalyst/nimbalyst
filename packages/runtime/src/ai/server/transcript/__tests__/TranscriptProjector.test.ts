@@ -238,14 +238,12 @@ describe('TranscriptProjector', () => {
 
     const vm = TranscriptProjector.project(events);
 
-    // Top-level: user_message, assistant_message, subagent, turn_ended
-    expect(vm.messages).toHaveLength(4);
+    // Top-level: user_message, assistant_message, subagent (turn_ended filtered out)
+    expect(vm.messages).toHaveLength(3);
     expect(vm.messages[0].type).toBe('user_message');
     expect(vm.messages[1].type).toBe('assistant_message');
     expect(vm.messages[2].type).toBe('subagent');
     expect(vm.messages[2].subagent!.childEvents).toHaveLength(1);
-    expect(vm.messages[3].type).toBe('turn_ended');
-    expect(vm.messages[3].turnEnded!.contextWindow).toBe(200000);
   });
 
   it('events without subagentId are top-level', () => {

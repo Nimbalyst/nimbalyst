@@ -1,7 +1,7 @@
-import type { Message, SessionData, SessionMode, SessionType } from '../server/types';
+import type { SessionData, SessionMode, SessionType, TranscriptViewMessage } from '../server/types';
 
 // Type aliases for compatibility
-export type ChatMessage = Message;
+export type ChatMessage = TranscriptViewMessage;
 export type ChatSession = SessionData;
 
 /**

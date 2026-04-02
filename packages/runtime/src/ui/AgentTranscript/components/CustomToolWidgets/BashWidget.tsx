@@ -195,7 +195,7 @@ export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpande
   }, [copied]);
 
   const handleCopyCommand = useCallback(async () => {
-    const command = extractCommand(tool?.arguments, tool?.name);
+    const command = extractCommand(tool?.arguments, tool?.toolName);
     if (command) {
       try {
         await copyToClipboard(command);
@@ -204,11 +204,11 @@ export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpande
         console.error('Failed to copy command:', err);
       }
     }
-  }, [tool?.arguments, tool?.name]);
+  }, [tool?.arguments, tool?.toolName]);
 
   if (!tool) return null;
 
-  const command = extractCommand(tool.arguments, tool.name);
+  const command = extractCommand(tool.arguments, tool.toolName);
   const description = extractDescription(tool.arguments);
   const output = extractOutputText(tool.result);
   const hasError = isToolError(tool.result, message);
@@ -411,11 +411,11 @@ export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpande
       )}
 
       {/* File changes caused by this tool call */}
-      {getToolCallDiffs && tool.id && (
+      {getToolCallDiffs && tool.providerToolCallId && (
         <div className="px-2 pb-2">
           <ToolCallChanges
-            toolCallItemId={tool.id}
-            toolCallTimestamp={message.timestamp}
+            toolCallItemId={tool.providerToolCallId}
+            toolCallTimestamp={message.createdAt?.getTime()}
             getToolCallDiffs={getToolCallDiffs}
             isExpanded={isExpanded}
             workspacePath={workspacePath}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { VList, type VListHandle, type CacheSnapshot } from 'virtua';
-import type { Message, SessionData } from '../../../ai/server/types';
+import type { TranscriptViewMessage, SessionData } from '../../../ai/server/types';
 import type { TranscriptSettings } from '../types';
 import { MessageSegment } from './MessageSegment';
 import { MarkdownRenderer } from './MarkdownRenderer';
@@ -16,7 +16,6 @@ import { formatToolDisplayName } from '../utils/toolNameFormatter';
 import { getCustomToolWidget, type ToolCallDiffResult } from './CustomToolWidgets';
 import { ToolCallChanges } from './ToolCallChanges';
 import { setSessionIsAtBottom, getSessionIsAtBottom } from '../../../store/atoms/transcriptScroll';
-import { CodexOutputRenderer } from './CodexOutputRenderer';
 
 // Per-session VList cache - survives component remounts so returning to a session
 // doesn't re-measure all items from scratch
@@ -349,9 +348,9 @@ const PromptAdditionsInline: React.FC<{
 };
 
 const SystemReminderCard: React.FC<{
-  message: Message;
+  message: TranscriptViewMessage;
 }> = ({ message }) => {
-  const content = message.content
+  const content = (message.text ?? '')
     .replace(/^\s*<SYSTEM_REMINDER>/, '')
     .replace(/<\/SYSTEM_REMINDER>\s*$/, '')
     .replace(/`([^`]+)`/g, '$1')
@@ -367,7 +366,7 @@ const SystemReminderCard: React.FC<{
         <MaterialSymbol icon="notification_important" size={14} />
         <span className="font-medium uppercase tracking-[0.08em]">System Reminder</span>
         <span className="ml-auto text-[10px] text-[var(--nim-text-faint)]">
-          {formatMessageTime(message.timestamp)}
+          {formatMessageTime(message.createdAt.getTime())}
         </span>
       </div>
       <p className="m-0 text-[0.875rem] leading-relaxed text-[var(--nim-text-muted)] whitespace-normal break-words">
@@ -383,7 +382,7 @@ interface RichTranscriptViewProps {
   isProcessing?: boolean; // Whether the session is currently processing a request
   /** When true, session is waiting for user input — suppresses the "Thinking..." indicator */
   hasPendingInteractivePrompt?: boolean;
-  messages: Message[];
+  messages: TranscriptViewMessage[];
   provider?: string;
   settings?: TranscriptSettings;
   onSettingsChange?: (settings: TranscriptSettings) => void;
@@ -464,7 +463,7 @@ const countLines = (s: string | undefined | null): number => {
  * Returns null if no file modifications were detected.
  */
 const computeTurnFileStats = (
-  messages: Message[],
+  messages: TranscriptViewMessage[],
   turnStartIdx: number,
   turnEndIdx: number
 ): { filesModified: number; linesAdded: number; linesRemoved: number } | null => {
@@ -474,9 +473,9 @@ const computeTurnFileStats = (
 
   for (let i = turnStartIdx + 1; i <= turnEndIdx; i++) {
     const msg = messages[i];
-    if (msg.role !== 'tool' || !msg.toolCall) continue;
+    if (msg.type !== 'tool_call' || !msg.toolCall) continue;
 
-    const toolName = msg.toolCall.name;
+    const toolName = msg.toolCall.toolName;
     if (!isFileModifyingTool(toolName)) continue;
     if (msg.isError) continue;
 
@@ -551,7 +550,7 @@ const buildEditSignature = (edit: Record<string, any>): string => {
   });
 };
 
-export const extractEditsFromToolMessage = (message: Message): any[] => {
+export const extractEditsFromToolMessage = (message: TranscriptViewMessage): any[] => {
   const tool = message.toolCall;
   if (!tool) return [];
 
@@ -685,9 +684,8 @@ export const extractEditsFromToolMessage = (message: Message): any[] => {
     });
   };
 
-  if (Array.isArray(message.edits) && message.edits.length > 0) {
-    message.edits.forEach(edit => pushEdit(edit, fallbackPath));
-  }
+  // Note: toolCall.changes contains {path, patch} metadata -- not edit instructions.
+  // Edits are extracted from tool arguments and result payloads via visit() below.
 
   if (args) {
     visit(args);
@@ -752,7 +750,7 @@ export const RichTranscriptView = React.forwardRef<
     // Check the prop (live IPC state) AND scan messages directly (survives session reloads).
     if (hasPendingInteractivePrompt) return false;
     const hasPendingQuestion = messages.some(
-      msg => msg.role === 'tool' && msg.toolCall?.name === 'AskUserQuestion' && !msg.toolCall.result
+      msg => (msg.type === 'tool_call' || msg.type === 'interactive_prompt' || msg.type === 'subagent') && msg.toolCall?.toolName === 'AskUserQuestion' && !msg.toolCall.result
     );
     if (hasPendingQuestion) return false;
     // Check isProcessing prop first (most reliable for queued prompts from mobile)
@@ -760,7 +758,7 @@ export const RichTranscriptView = React.forwardRef<
     if (sessionStatus === 'running') return true;
     if (sessionStatus === 'waiting' && messages.length > 0) {
       const lastMessage = messages[messages.length - 1];
-      return lastMessage.role === 'user';
+      return lastMessage.type === 'user_message';
     }
     return false;
   }, [messages, sessionStatus, isProcessing, hasPendingInteractivePrompt]);
@@ -772,7 +770,7 @@ export const RichTranscriptView = React.forwardRef<
     if (runningAgents.length > 0) {
       // Check if the last message is from the assistant (lead finished, waiting for agents)
       const lastMsg = messages[messages.length - 1];
-      if (lastMsg?.role === 'assistant') {
+      if (lastMsg?.type === 'assistant_message') {
         const label = runningAgents.length === 1 ? 'agent' : 'agents';
         return `Waiting for ${runningAgents.length} ${label} to finish`;
       }
@@ -787,12 +785,12 @@ export const RichTranscriptView = React.forwardRef<
     if (!promptAdditions) return -1;
     const storedIndex = promptAdditions.messageIndex;
     // Check if stored index is valid and points to a user message
-    if (storedIndex >= 0 && storedIndex < messages.length && messages[storedIndex]?.role === 'user') {
+    if (storedIndex >= 0 && storedIndex < messages.length && messages[storedIndex]?.type === 'user_message') {
       return storedIndex;
     }
     // Fallback: find the last user message
     for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'user') {
+      if (messages[i].type === 'user_message') {
         return i;
       }
     }
@@ -805,14 +803,14 @@ export const RichTranscriptView = React.forwardRef<
   const { restartAfterIndex, restartAtBottom } = useMemo(() => {
     if (!appStartTime || messages.length === 0) return { restartAfterIndex: -1, restartAtBottom: false };
     // Only show restart indicator if this session has messages from before the restart
-    const hasPreRestartMessages = messages.some(m => m.timestamp <= appStartTime);
+    const hasPreRestartMessages = messages.some(m => m.createdAt.getTime() <= appStartTime);
     if (!hasPreRestartMessages) return { restartAfterIndex: -1, restartAtBottom: false };
     // If all messages are before restart, show at bottom
-    if (messages[messages.length - 1].timestamp <= appStartTime) return { restartAfterIndex: -1, restartAtBottom: true };
+    if (messages[messages.length - 1].createdAt.getTime() <= appStartTime) return { restartAfterIndex: -1, restartAtBottom: true };
     // Find the first message after restart that will actually be rendered visibly:
     // Skip tool messages (they render hidden, grouped with the next assistant message)
     for (let i = 0; i < messages.length; i++) {
-      if (messages[i].timestamp > appStartTime && messages[i].role !== 'tool') {
+      if (messages[i].createdAt.getTime() > appStartTime && messages[i].type !== 'tool_call') {
         return { restartAfterIndex: i, restartAtBottom: false };
       }
     }
@@ -831,13 +829,13 @@ export const RichTranscriptView = React.forwardRef<
     const indices: number[] = [];
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
-      if (msg.role === 'tool' && msg.toolCall?.name === 'ToolPermission' && !msg.toolCall.result) {
+      if ((msg.type === 'tool_call' || msg.type === 'interactive_prompt' || msg.type === 'subagent') && msg.toolCall?.toolName === 'ToolPermission' && !msg.toolCall.result) {
         // Find the next assistant message that renders this tool via toolMessagesBefore
         let targetIdx = i + 1;
-        while (targetIdx < messages.length && messages[targetIdx].role === 'tool') {
+        while (targetIdx < messages.length && (messages[targetIdx].type === 'tool_call' || messages[targetIdx].type === 'interactive_prompt' || messages[targetIdx].type === 'subagent')) {
           targetIdx++;
         }
-        if (targetIdx < messages.length && messages[targetIdx].role === 'assistant') {
+        if (targetIdx < messages.length && messages[targetIdx].type === 'assistant_message') {
           indices.push(targetIdx); // Scroll to the assistant message that contains this widget
         } else {
           indices.push(i); // Orphaned tool - rendered at its own index
@@ -1029,9 +1027,9 @@ export const RichTranscriptView = React.forwardRef<
     });
   }, []);
 
-  const copyMessageContent = async (message: Message, index: number) => {
+  const copyTranscriptViewMessageContent = async (message: TranscriptViewMessage, index: number) => {
     try {
-      await copyToClipboard(message.content);
+      await copyToClipboard(message.text ?? '');
       setCopiedMessageIndex(index);
       setTimeout(() => setCopiedMessageIndex(null), 2000);
     } catch (err) {
@@ -1043,8 +1041,8 @@ export const RichTranscriptView = React.forwardRef<
   useEffect(() => {
     const subAgentIds = new Set<string>();
     messages.forEach(msg => {
-      if (msg.role === 'tool' && msg.toolCall?.isSubAgent && msg.toolCall.id) {
-        subAgentIds.add(msg.toolCall.id);
+      if (msg.type === 'subagent' && msg.subagentId) {
+        subAgentIds.add(msg.subagentId);
       }
     });
 
@@ -1060,7 +1058,7 @@ export const RichTranscriptView = React.forwardRef<
   // Helper to check if message is a login-required error
   // Uses SDK's first-class isAuthError flag when available (preferred)
   // Falls back to string matching for backwards compatibility with old messages
-  const isLoginRequiredError = (message: Message) => {
+  const isLoginRequiredError = (message: TranscriptViewMessage) => {
     // First-class detection via SDK's isAuthError flag (most reliable)
     if (message.isAuthError === true) {
       return true;
@@ -1068,7 +1066,7 @@ export const RichTranscriptView = React.forwardRef<
 
     // Fallback to string matching for backwards compatibility
     // IMPORTANT: Only match specific authentication error patterns, NOT generic words
-    const content = message.content || message.errorMessage || '';
+    const content = message.text || '';
     const lowerContent = content.toLowerCase();
     return (
       lowerContent.includes('invalid api key') ||
@@ -1093,7 +1091,7 @@ export const RichTranscriptView = React.forwardRef<
   // This prevents redundant widgets from being shown when scrolling through history
   const shouldShowLoginWidgetForIndex = (index: number): boolean => {
     const message = messages[index];
-    if (!isLoginRequiredError(message) || message.role === 'user') {
+    if (!isLoginRequiredError(message) || message.type === 'user_message') {
       return false;
     }
 
@@ -1140,13 +1138,13 @@ export const RichTranscriptView = React.forwardRef<
   };
 
   // Recursive tool rendering helper
-  const renderToolCard = (toolMsg: Message, toolIndex: number, depth: number = 0): JSX.Element | null => {
+  const renderToolCard = (toolMsg: TranscriptViewMessage, toolIndex: number, depth: number = 0): JSX.Element | null => {
     if (!toolMsg.toolCall) return null;
 
     // Hide Task tool calls that were cancelled as siblings of a parallel spawn.
     // These get exactly "<tool_use_error>Sibling tool call errored</tool_use_error>"
     // as their result and were never actually started.
-    if (toolMsg.toolCall.name === 'Task' && (toolMsg as any).isError) {
+    if (toolMsg.toolCall.toolName === 'Task' && (toolMsg as any).isError) {
       const result = toolMsg.toolCall.result;
       const resultStr = typeof result === 'string' ? result : '';
       if (/^\s*(<tool_use_error>)?\s*Sibling tool call errored\s*(<\/tool_use_error>)?\s*$/.test(resultStr)) {
@@ -1155,13 +1153,13 @@ export const RichTranscriptView = React.forwardRef<
     }
 
     const tool = toolMsg.toolCall;
-    const toolId = tool.id || tool.name || `tool-${toolIndex}`;
+    const toolId = tool.providerToolCallId || tool.toolName || `tool-${toolIndex}`;
     const isExpanded = expandedTools.has(toolId);
-    const isSubAgent = tool.isSubAgent && (tool.name === 'Task' || tool.name === 'Agent');
-    const isTeammate = isSubAgent && !!(tool.teammateName || tool.teamName);
-    const hasChildren = tool.childToolCalls && tool.childToolCalls.length > 0;
+    const isSubAgent = toolMsg.type === 'subagent';
+    const isTeammate = isSubAgent && !!(toolMsg.subagent?.teammateName || toolMsg.subagent?.teamName);
+    const hasChildren = isSubAgent && toolMsg.subagent?.childEvents && toolMsg.subagent.childEvents.length > 0;
     // Check for custom widget first
-    const CustomWidget = tool.name ? getCustomToolWidget(tool.name) : undefined;
+    const CustomWidget = tool.toolName ? getCustomToolWidget(tool.toolName) : undefined;
     if (CustomWidget) {
       return (
         <div
@@ -1182,9 +1180,9 @@ export const RichTranscriptView = React.forwardRef<
       );
     }
 
-    const editTool = isEditToolName(tool.name);
+    const editTool = isEditToolName(tool.toolName);
     const editEntries = editTool ? extractEditsFromToolMessage(toolMsg) : [];
-    const toolDisplayName = formatToolDisplayName(tool.name || '') || tool.name || 'Tool';
+    const toolDisplayName = formatToolDisplayName(tool.toolName || '') || tool.toolName || 'Tool';
 
     if (editTool && editEntries.length > 0) {
       return (
@@ -1237,25 +1235,25 @@ export const RichTranscriptView = React.forwardRef<
               // Wrench icon for regular tools
               <MaterialSymbol icon="build" size={16} className="rich-transcript-tool-icon w-4 h-4 text-[var(--nim-primary)] shrink-0" />
             )}
-            <span className="rich-transcript-tool-name font-mono text-sm text-[var(--nim-text)] font-medium" title={tool.name || undefined}>
+            <span className="rich-transcript-tool-name font-mono text-sm text-[var(--nim-text)] font-medium" title={tool.toolName || undefined}>
               {isTeammate
-                ? (tool.teammateName || 'Teammate')
+                ? (toolMsg.subagent?.teammateName || 'Teammate')
                 : isSubAgent
                   ? (toolArgs?.run_in_background ? 'Background Agent' : 'Sub-Agent')
                   : toolDisplayName}
-              {isTeammate && tool.teammateMode && (
-                <span className="rich-transcript-tool-subagent-type text-[var(--nim-text-muted)] font-normal text-xs ml-1">({tool.teammateMode})</span>
+              {isTeammate && toolMsg.subagent?.teammateMode && (
+                <span className="rich-transcript-tool-subagent-type text-[var(--nim-text-muted)] font-normal text-xs ml-1">({toolMsg.subagent?.teammateMode})</span>
               )}
-              {isSubAgent && !isTeammate && tool.subAgentType && (
-                <span className="rich-transcript-tool-subagent-type text-[var(--nim-primary)] font-semibold"> [{tool.subAgentType}]</span>
+              {isSubAgent && !isTeammate && toolMsg.subagent?.agentType && (
+                <span className="rich-transcript-tool-subagent-type text-[var(--nim-primary)] font-semibold"> [{toolMsg.subagent?.agentType}]</span>
               )}
             </span>
             {!isSubAgent && tool.arguments && (() => {
-              const argStr = formatToolArguments(tool.name, tool.arguments, workspacePath);
+              const argStr = formatToolArguments(tool.toolName, tool.arguments, workspacePath);
               if (!argStr) return null;
 
               // Check if there's a clickable file path (only for tools that reference actual files)
-              const filePath = extractFilePathFromArgs(tool.name, tool.arguments);
+              const filePath = extractFilePathFromArgs(tool.toolName, tool.arguments);
               const isClickable = onOpenFile && filePath;
 
               if (isClickable) {
@@ -1287,7 +1285,7 @@ export const RichTranscriptView = React.forwardRef<
             {isSubAgent ? (() => {
               // Look up teammate status from session metadata
               // Try tool.teammateAgentId first, then extract agent_id from result text
-              let agentId = tool.teammateAgentId;
+              let agentId = toolMsg.subagentId;
               if (!agentId && tool.result && typeof tool.result === 'string') {
                 const match = tool.result.match(/agent_id:\s*(\S+)/);
                 if (match) agentId = match[1].replace(/[.,]$/, '');
@@ -1328,7 +1326,7 @@ export const RichTranscriptView = React.forwardRef<
                 );
               }
               // Still waiting for result / no status yet - show progress spinner if available
-              if (!tool.result && tool.toolProgress) {
+              if (!tool.result && tool.progress.length > 0) {
                 return (
                   <span className="flex items-center gap-1 shrink-0">
                     <span className="inline-block w-3 h-3 border-2 border-[var(--nim-primary)] border-t-transparent rounded-full animate-spin" />
@@ -1381,10 +1379,10 @@ export const RichTranscriptView = React.forwardRef<
               {hasChildren && (
                 <div className="rich-transcript-tool-section mb-1.5">
                   <div className="rich-transcript-tool-section-label text-[var(--nim-text-faint)] mb-0.5 text-xs">
-                    {isTeammate ? 'Teammate' : 'Sub-agent'} Actions ({tool.childToolCalls!.length}):
+                    {isTeammate ? 'Teammate' : 'Sub-agent'} Actions ({(toolMsg.subagent?.childEvents ?? []).length}):
                   </div>
                   <div className="rich-transcript-subagent-children flex flex-col gap-1 mt-2">
-                    {tool.childToolCalls!.map((childMsg, childIdx) =>
+                    {(toolMsg.subagent?.childEvents ?? []).map((childMsg: TranscriptViewMessage, childIdx: number) =>
                       renderToolCard(childMsg, childIdx, depth + 1)
                     )}
                   </div>
@@ -1392,11 +1390,11 @@ export const RichTranscriptView = React.forwardRef<
               )}
 
               {/* Show progress indicator for running sub-agents/teammates */}
-              {isSubAgent && !tool.result && tool.toolProgress && (
+              {isSubAgent && !tool.result && tool.progress.length > 0 && (
                 <div className="rich-transcript-tool-section mb-1.5 flex items-center gap-2 text-xs text-[var(--nim-text-muted)]">
                   <span className="inline-block w-3 h-3 border-2 border-[var(--nim-primary)] border-t-transparent rounded-full animate-spin" />
-                  <span>Running <span className="font-mono text-[var(--nim-text)]">{tool.toolProgress.toolName}</span></span>
-                  <span>({Math.round(tool.toolProgress.elapsedSeconds)}s)</span>
+                  <span>Running <span className="font-mono text-[var(--nim-text)]">{tool.progress[tool.progress.length - 1]?.progressContent}</span></span>
+                  <span>({Math.round(tool.progress[tool.progress.length - 1]?.elapsedSeconds ?? 0)}s)</span>
                 </div>
               )}
 
@@ -1419,10 +1417,10 @@ export const RichTranscriptView = React.forwardRef<
               )}
 
               {/* File changes caused by this tool call */}
-              {!isSubAgent && getToolCallDiffs && tool.id && tool.result !== undefined && tool.result !== null && (
+              {!isSubAgent && getToolCallDiffs && tool.providerToolCallId && tool.result !== undefined && tool.result !== null && (
                 <ToolCallChanges
-                  toolCallItemId={tool.id}
-                  toolCallTimestamp={toolMsg.timestamp}
+                  toolCallItemId={tool.providerToolCallId}
+                  toolCallTimestamp={toolMsg.createdAt.getTime()}
                   getToolCallDiffs={getToolCallDiffs}
                   isExpanded={isExpanded}
                   workspacePath={workspacePath}
@@ -1552,117 +1550,25 @@ export const RichTranscriptView = React.forwardRef<
                   }}
                 >
                   {messages.map((message, index) => {
-                    const isUser = message.role === 'user';
-                    const isTool = message.role === 'tool';
+                    const isUser = message.type === 'user_message';
+                    const isTool = (message.type === 'tool_call' || message.type === 'interactive_prompt' || message.type === 'subagent');
                     const isCollapsed = collapsedMessages.has(index);
-
-                    // Check if this is a Codex raw event message
-                    const isCodexRawEvent = message.metadata?.codexProvider === true && message.metadata?.eventType;
-
-                    // If this is a Codex raw event, check if it's the first in a sequence
-                    if (isCodexRawEvent) {
-                      // Check if previous message is also a Codex raw event
-                      const prevMessage = index > 0 ? messages[index - 1] : null;
-                      const prevIsCodexRawEvent = prevMessage?.metadata?.codexProvider === true && prevMessage?.metadata?.eventType;
-
-                      if (prevIsCodexRawEvent) {
-                        // This is a continuation - skip rendering (handled by the first message)
-                        return <div key={`${sessionId}-${index}`} style={{ display: 'none' }} />;
-                      }
-
-                      // This is the first in a sequence - collect all consecutive Codex events
-                      const codexEvents: Message[] = [message];
-                      let checkIdx = index + 1;
-                      while (checkIdx < messages.length) {
-                        const nextMsg = messages[checkIdx];
-                        if (nextMsg.metadata?.codexProvider === true && nextMsg.metadata?.eventType) {
-                          codexEvents.push(nextMsg);
-                          checkIdx++;
-                        } else {
-                          break;
-                        }
-                      }
-
-                      // Render grouped Codex events
-                      return (
-                        <div
-                          key={`${sessionId}-${index}`}
-                          data-message-index={index}
-                          ref={(el) => {
-                            if (el) messageRefs.current.set(index, el);
-                          }}
-                          className="rich-transcript-message rounded-md relative max-w-full overflow-x-hidden break-words mb-2 assistant bg-[var(--nim-bg)] normal p-3"
-                        >
-                          <div className="rich-transcript-message-header flex items-center gap-2 mb-1.5">
-                            <div className="rich-transcript-message-avatar w-7 h-7 rounded-full shrink-0 flex items-center justify-center assistant">
-                              {/* No icon for Codex - provider icon handled elsewhere */}
-                            </div>
-                            <div className="rich-transcript-message-meta flex-1 flex items-baseline gap-2">
-                              <span className="rich-transcript-message-time text-xs text-[var(--nim-text-faint)]">
-                                {formatMessageTime(message.timestamp)}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="rich-transcript-message-content relative ml-6">
-                            <CodexOutputRenderer
-                              rawEvents={codexEvents}
-                              isCollapsed={isCollapsed}
-                              sessionId={sessionId}
-                              workspacePath={workspacePath}
-                              readFile={readFile}
-                              getToolCallDiffs={getToolCallDiffs}
-                              onOpenFile={onOpenFile}
-                            />
-                          </div>
-
-                          {/* Show elapsed time at the end of a completed Codex turn */}
-                          {(() => {
-                            const lastEventIdx = index + codexEvents.length - 1;
-                            // Don't show if still streaming (last group and waiting)
-                            if (isWaitingForResponse && lastEventIdx >= messages.length - 1) return null;
-                            // Find the preceding user-input message
-                            let startIdx = index - 1;
-                            while (startIdx >= 0 && !(messages[startIdx].role === 'user' && messages[startIdx].isUserInput !== false)) {
-                              startIdx--;
-                            }
-                            if (startIdx < 0) return null;
-                            const startTimestamp = messages[startIdx].timestamp;
-                            const endTimestamp = codexEvents[codexEvents.length - 1].timestamp;
-                            const duration = formatDuration(startTimestamp, endTimestamp);
-                            if (!duration || duration === '0ms') return null;
-                            const fileStats = computeTurnFileStats(messages, startIdx, index + codexEvents.length - 1);
-                            return (
-                              <div className="rich-transcript-turn-elapsed text-xs text-[var(--nim-text-faint)] mt-2 ml-6">
-                                Finished in {duration}
-                                {fileStats && (
-                                  <span>
-                                    {' · '}{fileStats.filesModified} file{fileStats.filesModified !== 1 ? 's' : ''}
-                                    {fileStats.linesAdded > 0 && <span className="text-[var(--nim-success)] opacity-60"> +{fileStats.linesAdded}</span>}
-                                    {fileStats.linesRemoved > 0 && <span className="text-[var(--nim-error)] opacity-60"> -{fileStats.linesRemoved}</span>}
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          })()}
-                        </div>
-                      );
-                    }
 
                     // Hide assistant/tool messages that sit between agent notifications.
                     // These are the agent's internal processing turns after receiving a teammate/sub-agent
                     // message - they appear as dark bars with scrollbars and add visual noise.
                     // NEVER hide interactive tool widgets (ToolPermission, ExitPlanMode, etc.) that require user action.
                     // Also never hide assistant messages that would carry interactive widgets in toolMessagesBefore.
-                    if (message.role === 'assistant' || message.role === 'tool') {
+                    if (message.type === 'assistant_message' || (message.type === 'tool_call' || message.type === 'interactive_prompt' || message.type === 'subagent')) {
                       const INTERACTIVE_WIDGETS = ['ToolPermission', 'ExitPlanMode', 'AskUserQuestion', 'GitCommitProposal'];
-                      const isInteractiveWidget = message.role === 'tool' && message.toolCall?.name &&
-                        INTERACTIVE_WIDGETS.includes(message.toolCall.name);
+                      const isInteractiveWidget = (message.type === 'tool_call' || message.type === 'interactive_prompt' || message.type === 'subagent') && message.toolCall?.toolName &&
+                        INTERACTIVE_WIDGETS.includes(message.toolCall.toolName);
                       // For assistant messages, check if preceding tool messages contain interactive widgets
                       let hasInteractiveToolsBefore = false;
-                      if (message.role === 'assistant') {
+                      if (message.type === 'assistant_message') {
                         let checkPrev = index - 1;
-                        while (checkPrev >= 0 && messages[checkPrev].role === 'tool') {
-                          if (messages[checkPrev].toolCall?.name && INTERACTIVE_WIDGETS.includes(messages[checkPrev].toolCall!.name)) {
+                        while (checkPrev >= 0 && (messages[checkPrev].type === 'tool_call' || messages[checkPrev].type === 'interactive_prompt' || messages[checkPrev].type === 'subagent')) {
+                          if (messages[checkPrev].toolCall?.toolName && INTERACTIVE_WIDGETS.includes(messages[checkPrev].toolCall!.toolName)) {
                             hasInteractiveToolsBefore = true;
                             break;
                           }
@@ -1672,11 +1578,11 @@ export const RichTranscriptView = React.forwardRef<
                       if (!isInteractiveWidget && !hasInteractiveToolsBefore) {
                         // Walk back to find the nearest user message (skipping tool and assistant messages)
                         let prevIdx = index - 1;
-                        while (prevIdx >= 0 && messages[prevIdx].role !== 'user') prevIdx--;
+                        while (prevIdx >= 0 && messages[prevIdx].type !== 'user_message') prevIdx--;
                         if (prevIdx >= 0 && messages[prevIdx].metadata?.isTeammateMessage) {
                           // The most recent user message before this is a teammate notification.
                           // Only hide empty processing turns (no substantive content).
-                          const hasNoContent = !message.content?.trim();
+                          const hasNoContent = !message.text?.trim();
                           if (hasNoContent) {
                             return <div key={`${sessionId}-${index}`} style={{ display: 'none' }} />;
                           }
@@ -1685,10 +1591,10 @@ export const RichTranscriptView = React.forwardRef<
                     }
 
                     // Find tool messages that should be grouped with this message
-                    const toolMessagesBefore: { message: Message, index: number }[] = [];
-                    if (message.role === 'assistant') {
+                    const toolMessagesBefore: { message: TranscriptViewMessage, index: number }[] = [];
+                    if (message.type === 'assistant_message') {
                       let checkIdx = index - 1;
-                      while (checkIdx >= 0 && messages[checkIdx].role === 'tool') {
+                      while (checkIdx >= 0 && (messages[checkIdx].type === 'tool_call' || messages[checkIdx].type === 'interactive_prompt' || messages[checkIdx].type === 'subagent')) {
                         toolMessagesBefore.unshift({ message: messages[checkIdx], index: checkIdx });
                         checkIdx--;
                       }
@@ -1697,10 +1603,10 @@ export const RichTranscriptView = React.forwardRef<
                     // Skip rendering tool messages - they'll be rendered with their assistant message
                     if (isTool) {
                       let nextIndex = index + 1;
-                      while (nextIndex < messages.length && messages[nextIndex].role === 'tool') {
+                      while (nextIndex < messages.length && (messages[nextIndex].type === 'tool_call' || messages[nextIndex].type === 'interactive_prompt' || messages[nextIndex].type === 'subagent')) {
                         nextIndex++;
                       }
-                      if (nextIndex < messages.length && messages[nextIndex].role === 'assistant') {
+                      if (nextIndex < messages.length && messages[nextIndex].type === 'assistant_message') {
                         // Return empty div for virtualization (can't return null)
                         return <div key={`${sessionId}-${index}`} style={{ display: 'none' }} />;
                       }
@@ -1709,13 +1615,13 @@ export const RichTranscriptView = React.forwardRef<
                     // Check if this is the start of a new message group
                     let effectivePrevMessage = null;
                     let checkIdx = index - 1;
-                    while (checkIdx >= 0 && messages[checkIdx].role === 'tool') {
+                    while (checkIdx >= 0 && (messages[checkIdx].type === 'tool_call' || messages[checkIdx].type === 'interactive_prompt' || messages[checkIdx].type === 'subagent')) {
                       checkIdx--;
                     }
                     if (checkIdx >= 0) {
                       effectivePrevMessage = messages[checkIdx];
                     }
-                    const isNewGroup = !effectivePrevMessage || effectivePrevMessage.role !== message.role;
+                    const isNewGroup = !effectivePrevMessage || effectivePrevMessage.type !== message.type;
 
                     // Render orphaned tool calls
                     if (isTool && message.toolCall) {
@@ -1729,7 +1635,7 @@ export const RichTranscriptView = React.forwardRef<
                     // Hide system-generated user-role messages that have no meaningful content
                     // (tool results, slash command output). These have isUserInput explicitly set to false.
                     // But keep messages with actual text content (e.g., compaction summaries).
-                    if (isUser && message.isUserInput === false && !message.metadata?.isTeammateMessage && !message.content?.trim()) {
+                    if (isUser && message.type !== 'user_message' && !message.metadata?.isTeammateMessage && !message.text?.trim()) {
                       return <div key={`${sessionId}-${index}`} style={{ display: 'none' }} />;
                     }
 
@@ -1737,7 +1643,7 @@ export const RichTranscriptView = React.forwardRef<
                     if (isUser && message.metadata?.isTeammateMessage) {
                       const teammateName = (message.metadata?.teammateName as string) || 'agent';
                       const label = `Received message from agent ${teammateName}`;
-                      const content = message.content?.trim();
+                      const content = message.text?.trim();
                       // Show first line as preview (truncated)
                       const firstLine = content?.split('\n')[0] || '';
                       const preview = firstLine.length > 100 ? firstLine.slice(0, 100) + '...' : firstLine;
@@ -1756,7 +1662,7 @@ export const RichTranscriptView = React.forwardRef<
                               <summary className="flex items-center gap-1.5 py-0.5 text-xs text-[var(--nim-text-faint)] hover:text-[var(--nim-text-muted)]">
                                 <MaterialSymbol icon="chevron_right" size={14} className="teammate-chevron transition-transform shrink-0 w-3.5" />
                                 <span className="flex-1 truncate">{label}: {preview}</span>
-                                <span className="text-[10px] shrink-0">{formatMessageTime(message.timestamp)}</span>
+                                <span className="text-[10px] shrink-0">{formatMessageTime(message.createdAt.getTime())}</span>
                               </summary>
                               <div className="teammate-content ml-5 mt-1 mb-0.5">
                                 <MarkdownRenderer content={content} isUser={false} onOpenFile={onOpenFile} />
@@ -1766,14 +1672,14 @@ export const RichTranscriptView = React.forwardRef<
                             <div className="flex items-center gap-1.5 py-0.5 text-xs text-[var(--nim-text-faint)]">
                               <MaterialSymbol icon="chevron_right" size={14} className="shrink-0 w-3.5 invisible" />
                               <span className="flex-1 truncate">{label}: {content}</span>
-                              <span className="text-[10px] shrink-0">{formatMessageTime(message.timestamp)}</span>
+                              <span className="text-[10px] shrink-0">{formatMessageTime(message.createdAt.getTime())}</span>
                             </div>
                           )}
                         </div>
                       );
                     }
 
-                    if (message.isSystem || message.role === 'system' || message.metadata?.promptType === 'system_reminder') {
+                    if (message.type === 'system_message' || (message.metadata?.promptType as string) === 'system_reminder') {
                       return (
                         <div
                           key={`${sessionId}-${index}`}
@@ -1828,11 +1734,11 @@ export const RichTranscriptView = React.forwardRef<
                                 </span>
                               )}
                               <span className="rich-transcript-message-time text-xs text-[var(--nim-text-faint)]">
-                                {formatMessageTime(message.timestamp)}
+                                {formatMessageTime(message.createdAt.getTime())}
                               </span>
                             </div>
                             <div className="rich-transcript-message-actions flex items-center gap-1">
-                              {message.content.length > 200 && (
+                              {(message.text ?? '').length > 200 && (
                                 <button
                                   onClick={() => toggleMessageCollapse(index)}
                                   className="rich-transcript-collapse-button p-1 rounded-md bg-transparent border-none text-[var(--nim-text-faint)] cursor-pointer transition-colors hover:bg-[var(--nim-bg-secondary)] hover:text-[var(--nim-text-muted)]"
@@ -1861,7 +1767,7 @@ export const RichTranscriptView = React.forwardRef<
                           {/* Copy button - shows on hover */}
                           <div className="rich-transcript-message-copy-action absolute -top-1 right-0 z-[1]">
                             <button
-                              onClick={() => copyMessageContent(message, index)}
+                              onClick={() => copyTranscriptViewMessageContent(message, index)}
                               className={`rich-transcript-copy-button p-1.5 rounded-md bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] cursor-pointer transition-all flex items-center justify-center hover:bg-[var(--nim-bg-hover)] ${copiedMessageIndex === index ? 'copied' : ''}`}
                               title="Copy as Markdown"
                             >
@@ -1894,22 +1800,22 @@ export const RichTranscriptView = React.forwardRef<
                         {!isUser && (() => {
                           // Check if this is the last message in the assistant group
                           let nextNonToolIdx = index + 1;
-                          while (nextNonToolIdx < messages.length && messages[nextNonToolIdx].role === 'tool') {
+                          while (nextNonToolIdx < messages.length && (messages[nextNonToolIdx].type === 'tool_call' || messages[nextNonToolIdx].type === 'interactive_prompt' || messages[nextNonToolIdx].type === 'subagent')) {
                             nextNonToolIdx++;
                           }
-                          const isEndOfGroup = nextNonToolIdx >= messages.length || messages[nextNonToolIdx].role !== 'assistant';
+                          const isEndOfGroup = nextNonToolIdx >= messages.length || messages[nextNonToolIdx].type !== 'assistant_message';
                           if (!isEndOfGroup) return null;
                           // Don't show for the last assistant group if still streaming
                           if (isWaitingForResponse && nextNonToolIdx >= messages.length) return null;
                           // Find the preceding user-input message that triggered this turn
                           // Only consider genuine user input (isUserInput), not system-generated user-role messages
                           let startIdx = index - 1;
-                          while (startIdx >= 0 && !(messages[startIdx].role === 'user' && messages[startIdx].isUserInput !== false)) {
+                          while (startIdx >= 0 && !(messages[startIdx].type === 'user_message')) {
                             startIdx--;
                           }
                           if (startIdx < 0) return null; // No preceding user input message
-                          const startTimestamp = messages[startIdx].timestamp;
-                          const endTimestamp = message.timestamp;
+                          const startTimestamp = messages[startIdx].createdAt.getTime();
+                          const endTimestamp = message.createdAt.getTime();
                           const duration = formatDuration(startTimestamp, endTimestamp);
                           if (!duration || duration === '0ms') return null;
                           const fileStats = computeTurnFileStats(messages, startIdx, index);

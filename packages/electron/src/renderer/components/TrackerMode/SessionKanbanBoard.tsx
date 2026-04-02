@@ -31,7 +31,7 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
 import { MaterialSymbol, ProviderIcon, RichTranscriptView } from '@nimbalyst/runtime';
 import type { SessionMeta } from '@nimbalyst/runtime';
-import type { Message } from '@nimbalyst/runtime/ai/server/types';
+import type { TranscriptViewMessage } from '@nimbalyst/runtime/ai/server/types';
 import {
   sessionsByPhaseAtom,
   sessionKanbanFilterAtom,
@@ -253,7 +253,7 @@ function CardStatusBadge({ info }: { info: CardStateInfo }) {
 // ============================================================
 
 /** Global cache for fetched tail messages to avoid refetching on re-hover */
-const tailMessageCache = new Map<string, Message[]>();
+const tailMessageCache = new Map<string, TranscriptViewMessage[]>();
 
 const PEEK_SETTINGS = {
   showToolCalls: true,
@@ -270,7 +270,7 @@ interface TranscriptPeekProps {
 }
 
 function TranscriptPeek({ sessionId, anchorRef, onClose }: TranscriptPeekProps) {
-  const [messages, setMessages] = useState<Message[] | null>(tailMessageCache.get(sessionId) || null);
+  const [messages, setMessages] = useState<TranscriptViewMessage[] | null>(tailMessageCache.get(sessionId) || null);
   const [loading, setLoading] = useState(!tailMessageCache.has(sessionId));
   const peekRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
@@ -286,7 +286,7 @@ function TranscriptPeek({ sessionId, anchorRef, onClose }: TranscriptPeekProps) 
     let cancelled = false;
     window.electronAPI.ai
       .getTailMessages(sessionId, 10)
-      .then((msgs: Message[]) => {
+      .then((msgs: TranscriptViewMessage[]) => {
         if (!cancelled) {
           tailMessageCache.set(sessionId, msgs);
           setMessages(msgs);

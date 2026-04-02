@@ -184,7 +184,7 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
   const host = useAtomValue(interactiveWidgetHostAtom(sessionId));
 
   const questions = parseQuestions(toolCall.arguments);
-  const questionId = toolCall.id || '';
+  const questionId = toolCall.providerToolCallId || '';
 
   // Parse result to determine completion state
   const rawResult = toolCall.result;

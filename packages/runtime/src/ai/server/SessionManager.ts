@@ -22,6 +22,7 @@ import {
   ModelIdentifier,
   shouldBlockStartedSessionProviderSwitch,
 } from './types';
+import type { TranscriptViewMessage } from './transcript/TranscriptProjector';
 import type { SessionData as ChatSession } from './types';
 import { parseContextUsageMessage } from './utils/contextUsage';
 import { TranscriptMigrationRepository } from '../../storage/repositories/TranscriptMigrationRepository';
@@ -66,23 +67,52 @@ function stripSystemReminderTags(content: string): string {
     .trim();
 }
 
-function chatMessageFromServerMessage(msg: any): Message {
-  return {
-    role: msg.role,
-    content: msg.content,
-    timestamp: msg.timestamp,
+/**
+ * Convert a raw server/provider message into a TranscriptViewMessage
+ * for in-memory session state. Used by the legacy addMessage path.
+ */
+function viewMessageFromServerMessage(msg: any): TranscriptViewMessage {
+  const roleToType: Record<string, TranscriptViewMessage['type']> = {
+    user: 'user_message',
+    assistant: 'assistant_message',
+    system: 'system_message',
+    tool: 'tool_call',
+  };
+  const type = roleToType[msg.role] ?? 'assistant_message';
+
+  const vm: TranscriptViewMessage = {
+    id: -(msg.timestamp || Date.now()),
+    sequence: -1,
+    createdAt: new Date(msg.timestamp || Date.now()),
+    type,
+    text: msg.content ?? msg.errorMessage ?? '',
     mode: msg.mode,
-    edits: msg.edits,
-    toolCall: (msg as any).toolCall,
+    subagentId: null,
     isError: msg.isError,
     isAuthError: msg.isAuthError,
-    errorMessage: msg.errorMessage,
-    isUserInput: msg.isUserInput ?? (msg.role === 'user' ? true : undefined),
-    isStreamingStatus: msg.isStreamingStatus,
-    streamingData: msg.streamingData,
-    attachments: msg.attachments,
     metadata: msg.metadata,
+    attachments: msg.attachments,
   };
+
+  if (msg.toolCall) {
+    const tc = msg.toolCall;
+    vm.toolCall = {
+      toolName: tc.name ?? tc.toolName ?? '',
+      toolDisplayName: tc.name ?? tc.toolName ?? '',
+      status: tc.isError ? 'error' : 'completed',
+      description: tc.description ?? null,
+      arguments: tc.arguments ?? {},
+      targetFilePath: tc.targetFilePath ?? null,
+      mcpServer: null,
+      mcpTool: null,
+      result: typeof tc.result === 'string' ? tc.result : tc.result != null ? JSON.stringify(tc.result) : undefined,
+      isError: tc.isError,
+      providerToolCallId: tc.id ?? null,
+      progress: [],
+    };
+  }
+
+  return vm;
 }
 
 function sessionDataFromChatSession(session: ChatSession, fallbackWorkspace: string): SessionData {
@@ -104,7 +134,7 @@ function sessionDataFromChatSession(session: ChatSession, fallbackWorkspace: str
     mode: session.mode,
     createdAt: toTimestampMillis(session.createdAt),
     updatedAt: toTimestampMillis(session.updatedAt),
-    messages: session.messages.map(chatMessageFromServerMessage),
+    messages: session.messages.map(viewMessageFromServerMessage),
     documentContext,
     workspacePath: workspaceId,
     title: session.title ?? 'New conversation',
@@ -694,6 +724,16 @@ export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
   return uiMessages;
 }
 
+/**
+ * Transform raw agent messages from database into TranscriptViewMessage[] format.
+ * Wraps transformAgentMessagesToUI, converting the legacy Message[] output.
+ * Used by iOS transcript which doesn't have access to the canonical transcript pipeline.
+ */
+export function transformAgentMessagesToViewMessages(agentMessages: any[]): TranscriptViewMessage[] {
+  const legacyMessages = transformAgentMessagesToUI(agentMessages);
+  return legacyMessages.map(viewMessageFromServerMessage);
+}
+
 async function fetchSessionsForWorkspace(workspace: string): Promise<SessionData[]> {
   const items = await AISessionsRepository.list(workspace);
   const sessions = await Promise.all(
@@ -977,16 +1017,13 @@ export class SessionManager {
     }
 
     // Load transcript from canonical ai_transcript_events table
+    // These are already TranscriptViewMessage[] -- do NOT pass through
+    // viewMessageFromServerMessage (which expects the old Message format).
     const uiMessages = await this.loadCanonicalTranscript(sessionId, session.provider);
 
-    // Create session data with transformed messages
-    // tokenUsage is read from metadata in sessionDataFromChatSession
-    const normalized: ChatSession = {
-      ...session,
-      messages: uiMessages,
-    };
-
-    const sessionData = sessionDataFromChatSession(normalized, workspace);
+    // Build session data, then overwrite messages with the already-projected ones
+    const sessionData = sessionDataFromChatSession(session, workspace);
+    sessionData.messages = uiMessages;
 
     // Fallback: If no tokenUsage in metadata, try parsing from /context responses
     // This provides backwards compatibility for sessions created before tokenUsage was stored in metadata
@@ -1018,13 +1055,14 @@ export class SessionManager {
   /**
    * Load transcript via canonical ai_transcript_events path.
    * Lazily transforms old sessions on first access.
+   * Returns projected TranscriptViewMessage[] directly -- no legacy conversion.
    */
-  private async loadCanonicalTranscript(sessionId: string, provider: string): Promise<Message[]> {
+  private async loadCanonicalTranscript(sessionId: string, provider: string): Promise<TranscriptViewMessage[]> {
     if (!TranscriptMigrationRepository.hasService()) {
       throw new Error('TranscriptMigrationService not available');
     }
 
-    return TranscriptMigrationRepository.getService().getLegacyMessages(sessionId, provider);
+    return TranscriptMigrationRepository.getService().getViewMessages(sessionId, provider);
   }
 
   async getSessions(workspacePath?: string): Promise<SessionData[]> {
@@ -1068,7 +1106,7 @@ export class SessionManager {
     if (this.currentSession?.id === targetId) {
       this.currentSession = {
         ...this.currentSession,
-        messages: [...(this.currentSession.messages || []), chatMessageFromServerMessage(message)],
+        messages: [...(this.currentSession.messages || []), viewMessageFromServerMessage(message)],
         updatedAt: Date.now(),
       };
     }
@@ -1080,7 +1118,7 @@ export class SessionManager {
     if (this.currentSession?.id === sessionId) {
       this.currentSession = {
         ...this.currentSession,
-        messages: messages.map(chatMessageFromServerMessage),
+        messages: messages.map(viewMessageFromServerMessage),
         updatedAt: Date.now(),
       };
     }

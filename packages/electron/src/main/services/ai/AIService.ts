@@ -1524,7 +1524,7 @@ export class AIService {
       }
 
       let contextResponse = '';
-      for await (const chunk of contextProvider.sendMessage('/context', undefined, session.id, updatedSession.messages, workspacePath, [])) {
+      for await (const chunk of contextProvider.sendMessage('/context', undefined, session.id, updatedSession.messages as any, workspacePath, [])) {
         if (!chunk) continue;
 
         if (chunk.type === 'text') {
@@ -2042,7 +2042,7 @@ export class AIService {
       // logger.main.info(`[AIService] User message added successfully to session ${session.id}`);
 
       // Update session title if this is the first user message
-      if (session.messages.length === 0 || (session.messages.length === 1 && session.messages[0].role === 'user')) {
+      if (session.messages.length === 0 || (session.messages.length === 1 && session.messages[0].type === 'user_message')) {
         // Generate a provisional title from the first message without locking out auto-naming
         const title = message.length > 100 ? message.substring(0, 97) + '...' : message;
         await this.sessionManager.updateSessionTitle(session.id, title, {
@@ -2723,7 +2723,7 @@ export class AIService {
           }
         }
 
-        for await (const chunk of provider.sendMessage(messageToSend, contextWithSession, session.id, sessionMessages, effectiveWorkspacePath, attachments)) {
+        for await (const chunk of provider.sendMessage(messageToSend, contextWithSession, session.id, sessionMessages as any, effectiveWorkspacePath, attachments)) {
           if (!chunk) continue;
           chunkCount++;
 

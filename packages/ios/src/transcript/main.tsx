@@ -9,7 +9,7 @@ import { setInteractiveWidgetHost } from '@nimbalyst/runtime/store';
 // prevents tree-shaking, producing a ~25MB bundle that crashes WKWebView.
 import { AgentTranscriptPanel } from '@nimbalyst/runtime/ui/AgentTranscript/components/AgentTranscriptPanel';
 import { noopInteractiveWidgetHost } from '@nimbalyst/runtime/ui/AgentTranscript/components/CustomToolWidgets/InteractiveWidgetHost';
-import { transformAgentMessagesToUI } from '@nimbalyst/runtime/ai/server/SessionManager';
+import { transformAgentMessagesToViewMessages } from '@nimbalyst/runtime/ai/server/SessionManager';
 import type { SessionData } from '@nimbalyst/runtime/ai/server/types';
 import type { InteractiveWidgetHost } from '@nimbalyst/runtime/ui/AgentTranscript/components/CustomToolWidgets/InteractiveWidgetHost';
 import './styles.css';
@@ -50,7 +50,7 @@ interface BridgeMetadataUpdate {
 }
 
 // ============================================================================
-// Convert bridge messages to the format transformAgentMessagesToUI expects
+// Convert bridge messages to the format transformAgentMessagesToViewMessages expects
 // ============================================================================
 
 function bridgeMessageToRaw(msg: BridgeMessage): {
@@ -66,7 +66,7 @@ function bridgeMessageToRaw(msg: BridgeMessage): {
 
   // The encrypted payload is an envelope: { content: "...", metadata: {...}, hidden: false }
   // We need to unwrap it to get the actual message content, which is what
-  // transformAgentMessagesToUI expects (e.g., '{"type":"text","content":"..."}')
+  // transformAgentMessagesToViewMessages expects (e.g., '{"type":"text","content":"..."}')
   try {
     const envelope = JSON.parse(raw);
     if (envelope && typeof envelope === 'object' && 'content' in envelope) {
@@ -281,11 +281,11 @@ function TranscriptApp() {
         if (!messages) return [];
         return messages
           .map((msg, index) => ({ msg, index }))
-          .filter(({ msg }) => msg.role === 'user' && msg.isUserInput !== false)
+          .filter(({ msg }) => msg.type === 'user_message')
           .map(({ msg, index }) => ({
             id: String(index),
-            text: (msg.content || '').substring(0, 80),
-            createdAt: msg.timestamp || 0,
+            text: (msg.text || '').substring(0, 80),
+            createdAt: msg.createdAt?.getTime() || 0,
           }));
       },
     };
@@ -311,7 +311,7 @@ function TranscriptApp() {
 
     try {
       const rawForTransform = rawMessages.map(bridgeMessageToRaw);
-      const transformedMessages = transformAgentMessagesToUI(rawForTransform);
+      const transformedMessages = transformAgentMessagesToViewMessages(rawForTransform);
 
       let sessionStatus: string | undefined;
       if (metadata.isExecuting) {

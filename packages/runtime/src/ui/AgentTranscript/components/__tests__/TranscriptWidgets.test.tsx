@@ -19,7 +19,7 @@ import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { createStore, Provider as JotaiProvider } from 'jotai';
-import type { Message } from '../../../../ai/server/types';
+import type { TranscriptViewMessage } from '../../../../ai/server/transcript/TranscriptProjector';
 import type { CustomToolWidgetProps } from '../CustomToolWidgets/index';
 
 // Mock clipboard
@@ -60,11 +60,15 @@ function Wrapper({ children }: { children: React.ReactNode }) {
   return <JotaiProvider store={store}>{children}</JotaiProvider>;
 }
 
-function makeMessage(overrides: Partial<Message> = {}): Message {
+let nextTestId = 1;
+
+function makeMessage(overrides: Partial<TranscriptViewMessage> = {}): TranscriptViewMessage {
   return {
-    role: 'assistant',
-    content: '',
-    timestamp: Date.now(),
+    id: nextTestId++,
+    sequence: nextTestId,
+    createdAt: new Date(),
+    type: 'assistant_message',
+    subagentId: null,
     ...overrides,
   };
 }
@@ -73,16 +77,23 @@ function makeToolMessage(
   toolName: string,
   args: Record<string, unknown> = {},
   result?: unknown,
-  overrides: Partial<Message> = {}
-): Message {
+  overrides: Partial<TranscriptViewMessage> = {}
+): TranscriptViewMessage {
   return makeMessage({
-    role: 'tool',
+    type: 'tool_call',
     toolCall: {
-      id: `tool-${Date.now()}`,
-      name: toolName,
+      toolName,
+      toolDisplayName: toolName,
+      status: result !== undefined ? 'completed' : 'running',
+      description: null,
       arguments: args,
+      targetFilePath: null,
+      mcpServer: null,
+      mcpTool: null,
+      providerToolCallId: `tool-${Date.now()}`,
+      progress: [],
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      result: result as any,
+      result: result != null ? (typeof result === 'string' ? result : JSON.stringify(result)) : undefined,
     },
     ...overrides,
   });
@@ -101,7 +112,7 @@ describe('MessageSegment', () => {
   });
 
   it('renders user message text', () => {
-    const message = makeMessage({ role: 'user', content: 'Hello world' });
+    const message = makeMessage({ type: 'user_message', text: 'Hello world' });
     render(
       <MessageSegment
         message={message}
@@ -117,8 +128,8 @@ describe('MessageSegment', () => {
 
   it('strips NIMBALYST_SYSTEM_MESSAGE from user messages', () => {
     const message = makeMessage({
-      role: 'user',
-      content: 'User text\n<NIMBALYST_SYSTEM_MESSAGE>hidden</NIMBALYST_SYSTEM_MESSAGE>',
+      type: 'user_message',
+      text: 'User text\n<NIMBALYST_SYSTEM_MESSAGE>hidden</NIMBALYST_SYSTEM_MESSAGE>',
     });
     render(
       <MessageSegment
@@ -136,10 +147,9 @@ describe('MessageSegment', () => {
 
   it('renders error messages with error styling', () => {
     const message = makeMessage({
-      role: 'assistant',
-      content: '',
+      type: 'assistant_message',
+      text: 'Something went wrong',
       isError: true,
-      errorMessage: 'Something went wrong',
     });
     const { container } = render(
       <MessageSegment
@@ -159,10 +169,9 @@ describe('MessageSegment', () => {
 
   it('renders context limit widget for context limit errors', () => {
     const message = makeMessage({
-      role: 'assistant',
-      content: '',
+      type: 'assistant_message',
+      text: 'Prompt is too long for this model',
       isError: true,
-      errorMessage: 'Prompt is too long for this model',
     });
     const { container } = render(
       <MessageSegment
@@ -179,16 +188,12 @@ describe('MessageSegment', () => {
 
   it('renders tool call card with expand/collapse', () => {
     const toolId = 'test-tool-1';
-    const message = makeMessage({
-      role: 'tool',
-      content: '',
-      toolCall: {
-        id: toolId,
-        name: 'Read',
-        arguments: { file_path: '/test.ts' },
-        result: 'file contents here',
-      },
-    });
+    const message = makeToolMessage(
+      'Read',
+      { file_path: '/test.ts' },
+      'file contents here',
+      { toolCall: { toolName: 'Read', toolDisplayName: 'Read', status: 'completed', description: null, arguments: { file_path: '/test.ts' }, targetFilePath: null, mcpServer: null, mcpTool: null, providerToolCallId: toolId, progress: [], result: 'file contents here' } }
+    );
 
     // Initially collapsed
     const { rerender } = render(
@@ -224,17 +229,12 @@ describe('MessageSegment', () => {
   });
 
   it('shows failed status for error tool calls', () => {
-    const message = makeMessage({
-      role: 'tool',
-      content: '',
-      isError: true,
-      toolCall: {
-        id: 'fail-tool',
-        name: 'Write',
-        arguments: {},
-        result: { success: false, error: 'Permission denied' },
-      },
-    });
+    const message = makeToolMessage(
+      'Write',
+      {},
+      JSON.stringify({ success: false, error: 'Permission denied' }),
+      { isError: true }
+    );
     render(
       <MessageSegment
         message={message}
@@ -250,8 +250,8 @@ describe('MessageSegment', () => {
 
   it('renders attachments for user messages', () => {
     const message = makeMessage({
-      role: 'user',
-      content: 'Check this image',
+      type: 'user_message',
+      text: 'Check this image',
       attachments: [
         {
           id: 'att-1',
@@ -260,7 +260,6 @@ describe('MessageSegment', () => {
           mimeType: 'image/png',
           size: 1024,
           type: 'image',
-          addedAt: Date.now(),
         },
       ],
     });
@@ -356,9 +355,9 @@ describe('BashWidget', () => {
     const message = makeToolMessage(
       'Bash',
       { command: 'false' },
-      { exit_code: 1, output: 'command failed' }
+      { exit_code: 1, output: 'command failed' },
+      { isError: true }
     );
-    message.isError = true;
     const { container } = render(
       <Wrapper>
         <BashWidget
@@ -441,8 +440,7 @@ describe('EditToolResultCard', () => {
   it('renders "Failed" status for error', () => {
     const message = makeToolMessage('Edit', {
       file_path: '/workspace/src/app.ts',
-    });
-    message.isError = true;
+    }, undefined, { isError: true });
     const edits = [{ old_string: 'foo', new_string: 'bar' }];
     render(
       <EditToolResultCard
@@ -749,11 +747,7 @@ describe('GitCommitConfirmationWidget', () => {
         commitMessage: 'feat: add feature',
         filesToStage: ['src/feature.ts'],
       },
-      {
-        action: 'committed',
-        commitHash: 'abc1234567890',
-        commitDate: '2025-03-26T12:00:00Z',
-      }
+      'committed - commit hash: abc1234567890, commit date: 2025-03-26T12:00:00Z'
     );
     render(
       <Wrapper>
@@ -797,7 +791,7 @@ describe('GitCommitConfirmationWidget', () => {
   });
 
   it('returns null when no tool call', () => {
-    const message = makeMessage({ role: 'tool', content: '' });
+    const message = makeMessage({ type: 'tool_call' });
     const { container } = render(
       <Wrapper>
         <GitCommitConfirmationWidget
@@ -1367,7 +1361,7 @@ describe('UpdateSessionMetaWidget', () => {
   });
 
   it('returns null when no tool call', () => {
-    const message = makeMessage({ role: 'tool', content: '' });
+    const message = makeMessage({ type: 'tool_call' });
     const { container } = render(
       <Wrapper>
         <UpdateSessionMetaWidget
@@ -1437,11 +1431,3 @@ describe('UpdateSessionMetaWidget', () => {
   });
 });
 
-// ============================================================================
-// CodexOutputRenderer - parseCodexRawEvents Tests
-// Note: Comprehensive unit tests for parseCodexRawEvents exist in
-// CodexOutputRenderer.test.ts. The CodexOutputRenderer React component
-// cannot be tested in isolation here because it transitively imports
-// @nimbalyst/extension-sdk which requires build artifacts not available
-// in the test environment.
-// ============================================================================

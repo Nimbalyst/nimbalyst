@@ -11,7 +11,7 @@
  */
 import { marked, type MarkedOptions, type Tokens } from 'marked';
 import hljs from 'highlight.js';
-import type { Message, SessionData } from '@nimbalyst/runtime/ai/server/types';
+import type { TranscriptViewMessage, SessionData } from '@nimbalyst/runtime/ai/server/types';
 
 // ---------------------------------------------------------------------------
 // Markdown setup – configure once
@@ -138,16 +138,18 @@ function renderMarkdown(raw: string, workspacePath: string): string {
 // Tool result rendering
 // ---------------------------------------------------------------------------
 
-function toolStatus(message: Message): { didFail: boolean; label: string } {
-  const result = message.toolCall?.result;
-  const resultObj =
-    typeof result === 'object' && result !== null && typeof result !== 'string' ? (result as unknown as Record<string, unknown>) : null;
+function toolStatus(message: TranscriptViewMessage): { didFail: boolean; label: string } {
+  const raw = message.toolCall?.result;
+  let resultObj: Record<string, unknown> | null = null;
+  if (typeof raw === 'string') {
+    try { resultObj = JSON.parse(raw) as Record<string, unknown>; } catch { /* not JSON */ }
+  }
   const explicitSuccess =
     resultObj && 'success' in resultObj ? resultObj.success !== false : undefined;
   const derivedError =
-    message.errorMessage ||
+    (message.isError && message.text) ||
     (resultObj && typeof resultObj.error === 'string' ? (resultObj.error as string) : undefined);
-  const didFail = !!message.isError || explicitSuccess === false || !!derivedError;
+  const didFail = !!message.isError || !!message.toolCall?.isError || explicitSuccess === false || !!derivedError;
   return { didFail, label: didFail ? 'Failed' : 'Succeeded' };
 }
 
@@ -210,66 +212,63 @@ function renderDiffLines(content: string, workspacePath: string): string {
 // Tool card rendering (recursive for sub-agents)
 // ---------------------------------------------------------------------------
 
-function renderToolCard(message: Message, workspacePath: string, depth: number = 0): string {
+function renderToolCard(message: TranscriptViewMessage, workspacePath: string, depth: number = 0): string {
   const tc = message.toolCall;
-  if (!tc) return '';
+  const sub = message.subagent;
+  if (!tc && !sub) return '';
 
-  // Prevent infinite recursion and limit nesting depth
   const MAX_DEPTH = 5;
   if (depth > MAX_DEPTH) return '<div class="tool-card"><em>(nested tools omitted)</em></div>';
 
-  const displayName = formatToolDisplayName(tc.name) || tc.name;
+  const isSubagent = message.type === 'subagent';
+  const displayName = tc
+    ? (formatToolDisplayName(tc.toolName) || tc.toolName)
+    : (sub?.teammateName || sub?.agentType || 'Sub-agent');
   const { didFail, label } = toolStatus(message);
   const statusClass = didFail ? 'status-error' : 'status-success';
 
-  // Determine card class (sub-agent, teammate, or regular)
   let cardClass = 'tool-card';
   let extraLabel = '';
-  if (tc.isSubAgent) {
+  if (isSubagent) {
     cardClass += ' sub-agent';
-    if (tc.subAgentType) extraLabel = `<span class="tool-agent-type">${escapeHtml(tc.subAgentType)}</span>`;
+    if (sub?.agentType) extraLabel = `<span class="tool-agent-type">${escapeHtml(sub.agentType)}</span>`;
   }
-  if (tc.teammateName) {
+  if (sub?.teammateName) {
     cardClass += ' teammate';
-    extraLabel = `<span class="tool-teammate-name">${escapeHtml(tc.teammateName)}</span>`;
+    extraLabel = `<span class="tool-teammate-name">${escapeHtml(sub.teammateName)}</span>`;
   }
 
   const indentStyle = depth > 0 ? ` style="margin-left: ${depth * 1}rem;"` : '';
 
-  // Arguments section
   const argsHtml =
-    tc.arguments && Object.keys(tc.arguments).length > 0
+    tc?.arguments && Object.keys(tc.arguments).length > 0
       ? `<div class="tool-section"><div class="tool-section-label">Parameters</div>${renderToolArguments(tc.arguments, workspacePath)}</div>`
       : '';
 
-  // Result section
   const resultHtml =
-    tc.result !== undefined && tc.result !== null
+    tc?.result !== undefined && tc?.result !== null
       ? `<div class="tool-section"><div class="tool-section-label">Result</div>${renderToolResult(tc.result, workspacePath)}</div>`
       : '';
 
-  // Error message
-  const errorHtml = message.errorMessage
-    ? `<div class="tool-error">${escapeHtml(stripAbsolutePaths(message.errorMessage, workspacePath))}</div>`
+  const errorText = (message.isError || message.toolCall?.isError) ? message.text : undefined;
+  const errorHtml = errorText
+    ? `<div class="tool-error">${escapeHtml(stripAbsolutePaths(errorText, workspacePath))}</div>`
     : '';
 
-  // Nested child tool calls (sub-agent hierarchy)
   let childHtml = '';
-  if (tc.childToolCalls && tc.childToolCalls.length > 0) {
-    const childCards = tc.childToolCalls
-      .filter((child) => child.toolCall)
-      .map((child) => renderToolCard(child, workspacePath, depth + 1))
+  if (sub?.childEvents && sub.childEvents.length > 0) {
+    const childCards = sub.childEvents
+      .filter((child: TranscriptViewMessage) => child.toolCall || child.subagent)
+      .map((child: TranscriptViewMessage) => renderToolCard(child, workspacePath, depth + 1))
       .join('\n');
     if (childCards) {
       childHtml = `<div class="tool-children">${childCards}</div>`;
     }
   }
 
-  // Content section: only for child tool calls that carry their own text content
-  // (not the parent assistant message, which renders its content separately)
   let contentHtml = '';
-  if (message.content && depth > 0) {
-    contentHtml = `<div class="tool-content">${renderMarkdown(message.content, workspacePath)}</div>`;
+  if (message.text && depth > 0) {
+    contentHtml = `<div class="tool-content">${renderMarkdown(message.text, workspacePath)}</div>`;
   }
 
   return `
@@ -295,27 +294,21 @@ function renderToolCard(message: Message, workspacePath: string, depth: number =
 // Message rendering
 // ---------------------------------------------------------------------------
 
-function renderMessage(msg: Message, workspacePath: string): string {
-  // Skip streaming status, hidden, system messages with no content
-  if (msg.isStreamingStatus) return '';
-  if (msg.role === 'system' && !msg.content?.trim()) return '';
+function renderMessage(msg: TranscriptViewMessage, workspacePath: string): string {
+  if (msg.type === 'system_message' && !msg.text?.trim()) return '';
+  if (msg.type === 'tool_call' || msg.type === 'interactive_prompt' || msg.type === 'subagent') return '';
+  if (msg.type === 'turn_ended') return '';
 
-  // Tool messages are rendered as cards attached to their parent assistant message
-  // They should not render as standalone messages
-  if (msg.role === 'tool') return '';
-
-  const isUser = msg.role === 'user';
+  const isUser = msg.type === 'user_message';
   const roleClass = isUser ? 'user' : 'assistant';
   const avatarLabel = isUser ? 'U' : 'A';
-  const timeStr = msg.timestamp ? formatShortTime(msg.timestamp) : '';
+  const timeStr = msg.createdAt ? formatShortTime(msg.createdAt.getTime()) : '';
 
-  // Render content
   let contentHtml = '';
-  if (msg.content?.trim()) {
-    contentHtml = renderMarkdown(msg.content, workspacePath);
+  if (msg.text?.trim()) {
+    contentHtml = renderMarkdown(msg.text, workspacePath);
   }
 
-  // Render attachments (just filenames, not embedded)
   let attachmentsHtml = '';
   if (msg.attachments && msg.attachments.length > 0) {
     const items = msg.attachments
@@ -324,22 +317,17 @@ function renderMessage(msg: Message, workspacePath: string): string {
     attachmentsHtml = `<div class="message-attachments">${items}</div>`;
   }
 
-  // Render tool call (for assistant messages that include a tool call)
   let toolHtml = '';
-  if (msg.toolCall) {
+  if (msg.toolCall || msg.subagent) {
     toolHtml = renderToolCard(msg, workspacePath);
   }
 
-  // Render edits as diffs
   let editsHtml = '';
-  if (msg.edits && msg.edits.length > 0) {
-    const editCards = msg.edits
-      .map((edit: any) => {
-        const filePath = stripAbsolutePaths(
-          edit.filePath || edit.file_path || edit.targetFilePath || 'Unknown file',
-          workspacePath
-        );
-        const diffContent = edit.diff || edit.content || '';
+  if (msg.toolCall?.changes && msg.toolCall.changes.length > 0) {
+    const editCards = msg.toolCall.changes
+      .map((change) => {
+        const filePath = stripAbsolutePaths(change.path || 'Unknown file', workspacePath);
+        const diffContent = change.patch || '';
         if (!diffContent) return '';
         return `
           <details class="edit-card" open>
@@ -354,13 +342,11 @@ function renderMessage(msg: Message, workspacePath: string): string {
     editsHtml = editCards;
   }
 
-  // Error state
   let errorHtml = '';
-  if (msg.isError && msg.errorMessage) {
-    errorHtml = `<div class="message-error">${escapeHtml(stripAbsolutePaths(msg.errorMessage, workspacePath))}</div>`;
+  if (msg.isError && msg.text) {
+    errorHtml = `<div class="message-error">${escapeHtml(stripAbsolutePaths(msg.text, workspacePath))}</div>`;
   }
 
-  // Mode badge
   const modeBadge = msg.mode ? `<span class="mode-badge">${escapeHtml(msg.mode)}</span>` : '';
 
   return `
@@ -1132,8 +1118,8 @@ export async function exportSessionToHtml(session: SessionData): Promise<string>
 
   // Filter out messages we don't want in the export
   const exportMessages = (session.messages || []).filter((msg) => {
-    if (msg.isStreamingStatus) return false;
-    if (msg.role === 'tool') return false; // Tool results are rendered inline with their parent
+    if (msg.type === 'tool_call' || msg.type === 'interactive_prompt' || msg.type === 'subagent') return false;
+    if (msg.type === 'turn_ended') return false;
     return true;
   });
 

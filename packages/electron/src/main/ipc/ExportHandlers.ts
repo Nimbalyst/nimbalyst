@@ -6,7 +6,7 @@ import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { AISessionsRepository } from '@nimbalyst/runtime';
 import type { SessionData } from '@nimbalyst/runtime/ai/server/types';
 import { exportSessionToHtml, getExportFilename } from '../services/SessionHtmlExporter';
-import { loadLegacyMessages } from '../utils/transcriptHelpers';
+import { loadViewMessages } from '../utils/transcriptHelpers';
 
 /**
  * Registers IPC handlers for export functionality.
@@ -151,7 +151,7 @@ export function registerExportHandlers() {
           return { success: false, error: `Session not found: ${sessionId}` };
         }
 
-        const msgResult = await loadLegacyMessages(sessionId, chatSession.provider ?? 'unknown');
+        const msgResult = await loadViewMessages(sessionId, chatSession.provider ?? 'unknown');
         if (!msgResult.success) {
           return { success: false, error: msgResult.error };
         }
@@ -230,7 +230,7 @@ export function registerExportHandlers() {
           return { success: false, error: `Session not found: ${sessionId}` };
         }
 
-        const msgResult = await loadLegacyMessages(sessionId, chatSession.provider ?? 'unknown');
+        const msgResult = await loadViewMessages(sessionId, chatSession.provider ?? 'unknown');
         if (!msgResult.success) {
           return { success: false, error: msgResult.error };
         }
@@ -251,16 +251,16 @@ export function registerExportHandlers() {
         lines.push('');
 
         for (const msg of uiMessages) {
-          if (msg.isStreamingStatus) continue;
-          if (msg.role === 'tool') continue;
+          if (msg.type === 'tool_call' || msg.type === 'interactive_prompt' || msg.type === 'subagent') continue;
+          if (msg.type === 'turn_ended') continue;
 
-          const role = msg.role === 'user' ? 'User' : 'Assistant';
+          const role = msg.type === 'user_message' ? 'User' : 'Assistant';
           lines.push(`## ${role}`);
-          if (msg.content?.trim()) {
-            lines.push(stripPaths(msg.content.trim()));
+          if (msg.text?.trim()) {
+            lines.push(stripPaths(msg.text.trim()));
           }
           if (msg.toolCall) {
-            const toolName = msg.toolCall.name || 'Unknown tool';
+            const toolName = msg.toolCall.toolName || 'Unknown tool';
             lines.push(`[Tool: ${toolName}]`);
           }
           lines.push('');

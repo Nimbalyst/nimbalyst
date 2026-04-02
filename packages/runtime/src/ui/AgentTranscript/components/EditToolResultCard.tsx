@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Message } from '../../../ai/server/types';
+import type { TranscriptViewMessage } from '../../../ai/server/transcript/TranscriptProjector';
 import { DiffViewer } from './DiffViewer';
 import { NewFilePreview } from './NewFilePreview';
 import { toProjectRelative, shortenPath } from '../utils/pathResolver';
@@ -15,13 +15,13 @@ const isNewFileEdit = (edit: any): boolean => {
 };
 
 interface EditToolResultCardProps {
-  toolMessage: Message;
+  toolMessage: TranscriptViewMessage;
   edits: any[];
   workspacePath?: string;
   onOpenFile?: (filePath: string) => void;
 }
 
-const resolveEditFilePath = (edit: any, toolMessage: Message): string | undefined => {
+const resolveEditFilePath = (edit: any, toolMessage: TranscriptViewMessage): string | undefined => {
   if (!edit) return undefined;
   const tool = toolMessage.toolCall;
   return (
@@ -35,7 +35,7 @@ const resolveEditFilePath = (edit: any, toolMessage: Message): string | undefine
   );
 };
 
-const getInstructionText = (toolMessage: Message): string => {
+const getInstructionText = (toolMessage: TranscriptViewMessage): string => {
   const args = toolMessage.toolCall?.arguments;
   if (!args) return '';
   if (typeof args.instructions === 'string') return args.instructions;
@@ -58,7 +58,7 @@ export const EditToolResultCard: React.FC<EditToolResultCardProps> = ({ toolMess
   const firstEditPath = resolveEditFilePath(edits[0], toolMessage);
   const displayPath = firstEditPath ? toProjectRelative(firstEditPath, workspacePath) : '';
   const prettyPath = displayPath ? shortenPath(displayPath, 64) : '';
-  const toolDisplayName = formatToolDisplayName(tool.name || '') || tool.name || 'Edit';
+  const toolDisplayName = formatToolDisplayName(tool.toolName || '') || tool.toolName || 'Edit';
 
   const instruction = truncateInstruction(getInstructionText(toolMessage));
   const allNewFiles = edits.every(isNewFileEdit);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { Message, ChatAttachment } from '../../../ai/server/types';
+import type { TranscriptViewMessage, ChatAttachment } from '../../../ai/server/types';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { JSONViewer } from './JSONViewer';
 import { DiffViewer } from './DiffViewer';
@@ -12,7 +12,7 @@ import { MaterialSymbol } from '../../icons/MaterialSymbol';
 import { formatToolDisplayName } from '../utils/toolNameFormatter';
 
 interface MessageSegmentProps {
-  message: Message;
+  message: TranscriptViewMessage;
   isUser: boolean;
   isCollapsed?: boolean;
   showToolCalls: boolean;
@@ -146,24 +146,24 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
 
   // Render text content
   const renderTextContent = () => {
-    if (!message.content.trim()) return null;
+    if (!message.text?.trim()) return null;
 
     // Skip if this is an error message - renderError() will handle it
     // This prevents duplicate LoginRequiredWidget rendering
     if (message.isError) return null;
 
     // Check if this is a rate limit event embedded in text content
-    if (!isUser && isRateLimitContent(message.content)) {
-      return <RateLimitWidget content={message.content} />;
+    if (!isUser && isRateLimitContent(message.text ?? '')) {
+      return <RateLimitWidget content={message.text ?? ''} />;
     }
 
     // Check if this is an OpenAI auth error in the message content
-    if (!isUser && isOpenAIAuthError(message.content)) {
+    if (!isUser && isOpenAIAuthError(message.text ?? '')) {
       return shouldShowLoginWidget ? <OpenAIAuthWidget /> : null;
     }
 
     // Check if this is a login-required error in the message content
-    const isLoginRequired = isLoginRequiredError(message.content);
+    const isLoginRequired = isLoginRequiredError(message.text ?? '');
 
     // If it's a login-required message, render the special widget (only if allowed)
     if (isLoginRequired && !isUser && shouldShowLoginWidget) {
@@ -176,10 +176,10 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     }
 
     // Slight visual variation for system messages
-    const isSystemMessage = message.isSystem || message.role === 'system';
+    const isSystemMessage = message.type === 'system_message';
 
     // Strip out system message from user messages
-    const displayContent = isUser ? stripSystemMessage(message.content) : message.content;
+    const displayContent = isUser ? stripSystemMessage(message.text ?? '') : message.text;
 
     // Codex raw events are now rendered directly in RichTranscriptView (grouped together)
     // This component only handles non-Codex messages
@@ -204,28 +204,31 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     if (!showToolCalls || !message.toolCall) return null;
 
     const tool = message.toolCall;
-    const isExpanded = expandedTools.has(tool.id || tool.name);
+    const isExpanded = expandedTools.has(tool.providerToolCallId || tool.toolName);
     const toolResult = tool.result;
-    const resultDetails = typeof toolResult === 'object' && toolResult !== null ? (toolResult as Record<string, any>) : null;
+    let resultDetails: Record<string, unknown> | null = null;
+    if (typeof toolResult === 'string') {
+      try { resultDetails = JSON.parse(toolResult); } catch { /* not JSON */ }
+    }
     const explicitSuccess = resultDetails && 'success' in resultDetails ? resultDetails.success !== false : undefined;
-    const derivedErrorMessage = message.errorMessage || (resultDetails && typeof resultDetails.error === 'string' ? (resultDetails.error as string) : undefined);
-    const didFail = message.isError || explicitSuccess === false || !!derivedErrorMessage;
+    const derivedErrorMessage = (message.isError && message.text) || (resultDetails && typeof resultDetails.error === 'string' ? (resultDetails.error as string) : undefined);
+    const didFail = message.isError || tool.isError || explicitSuccess === false || !!derivedErrorMessage;
     const statusLabel = didFail ? 'Failed' : 'Succeeded';
     const statusColor = didFail ? 'var(--nim-error)' : 'var(--nim-success)';
     const statusBackground = didFail ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)';
     const hasResult = toolResult !== undefined && toolResult !== null && (typeof toolResult !== 'string' || toolResult.trim().length > 0);
-    const toolDisplayName = formatToolDisplayName(tool.name || '') || tool.name || 'Tool Call';
+    const toolDisplayName = formatToolDisplayName(tool.toolName || '') || tool.toolName || 'Tool Call';
 
     return (
       <div className="rounded-md bg-nim-tertiary overflow-hidden border border-nim my-2">
         <button
-          onClick={() => onToggleToolExpand(tool.id || tool.name)}
+          onClick={() => onToggleToolExpand(tool.providerToolCallId || tool.toolName)}
           className="w-full py-2 px-3 bg-nim-secondary flex items-center gap-2 transition-colors text-left border-none cursor-pointer hover:bg-nim-hover"
         >
           <MaterialSymbol icon="build" size={14} className="tool-icon" />
           <span
             className="font-mono text-xs text-nim flex-1"
-            title={tool.name}
+            title={tool.toolName}
           >
             {toolDisplayName}
           </span>
@@ -284,9 +287,9 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
 
   // Render error
   const renderError = () => {
-    if (!message.isError || message.role === 'tool') return null;
+    if (!message.isError || message.type === 'tool_call') return null;
 
-    const errorMessage = message.errorMessage || message.content || 'Error';
+    const errorMessage = message.text || 'Error';
 
     // Check if this is an OpenAI authentication error
     if (isOpenAIAuthError(errorMessage) && shouldShowLoginWidget) {
@@ -366,18 +369,18 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
           <div
             key={attachment.id}
             className="message-attachment-item flex items-center gap-2 px-2.5 py-1.5 border border-[var(--nim-border)] rounded-md bg-[var(--nim-bg-secondary)] cursor-pointer transition-colors duration-150 max-w-[200px] hover:bg-[var(--nim-bg-hover)]"
-            onClick={() => handleAttachmentClick(attachment)}
+            onClick={() => handleAttachmentClick(attachment as ChatAttachment)}
             title="Click to preview"
           >
             {attachment.type === 'image' ? (
               <img
-                src={attachment.thumbnail || `file://${attachment.filepath}`}
+                src={(attachment as any).thumbnail || `file://${attachment.filepath}`}
                 alt={attachment.filename}
                 className="message-attachment-thumbnail w-12 h-12 object-cover rounded shrink-0"
               />
             ) : (
               <div className="message-attachment-icon w-12 h-12 flex items-center justify-center bg-[var(--nim-bg-tertiary)] rounded shrink-0 text-[var(--nim-text-muted)]">
-                <MaterialSymbol icon={getFileIcon(attachment.type)} size={24} />
+                <MaterialSymbol icon={getFileIcon(attachment.type as ChatAttachment['type'])} size={24} />
               </div>
             )}
             <div className="message-attachment-info flex flex-col gap-0.5 min-w-0 flex-1">
@@ -495,7 +498,8 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
 
   // Render edits as diffs
   const renderEdits = () => {
-    if (!message.edits || message.edits.length === 0) return null;
+    const changes = message.toolCall?.changes;
+    if (!changes || changes.length === 0) return null;
 
     return (
       <div className="my-2">
@@ -507,13 +511,13 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
             {isDiffExpanded ? '\u25BC' : '\u25B6'}
           </span>
           <span className="text-nim-muted font-medium">
-            {message.edits.length} edit{message.edits.length !== 1 ? 's' : ''}
+            {message.toolCall?.changes?.length ?? 0} edit{(message.toolCall?.changes?.length ?? 0) !== 1 ? 's' : ''}
           </span>
         </button>
 
         {isDiffExpanded && (
           <div className="mt-2 flex flex-col gap-2">
-            {message.edits.map((edit: any, idx: number) => {
+            {message.toolCall?.changes?.map((edit: any, idx: number) => {
               const absolutePath = edit.filePath || edit.file_path || edit.targetFilePath;
               return (
                 <DiffViewer

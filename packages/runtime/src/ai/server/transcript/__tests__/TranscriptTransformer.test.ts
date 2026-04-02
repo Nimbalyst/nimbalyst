@@ -1113,6 +1113,101 @@ describe('TranscriptTransformer', () => {
     });
   });
 
+  describe('Codex reasoning and todo_list transformation', () => {
+    const CODEX_PROVIDER = 'openai-codex';
+
+    it('transforms Codex reasoning events as assistant messages', async () => {
+      const rawStore = createMockRawStore([
+        makeRawMessage({
+          id: 1,
+          sessionId: SESSION_ID,
+          source: 'openai-codex',
+          direction: 'output',
+          content: JSON.stringify({
+            type: 'item.completed',
+            item: {
+              id: 'reasoning-1',
+              type: 'reasoning',
+              text: 'Let me think about this problem.',
+            },
+          }),
+        }),
+      ]);
+      const transformer = new TranscriptTransformer(rawStore, transcriptStore, metadataStore);
+
+      await transformer.ensureTransformed(SESSION_ID, CODEX_PROVIDER);
+
+      const events = await transcriptStore.getSessionEvents(SESSION_ID);
+      const assistantEvents = events.filter((e) => e.eventType === 'assistant_message');
+      expect(assistantEvents.length).toBeGreaterThanOrEqual(1);
+      const reasoningEvent = assistantEvents.find(
+        (e) => e.searchableText?.includes('Let me think about this problem.'),
+      );
+      expect(reasoningEvent).toBeDefined();
+    });
+
+    it('transforms Codex todo_list items as markdown assistant messages', async () => {
+      const rawStore = createMockRawStore([
+        makeRawMessage({
+          id: 1,
+          sessionId: SESSION_ID,
+          source: 'openai-codex',
+          direction: 'output',
+          content: JSON.stringify({
+            type: 'item.updated',
+            item: {
+              id: 'todo-1',
+              type: 'todo_list',
+              items: [
+                { text: 'Read the file', completed: true },
+                { text: 'Fix the bug', completed: false },
+                { text: 'Write tests', completed: false },
+              ],
+            },
+          }),
+        }),
+      ]);
+      const transformer = new TranscriptTransformer(rawStore, transcriptStore, metadataStore);
+
+      await transformer.ensureTransformed(SESSION_ID, CODEX_PROVIDER);
+
+      const events = await transcriptStore.getSessionEvents(SESSION_ID);
+      const assistantEvents = events.filter((e) => e.eventType === 'assistant_message');
+      expect(assistantEvents.length).toBeGreaterThanOrEqual(1);
+      const todoEvent = assistantEvents.find(
+        (e) => e.searchableText?.includes('- [x] Read the file'),
+      );
+      expect(todoEvent).toBeDefined();
+      expect(todoEvent!.searchableText).toContain('- [ ] Fix the bug');
+      expect(todoEvent!.searchableText).toContain('- [ ] Write tests');
+    });
+
+    it('skips todo_list with empty items array', async () => {
+      const rawStore = createMockRawStore([
+        makeRawMessage({
+          id: 1,
+          sessionId: SESSION_ID,
+          source: 'openai-codex',
+          direction: 'output',
+          content: JSON.stringify({
+            type: 'item.updated',
+            item: {
+              id: 'todo-empty',
+              type: 'todo_list',
+              items: [],
+            },
+          }),
+        }),
+      ]);
+      const transformer = new TranscriptTransformer(rawStore, transcriptStore, metadataStore);
+
+      await transformer.ensureTransformed(SESSION_ID, CODEX_PROVIDER);
+
+      const events = await transcriptStore.getSessionEvents(SESSION_ID);
+      expect(events).toHaveLength(0);
+    });
+  });
+
   describe('error handling', () => {
     it('marks session as error when transformation fails', async () => {
       // Create a raw store that throws on getMessages (called before per-message loop)

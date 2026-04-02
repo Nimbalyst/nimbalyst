@@ -122,7 +122,7 @@ export function initSessionTranscriptListeners(): () => void {
       const messages = sessionData?.messages || [];
       let lastUserIdx = -1;
       for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].role === 'user') {
+        if (messages[i].type === 'user_message') {
           lastUserIdx = i;
           break;
         }

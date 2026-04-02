@@ -475,7 +475,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       }
 
       // For Codex sessions, OpenAI auth errors are already displayed by the
-      // CodexOutputRenderer (via the persisted raw event). Skip creating a
+      // canonical transcript events (via the persisted raw event). Skip creating a
       // duplicate in-memory error message that would show two auth widgets.
       const isCodexOpenAIAuthError = sessionData?.provider === 'openai-codex' &&
         sessionError.message.toLowerCase().includes('api.openai.com') &&
@@ -485,12 +485,15 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       if (!isCodexOpenAIAuthError) {
         // Add error as an assistant message so user can see what went wrong
         const errorMessage = {
-          id: `error-${Date.now()}`,
-          role: 'assistant' as const,
-          content: `Error: ${sessionError.message}`,
-          timestamp: Date.now(),
+          id: -Date.now(),
+          sequence: -1,
+          createdAt: new Date(),
+          type: 'system_message' as const,
+          text: `Error: ${sessionError.message}`,
+          subagentId: null,
           isError: true,
           ...(sessionError.isAuthError && { isAuthError: true }),
+          systemMessage: { systemType: 'error' as const },
         };
         updateSessionStore({
           sessionId,
@@ -683,11 +686,14 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         setAiMode(aiMode);
         // Show error to user
         const errorMessage = {
-          id: `error-${Date.now()}`,
-          role: 'assistant' as const,
-          content: 'Failed to switch to planning mode. Please try again.',
-          timestamp: Date.now(),
+          id: -Date.now(),
+          sequence: -1,
+          createdAt: new Date(),
+          type: 'system_message' as const,
+          text: 'Failed to switch to planning mode. Please try again.',
+          subagentId: null,
           isError: true,
+          systemMessage: { systemType: 'error' as const },
         };
         updateSessionStore({
           sessionId,
@@ -751,11 +757,13 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     setIsProcessing(true);
 
     const userMessage = {
-      id: `msg-${Date.now()}`,
-      role: 'user' as const,
-      content: message,
-      timestamp: Date.now(),
-      mode: overrideMode,
+      id: -Date.now(),
+      sequence: -1,
+      createdAt: new Date(),
+      type: 'user_message' as const,
+      text: message,
+      subagentId: null,
+      mode: overrideMode as 'agent' | 'planning' | undefined,
       attachments: attachments.length > 0 ? attachments : undefined,
     };
     updateSessionStore({
@@ -788,11 +796,14 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       console.error('[SessionTranscript] Failed to send message:', error);
       // Show error in transcript so user knows what went wrong
       const errorMessage = {
-        id: `error-${Date.now()}`,
-        role: 'assistant' as const,
-        content: `Error: ${error instanceof Error ? error.message : 'Failed to send message'}`,
-        timestamp: Date.now(),
+        id: -Date.now(),
+        sequence: -1,
+        createdAt: new Date(),
+        type: 'system_message' as const,
+        text: `Error: ${error instanceof Error ? error.message : 'Failed to send message'}`,
+        subagentId: null,
         isError: true,
+        systemMessage: { systemType: 'error' as const },
       };
       updateSessionStore({
         sessionId,
@@ -841,11 +852,13 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
     const message = '/compact';
     const userMessage = {
-      id: `msg-${Date.now()}`,
-      role: 'user' as const,
-      content: message,
-      timestamp: Date.now(),
-      mode: aiMode,
+      id: -Date.now(),
+      sequence: -1,
+      createdAt: new Date(),
+      type: 'user_message' as const,
+      text: message,
+      subagentId: null,
+      mode: aiMode as 'agent' | 'planning' | undefined,
     };
     updateSessionStore({
       sessionId,
@@ -1378,9 +1391,9 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
   // Last user message timestamp for mockup annotation indicator
   const lastUserMessageTimestamp = React.useMemo(() => {
-    const userMessages = messages.filter(m => m.role === 'user');
+    const userMessages = messages.filter(m => m.type === 'user_message');
     if (userMessages.length === 0) return null;
-    return userMessages[userMessages.length - 1].timestamp || null;
+    return userMessages[userMessages.length - 1].createdAt?.getTime() || null;
   }, [messages]);
 
   // Slash command suggestions for empty sessions
@@ -1413,20 +1426,15 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       const msgs = messages;
       for (let i = 0; i < msgs.length; i++) {
         const msg = msgs[i];
-        if (msg.role !== 'tool' || msg.toolCall?.name !== 'Task' || !msg.toolCall?.isSubAgent) {
+        if (msg.type !== 'subagent') {
           continue;
         }
 
-        const rawResult = msg.toolCall.result;
-        const resultText = typeof rawResult === 'string'
-          ? rawResult
-          : rawResult
-            ? JSON.stringify(rawResult)
-            : '';
+        const resultText = msg.subagent?.resultSummary ?? '';
         const agentIdFromResult = resultText.match(/\bagent_id:\s*([^\s,;]+)/i)?.[1]?.replace(/^[`"'([{]+|[`"',.;:)\]}]+$/g, '');
 
         const isMatch =
-          msg.toolCall.teammateAgentId === agentId ||
+          msg.subagentId === agentId ||
           agentIdFromResult === agentId ||
           resultText.includes(`agent_id: ${agentId}`);
         if (!isMatch) {
@@ -1435,10 +1443,10 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
         // Tool rows are hidden when followed by an assistant row; scroll to that visible assistant.
         let targetIdx = i + 1;
-        while (targetIdx < msgs.length && msgs[targetIdx].role === 'tool') {
+        while (targetIdx < msgs.length && (msgs[targetIdx].type === 'tool_call' || msgs[targetIdx].type === 'interactive_prompt' || msgs[targetIdx].type === 'subagent')) {
           targetIdx++;
         }
-        if (targetIdx < msgs.length && msgs[targetIdx].role === 'assistant') {
+        if (targetIdx < msgs.length && msgs[targetIdx].type === 'assistant_message') {
           return targetIdx;
         }
 
@@ -1469,7 +1477,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
     // Find the user message whose timestamp matches the prompt's createdAt.
     const targetIdx = messages.findIndex(msg =>
-      msg.role === 'user' && Math.abs(msg.timestamp - timestamp) < 1000
+      msg.type === 'user_message' && Math.abs((msg.createdAt?.getTime() || 0) - timestamp) < 1000
     );
 
     if (targetIdx === -1) {

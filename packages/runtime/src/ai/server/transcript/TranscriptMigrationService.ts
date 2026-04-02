@@ -7,11 +7,9 @@
  */
 
 import { TranscriptTransformer } from './TranscriptTransformer';
-import { TranscriptProjector } from './TranscriptProjector';
-import { convertCanonicalToLegacyMessages } from './CanonicalTranscriptConverter';
+import { TranscriptProjector, type TranscriptViewMessage } from './TranscriptProjector';
 import type { IRawMessageStore, ISessionMetadataStore } from './TranscriptTransformer';
 import type { ITranscriptEventStore, TranscriptEvent, TranscriptEventType } from './types';
-import type { Message } from '../types';
 
 export class TranscriptMigrationService {
   private transformer: TranscriptTransformer;
@@ -42,13 +40,13 @@ export class TranscriptMigrationService {
   }
 
   /**
-   * Get canonical events transformed into legacy Message[] format.
-   * Convenience method that chains getCanonicalEvents -> project -> convert.
+   * Get projected view messages for UI rendering.
+   * Chains getCanonicalEvents -> project, returning TranscriptViewMessage[] directly.
    */
-  async getLegacyMessages(sessionId: string, provider: string): Promise<Message[]> {
+  async getViewMessages(sessionId: string, provider: string): Promise<TranscriptViewMessage[]> {
     const events = await this.getCanonicalEvents(sessionId, provider);
     const viewModel = TranscriptProjector.project(events);
-    return convertCanonicalToLegacyMessages(viewModel.messages);
+    return viewModel.messages;
   }
 
   /**

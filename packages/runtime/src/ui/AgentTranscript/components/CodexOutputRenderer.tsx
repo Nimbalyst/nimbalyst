@@ -10,7 +10,11 @@ import {
   extractStringField,
   extractNumberField,
 } from '../utils/fieldExtractors';
-import type { Message, ToolCall, ToolResult } from '../../../ai/server/types';
+import type { TranscriptViewMessage } from '../../../ai/server/transcript/TranscriptProjector';
+import type { ToolResult } from '../../../ai/server/types';
+
+/** ToolCall shape matching TranscriptViewMessage.toolCall (canonical) */
+type ToolCall = NonNullable<TranscriptViewMessage['toolCall']>;
 import { extractTextFromCodexEvent } from '../../../ai/server/providers/codex/textExtraction';
 import { isCodexSdkEvent } from '../../../ai/server/providers/codex/codexEventParser';
 
@@ -21,7 +25,7 @@ import { isCodexSdkEvent } from '../../../ai/server/providers/codex/codexEventPa
 const TOOL_ITEM_TYPES = new Set(['mcp_tool_call', 'command_execution', 'file_change', 'web_search']);
 
 interface CodexOutputRendererProps {
-  rawEvents: Message[];
+  rawEvents: TranscriptViewMessage[];
   isCollapsed?: boolean;
   sessionId: string;
   workspacePath?: string;
@@ -70,7 +74,7 @@ function getItemType(item: Record<string, unknown> | null): string {
 
 /**
  * Check if text content indicates an OpenAI authentication error (401 from api.openai.com).
- * Matches the same patterns as MessageSegment.isOpenAIAuthError.
+ * Matches the same patterns as TranscriptViewMessageSegment.isOpenAIAuthError.
  */
 function isOpenAIAuthError(text: string): boolean {
   const lower = text.toLowerCase();
@@ -214,10 +218,10 @@ function appendOutputChunk(outputParts: string[], candidateText: string, previou
 }
 
 /**
- * Parses raw Codex SDK events (stored as JSON strings in message.content) into ordered sections.
+ * Parses raw Codex SDK events (stored as JSON strings in message.text) into ordered sections.
  * This is display-time parsing - NO preprocessing before storage.
  *
- * Each message.content contains JSON.stringify(rawEvent) from the Codex SDK.
+ * Each message.text contains JSON.stringify(rawEvent) from the Codex SDK.
  * message.metadata.eventType contains the raw event type persisted at write-time.
  *
  * Sections preserve the temporal order of events. Consecutive events of the same type
@@ -228,7 +232,7 @@ function appendOutputChunk(outputParts: string[], candidateText: string, previou
  * useMemo([rawEvents]) for memoization, which prevents unnecessary re-parsing when the component
  * re-renders but rawEvents haven't changed.
  */
-export function parseCodexRawEvents(rawEvents: Message[]): ParsedCodexOutput {
+export function parseCodexRawEvents(rawEvents: TranscriptViewMessage[]): ParsedCodexOutput {
   const sections: CodexSection[] = [];
 
   // Track only active tool calls by raw Codex item ID.
@@ -248,23 +252,25 @@ export function parseCodexRawEvents(rawEvents: Message[]): ParsedCodexOutput {
     const msg = rawEvents[index];
     const eventType = msg.metadata?.eventType;
 
-    if (!msg.content || typeof msg.content !== 'string') {
-      console.error('[parseCodexRawEvents] Invalid message content:', msg);
+    if (!msg.text || typeof msg.text !== 'string') {
+      console.error('[parseCodexRawEvents] Invalid message text:', msg);
       continue;
     }
 
     // Type guard for timestamp - ensure it's a valid number
-    if (typeof msg.timestamp !== 'number' || msg.timestamp <= 0) {
+    const msgTimestamp = msg.createdAt?.getTime() || 0;
+    if (msgTimestamp <= 0) {
       console.warn('[parseCodexRawEvents] Message has invalid timestamp:', {
-        timestamp: msg.timestamp,
+        timestamp: msgTimestamp,
         messageIndex: index,
       });
-      // Assign a fallback timestamp to maintain data integrity
-      msg.timestamp = Date.now();
+      // Skip messages with invalid timestamps
     }
 
+    const effectiveTimestamp = msgTimestamp || Date.now();
+
     try {
-      const rawEvent = JSON.parse(msg.content);
+      const rawEvent = JSON.parse(msg.text!);
 
       // Validate the parsed event
       if (!isCodexSdkEvent(rawEvent)) {
@@ -311,8 +317,10 @@ export function parseCodexRawEvents(rawEvents: Message[]): ParsedCodexOutput {
 
         if (existingToolCall) {
           // Merge update/completion into the active tool call instance.
-          if (existingToolCall.name === 'Unknown Tool') {
-            existingToolCall.name = getToolDisplayName(item, itemType);
+          if (existingToolCall.toolName === 'Unknown Tool') {
+            const displayName = getToolDisplayName(item, itemType);
+            existingToolCall.toolName = displayName;
+            existingToolCall.toolDisplayName = displayName;
           }
           if (
             existingToolCall.arguments === undefined ||
@@ -321,10 +329,11 @@ export function parseCodexRawEvents(rawEvents: Message[]): ParsedCodexOutput {
               !Array.isArray(existingToolCall.arguments) &&
               Object.keys(existingToolCall.arguments as Record<string, unknown>).length === 0)
           ) {
-            existingToolCall.arguments = getToolArguments(item, itemType);
+            existingToolCall.arguments = getToolArguments(item, itemType) ?? {};
           }
           if (toolResult !== undefined) {
-            existingToolCall.result = toolResult;
+            existingToolCall.result = typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult);
+            existingToolCall.status = 'completed';
           }
 
           if (itemId) {
@@ -337,17 +346,26 @@ export function parseCodexRawEvents(rawEvents: Message[]): ParsedCodexOutput {
         } else {
           // New tool call - create a new section
           const toolCallId = itemId
-            ? buildCodexToolLookupId(itemId, msg.timestamp, index)
-            : `tool-${msg.timestamp}-${index}`;
+            ? buildCodexToolLookupId(itemId, effectiveTimestamp, index)
+            : `tool-${effectiveTimestamp}-${index}`;
+          const toolDisplayName = getToolDisplayName(item, itemType);
           const newToolCall: ToolCall = {
-            id: toolCallId,
-            name: getToolDisplayName(item, itemType),
-            arguments: getToolArguments(item, itemType),
+            toolName: toolDisplayName,
+            toolDisplayName,
+            status: 'running',
+            description: null,
+            arguments: getToolArguments(item, itemType) ?? {},
+            targetFilePath: null,
+            mcpServer: null,
+            mcpTool: null,
+            providerToolCallId: toolCallId,
+            progress: [],
           };
           if (toolResult !== undefined) {
-            newToolCall.result = toolResult;
+            newToolCall.result = typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult);
+            newToolCall.status = 'completed';
           }
-          sections.push({ type: 'tool_call', toolCall: newToolCall, timestamp: msg.timestamp });
+          sections.push({ type: 'tool_call', toolCall: newToolCall, timestamp: effectiveTimestamp });
 
           if (itemId && !isCompleted) {
             activeToolCallsByItemId.set(itemId, newToolCall);
@@ -411,7 +429,7 @@ export function parseCodexRawEvents(rawEvents: Message[]): ParsedCodexOutput {
       }
     } catch (error) {
       // If parsing fails, log but don't crash the UI
-      console.error('[CodexOutputRenderer] Failed to parse raw event:', error, msg.content);
+      console.error('[CodexOutputRenderer] Failed to parse raw event:', error, msg.text);
     }
   }
 
@@ -468,10 +486,13 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
 
   // Render tool call widget (same style as Claude Code)
   const renderToolCall = (tool: ToolCall, sectionIndex: number, toolCallTimestamp?: number) => {
-    const toolId = tool.id || tool.name || `tool-${sectionIndex}`;
+    const toolId = tool.providerToolCallId || tool.toolName || `tool-${sectionIndex}`;
     const isExpanded = expandedTools.has(toolId);
     const toolResult = tool.result;
-    const resultDetails = typeof toolResult === 'object' && toolResult !== null && typeof toolResult !== 'string' ? (toolResult as unknown as Record<string, unknown>) : null;
+    let resultDetails: Record<string, unknown> | null = null;
+    if (typeof toolResult === 'string') {
+      try { resultDetails = JSON.parse(toolResult) as Record<string, unknown>; } catch { /* not JSON */ }
+    }
     const explicitSuccess = resultDetails && 'success' in resultDetails ? resultDetails.success !== false : undefined;
     const derivedErrorMessage = resultDetails && typeof resultDetails.error === 'string' ? (resultDetails.error as string) : undefined;
     const didFail = explicitSuccess === false || !!derivedErrorMessage;
@@ -480,14 +501,16 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
     const statusBackground = didFail ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)';
     const hasResultValue = toolResult !== undefined && toolResult !== null;
     const hasDisplayResult = hasResultValue && (typeof toolResult !== 'string' || toolResult.trim().length > 0);
-    const toolDisplayName = formatToolDisplayName(tool.name || '') || tool.name || 'Tool Call';
+    const toolDisplayName = formatToolDisplayName(tool.toolName || '') || tool.toolName || 'Tool Call';
 
-    const CustomWidget = tool.name ? getCustomToolWidget(tool.name) : undefined;
+    const CustomWidget = tool.toolName ? getCustomToolWidget(tool.toolName) : undefined;
     if (CustomWidget) {
-      const toolMessage: Message = {
-        role: 'tool',
-        content: '',
-        timestamp: Date.now(),
+      const toolMessage: TranscriptViewMessage = {
+        id: -Date.now(),
+        sequence: -1,
+        createdAt: new Date(),
+        type: 'tool_call',
+        subagentId: null,
         toolCall: tool,
         ...(didFail ? { isError: true } : {}),
       };
@@ -518,7 +541,7 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
           <MaterialSymbol icon="build" size={14} className="tool-icon" />
           <span
             className="font-mono text-xs text-nim flex-1"
-            title={tool.name}
+            title={tool.toolName}
           >
             {toolDisplayName}
           </span>
@@ -571,9 +594,9 @@ export const CodexOutputRenderer: React.FC<CodexOutputRendererProps> = ({
             </div>
 
             {/* File changes caused by this tool call */}
-            {getToolCallDiffs && tool.id && hasResultValue && (
+            {getToolCallDiffs && tool.providerToolCallId && hasResultValue && (
               <ToolCallChanges
-                toolCallItemId={tool.id}
+                toolCallItemId={tool.providerToolCallId}
                 toolCallTimestamp={toolCallTimestamp}
                 getToolCallDiffs={getToolCallDiffs}
                 isExpanded={isExpanded}
