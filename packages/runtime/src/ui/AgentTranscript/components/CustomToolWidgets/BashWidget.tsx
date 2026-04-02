@@ -183,7 +183,7 @@ export const BashWidget: React.FC<CustomToolWidgetProps> = ({ message, isExpande
 
   const tool = message.toolCall;
   const isRunning = tool ? isToolRunning(tool) : false;
-  const elapsedRef = useElapsedTimeRef(isRunning ? message.timestamp : undefined);
+  const elapsedRef = useElapsedTimeRef(isRunning ? message.createdAt : undefined);
 
   // Reset copied state after timeout
   useEffect(() => {

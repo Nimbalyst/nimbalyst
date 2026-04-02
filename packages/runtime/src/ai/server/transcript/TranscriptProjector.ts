@@ -267,7 +267,7 @@ function interactivePromptToToolCall(
   // Build result from prompt resolution data
   let result: string | undefined;
   if (prompt.status !== 'pending') {
-    const { promptType: _pt, status: _s, requestId: _r, ...rest } = prompt as Record<string, unknown>;
+    const { promptType: _pt, status: _s, requestId: _r, ...rest } = prompt as unknown as Record<string, unknown>;
     result = JSON.stringify(rest);
   }
 
