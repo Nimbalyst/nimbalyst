@@ -2677,6 +2677,7 @@ export class AIService {
           sessionType: documentContext?.sessionType ?? session.sessionType,
           mode: effectiveMode,
           permissionsPath,  // For worktree sessions, this is the parent project path
+          mcpConfigWorkspacePath: session.worktreeProjectPath || effectiveWorkspacePath,  // Use parent project for MCP config lookup
           attachments,
 
           // Worktree context

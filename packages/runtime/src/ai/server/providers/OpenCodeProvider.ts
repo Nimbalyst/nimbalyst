@@ -254,6 +254,7 @@ export class OpenCodeProvider extends BaseAgentProvider {
       await this.logAgentMessageBestEffort(sessionId, 'input', messageWithContext);
     }
 
+    const mcpConfigWorkspacePath = documentContext?.mcpConfigWorkspacePath || workspacePath;
     const abortController = new AbortController();
     this.abortController = abortController;
 
@@ -268,7 +269,7 @@ export class OpenCodeProvider extends BaseAgentProvider {
         action: existingSessionId ? 'RESUME' : 'CREATE'
       });
 
-      const mcpServers = await this.mcpConfigService.getMcpServersConfig({ sessionId, workspacePath });
+      const mcpServers = await this.mcpConfigService.getMcpServersConfig({ sessionId, workspacePath: mcpConfigWorkspacePath });
       const env = OpenCodeProvider.buildOpenCodeEnvironment();
 
       const sessionOptions = {

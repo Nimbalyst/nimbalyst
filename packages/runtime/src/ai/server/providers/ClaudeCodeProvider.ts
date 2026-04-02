@@ -439,6 +439,10 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     // This is passed via documentContext.permissionsPath from AIService
     const permissionsPath = (documentContext as any)?.permissionsPath || workspacePath;
 
+    // For worktree sessions, use the parent project path for MCP config lookup
+    // .mcp.json and ~/.claude.json project entries are keyed by parent project path
+    const mcpConfigWorkspacePath = (documentContext as any)?.mcpConfigWorkspacePath || workspacePath;
+
     // Create tool hooks service for this turn
     // This service manages pre/post hooks, file tagging, and snapshot creation
     this.toolHooksService = this.createToolHooksService(
@@ -555,6 +559,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
           imageContentBlocks,
           documentContentBlocks,
           permissionsPath,
+          mcpConfigWorkspacePath,
         }
       );
       const { options, promptInput } = sdkResult;

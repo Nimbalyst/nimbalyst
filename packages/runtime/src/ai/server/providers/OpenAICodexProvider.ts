@@ -769,6 +769,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     }
 
     const permissionsPath = documentContext?.permissionsPath || workspacePath;
+    const mcpConfigWorkspacePath = documentContext?.mcpConfigWorkspacePath || workspacePath;
     const abortController = new AbortController();
     this.abortController = abortController;
 
@@ -799,7 +800,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
         action: existingSessionId ? 'RESUME' : 'CREATE'
       });
 
-      const mcpServers = await this.mcpConfigService.getMcpServersConfig({ sessionId, workspacePath });
+      const mcpServers = await this.mcpConfigService.getMcpServersConfig({ sessionId, workspacePath: mcpConfigWorkspacePath });
       const hasSessionNamingServer = Object.prototype.hasOwnProperty.call(mcpServers, 'nimbalyst-session-naming');
       let usedSessionNamingToolThisTurn = false;
 

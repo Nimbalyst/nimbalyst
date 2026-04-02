@@ -51,6 +51,7 @@ export interface BuildSdkOptionsParams {
   imageContentBlocks: ContentBlockParam[];
   documentContentBlocks: ContentBlockParam[];
   permissionsPath?: string;
+  mcpConfigWorkspacePath?: string;
 }
 
 export interface BuildSdkOptionsResult {
@@ -86,6 +87,7 @@ export async function buildSdkOptions(
     imageContentBlocks,
     documentContentBlocks,
     permissionsPath,
+    mcpConfigWorkspacePath,
   } = params;
 
   let helperMethod: ClaudeHelperMethod = 'electron';
@@ -117,7 +119,7 @@ export async function buildSdkOptions(
       append: systemPrompt
     },
     settingSources,
-    mcpServers: await mcpConfigService.getMcpServersConfig({ sessionId, workspacePath }),
+    mcpServers: await mcpConfigService.getMcpServersConfig({ sessionId, workspacePath: mcpConfigWorkspacePath || workspacePath }),
     cwd: workspacePath,
     abortController,
     model: resolveModelVariant(),
