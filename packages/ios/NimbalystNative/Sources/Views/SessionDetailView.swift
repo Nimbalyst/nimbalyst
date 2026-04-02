@@ -71,6 +71,9 @@ public struct SessionDetailView: View {
     @State private var isApplyingRemoteDraft = false
     /// Epoch ms of last local submit -- used to reject stale remote drafts.
     @State private var lastSubmitAt: Int = 0
+    /// Epoch ms of last local keystroke -- used to reject stale sync echoes.
+    /// Mirrors desktop's sessionDraftLocalModifiedAtAtom pattern.
+    @State private var lastLocalEditAt: Int = 0
     /// Error message shown when prompt send fails.
     @State private var sendError: String?
     /// Warning shown when prompt was sent but desktop hasn't picked it up.
@@ -254,6 +257,14 @@ public struct SessionDetailView: View {
             if let remoteTs = liveSession?.draftUpdatedAt, !draft.isEmpty, remoteTs <= lastSubmitAt {
                 return
             }
+            // Reject sync echoes older than our local typing.
+            // When the user is actively typing, lastLocalEditAt advances ahead of
+            // any echoed drafts from the server. Only accept remote drafts that are
+            // genuinely newer (e.g., typed on desktop after we stopped typing here).
+            // This mirrors desktop's sessionDraftLocalModifiedAtAtom pattern.
+            if let remoteTs = liveSession?.draftUpdatedAt, lastLocalEditAt > 0, remoteTs <= lastLocalEditAt {
+                return
+            }
             isApplyingRemoteDraft = true
             composeText = draft
             DispatchQueue.main.async { isApplyingRemoteDraft = false }
@@ -261,6 +272,8 @@ public struct SessionDetailView: View {
         .onChange(of: composeText) { newText in
             // Push draft changes back to sync (debounced)
             guard !isApplyingRemoteDraft else { return }
+            // Track local edit time so we can reject stale sync echoes
+            lastLocalEditAt = Int(Date().timeIntervalSince1970 * 1000)
             draftDebounceItem?.cancel()
             let item = DispatchWorkItem { [weak appState] in
                 appState?.syncManager?.updateDraftInput(
