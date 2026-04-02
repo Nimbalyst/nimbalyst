@@ -8,17 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-<!-- New features go here -->
-
 ### Changed
-<!-- Changes to existing functionality go here -->
+- Transcript UI now consumes TranscriptViewMessage directly, removing intermediate mapping layer
 
 ### Fixed
-<!-- Bug fixes go here -->
-
-### Removed
-<!-- Removed features go here -->
+- Duplicate "yes" messages no longer incorrectly deduplicated in transcript
+- TypeScript errors in transcript projector InteractivePromptPayload cast
+- BashWidget and FileChangeWidget elapsed time display using correct timestamp field
 
 ## [0.57.5] - 2026-04-01
 
