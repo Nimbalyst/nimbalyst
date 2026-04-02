@@ -753,6 +753,8 @@ export interface TrackerUpsertMessage {
   itemId: string;
   encryptedPayload: string;
   iv: string;
+  issueNumber?: number;
+  issueKey?: string;
 }
 
 /** Delete a tracker item */
@@ -764,7 +766,7 @@ export interface TrackerDeleteMessage {
 /** Batch create/update encrypted tracker items */
 export interface TrackerBatchUpsertMessage {
   type: 'trackerBatchUpsert';
-  items: { itemId: string; encryptedPayload: string; iv: string }[];
+  items: { itemId: string; encryptedPayload: string; iv: string; issueNumber?: number; issueKey?: string }[];
 }
 
 // ============================================================================
@@ -813,6 +815,8 @@ export interface TrackerErrorMessage {
 /** Encrypted tracker item as stored/transmitted */
 export interface EncryptedTrackerItem {
   itemId: string;
+  issueNumber?: number;
+  issueKey?: string;
   version: number;
   encryptedPayload: string;
   iv: string;

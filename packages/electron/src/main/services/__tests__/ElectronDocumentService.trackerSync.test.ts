@@ -15,22 +15,45 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 
+const {
+  mockQuery,
+  mockSyncTrackerItem,
+  mockUnsyncTrackerItem,
+  mockIsTrackerSyncActive,
+  mockGetWorkspaceState,
+  mockGlobalRegistryGet,
+} = vi.hoisted(() => ({
+  mockQuery: vi.fn(),
+  mockSyncTrackerItem: vi.fn(),
+  mockUnsyncTrackerItem: vi.fn(),
+  mockIsTrackerSyncActive: vi.fn(),
+  mockGetWorkspaceState: vi.fn((..._args: any[]) => ({})),
+  mockGlobalRegistryGet: vi.fn((..._args: any[]) => undefined as any),
+}));
+
 // Mock the database before importing ElectronDocumentService
-const mockQuery = vi.fn();
 vi.mock('../../database/PGLiteDatabaseWorker', () => ({
   database: {
-    query: (...args: any[]) => mockQuery(...args),
+    query: mockQuery,
   },
 }));
 
 // Mock TrackerSyncManager
-const mockSyncTrackerItem = vi.fn();
-const mockUnsyncTrackerItem = vi.fn();
-const mockIsTrackerSyncActive = vi.fn();
 vi.mock('../TrackerSyncManager', () => ({
-  syncTrackerItem: (...args: any[]) => mockSyncTrackerItem(...args),
-  unsyncTrackerItem: (...args: any[]) => mockUnsyncTrackerItem(...args),
-  isTrackerSyncActive: (...args: any[]) => mockIsTrackerSyncActive(...args),
+  syncTrackerItem: mockSyncTrackerItem,
+  unsyncTrackerItem: mockUnsyncTrackerItem,
+  isTrackerSyncActive: mockIsTrackerSyncActive,
+}));
+
+vi.mock('../../utils/store', () => ({
+  getWorkspaceState: mockGetWorkspaceState,
+  isAnalyticsEnabled: () => true,
+}));
+
+vi.mock('@nimbalyst/runtime/plugins/TrackerPlugin/models/TrackerDataModel', () => ({
+  globalRegistry: {
+    get: mockGlobalRegistryGet,
+  },
 }));
 
 import { ElectronDocumentService } from '../ElectronDocumentService';
@@ -78,6 +101,8 @@ let service: ElectronDocumentService;
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  mockGetWorkspaceState.mockReturnValue({});
+  mockGlobalRegistryGet.mockReturnValue(undefined);
   tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'tracker-sync-test-'));
   service = new ElectronDocumentService(tempDir);
 });
@@ -209,6 +234,54 @@ describe('archiveTrackerItem sync integration', () => {
     // Should not throw
     const item = await service.archiveTrackerItem('bug-001', true);
     expect(item).toBeDefined();
+  });
+});
+
+describe('createTrackerItem sync status policy', () => {
+  it('stores local sync_status for local policy items', async () => {
+    mockGetWorkspaceState.mockReturnValue({
+      trackerSyncPolicies: { bug: 'local' },
+    });
+    mockGlobalRegistryGet.mockReturnValue({
+      sync: { mode: 'shared', scope: 'project' },
+    });
+
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    mockQuery.mockResolvedValueOnce({ rows: [makeTrackerRow({ id: 'bug-local', sync_status: 'local' })] });
+
+    await service.createTrackerItem({
+      id: 'bug-local',
+      type: 'bug',
+      title: 'Local bug',
+      status: 'to-do',
+      priority: 'high',
+      workspace: WORKSPACE,
+    });
+
+    expect(mockQuery.mock.calls[0]?.[1]?.[4]).toBe('local');
+  });
+
+  it('stores pending sync_status for shared policy items', async () => {
+    mockGetWorkspaceState.mockReturnValue({
+      trackerSyncPolicies: { bug: 'shared' },
+    });
+    mockGlobalRegistryGet.mockReturnValue({
+      sync: { mode: 'local', scope: 'project' },
+    });
+
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    mockQuery.mockResolvedValueOnce({ rows: [makeTrackerRow({ id: 'bug-shared', sync_status: 'pending' })] });
+
+    await service.createTrackerItem({
+      id: 'bug-shared',
+      type: 'bug',
+      title: 'Shared bug',
+      status: 'to-do',
+      priority: 'high',
+      workspace: WORKSPACE,
+    });
+
+    expect(mockQuery.mock.calls[0]?.[1]?.[4]).toBe('pending');
   });
 });
 

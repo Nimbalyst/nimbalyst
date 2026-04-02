@@ -93,6 +93,10 @@ export interface TrackerActivity {
  */
 export interface TrackerItem {
   id: string;
+  /** Human-readable sequential number assigned by the shared tracker room. */
+  issueNumber?: number;
+  /** Human-readable key like NIM-123 assigned by the shared tracker room. */
+  issueKey?: string;
   type: TrackerItemType;
   /** All type tags including primary type. Enables multi-type items. */
   typeTags?: string[];

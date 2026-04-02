@@ -54,6 +54,8 @@ describe('trackerItemToPayload', () => {
   it('should convert basic fields correctly', () => {
     const item = makeTrackerItem({
       id: 'bug-001',
+      issueNumber: 123,
+      issueKey: 'NIM-123',
       type: 'bug',
       title: 'Login broken',
       description: 'Cannot log in with valid credentials',
@@ -64,6 +66,8 @@ describe('trackerItemToPayload', () => {
     const payload = trackerItemToPayload(item, 'user-123');
 
     expect(payload.itemId).toBe('bug-001');
+    expect(payload.issueNumber).toBe(123);
+    expect(payload.issueKey).toBe('NIM-123');
     expect(payload.type).toBe('bug');
     expect(payload.title).toBe('Login broken');
     expect(payload.description).toBe('Cannot log in with valid credentials');
@@ -126,7 +130,7 @@ describe('trackerItemToPayload', () => {
     const after = Date.now();
 
     const expectedFields = [
-      'title', 'status', 'priority', 'description',
+      'title', 'issueNumber', 'issueKey', 'status', 'priority', 'description',
       'assigneeEmail', 'reporterEmail', 'authorIdentity', 'lastModifiedBy',
       'assigneeId', 'reporterId', 'labels', 'linkedSessions',
       'linkedCommitSha', 'documentId', 'archived', 'comments', 'customFields',
@@ -175,6 +179,8 @@ describe('payloadToTrackerItem', () => {
   it('should convert basic fields correctly', () => {
     const payload = makePayload({
       itemId: 'bug-101',
+      issueNumber: 101,
+      issueKey: 'NIM-101',
       type: 'task',
       title: 'Refactor auth',
       description: 'Split into separate module',
@@ -185,6 +191,8 @@ describe('payloadToTrackerItem', () => {
     const item = payloadToTrackerItem(payload, '/workspace/project');
 
     expect(item.id).toBe('bug-101');
+    expect(item.issueNumber).toBe(101);
+    expect(item.issueKey).toBe('NIM-101');
     expect(item.type).toBe('task');
     expect(item.title).toBe('Refactor auth');
     expect(item.description).toBe('Split into separate module');
@@ -271,6 +279,8 @@ describe('payload round-trip', () => {
   it('should preserve data through a full round-trip', () => {
     const original = makeTrackerItem({
       id: 'round-trip-1',
+      issueNumber: 777,
+      issueKey: 'NIM-777',
       type: 'bug',
       title: 'Round trip test',
       description: 'Testing full round trip',
@@ -289,6 +299,8 @@ describe('payload round-trip', () => {
     const roundTripped = payloadToTrackerItem(payload, original.workspace);
 
     expect(roundTripped.id).toBe(original.id);
+    expect(roundTripped.issueNumber).toBe(original.issueNumber);
+    expect(roundTripped.issueKey).toBe(original.issueKey);
     expect(roundTripped.type).toBe(original.type);
     expect(roundTripped.title).toBe(original.title);
     expect(roundTripped.description).toBe(original.description);

@@ -38,11 +38,20 @@ export interface TrackerSyncConfig {
   /** Called when connection status changes */
   onStatusChange?: (status: TrackerSyncStatus) => void;
 
+  /** Called once after initial sync fully completes. */
+  onInitialSyncComplete?: (summary: TrackerInitialSyncSummary) => void | Promise<void>;
+
   /**
    * Override the WebSocket URL construction.
    * Useful for integration tests with auth bypass.
    */
   buildUrl?: (roomId: string) => string;
+}
+
+export interface TrackerInitialSyncSummary {
+  remoteItemCount: number;
+  remoteDeletedCount: number;
+  sequence: number;
 }
 
 // ============================================================================
@@ -68,6 +77,12 @@ export type TrackerSyncStatus =
 export interface TrackerItemPayload {
   /** Unique item ID (opaque UUID, also stored in plaintext on server for routing) */
   itemId: string;
+
+  /** Human-readable sequential number assigned by the tracker room */
+  issueNumber?: number;
+
+  /** Human-readable key like NIM-123 assigned by the tracker room */
+  issueKey?: string;
 
   /** Tracker type (bug, task, plan, idea, decision, or custom) */
   type: string;
@@ -177,9 +192,9 @@ export interface TrackerSyncResult {
 /** Client -> Server messages */
 export type TrackerClientMessage =
   | { type: 'trackerSync'; sinceSequence: number }
-  | { type: 'trackerUpsert'; itemId: string; encryptedPayload: string; iv: string }
+  | { type: 'trackerUpsert'; itemId: string; encryptedPayload: string; iv: string; issueNumber?: number; issueKey?: string }
   | { type: 'trackerDelete'; itemId: string }
-  | { type: 'trackerBatchUpsert'; items: { itemId: string; encryptedPayload: string; iv: string }[] };
+  | { type: 'trackerBatchUpsert'; items: { itemId: string; encryptedPayload: string; iv: string; issueNumber?: number; issueKey?: string }[] };
 
 /** Server -> Client messages */
 export type TrackerServerMessage =
@@ -216,6 +231,8 @@ export interface TrackerErrorMessage {
 /** Encrypted tracker item as received from server */
 export interface EncryptedTrackerItem {
   itemId: string;
+  issueNumber?: number;
+  issueKey?: string;
   version: number;
   encryptedPayload: string;
   iv: string;
@@ -238,6 +255,8 @@ export function trackerItemToPayload(item: TrackerItem, userId: string): Tracker
   const now = Date.now();
   return {
     itemId: item.id,
+    issueNumber: item.issueNumber,
+    issueKey: item.issueKey,
     type: item.type,
     title: item.title,
     description: item.description,
@@ -261,6 +280,8 @@ export function trackerItemToPayload(item: TrackerItem, userId: string): Tracker
     customFields: item.customFields || {},
     fieldUpdatedAt: {
       title: now,
+      issueNumber: now,
+      issueKey: now,
       status: now,
       priority: now,
       description: now,
@@ -293,6 +314,8 @@ export function payloadToTrackerItem(
 ): Omit<TrackerItem, 'module' | 'lastIndexed'> & { module: string; lastIndexed: Date } {
   return {
     id: payload.itemId,
+    issueNumber: payload.issueNumber,
+    issueKey: payload.issueKey,
     type: payload.type,
     title: payload.title,
     description: payload.description,

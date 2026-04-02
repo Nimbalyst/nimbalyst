@@ -199,6 +199,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     const q = searchQuery.toLowerCase();
     return source.filter(
       item =>
+        item.issueKey?.toLowerCase().includes(q) ||
+        String(item.issueNumber ?? '').includes(q) ||
         item.title.toLowerCase().includes(q) ||
         item.module?.toLowerCase().includes(q)
     );
@@ -474,6 +476,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                       style={{ backgroundColor: PRIORITY_COLORS[item.priority || 'medium'] || '#6b7280' }}
                     />
                     <div className="flex-1 min-w-0">
+                      {item.issueKey && (
+                        <div className="text-[10px] font-mono font-medium uppercase tracking-[0.08em] text-nim-faint mb-0.5">
+                          {item.issueKey}
+                        </div>
+                      )}
                       <div className="text-sm text-nim leading-snug line-clamp-2">
                         {item.title}
                       </div>

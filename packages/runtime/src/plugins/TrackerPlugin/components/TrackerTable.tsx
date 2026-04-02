@@ -467,7 +467,16 @@ function renderCell(
           />
         );
       }
-      return <div className="title-text font-medium text-[var(--nim-text)]">{item.title}</div>;
+      return (
+        <div className="min-w-0">
+          {item.issueKey && (
+            <div className="text-[10px] font-mono font-medium uppercase tracking-[0.08em] text-[var(--nim-text-faint)]">
+              {item.issueKey}
+            </div>
+          )}
+          <div className="title-text font-medium text-[var(--nim-text)]">{item.title}</div>
+        </div>
+      );
 
     case 'status': {
       if (isItemEditable(item) && editingCell?.itemId === item.id && editingCell?.field === 'status') {
@@ -819,6 +828,8 @@ export function TrackerTable({
       if (searchTerm) {
         const searchLower = searchTerm.toLowerCase();
         const matchesSearch =
+          item.issueKey?.toLowerCase().includes(searchLower) ||
+          String(item.issueNumber ?? '').includes(searchLower) ||
           item.title.toLowerCase().includes(searchLower) ||
           item.module.toLowerCase().includes(searchLower) ||
           (item.owner && item.owner.toLowerCase().includes(searchLower)) ||

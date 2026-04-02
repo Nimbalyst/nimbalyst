@@ -1,9 +1,40 @@
 import { getCurrentIdentity } from '../../services/TrackerIdentityService';
+import {
+  getEffectiveTrackerSyncPolicy,
+  getInitialTrackerSyncStatus,
+  shouldSyncTrackerPolicy,
+} from '../../services/TrackerPolicyService';
+import { isTrackerSyncActive, syncTrackerItem } from '../../services/TrackerSyncManager';
 
 type McpToolResult = {
   content: Array<{ type: string; text?: string }>;
   isError: boolean;
 };
+
+function getTrackerDisplayRef(item: { issueKey?: string; id: string }): string {
+  return item.issueKey || item.id;
+}
+
+async function resolveTrackerRowByReference(
+  db: { query: <T = any>(sql: string, params?: any[]) => Promise<{ rows: T[] }> },
+  reference: string,
+  workspacePath?: string,
+): Promise<any | null> {
+  const params: any[] = [reference];
+  const workspaceClause = workspacePath ? ` AND workspace = $2` : '';
+  if (workspacePath) params.push(workspacePath);
+
+  const result = await db.query<any>(
+    `SELECT *
+     FROM tracker_items
+     WHERE (id = $1 OR issue_key = $1)${workspaceClause}
+     ORDER BY updated DESC
+     LIMIT 1`,
+    params
+  );
+
+  return result.rows[0] || null;
+}
 
 /** Append an activity entry to a tracker item's data.activity array */
 function appendActivity(
@@ -94,6 +125,8 @@ function rowToTrackerItem(row: any): any {
     : [row.type];
   return {
     id: row.id,
+    issueNumber: row.issue_number ?? undefined,
+    issueKey: row.issue_key ?? undefined,
     type: row.type,
     typeTags,
     title: data.title || row.title,
@@ -242,7 +275,7 @@ export const trackerToolSchemas = [
       properties: {
         id: {
           type: "string",
-          description: "The tracker item ID",
+          description: "The tracker item ID or issue key (e.g. NIM-123)",
         },
       },
       required: ["id"],
@@ -338,7 +371,7 @@ export const trackerToolSchemas = [
       properties: {
         id: {
           type: "string",
-          description: "The tracker item ID to update",
+          description: "The tracker item ID or issue key to update",
         },
         title: {
           type: "string",
@@ -420,7 +453,7 @@ export const trackerToolSchemas = [
       properties: {
         trackerId: {
           type: "string",
-          description: "The tracker item ID to link to this session",
+          description: "The tracker item ID or issue key to link to this session",
         },
       },
       required: ["trackerId"],
@@ -450,7 +483,7 @@ export const trackerToolSchemas = [
       properties: {
         trackerId: {
           type: "string",
-          description: "The tracker item ID to comment on",
+          description: "The tracker item ID or issue key to comment on",
         },
         body: {
           type: "string",
@@ -520,7 +553,7 @@ export async function handleTrackerList(
     // Search title and description
     if (args.search) {
       conditions.push(
-        `(data->>'title' ILIKE $${paramIdx} OR data->>'description' ILIKE $${paramIdx})`
+        `(data->>'title' ILIKE $${paramIdx} OR data->>'description' ILIKE $${paramIdx} OR issue_key ILIKE $${paramIdx} OR CAST(issue_number AS TEXT) ILIKE $${paramIdx})`
       );
       params.push(`%${args.search}%`);
       paramIdx++;
@@ -533,7 +566,7 @@ export async function handleTrackerList(
         : "";
 
     const result = await db.query<any>(
-      `SELECT id, type, type_tags, data, archived, source, source_ref, updated, sync_status
+      `SELECT id, issue_number, issue_key, type, type_tags, data, archived, source, source_ref, updated, sync_status
        FROM tracker_items
        ${whereClause}
        ORDER BY updated DESC
@@ -551,6 +584,8 @@ export async function handleTrackerList(
         : [row.type];
       return {
         id: row.id,
+        issueNumber: row.issue_number ?? undefined,
+        issueKey: row.issue_key ?? undefined,
         type: row.type,
         typeTags,
         title: data.title || "",
@@ -567,7 +602,7 @@ export async function handleTrackerList(
     const summary = items
       .map(
         (item: any) =>
-          `- [${item.type}] ${item.title} (${item.status || "no status"}, ${item.priority || "no priority"}, ${item.syncStatus}) [id: ${item.id}]`
+          `- [${item.type}] ${item.title} (${item.status || "no status"}, ${item.priority || "no priority"}, ${item.syncStatus}) [ref: ${item.issueKey || item.id}]`
       )
       .join("\n");
 
@@ -585,6 +620,8 @@ export async function handleTrackerList(
       count: items.length,
       items: items.map((item: any) => ({
         id: item.id,
+        issueNumber: item.issueNumber,
+        issueKey: item.issueKey,
         type: item.type,
         typeTags: item.typeTags,
         title: item.title,
@@ -621,17 +658,16 @@ export async function handleTrackerList(
   }
 }
 
-export async function handleTrackerGet(args: any): Promise<McpToolResult> {
+export async function handleTrackerGet(
+  args: any,
+  workspacePath?: string,
+): Promise<McpToolResult> {
   try {
     const { getDatabase } = await import("../../database/initialize");
     const db = getDatabase();
 
-    const result = await db.query<any>(
-      `SELECT * FROM tracker_items WHERE id = $1`,
-      [args.id]
-    );
-
-    if (result.rows.length === 0) {
+    const row = await resolveTrackerRowByReference(db, args.id, workspacePath);
+    if (!row) {
       return {
         content: [
           {
@@ -643,7 +679,6 @@ export async function handleTrackerGet(args: any): Promise<McpToolResult> {
       };
     }
 
-    const row = result.rows[0];
     const data =
       typeof row.data === "string"
         ? JSON.parse(row.data)
@@ -654,6 +689,7 @@ export async function handleTrackerGet(args: any): Promise<McpToolResult> {
     lines.push(`# ${data.title || "Untitled"}`);
     lines.push("");
     lines.push(`**Type**: ${row.type}`);
+    if (row.issue_key) lines.push(`**Issue Key**: ${row.issue_key}`);
     if (data.status) lines.push(`**Status**: ${data.status}`);
     if (data.priority) lines.push(`**Priority**: ${data.priority}`);
     if (data.tags?.length)
@@ -702,6 +738,8 @@ export async function handleTrackerGet(args: any): Promise<McpToolResult> {
       action: "retrieved" as const,
       item: {
         id: row.id,
+        issueNumber: row.issue_number ?? undefined,
+        issueKey: row.issue_key ?? undefined,
         type: row.type,
         typeTags,
         title: data.title || "Untitled",
@@ -778,6 +816,10 @@ export async function handleTrackerCreate(
     // Resolve current user identity for authorship
     // getCurrentIdentity imported statically at top of file
     const authorIdentity = getCurrentIdentity(workspacePath);
+    const syncPolicy = workspacePath
+      ? getEffectiveTrackerSyncPolicy(workspacePath, args.type)
+      : { mode: 'local' as const, scope: 'project' as const };
+    const syncStatus = getInitialTrackerSyncStatus(syncPolicy);
 
     const id = `${args.type}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const data: Record<string, any> = {
@@ -821,9 +863,27 @@ export async function handleTrackerCreate(
         id, type, type_tags, data, workspace, document_path, line_number,
         created, updated, last_indexed, sync_status,
         content, archived, source, source_ref
-      ) VALUES ($1, $2, $3, $4, $5, '', NULL, NOW(), NOW(), NOW(), 'pending', $6, FALSE, 'native', NULL)`,
-      [id, args.type, typeTags, JSON.stringify(data), workspacePath, contentJson]
+      ) VALUES ($1, $2, $3, $4, $5, '', NULL, NOW(), NOW(), NOW(), $6, $7, FALSE, 'native', NULL)`,
+      [id, args.type, typeTags, JSON.stringify(data), workspacePath, syncStatus, contentJson]
     );
+
+    let createdRow = await resolveTrackerRowByReference(db, id, workspacePath);
+    let createdItem = createdRow ? rowToTrackerItem(createdRow) : null;
+
+    if (
+      createdItem &&
+      workspacePath &&
+      shouldSyncTrackerPolicy(syncPolicy) &&
+      isTrackerSyncActive(workspacePath)
+    ) {
+      try {
+        await syncTrackerItem(createdItem);
+        createdRow = await resolveTrackerRowByReference(db, id, workspacePath);
+        createdItem = createdRow ? rowToTrackerItem(createdRow) : createdItem;
+      } catch (syncError) {
+        console.error('[MCP Server] tracker_create sync failed:', syncError);
+      }
+    }
 
     // Auto-link session to the newly created tracker item
     if (sessionId) {
@@ -844,6 +904,8 @@ export async function handleTrackerCreate(
       action: "created" as const,
       item: {
         id,
+        issueNumber: createdItem?.issueNumber,
+        issueKey: createdItem?.issueKey,
         type: args.type,
         typeTags,
         title: args.title,
@@ -859,7 +921,7 @@ export async function handleTrackerCreate(
           type: "text",
           text: JSON.stringify({
             structured,
-            summary: `Created tracker item:\n- **Type**: ${args.type}\n- **Title**: ${args.title}\n- **Status**: ${data.status}\n- **ID**: ${id}`,
+            summary: `Created tracker item:\n- **Type**: ${args.type}\n- **Title**: ${args.title}\n- **Status**: ${data.status}\n- **Ref**: ${getTrackerDisplayRef(createdItem || { id })}\n- **ID**: ${id}`,
           }),
         },
       ],
@@ -889,11 +951,8 @@ export async function handleTrackerUpdate(
     const db = getDatabase();
 
     // Read existing item
-    const existing = await db.query<any>(
-      `SELECT * FROM tracker_items WHERE id = $1`,
-      [args.id]
-    );
-    if (existing.rows.length === 0) {
+    const row = await resolveTrackerRowByReference(db, args.id, workspacePath);
+    if (!row) {
       return {
         content: [
           {
@@ -905,7 +964,6 @@ export async function handleTrackerUpdate(
       };
     }
 
-    const row = existing.rows[0];
     const data =
       typeof row.data === "string"
         ? JSON.parse(row.data)
@@ -965,14 +1023,14 @@ export async function handleTrackerUpdate(
       }
       await db.query(
         `UPDATE tracker_items SET type_tags = $1 WHERE id = $2`,
-        [newTypeTags, args.id]
+        [newTypeTags, row.id]
       );
     }
 
     // Update data field
     await db.query(
       `UPDATE tracker_items SET data = $1, updated = NOW() WHERE id = $2`,
-      [JSON.stringify(data), args.id]
+      [JSON.stringify(data), row.id]
     );
 
     // Update content if description changed
@@ -980,7 +1038,7 @@ export async function handleTrackerUpdate(
       const contentJson = JSON.stringify(args.description);
       await db.query(
         `UPDATE tracker_items SET content = $1 WHERE id = $2`,
-        [contentJson, args.id]
+        [contentJson, row.id]
       );
     }
 
@@ -989,7 +1047,7 @@ export async function handleTrackerUpdate(
       const { documentServices } = await import("../../window/WindowManager");
       const docService = workspacePath ? documentServices.get(workspacePath) : undefined;
       if (docService) {
-        await docService.archiveTrackerItem(args.id, args.archived);
+        await docService.archiveTrackerItem(row.id, args.archived);
       } else {
         // Fallback: DB-only update if no document service available
         await db.query(
@@ -997,7 +1055,7 @@ export async function handleTrackerUpdate(
           [
             args.archived,
             args.archived ? new Date().toISOString() : null,
-            args.id,
+            row.id,
           ]
         );
       }
@@ -1005,7 +1063,7 @@ export async function handleTrackerUpdate(
 
     // Auto-link session to the updated tracker item
     if (sessionId) {
-      const linked = await createBidirectionalLink(args.id, sessionId);
+      const linked = await createBidirectionalLink(row.id, sessionId);
       if (linked) {
         const sessionResult = await db.query<any>(
           `SELECT metadata FROM ai_sessions WHERE id = $1`,
@@ -1017,7 +1075,28 @@ export async function handleTrackerUpdate(
     }
 
     // Notify renderer (correct channel + event format)
-    await notifyTrackerItemUpdated(workspacePath, args.id);
+    await notifyTrackerItemUpdated(workspacePath, row.id);
+
+    const refreshedRow = await resolveTrackerRowByReference(db, row.id, workspacePath);
+    const effectiveWorkspacePath = refreshedRow?.workspace || workspacePath;
+    if (refreshedRow && effectiveWorkspacePath) {
+      const syncPolicy = getEffectiveTrackerSyncPolicy(effectiveWorkspacePath, refreshedRow.type);
+      if (shouldSyncTrackerPolicy(syncPolicy)) {
+        if (isTrackerSyncActive(effectiveWorkspacePath)) {
+          try {
+            await syncTrackerItem(rowToTrackerItem(refreshedRow));
+          } catch (syncError) {
+            console.error('[MCP Server] tracker_update sync failed:', syncError);
+          }
+        } else {
+          await db.query(
+            `UPDATE tracker_items SET sync_status = 'pending' WHERE id = $1`,
+            [row.id]
+          );
+        }
+      }
+    }
+    const postSyncRow = await resolveTrackerRowByReference(db, row.id, workspacePath);
 
     const updateSummaryParts: string[] = [];
     if (args.title !== undefined) updateSummaryParts.push(`- **Title**: ${args.title}`);
@@ -1029,7 +1108,7 @@ export async function handleTrackerUpdate(
     // Re-read type_tags after potential update
     const updatedRow = await db.query<any>(
       `SELECT type_tags FROM tracker_items WHERE id = $1`,
-      [args.id]
+      [row.id]
     );
     const currentTypeTags: string[] = updatedRow.rows[0]?.type_tags?.length > 0
       ? updatedRow.rows[0].type_tags
@@ -1037,7 +1116,9 @@ export async function handleTrackerUpdate(
 
     const structured = {
       action: "updated" as const,
-      id: args.id,
+      id: row.id,
+      issueNumber: postSyncRow?.issue_number ?? refreshedRow?.issue_number ?? row.issue_number ?? undefined,
+      issueKey: postSyncRow?.issue_key ?? refreshedRow?.issue_key ?? row.issue_key ?? undefined,
       type: row.type,
       typeTags: currentTypeTags,
       title: data.title,
@@ -1050,7 +1131,7 @@ export async function handleTrackerUpdate(
           type: "text",
           text: JSON.stringify({
             structured,
-            summary: `Updated tracker item ${args.id}:\n${updateSummaryParts.join("\n")}`,
+            summary: `Updated tracker item ${getTrackerDisplayRef({ id: row.id, issueKey: postSyncRow?.issue_key ?? refreshedRow?.issue_key ?? row.issue_key ?? undefined })}:\n${updateSummaryParts.join("\n")}`,
           }),
         },
       ],
@@ -1092,11 +1173,8 @@ export async function handleTrackerLinkSession(
     const db = getDatabase();
 
     // Verify tracker item exists
-    const existing = await db.query<any>(
-      `SELECT id, type, data FROM tracker_items WHERE id = $1`,
-      [args.trackerId]
-    );
-    if (existing.rows.length === 0) {
+    const existing = await resolveTrackerRowByReference(db, args.trackerId, workspacePath);
+    if (!existing) {
       return {
         content: [
           {
@@ -1109,12 +1187,12 @@ export async function handleTrackerLinkSession(
     }
 
     // Create bidirectional link
-    await createBidirectionalLink(args.trackerId, sessionId);
+    await createBidirectionalLink(existing.id, sessionId);
 
     // Get updated counts for the response
     const trackerResult = await db.query<any>(
       `SELECT data FROM tracker_items WHERE id = $1`,
-      [args.trackerId]
+      [existing.id]
     );
     const trackerData = typeof trackerResult.rows[0]?.data === "string"
       ? JSON.parse(trackerResult.rows[0].data)
@@ -1122,7 +1200,7 @@ export async function handleTrackerLinkSession(
     const linkedSessions: string[] = trackerData.linkedSessions || [];
 
     // Notify renderer of both changes (correct channel + event format)
-    await notifyTrackerItemUpdated(workspacePath, args.trackerId);
+    await notifyTrackerItemUpdated(workspacePath, existing.id);
     const sessionResult = await db.query<any>(
       `SELECT metadata FROM ai_sessions WHERE id = $1`,
       [sessionId]
@@ -1132,8 +1210,10 @@ export async function handleTrackerLinkSession(
 
     const structured = {
       action: "linked" as const,
-      trackerId: args.trackerId,
-      type: existing.rows[0]?.type || "",
+      trackerId: existing.id,
+      issueNumber: existing.issue_number ?? undefined,
+      issueKey: existing.issue_key ?? undefined,
+      type: existing.type || "",
       title: trackerData.title || "",
       linkedCount: linkedSessions.length,
     };
@@ -1144,7 +1224,7 @@ export async function handleTrackerLinkSession(
           type: "text",
           text: JSON.stringify({
             structured,
-            summary: `Linked session ${sessionId} to tracker item ${args.trackerId}. Total linked sessions: ${linkedSessions.length}`,
+            summary: `Linked session ${sessionId} to tracker item ${getTrackerDisplayRef({ id: existing.id, issueKey: existing.issue_key ?? undefined })}. Total linked sessions: ${linkedSessions.length}`,
           }),
         },
       ],
@@ -1262,18 +1342,14 @@ export async function handleTrackerAddComment(
     const db = getDatabase();
 
     // Read existing item
-    const existing = await db.query<any>(
-      `SELECT * FROM tracker_items WHERE id = $1`,
-      [args.trackerId]
-    );
-    if (existing.rows.length === 0) {
+    const row = await resolveTrackerRowByReference(db, args.trackerId, workspacePath);
+    if (!row) {
       return {
         content: [{ type: "text", text: `Tracker item not found: ${args.trackerId}` }],
         isError: true,
       };
     }
 
-    const row = existing.rows[0];
     const data = typeof row.data === "string" ? JSON.parse(row.data) : row.data || {};
 
     // Resolve current identity for the comment
@@ -1300,11 +1376,11 @@ export async function handleTrackerAddComment(
 
     await db.query(
       `UPDATE tracker_items SET data = $1, updated = NOW() WHERE id = $2`,
-      [JSON.stringify(data), args.trackerId]
+      [JSON.stringify(data), row.id]
     );
 
     // Notify renderer
-    await notifyTrackerItemUpdated(workspacePath, args.trackerId);
+    await notifyTrackerItemUpdated(workspacePath, row.id);
 
     return {
       content: [
@@ -1313,11 +1389,13 @@ export async function handleTrackerAddComment(
           text: JSON.stringify({
             structured: {
               action: "commented" as const,
-              trackerId: args.trackerId,
+              trackerId: row.id,
+              issueNumber: row.issue_number ?? undefined,
+              issueKey: row.issue_key ?? undefined,
               commentId,
               author: authorIdentity.displayName,
             },
-            summary: `Added comment to ${args.trackerId} by ${authorIdentity.displayName}`,
+            summary: `Added comment to ${getTrackerDisplayRef({ id: row.id, issueKey: row.issue_key ?? undefined })} by ${authorIdentity.displayName}`,
           }),
         },
       ],

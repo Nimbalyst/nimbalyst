@@ -104,6 +104,7 @@ export function mergeTrackerItems(
 
   const mergeableFields: (keyof TrackerItemPayload)[] = [
     'title', 'description', 'status', 'priority',
+    'issueNumber', 'issueKey',
     'assigneeEmail', 'reporterEmail', 'authorIdentity', 'lastModifiedBy',
     'assigneeId', 'reporterId', 'labels', 'linkedSessions',
     'linkedCommitSha', 'documentId', 'comments', 'customFields',
@@ -137,6 +138,26 @@ interface QueuedMutation {
   payload?: TrackerItemPayload;
 }
 
+function applyIssueIdentity(
+  payload: TrackerItemPayload,
+  encryptedItem: EncryptedTrackerItem,
+): TrackerItemPayload {
+  if (encryptedItem.issueNumber == null && encryptedItem.issueKey == null) {
+    return payload;
+  }
+
+  return {
+    ...payload,
+    issueNumber: encryptedItem.issueNumber ?? payload.issueNumber,
+    issueKey: encryptedItem.issueKey ?? payload.issueKey,
+    fieldUpdatedAt: {
+      ...payload.fieldUpdatedAt,
+      issueNumber: Number.MAX_SAFE_INTEGER - 1,
+      issueKey: Number.MAX_SAFE_INTEGER,
+    },
+  };
+}
+
 export class TrackerSyncProvider {
   private config: TrackerSyncConfig;
   private ws: WebSocket | null = null;
@@ -152,6 +173,10 @@ export class TrackerSyncProvider {
 
   /** Local cache of decrypted items (itemId -> payload) for LWW merge */
   private localItems: Map<string, TrackerItemPayload> = new Map();
+
+  /** Aggregate counts observed during the initial sync window */
+  private initialSyncRemoteItemCount = 0;
+  private initialSyncRemoteDeletedCount = 0;
 
   /** Reconnect state */
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -177,6 +202,8 @@ export class TrackerSyncProvider {
 
     this.cancelReconnect();
     this.setStatus('connecting');
+    this.initialSyncRemoteItemCount = 0;
+    this.initialSyncRemoteDeletedCount = 0;
 
     const { serverUrl, orgId, projectId } = this.config;
     const roomId = `org:${orgId}:tracker:${projectId}`;
@@ -279,6 +306,8 @@ export class TrackerSyncProvider {
       itemId: payload.itemId,
       encryptedPayload,
       iv,
+      issueNumber: payload.issueNumber,
+      issueKey: payload.issueKey,
     });
   }
 
@@ -316,7 +345,13 @@ export class TrackerSyncProvider {
     const items = await Promise.all(
       payloads.map(async (payload) => {
         const { encryptedPayload, iv } = await encryptPayload(payload, this.config.encryptionKey);
-        return { itemId: payload.itemId, encryptedPayload, iv };
+        return {
+          itemId: payload.itemId,
+          encryptedPayload,
+          iv,
+          issueNumber: payload.issueNumber,
+          issueKey: payload.issueKey,
+        };
       })
     );
 
@@ -353,6 +388,8 @@ export class TrackerSyncProvider {
 
   private async handleSyncResponse(msg: TrackerSyncResponseMessage): Promise<void> {
     console.log('[TrackerSync] Sync response:', msg.items.length, 'items,', msg.deletedItemIds.length, 'deletions, sequence:', msg.sequence, 'hasMore:', msg.hasMore);
+    this.initialSyncRemoteItemCount += msg.items.length;
+    this.initialSyncRemoteDeletedCount += msg.deletedItemIds.length;
     // Decrypt all items
     for (const encryptedItem of msg.items) {
       try {
@@ -361,16 +398,17 @@ export class TrackerSyncProvider {
           encryptedItem.iv,
           this.config.encryptionKey
         );
+        const payloadWithIssueIdentity = applyIssueIdentity(payload, encryptedItem);
 
         // Check for conflict with local version
-        const localItem = this.localItems.get(payload.itemId);
+        const localItem = this.localItems.get(payloadWithIssueIdentity.itemId);
         if (localItem) {
-          const merged = mergeTrackerItems(localItem, payload);
-          this.localItems.set(payload.itemId, merged);
+          const merged = mergeTrackerItems(localItem, payloadWithIssueIdentity);
+          this.localItems.set(payloadWithIssueIdentity.itemId, merged);
           this.config.onItemUpserted?.(merged);
         } else {
-          this.localItems.set(payload.itemId, payload);
-          this.config.onItemUpserted?.(payload);
+          this.localItems.set(payloadWithIssueIdentity.itemId, payloadWithIssueIdentity);
+          this.config.onItemUpserted?.(payloadWithIssueIdentity);
         }
       } catch (err) {
         console.error('[TrackerSync] Failed to decrypt item:', encryptedItem.itemId, err);
@@ -395,6 +433,11 @@ export class TrackerSyncProvider {
     if (!this.synced) {
       this.synced = true;
       this.setStatus('connected');
+      await this.config.onInitialSyncComplete?.({
+        remoteItemCount: this.initialSyncRemoteItemCount,
+        remoteDeletedCount: this.initialSyncRemoteDeletedCount,
+        sequence: msg.sequence,
+      });
       console.log('[TrackerSync] Initial sync complete, now connected. Local items:', this.localItems.size);
       // Replay offline queue after initial sync
       await this.replayOfflineQueue();
@@ -409,16 +452,17 @@ export class TrackerSyncProvider {
         msg.item.iv,
         this.config.encryptionKey
       );
+      const payloadWithIssueIdentity = applyIssueIdentity(payload, msg.item);
 
       // Check for conflict with local version
-      const localItem = this.localItems.get(payload.itemId);
+      const localItem = this.localItems.get(payloadWithIssueIdentity.itemId);
       if (localItem) {
-        const merged = mergeTrackerItems(localItem, payload);
-        this.localItems.set(payload.itemId, merged);
+        const merged = mergeTrackerItems(localItem, payloadWithIssueIdentity);
+        this.localItems.set(payloadWithIssueIdentity.itemId, merged);
         this.config.onItemUpserted?.(merged);
       } else {
-        this.localItems.set(payload.itemId, payload);
-        this.config.onItemUpserted?.(payload);
+        this.localItems.set(payloadWithIssueIdentity.itemId, payloadWithIssueIdentity);
+        this.config.onItemUpserted?.(payloadWithIssueIdentity);
       }
 
       // Advance sequence

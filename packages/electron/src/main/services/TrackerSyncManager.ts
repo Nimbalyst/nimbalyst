@@ -49,6 +49,53 @@ const workspaceStates = new Map<string, WorkspaceSyncState>();
 type TrackerSyncStatusListener = (status: TrackerSyncStatus) => void;
 const statusListeners = new Set<TrackerSyncStatusListener>();
 
+async function uploadTrackerRows(
+  provider: import('@nimbalyst/runtime/sync').TrackerSyncProvider,
+  rows: any[],
+  userId: string,
+): Promise<number> {
+  if (rows.length === 0) return 0;
+
+  const { trackerItemToPayload } = loadSyncModule();
+  const payloads: import('@nimbalyst/runtime/sync').TrackerItemPayload[] = [];
+  for (const row of rows) {
+    const data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
+    const item = {
+      id: row.id,
+      issueNumber: row.issue_number ?? undefined,
+      issueKey: row.issue_key ?? undefined,
+      type: row.type,
+      title: data.title || row.title,
+      description: data.description,
+      status: data.status || row.status,
+      priority: data.priority,
+      owner: data.owner,
+      module: row.document_path,
+      workspace: row.workspace,
+      tags: data.tags,
+      created: data.created || row.created,
+      updated: data.updated || row.updated,
+      lastIndexed: new Date(row.last_indexed),
+      authorIdentity: data.authorIdentity,
+      lastModifiedBy: data.lastModifiedBy,
+      createdByAgent: data.createdByAgent,
+      assigneeEmail: data.assigneeEmail,
+      reporterEmail: data.reporterEmail,
+      assigneeId: data.assigneeId,
+      reporterId: data.reporterId,
+      labels: data.labels,
+      linkedSessions: data.linkedSessions,
+      linkedCommitSha: data.linkedCommitSha,
+      documentId: data.documentId,
+      customFields: data.customFields,
+    };
+    payloads.push(trackerItemToPayload(item as any, userId));
+  }
+
+  await provider.batchUpsertItems(payloads);
+  return payloads.length;
+}
+
 // ============================================================================
 // IPC Broadcasting
 // ============================================================================
@@ -200,6 +247,11 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
     // logger.main.info('[TrackerSyncManager] Connecting tracker sync', { orgId, projectId });
 
     const { TrackerSyncProvider, payloadToTrackerItem } = loadSyncModule();
+    const preexistingSyncedRowsResult = await database.query<any>(
+      `SELECT * FROM tracker_items WHERE workspace = $1 AND sync_status = 'synced'`,
+      [workspacePath]
+    );
+    const preexistingSyncedRows = preexistingSyncedRowsResult.rows;
 
     // Use the shared org encryption key (distributed via key envelopes)
     // All team members share this key so they can decrypt each other's items
@@ -225,7 +277,8 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
       logger.main.warn(`[TrackerSyncManager] Auto-wrap for new members of ${projectId} failed:`, err);
     });
 
-    const provider = new TrackerSyncProvider({
+    let provider: import('@nimbalyst/runtime/sync').TrackerSyncProvider;
+    provider = new TrackerSyncProvider({
       serverUrl,
       orgId,
       projectId,
@@ -259,6 +312,26 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
         removeTrackerItem(itemId, workspacePath)
           .catch(err => logger.main.error('[TrackerSyncManager] Failed to remove deleted item:', err));
       },
+
+      onInitialSyncComplete: async (summary) => {
+        if (
+          summary.remoteItemCount !== 0 ||
+          summary.remoteDeletedCount !== 0 ||
+          summary.sequence !== 0
+        ) {
+          return;
+        }
+
+        try {
+          if (preexistingSyncedRows.length === 0) {
+            return;
+          }
+
+          await uploadTrackerRows(provider, preexistingSyncedRows, userId);
+        } catch (err) {
+          logger.main.warn('[TrackerSyncManager] Failed to recover synced tracker items for empty room:', err);
+        }
+      },
     });
 
     workspaceStates.set(workspacePath, {
@@ -272,50 +345,16 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
     await provider.connect();
     // logger.main.info('[TrackerSyncManager] Tracker sync initialized successfully for', workspacePath);
 
-    // Push local unsynced items to the server.
-    // This handles first-time share: admin has local items that need to be uploaded
-    // so other team members can see them. Also handles DO wipe recovery.
+    // Push shareable unsynced items to the server.
+    // `pending` means "should sync once a provider is available".
+    // `local` means "never sync".
     try {
-      const { trackerItemToPayload } = loadSyncModule();
       const localResult = await database.query<any>(
-        `SELECT * FROM tracker_items WHERE workspace = $1 AND (sync_status = 'local' OR sync_status IS NULL)`,
+        `SELECT * FROM tracker_items WHERE workspace = $1 AND (sync_status = 'pending' OR sync_status IS NULL)`,
         [workspacePath]
       );
       if (localResult.rows.length > 0) {
-        // logger.main.info('[TrackerSyncManager] Uploading', localResult.rows.length, 'local items to server for', workspacePath);
-        const payloads: import('@nimbalyst/runtime/sync').TrackerItemPayload[] = [];
-        for (const row of localResult.rows) {
-          const data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
-          const item = {
-            id: row.id,
-            type: row.type,
-            title: data.title || row.title,
-            description: data.description,
-            status: data.status || row.status,
-            priority: data.priority,
-            owner: data.owner,
-            module: row.document_path,
-            workspace: row.workspace,
-            tags: data.tags,
-            created: data.created || row.created,
-            updated: data.updated || row.updated,
-            lastIndexed: new Date(row.last_indexed),
-            authorIdentity: data.authorIdentity,
-            lastModifiedBy: data.lastModifiedBy,
-            createdByAgent: data.createdByAgent,
-            assigneeEmail: data.assigneeEmail,
-            reporterEmail: data.reporterEmail,
-            assigneeId: data.assigneeId,
-            reporterId: data.reporterId,
-            labels: data.labels,
-            linkedSessions: data.linkedSessions,
-            linkedCommitSha: data.linkedCommitSha,
-            documentId: data.documentId,
-            customFields: data.customFields,
-          };
-          payloads.push(trackerItemToPayload(item as any, userId));
-        }
-        await provider.batchUpsertItems(payloads);
+        await uploadTrackerRows(provider, localResult.rows, userId);
         // Mark items as synced
         const ids = localResult.rows.map((r: any) => r.id);
         await database.query(
@@ -414,14 +453,18 @@ async function hydrateTrackerItem(
 
   await database.query(
     `INSERT INTO tracker_items (
-      id, type, data, workspace, document_path, line_number, created, updated, last_indexed, sync_status, archived, archived_at
-    ) VALUES ($1, $2, $3, $4, $5, NULL, NOW(), NOW(), $6, 'synced', $7, $8)
+      id, issue_number, issue_key, type, data, workspace, document_path, line_number, created, updated, last_indexed, sync_status, archived, archived_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, NOW(), NOW(), $8, 'synced', $9, $10)
     ON CONFLICT (id) DO UPDATE SET
-      type = $2, data = $3, updated = NOW(), last_indexed = $6, sync_status = 'synced',
-      archived = CASE WHEN $7 = TRUE THEN TRUE ELSE tracker_items.archived END,
-      archived_at = CASE WHEN $7 = TRUE THEN $8 ELSE tracker_items.archived_at END`,
+      issue_number = COALESCE($2, tracker_items.issue_number),
+      issue_key = COALESCE($3, tracker_items.issue_key),
+      type = $4, data = $5, updated = NOW(), last_indexed = $8, sync_status = 'synced',
+      archived = CASE WHEN $9 = TRUE THEN TRUE ELSE tracker_items.archived END,
+      archived_at = CASE WHEN $9 = TRUE THEN $10 ELSE tracker_items.archived_at END`,
     [
       item.id,
+      item.issueNumber ?? null,
+      item.issueKey ?? null,
       item.type,
       JSON.stringify(data),
       workspacePath,

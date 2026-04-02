@@ -34,6 +34,7 @@ interface ConnectionState {
 // WebSocket tag prefixes for hibernation recovery
 const TAG_USER = 'user:';
 const TAG_ORG = 'org:';
+const ISSUE_KEY_PREFIX = 'NIM';
 
 export class TeamTrackerRoom implements DurableObject {
   private state: DurableObjectState;
@@ -82,12 +83,19 @@ export class TeamTrackerRoom implements DurableObject {
     sql.exec(`
       CREATE TABLE IF NOT EXISTS tracker_items (
         item_id TEXT PRIMARY KEY,
+        issue_number INTEGER,
+        issue_key TEXT,
         version INTEGER NOT NULL,
         encrypted_payload TEXT NOT NULL,
         iv TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_tracker_items_issue_number ON tracker_items(issue_number)
+      WHERE issue_number IS NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_tracker_items_issue_key ON tracker_items(issue_key)
+      WHERE issue_key IS NOT NULL;
 
       CREATE TABLE IF NOT EXISTS changelog (
         sequence INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -121,6 +129,64 @@ export class TeamTrackerRoom implements DurableObject {
     }
 
     this.initialized = true;
+  }
+
+  private getMetadataValue(key: string): string | null {
+    const sql = this.state.storage.sql;
+    const row = sql.exec<{ value: string }>(
+      `SELECT value FROM metadata WHERE key = ?`,
+      key
+    ).toArray()[0];
+    return row?.value ?? null;
+  }
+
+  private allocateNextIssueNumber(): number {
+    const stored = this.getMetadataValue('next_issue_number');
+    let next = Number(stored ?? '0');
+    if (!Number.isFinite(next) || next <= 0) {
+      const maxExisting = this.state.storage.sql.exec<{ max_issue_number: number | null }>(
+        `SELECT MAX(issue_number) as max_issue_number FROM tracker_items`
+      ).toArray()[0]?.max_issue_number ?? 0;
+      next = Math.max(1, maxExisting + 1);
+    }
+    this.setMetadataValue('next_issue_number', String(next + 1));
+    return next;
+  }
+
+  private ensureIssueSequenceAtLeast(issueNumber: number): void {
+    const current = Number(this.getMetadataValue('next_issue_number') ?? '1');
+    const desired = issueNumber + 1;
+    if (!Number.isFinite(current) || current < desired) {
+      this.setMetadataValue('next_issue_number', String(desired));
+    }
+  }
+
+  private assignIssueIdentity(
+    existing: { issue_number?: number | null; issue_key?: string | null } | undefined,
+    incoming?: { issueNumber?: number; issueKey?: string },
+  ): { issueNumber: number; issueKey: string } {
+    const existingIssueNumber = existing?.issue_number ?? null;
+    const existingIssueKey = existing?.issue_key ?? null;
+    if (existingIssueNumber != null && existingIssueKey) {
+      return {
+        issueNumber: existingIssueNumber,
+        issueKey: existingIssueKey,
+      };
+    }
+
+    if (incoming?.issueNumber != null && incoming.issueKey) {
+      this.ensureIssueSequenceAtLeast(incoming.issueNumber);
+      return {
+        issueNumber: incoming.issueNumber,
+        issueKey: incoming.issueKey,
+      };
+    }
+
+    const issueNumber = this.allocateNextIssueNumber();
+    return {
+      issueNumber,
+      issueKey: `${ISSUE_KEY_PREFIX}-${issueNumber}`,
+    };
   }
 
   /**
@@ -207,7 +273,14 @@ export class TeamTrackerRoom implements DurableObject {
           break;
 
         case 'trackerUpsert':
-          await this.handleTrackerUpsert(ws, connState, message.itemId, message.encryptedPayload, message.iv);
+          await this.handleTrackerUpsert(
+            ws,
+            connState,
+            message.itemId,
+            message.encryptedPayload,
+            message.iv,
+            { issueNumber: message.issueNumber, issueKey: message.issueKey },
+          );
           break;
 
         case 'trackerDelete':
@@ -278,13 +351,15 @@ export class TeamTrackerRoom implements DurableObject {
       const placeholders = Array.from(upsertedItemIds).map(() => '?').join(',');
       const itemRows = sql.exec<{
         item_id: string;
+        issue_number?: number | null;
+        issue_key?: string | null;
         version: number;
         encrypted_payload: string;
         iv: string;
         created_at: number;
         updated_at: number;
       }>(
-        `SELECT item_id, version, encrypted_payload, iv, created_at, updated_at
+        `SELECT item_id, issue_number, issue_key, version, encrypted_payload, iv, created_at, updated_at
          FROM tracker_items
          WHERE item_id IN (${placeholders})`,
         ...Array.from(upsertedItemIds)
@@ -299,6 +374,8 @@ export class TeamTrackerRoom implements DurableObject {
 
         items.push({
           itemId: row.item_id,
+          issueNumber: row.issue_number ?? undefined,
+          issueKey: row.issue_key ?? undefined,
           version: row.version,
           encryptedPayload: row.encrypted_payload,
           iv: row.iv,
@@ -334,24 +411,29 @@ export class TeamTrackerRoom implements DurableObject {
     connState: ConnectionState,
     itemId: string,
     encryptedPayload: string,
-    iv: string
+    iv: string,
+    incomingIssueIdentity?: { issueNumber?: number; issueKey?: string },
   ): Promise<void> {
     const sql = this.state.storage.sql;
     const now = Date.now();
 
     // Check for version conflict
-    const existing = sql.exec<{ version: number }>(
-      `SELECT version FROM tracker_items WHERE item_id = ?`,
+    const existing = sql.exec<{ version: number; issue_number?: number | null; issue_key?: string | null }>(
+      `SELECT version, issue_number, issue_key FROM tracker_items WHERE item_id = ?`,
       itemId
     ).toArray()[0];
 
     const newVersion = (existing?.version ?? 0) + 1;
+    const issueIdentity = this.assignIssueIdentity(existing, incomingIssueIdentity);
 
     if (existing) {
       // Update existing item
       sql.exec(
-        `UPDATE tracker_items SET version = ?, encrypted_payload = ?, iv = ?, updated_at = ?
+        `UPDATE tracker_items
+         SET issue_number = ?, issue_key = ?, version = ?, encrypted_payload = ?, iv = ?, updated_at = ?
          WHERE item_id = ?`,
+        issueIdentity.issueNumber,
+        issueIdentity.issueKey,
         newVersion,
         encryptedPayload,
         iv,
@@ -361,9 +443,11 @@ export class TeamTrackerRoom implements DurableObject {
     } else {
       // Insert new item
       sql.exec(
-        `INSERT INTO tracker_items (item_id, version, encrypted_payload, iv, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO tracker_items (item_id, issue_number, issue_key, version, encrypted_payload, iv, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         itemId,
+        issueIdentity.issueNumber,
+        issueIdentity.issueKey,
         newVersion,
         encryptedPayload,
         iv,
@@ -398,6 +482,8 @@ export class TeamTrackerRoom implements DurableObject {
     // Broadcast to other connections
     const item: EncryptedTrackerItem = {
       itemId,
+      issueNumber: issueIdentity.issueNumber,
+      issueKey: issueIdentity.issueKey,
       version: newVersion,
       encryptedPayload,
       iv,
@@ -405,6 +491,12 @@ export class TeamTrackerRoom implements DurableObject {
       updatedAt: now,
       sequence,
     };
+
+    const senderMessage: TrackerServerMessage = {
+      type: 'trackerUpsertBroadcast',
+      item,
+    };
+    ws.send(JSON.stringify(senderMessage));
 
     this.broadcast(
       {
@@ -466,11 +558,18 @@ export class TeamTrackerRoom implements DurableObject {
   private async handleTrackerBatchUpsert(
     ws: WebSocket,
     connState: ConnectionState,
-    items: { itemId: string; encryptedPayload: string; iv: string }[]
+    items: { itemId: string; encryptedPayload: string; iv: string; issueNumber?: number; issueKey?: string }[]
   ): Promise<void> {
     // Process each item individually (SQLite handles transaction internally per DO)
     for (const item of items) {
-      await this.handleTrackerUpsert(ws, connState, item.itemId, item.encryptedPayload, item.iv);
+      await this.handleTrackerUpsert(
+        ws,
+        connState,
+        item.itemId,
+        item.encryptedPayload,
+        item.iv,
+        { issueNumber: item.issueNumber, issueKey: item.issueKey },
+      );
     }
   }
 

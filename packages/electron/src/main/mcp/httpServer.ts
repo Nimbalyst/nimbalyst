@@ -361,7 +361,7 @@ function createSharedMcpServer(
         return handleTrackerList(args, workspacePath);
 
       case "tracker_get":
-        return handleTrackerGet(args);
+        return handleTrackerGet(args, workspacePath);
 
       case "tracker_create":
         return handleTrackerCreate(args, workspacePath, sessionId);

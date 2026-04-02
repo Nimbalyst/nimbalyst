@@ -66,6 +66,10 @@ describe('TeamTrackerRoom integration', () => {
     await sendAndWait(ws2, { type: 'trackerSync', sinceSequence: 0 }, 'trackerSyncResponse');
 
     // Client 1 upserts, client 2 should receive broadcast
+    const senderBroadcastPromise = waitForMessage<Extract<TrackerServerMessage, { type: 'trackerUpsertBroadcast' }>>(
+      ws1,
+      'trackerUpsertBroadcast'
+    );
     const broadcastPromise = waitForMessage<Extract<TrackerServerMessage, { type: 'trackerUpsertBroadcast' }>>(
       ws2,
       'trackerUpsertBroadcast'
@@ -78,13 +82,78 @@ describe('TeamTrackerRoom integration', () => {
       iv: btoa('bug-iv'),
     }));
 
+    const senderBroadcast = await senderBroadcastPromise;
     const broadcast = await broadcastPromise;
+    expect(senderBroadcast.type).toBe('trackerUpsertBroadcast');
+    expect(senderBroadcast.item.issueNumber).toBe(1);
+    expect(senderBroadcast.item.issueKey).toBe('NIM-1');
     expect(broadcast.type).toBe('trackerUpsertBroadcast');
     expect(broadcast.item.itemId).toBe('bug-001');
+    expect(broadcast.item.issueNumber).toBe(1);
+    expect(broadcast.item.issueKey).toBe('NIM-1');
     expect(broadcast.item.encryptedPayload).toBe(btoa('encrypted-bug-data'));
     expect(broadcast.item.iv).toBe(btoa('bug-iv'));
     expect(broadcast.item.version).toBe(1);
     expect(broadcast.item.sequence).toBeGreaterThan(0);
+  });
+
+  it('should preserve incoming issue identity and continue the room sequence', async () => {
+    const projectId = `test-issue-identity-${Date.now()}`;
+
+    const ws1 = connect(projectId, 'user1');
+    await waitForOpen(ws1);
+    await sendAndWait(ws1, { type: 'trackerSync', sinceSequence: 0 }, 'trackerSyncResponse');
+
+    const recoveredBroadcastPromise = waitForMessage<Extract<TrackerServerMessage, { type: 'trackerUpsertBroadcast' }>>(
+      ws1,
+      'trackerUpsertBroadcast'
+    );
+    ws1.send(JSON.stringify({
+      type: 'trackerUpsert',
+      itemId: 'recovered-001',
+      encryptedPayload: btoa('recovered-data'),
+      iv: btoa('recovered-iv'),
+      issueNumber: 42,
+      issueKey: 'NIM-42',
+    }));
+
+    const recoveredBroadcast = await recoveredBroadcastPromise;
+    expect(recoveredBroadcast.item.issueNumber).toBe(42);
+    expect(recoveredBroadcast.item.issueKey).toBe('NIM-42');
+
+    const nextBroadcastPromise = waitForMessage<Extract<TrackerServerMessage, { type: 'trackerUpsertBroadcast' }>>(
+      ws1,
+      'trackerUpsertBroadcast'
+    );
+    ws1.send(JSON.stringify({
+      type: 'trackerUpsert',
+      itemId: 'fresh-001',
+      encryptedPayload: btoa('fresh-data'),
+      iv: btoa('fresh-iv'),
+    }));
+
+    const nextBroadcast = await nextBroadcastPromise;
+    expect(nextBroadcast.item.issueNumber).toBe(43);
+    expect(nextBroadcast.item.issueKey).toBe('NIM-43');
+
+    await closeWS(ws1);
+    openSockets.splice(openSockets.indexOf(ws1), 1);
+
+    const ws2 = connect(projectId, 'user2');
+    await waitForOpen(ws2);
+
+    const response = await sendAndWait<Extract<TrackerServerMessage, { type: 'trackerSyncResponse' }>>(
+      ws2,
+      { type: 'trackerSync', sinceSequence: 0 },
+      'trackerSyncResponse'
+    );
+
+    const recoveredItem = response.items.find(item => item.itemId === 'recovered-001');
+    const freshItem = response.items.find(item => item.itemId === 'fresh-001');
+    expect(recoveredItem?.issueNumber).toBe(42);
+    expect(recoveredItem?.issueKey).toBe('NIM-42');
+    expect(freshItem?.issueNumber).toBe(43);
+    expect(freshItem?.issueKey).toBe('NIM-43');
   });
 
   it('should persist items and serve them on sync', async () => {

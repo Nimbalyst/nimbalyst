@@ -807,6 +807,8 @@ class PGLiteWorker {
       await this.db.exec(`
         CREATE TABLE IF NOT EXISTS tracker_items (
           id TEXT PRIMARY KEY,
+          issue_number INTEGER,
+          issue_key TEXT,
           type TEXT NOT NULL,
           data JSONB NOT NULL,
           workspace TEXT NOT NULL,
@@ -853,6 +855,8 @@ class PGLiteWorker {
           await this.db.exec(`
             CREATE TABLE tracker_items (
               id TEXT PRIMARY KEY,
+              issue_number INTEGER,
+              issue_key TEXT,
               type TEXT NOT NULL,
               data JSONB NOT NULL,
               workspace TEXT NOT NULL,
@@ -867,6 +871,8 @@ class PGLiteWorker {
 
             CREATE INDEX IF NOT EXISTS idx_tracker_type ON tracker_items(type);
             CREATE INDEX IF NOT EXISTS idx_tracker_workspace ON tracker_items(workspace);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_tracker_workspace_issue_number ON tracker_items(workspace, issue_number) WHERE issue_number IS NOT NULL;
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_tracker_workspace_issue_key ON tracker_items(workspace, issue_key) WHERE issue_key IS NOT NULL;
             CREATE INDEX IF NOT EXISTS idx_tracker_status ON tracker_items(status);
             CREATE INDEX IF NOT EXISTS idx_tracker_created ON tracker_items(created);
             CREATE INDEX IF NOT EXISTS idx_tracker_updated ON tracker_items(updated);
@@ -888,7 +894,7 @@ class PGLiteWorker {
       // Non-fatal - tracker items will be re-indexed from documents anyway
     }
 
-      // Migration: Add sync_status column for collaborative tracker sync
+    // Migration: Add sync_status column for collaborative tracker sync
       try {
           const syncStatusCheck = await this.db.query(`
         SELECT EXISTS (
@@ -904,11 +910,44 @@ class PGLiteWorker {
           CREATE INDEX IF NOT EXISTS idx_tracker_sync_status ON tracker_items(sync_status);
         `);
               console.log('[PGLite Worker] Added sync_status column to tracker_items');
-          }
-      } catch (error) {
-          console.error('[PGLite Worker] Failed to add sync_status column:', error);
-          // Non-fatal - new column defaults are safe
       }
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to add sync_status column:', error);
+      // Non-fatal - new column defaults are safe
+    }
+
+    // Migration: Add human-readable issue key columns for shared trackers
+    try {
+      const issueIdentityCheck = await this.db.query(`
+        SELECT
+          EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'tracker_items' AND column_name = 'issue_number'
+          ) as has_issue_number,
+          EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'tracker_items' AND column_name = 'issue_key'
+          ) as has_issue_key
+      `);
+      const { has_issue_number, has_issue_key } = issueIdentityCheck.rows[0] || {};
+      if (!has_issue_number) {
+        await this.db.exec(`
+          ALTER TABLE tracker_items ADD COLUMN issue_number INTEGER;
+        `);
+      }
+      if (!has_issue_key) {
+        await this.db.exec(`
+          ALTER TABLE tracker_items ADD COLUMN issue_key TEXT;
+        `);
+      }
+      // Always ensure indexes exist (covers both new DBs and migrated DBs)
+      await this.db.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_tracker_workspace_issue_number ON tracker_items(workspace, issue_number) WHERE issue_number IS NOT NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_tracker_workspace_issue_key ON tracker_items(workspace, issue_key) WHERE issue_key IS NOT NULL;
+      `);
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to add issue identity columns:', error);
+    }
 
     // Migration: Add content, archived, source columns for unified tracker system
     try {

@@ -21,6 +21,131 @@ import { database } from '../database/PGLiteDatabaseWorker';
 import { shouldExcludeDir } from '../utils/fileFilters';
 import { isPathInWorkspace, getRelativeWorkspacePath } from '../utils/workspaceDetection';
 import { syncTrackerItem, unsyncTrackerItem, isTrackerSyncActive } from './TrackerSyncManager';
+import {
+  getEffectiveTrackerSyncPolicy,
+  getInitialTrackerSyncStatus,
+  shouldSyncTrackerPolicy,
+} from './TrackerPolicyService';
+
+export interface ParsedInlineTrackerCandidate extends Omit<TrackerItem, 'id'> {
+  id?: string;
+  explicitId: boolean;
+}
+
+interface ExistingInlineTrackerRow {
+  id: string;
+  type: string;
+  line_number?: number | null;
+  title?: string | null;
+}
+
+function normalizeTrackerTitle(title: string | undefined): string {
+  return (title || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+export function computeDeterministicInlineTrackerId(
+  relativePath: string,
+  type: string,
+  lineNumber: number | undefined,
+  title: string,
+): string {
+  const hash = crypto
+    .createHash('sha1')
+    .update(`${relativePath}\n${type}\n${lineNumber ?? 0}\n${normalizeTrackerTitle(title)}`)
+    .digest('hex')
+    .slice(0, 12);
+  return `${type}_${hash}`;
+}
+
+export function resolveInlineTrackerIds(
+  candidates: ParsedInlineTrackerCandidate[],
+  existingRows: ExistingInlineTrackerRow[],
+  relativePath: string,
+): TrackerItem[] {
+  const unmatchedExisting = [...existingRows];
+  const candidateTitleCounts = new Map<string, number>();
+  const existingTitleCounts = new Map<string, number>();
+
+  for (const candidate of candidates) {
+    const key = `${candidate.type}::${normalizeTrackerTitle(candidate.title)}`;
+    candidateTitleCounts.set(key, (candidateTitleCounts.get(key) ?? 0) + 1);
+  }
+
+  for (const row of existingRows) {
+    const key = `${row.type}::${normalizeTrackerTitle(row.title ?? undefined)}`;
+    existingTitleCounts.set(key, (existingTitleCounts.get(key) ?? 0) + 1);
+  }
+
+  function takeMatch(
+    predicate: (row: ExistingInlineTrackerRow) => boolean,
+  ): ExistingInlineTrackerRow | null {
+    const index = unmatchedExisting.findIndex(predicate);
+    if (index === -1) return null;
+    const [row] = unmatchedExisting.splice(index, 1);
+    return row;
+  }
+
+  return candidates.map((candidate) => {
+    if (candidate.explicitId && candidate.id) {
+      takeMatch((row) => row.id === candidate.id);
+      return { ...candidate, id: candidate.id };
+    }
+
+    const normalizedTitle = normalizeTrackerTitle(candidate.title);
+    const titleKey = `${candidate.type}::${normalizedTitle}`;
+
+    const exactLineMatch = takeMatch((row) =>
+      row.type === candidate.type &&
+      (row.line_number ?? null) === (candidate.lineNumber ?? null)
+    );
+
+    if (exactLineMatch) {
+      return { ...candidate, id: exactLineMatch.id };
+    }
+
+    const canUseTitleMatch =
+      (candidateTitleCounts.get(titleKey) ?? 0) === 1 &&
+      (existingTitleCounts.get(titleKey) ?? 0) === 1;
+    const titleMatch = canUseTitleMatch
+      ? takeMatch((row) =>
+          row.type === candidate.type &&
+          normalizeTrackerTitle(row.title ?? undefined) === normalizedTitle
+        )
+      : null;
+
+    if (titleMatch) {
+      return { ...candidate, id: titleMatch.id };
+    }
+
+    let nearestIndex = -1;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < unmatchedExisting.length; i++) {
+      const row = unmatchedExisting[i];
+      if (row.type !== candidate.type) continue;
+      if (candidate.lineNumber == null || row.line_number == null) continue;
+      const distance = Math.abs(row.line_number - candidate.lineNumber);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestIndex = i;
+      }
+    }
+
+    if (nearestIndex !== -1 && nearestDistance <= 3) {
+      const [nearest] = unmatchedExisting.splice(nearestIndex, 1);
+      return { ...candidate, id: nearest.id };
+    }
+
+    return {
+      ...candidate,
+      id: computeDeterministicInlineTrackerId(
+        relativePath,
+        candidate.type,
+        candidate.lineNumber,
+        candidate.title,
+      ),
+    };
+  });
+}
 
 export class ElectronDocumentService implements DocumentService {
   private workspacePath: string;
@@ -850,6 +975,8 @@ export class ElectronDocumentService implements DocumentService {
 
     return {
       id: row.id,
+      issueNumber: row.issue_number ?? undefined,
+      issueKey: row.issue_key ?? undefined,
       type: row.type,
       typeTags,
       title: data.title || row.title, // Fallback to generated column
@@ -1454,14 +1581,25 @@ export class ElectronDocumentService implements DocumentService {
 
     const source = payload.source || 'native';
     const contentJson = payload.content ? JSON.stringify(payload.content) : null;
+    const syncPolicy = getEffectiveTrackerSyncPolicy(payload.workspace, payload.type);
+    const syncStatus = getInitialTrackerSyncStatus(syncPolicy);
 
     await database.query(
       `INSERT INTO tracker_items (
         id, type, data, workspace, document_path, line_number,
         created, updated, last_indexed, sync_status,
         content, archived, source, source_ref
-      ) VALUES ($1, $2, $3, $4, '', NULL, NOW(), NOW(), NOW(), 'pending', $5, FALSE, $6, $7)`,
-      [payload.id, payload.type, JSON.stringify(data), payload.workspace, contentJson, source, payload.sourceRef || null]
+      ) VALUES ($1, $2, $3, $4, '', NULL, NOW(), NOW(), NOW(), $5, $6, FALSE, $7, $8)`,
+      [
+        payload.id,
+        payload.type,
+        JSON.stringify(data),
+        payload.workspace,
+        syncStatus,
+        contentJson,
+        source,
+        payload.sourceRef || null,
+      ]
     );
 
     const result = await database.query<any>(
@@ -1490,10 +1628,10 @@ export class ElectronDocumentService implements DocumentService {
    * Parse tracker items from markdown content
    * Note: This function is only called for .md and .markdown files
    */
-  private async parseTrackerItems(filePath: string, relativePath: string): Promise<TrackerItem[]> {
+  private async parseTrackerItems(filePath: string, relativePath: string): Promise<ParsedInlineTrackerCandidate[]> {
     try {
       const content = await fs.readFile(filePath, 'utf-8');
-      const items: TrackerItem[] = [];
+      const items: ParsedInlineTrackerCandidate[] = [];
       const lines = content.split('\n');
 
       // Regex to match: text #type[id:... status:...]
@@ -1566,7 +1704,8 @@ export class ElectronDocumentService implements DocumentService {
           }
 
           items.push({
-            id: props.id || `${type}_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`,
+            id: props.id || undefined,
+            explicitId: Boolean(props.id),
             type: type as TrackerItemType,
             title: title.trim().replace(/^- /, '').replace(/^\[ \] /, '').replace(/^\[x\] /, ''),
             description,
@@ -1613,7 +1752,7 @@ export class ElectronDocumentService implements DocumentService {
 
     try {
       // Parse tracker items from the file
-      const items = await this.parseTrackerItems(fullPath, relativePath);
+      const parsedItems = await this.parseTrackerItems(fullPath, relativePath);
       // TODO: Debug logging - uncomment if needed for troubleshooting
       // console.log(`[DocumentService] Found ${items.length} tracker items in ${relativePath}`);
       // if (items.length > 0) {
@@ -1623,11 +1762,14 @@ export class ElectronDocumentService implements DocumentService {
       // Get existing items for this module
       // console.log(`[DocumentService] Querying database for existing tracker items...`);
       const existingResult = await database.query<any>(
-        `SELECT id FROM tracker_items WHERE workspace = $1 AND document_path = $2`,
+        `SELECT id, type, line_number, title
+         FROM tracker_items
+         WHERE workspace = $1 AND document_path = $2`,
         [this.workspacePath, relativePath]
       );
       // console.log(`[DocumentService] Found ${existingResult.rows.length} existing tracker items in database`);
       const existingIds = new Set(existingResult.rows.map(row => row.id));
+      const items = resolveInlineTrackerIds(parsedItems, existingResult.rows, relativePath);
       const newIds = new Set(items.map(item => item.id));
 
       // Find items to remove (existed before but not anymore)
@@ -2147,14 +2289,20 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
     syncMode?: string;
   }) => {
     try {
-      console.log('[DocumentService] create-tracker-item called:', { id: payload.id, type: payload.type, syncMode: payload.syncMode, workspace: payload.workspace });
+      const syncPolicy = getEffectiveTrackerSyncPolicy(payload.workspace, payload.type);
+      console.log('[DocumentService] create-tracker-item called:', {
+        id: payload.id,
+        type: payload.type,
+        requestedSyncMode: payload.syncMode,
+        effectiveSyncPolicy: syncPolicy,
+        workspace: payload.workspace,
+      });
       const item = await requireDocumentService(event).createTrackerItem(payload);
       console.log('[DocumentService] create-tracker-item created locally:', item.id);
 
-      // If sync policy says shared, push to TrackerRoom
-      if (payload.syncMode === 'shared' || payload.syncMode === 'hybrid') {
+      if (shouldSyncTrackerPolicy(syncPolicy)) {
         const active = isTrackerSyncActive(payload.workspace);
-        console.log('[DocumentService] create-tracker-item sync check:', { syncMode: payload.syncMode, active });
+        console.log('[DocumentService] create-tracker-item sync check:', { syncPolicy, active });
         if (active) {
           try {
             await syncTrackerItem(item);
@@ -2179,25 +2327,30 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
     syncMode?: string;
   }) => {
     try {
-      console.log('[DocumentService] update-tracker-item:', { itemId: payload.itemId, syncMode: payload.syncMode, updateKeys: Object.keys(payload.updates) });
+      console.log('[DocumentService] update-tracker-item:', {
+        itemId: payload.itemId,
+        requestedSyncMode: payload.syncMode,
+        updateKeys: Object.keys(payload.updates),
+      });
       const item = await requireDocumentService(event).updateTrackerItem(payload.itemId, payload.updates);
+      const syncPolicy = getEffectiveTrackerSyncPolicy(item.workspace, item.type);
 
-      // If sync policy says shared, push updated item to TrackerRoom
-      if (payload.syncMode === 'shared' || payload.syncMode === 'hybrid') {
+      if (shouldSyncTrackerPolicy(syncPolicy)) {
         const syncActive = isTrackerSyncActive(item.workspace);
-        console.log('[DocumentService] update-tracker-item sync gate:', { syncMode: payload.syncMode, workspace: item.workspace, syncActive });
+        console.log('[DocumentService] update-tracker-item sync gate:', { syncPolicy, workspace: item.workspace, syncActive });
         try {
           if (syncActive) {
             await syncTrackerItem(item);
             console.log('[DocumentService] update-tracker-item synced:', item.id);
           } else {
+            await requireDocumentService(event).updateTrackerItemSyncStatus(item.id, 'pending');
             console.log('[DocumentService] update-tracker-item skipped: sync not active for workspace');
           }
         } catch (syncErr) {
           console.error('[DocumentService] update-tracker-item sync failed:', syncErr);
         }
       } else {
-        console.log('[DocumentService] update-tracker-item no sync: syncMode =', payload.syncMode);
+        console.log('[DocumentService] update-tracker-item no sync: effective mode =', syncPolicy.mode);
       }
 
       return { success: true, item };
