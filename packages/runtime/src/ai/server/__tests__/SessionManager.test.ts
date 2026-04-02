@@ -6,7 +6,7 @@ import type {
   SessionMeta,
   UpdateSessionMetadataPayload,
 } from '../../adapters/sessionStore';
-import { shouldBlockStartedSessionProviderSwitch, type Message, type SessionData, type TranscriptViewMessage } from '../types';
+import { shouldBlockStartedSessionProviderSwitch, type SessionData, type TranscriptViewMessage } from '../types';
 
 class InMemorySessionStore implements SessionStore {
   private sessions = new Map<string, SessionData>();

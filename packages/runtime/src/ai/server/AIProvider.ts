@@ -10,7 +10,6 @@ import {
   StreamChunk,
   ToolHandler,
   ToolDefinition,
-  Message,
 } from './types';
 import { toolRegistry, toAnthropicTools, toOpenAITools } from '../tools';
 import { buildSystemPrompt } from '../prompt';
@@ -59,7 +58,7 @@ export interface AIProvider extends EventEmitter {
     message: string,
     documentContext?: DocumentContext,
     sessionId?: string,
-    messages?: Message[],
+    messages?: any[],
     workspacePath?: string,
     attachments?: any[]
   ): AsyncIterableIterator<StreamChunk>;
@@ -122,7 +121,7 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
     message: string,
     documentContext?: DocumentContext,
     sessionId?: string,
-    messages?: Message[],
+    messages?: any[],
     workspacePath?: string,
     attachments?: any[]
   ): AsyncIterableIterator<StreamChunk>;

@@ -18,7 +18,8 @@ import React, { useCallback, useRef, useImperativeHandle, forwardRef, useEffect,
 import { useAtom, useSetAtom, useAtomValue } from 'jotai';
 import { store, setInteractiveWidgetHost } from '@nimbalyst/runtime/store';
 import { AgentTranscriptPanel, TodoItem, type InteractiveWidgetHost, type PermissionScope } from '@nimbalyst/runtime';
-import type { SessionData, ChatAttachment } from '@nimbalyst/runtime/ai/server/types';
+import type { SessionData, ChatAttachment, TranscriptViewMessage } from '@nimbalyst/runtime/ai/server/types';
+import { isToolLikeMessage } from '@nimbalyst/runtime/ui/AgentTranscript/utils/messageTypeHelpers';
 import { AIInput, AIInputRef } from './AIInput';
 import { PromptQueueList } from './PromptQueueList';
 import { useDialog } from '../../contexts/DialogContext';
@@ -67,7 +68,7 @@ import {
   loadInitialQueuedPrompts,
 } from '../../store';
 import { streamCompletionSignalAtom } from '../../store/atoms/sessionTranscript';
-import { convertToWorkstreamAtom, sessionPromptAdditionsAtom, sessionLastSubmitAtAtom, sessionDraftLocalModifiedAtAtom } from '../../store/atoms/sessions';
+import { convertToWorkstreamAtom, sessionPromptAdditionsAtom, sessionLastSubmitAtAtom, sessionDraftLocalModifiedAtAtom, nextOptimisticId } from '../../store/atoms/sessions';
 import { scrollToTeammateAtom, scrollToMessageAtom } from '../../store/atoms/agentMode';
 import { usePostHog } from 'posthog-js/react';
 import { setAgentModeSettingsAtom, showPromptAdditionsAtom, hasExternalEditorAtom, externalEditorNameAtom, openInExternalEditorAtom, defaultAgentModelAtom, defaultEffortLevelAtom } from '../../store/atoms/appSettings';
@@ -96,6 +97,37 @@ function expandSessionMentions(
     // No match found -- leave as-is
     return _match;
   });
+}
+
+function makeOptimisticError(text: string, extra?: Partial<TranscriptViewMessage>): TranscriptViewMessage {
+  return {
+    id: nextOptimisticId(),
+    sequence: -1,
+    createdAt: new Date(),
+    type: 'system_message',
+    text,
+    subagentId: null,
+    isError: true,
+    systemMessage: { systemType: 'error' },
+    ...extra,
+  };
+}
+
+function makeOptimisticUserMessage(
+  text: string,
+  mode?: 'agent' | 'planning',
+  attachments?: ChatAttachment[],
+): TranscriptViewMessage {
+  return {
+    id: nextOptimisticId(),
+    sequence: -1,
+    createdAt: new Date(),
+    type: 'user_message',
+    text,
+    subagentId: null,
+    mode,
+    attachments,
+  };
 }
 
 interface Todo {
@@ -484,17 +516,10 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
       if (!isCodexOpenAIAuthError) {
         // Add error as an assistant message so user can see what went wrong
-        const errorMessage = {
-          id: -Date.now(),
-          sequence: -1,
-          createdAt: new Date(),
-          type: 'system_message' as const,
-          text: `Error: ${sessionError.message}`,
-          subagentId: null,
-          isError: true,
-          ...(sessionError.isAuthError && { isAuthError: true }),
-          systemMessage: { systemType: 'error' as const },
-        };
+        const errorMessage = makeOptimisticError(
+          `Error: ${sessionError.message}`,
+          sessionError.isAuthError ? { isAuthError: true } : undefined,
+        );
         updateSessionStore({
           sessionId,
           updates: {
@@ -685,16 +710,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         // Revert local state since persistence failed
         setAiMode(aiMode);
         // Show error to user
-        const errorMessage = {
-          id: -Date.now(),
-          sequence: -1,
-          createdAt: new Date(),
-          type: 'system_message' as const,
-          text: 'Failed to switch to planning mode. Please try again.',
-          subagentId: null,
-          isError: true,
-          systemMessage: { systemType: 'error' as const },
-        };
+        const errorMessage = makeOptimisticError('Failed to switch to planning mode. Please try again.');
         updateSessionStore({
           sessionId,
           updates: {
@@ -756,16 +772,11 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     // Optimistically set processing state - will be confirmed by session:started event
     setIsProcessing(true);
 
-    const userMessage = {
-      id: -Date.now(),
-      sequence: -1,
-      createdAt: new Date(),
-      type: 'user_message' as const,
-      text: message,
-      subagentId: null,
-      mode: overrideMode as 'agent' | 'planning' | undefined,
-      attachments: attachments.length > 0 ? attachments : undefined,
-    };
+    const userMessage = makeOptimisticUserMessage(
+      message,
+      overrideMode as 'agent' | 'planning' | undefined,
+      attachments.length > 0 ? attachments : undefined,
+    );
     updateSessionStore({
       sessionId,
       updates: {
@@ -795,16 +806,9 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     } catch (error) {
       console.error('[SessionTranscript] Failed to send message:', error);
       // Show error in transcript so user knows what went wrong
-      const errorMessage = {
-        id: -Date.now(),
-        sequence: -1,
-        createdAt: new Date(),
-        type: 'system_message' as const,
-        text: `Error: ${error instanceof Error ? error.message : 'Failed to send message'}`,
-        subagentId: null,
-        isError: true,
-        systemMessage: { systemType: 'error' as const },
-      };
+      const errorMessage = makeOptimisticError(
+        `Error: ${error instanceof Error ? error.message : 'Failed to send message'}`,
+      );
       updateSessionStore({
         sessionId,
         updates: {
@@ -851,15 +855,10 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     if (!sessionData) return;
 
     const message = '/compact';
-    const userMessage = {
-      id: -Date.now(),
-      sequence: -1,
-      createdAt: new Date(),
-      type: 'user_message' as const,
-      text: message,
-      subagentId: null,
-      mode: aiMode as 'agent' | 'planning' | undefined,
-    };
+    const userMessage = makeOptimisticUserMessage(
+      message,
+      aiMode as 'agent' | 'planning' | undefined,
+    );
     updateSessionStore({
       sessionId,
       updates: {
@@ -1443,7 +1442,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
         // Tool rows are hidden when followed by an assistant row; scroll to that visible assistant.
         let targetIdx = i + 1;
-        while (targetIdx < msgs.length && (msgs[targetIdx].type === 'tool_call' || msgs[targetIdx].type === 'interactive_prompt' || msgs[targetIdx].type === 'subagent')) {
+        while (targetIdx < msgs.length && isToolLikeMessage(msgs[targetIdx])) {
           targetIdx++;
         }
         if (targetIdx < msgs.length && msgs[targetIdx].type === 'assistant_message') {

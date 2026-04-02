@@ -32,7 +32,6 @@ import {
   ProviderCapabilities,
   StreamChunk,
   AIModel,
-  Message,
   PermissionRequestContent,
   PermissionResponseContent,
   CLAUDE_CODE_VARIANTS,
@@ -399,7 +398,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     message: string,
     documentContext?: DocumentContext,
     sessionId?: string,
-    messages?: Message[],
+    messages?: any[],
     workspacePath?: string,
     attachments?: any[]
   ): AsyncIterableIterator<StreamChunk> {

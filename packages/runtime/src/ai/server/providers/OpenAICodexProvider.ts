@@ -10,7 +10,6 @@ import {
   ProviderConfig,
   DocumentContext,
   StreamChunk,
-  Message,
   ProviderCapabilities,
   AIModel,
   AIProviderType,
@@ -712,7 +711,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     message: string,
     documentContext?: DocumentContext,
     sessionId?: string,
-    messages?: Message[],
+    messages?: any[],
     workspacePath?: string,
     attachments?: ChatAttachment[]
   ): AsyncIterableIterator<StreamChunk> {
@@ -1309,7 +1308,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
   private buildCodexPrompt(options: {
     systemPrompt: string;
     message: string;
-    messages?: Message[];
+    messages?: any[];
     shouldBootstrapFromHistory: boolean;
   }): string {
     // Note: System prompt is now passed via developer_instructions in thread options.

@@ -10,7 +10,6 @@ import {
   ProviderConfig,
   ProviderCapabilities,
   StreamChunk,
-  Message,
   AIModel,
   ModelIdentifier
 } from '../types';
@@ -50,7 +49,7 @@ export class LMStudioProvider extends BaseAIProvider {
     message: string,
     documentContext?: DocumentContext,
     sessionId?: string,
-    messages?: Message[],
+    messages?: any[],
     workspacePath?: string,
     attachments?: any[]
   ): AsyncIterableIterator<StreamChunk> {

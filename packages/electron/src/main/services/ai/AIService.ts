@@ -1524,7 +1524,7 @@ export class AIService {
       }
 
       let contextResponse = '';
-      for await (const chunk of contextProvider.sendMessage('/context', undefined, session.id, updatedSession.messages as any, workspacePath, [])) {
+      for await (const chunk of contextProvider.sendMessage('/context', undefined, session.id, updatedSession.messages, workspacePath, [])) {
         if (!chunk) continue;
 
         if (chunk.type === 'text') {
@@ -2723,7 +2723,7 @@ export class AIService {
           }
         }
 
-        for await (const chunk of provider.sendMessage(messageToSend, contextWithSession, session.id, sessionMessages as any, effectiveWorkspacePath, attachments)) {
+        for await (const chunk of provider.sendMessage(messageToSend, contextWithSession, session.id, sessionMessages, effectiveWorkspacePath, attachments)) {
           if (!chunk) continue;
           chunkCount++;
 

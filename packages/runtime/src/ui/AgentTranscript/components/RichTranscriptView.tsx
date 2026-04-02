@@ -13,6 +13,7 @@ import { formatToolArguments, extractFilePathFromArgs } from '../utils/pathResol
 import { EditToolResultCard } from './EditToolResultCard';
 import { TranscriptSearchBar } from './TranscriptSearchBar';
 import { formatToolDisplayName } from '../utils/toolNameFormatter';
+import { isToolLikeMessage } from '../utils/messageTypeHelpers';
 import { getCustomToolWidget, type ToolCallDiffResult } from './CustomToolWidgets';
 import { ToolCallChanges } from './ToolCallChanges';
 import { setSessionIsAtBottom, getSessionIsAtBottom } from '../../../store/atoms/transcriptScroll';
@@ -750,7 +751,7 @@ export const RichTranscriptView = React.forwardRef<
     // Check the prop (live IPC state) AND scan messages directly (survives session reloads).
     if (hasPendingInteractivePrompt) return false;
     const hasPendingQuestion = messages.some(
-      msg => (msg.type === 'tool_call' || msg.type === 'interactive_prompt' || msg.type === 'subagent') && msg.toolCall?.toolName === 'AskUserQuestion' && !msg.toolCall.result
+      msg => isToolLikeMessage(msg) && msg.toolCall?.toolName === 'AskUserQuestion' && !msg.toolCall.result
     );
     if (hasPendingQuestion) return false;
     // Check isProcessing prop first (most reliable for queued prompts from mobile)
@@ -829,10 +830,10 @@ export const RichTranscriptView = React.forwardRef<
     const indices: number[] = [];
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
-      if ((msg.type === 'tool_call' || msg.type === 'interactive_prompt' || msg.type === 'subagent') && msg.toolCall?.toolName === 'ToolPermission' && !msg.toolCall.result) {
+      if (isToolLikeMessage(msg) && msg.toolCall?.toolName === 'ToolPermission' && !msg.toolCall.result) {
         // Find the next assistant message that renders this tool via toolMessagesBefore
         let targetIdx = i + 1;
-        while (targetIdx < messages.length && (messages[targetIdx].type === 'tool_call' || messages[targetIdx].type === 'interactive_prompt' || messages[targetIdx].type === 'subagent')) {
+        while (targetIdx < messages.length && isToolLikeMessage(messages[targetIdx])) {
           targetIdx++;
         }
         if (targetIdx < messages.length && messages[targetIdx].type === 'assistant_message') {
@@ -1144,7 +1145,7 @@ export const RichTranscriptView = React.forwardRef<
     // Hide Task tool calls that were cancelled as siblings of a parallel spawn.
     // These get exactly "<tool_use_error>Sibling tool call errored</tool_use_error>"
     // as their result and were never actually started.
-    if (toolMsg.toolCall.toolName === 'Task' && (toolMsg as any).isError) {
+    if (toolMsg.toolCall.toolName === 'Task' && toolMsg.isError) {
       const result = toolMsg.toolCall.result;
       const resultStr = typeof result === 'string' ? result : '';
       if (/^\s*(<tool_use_error>)?\s*Sibling tool call errored\s*(<\/tool_use_error>)?\s*$/.test(resultStr)) {
@@ -1292,7 +1293,7 @@ export const RichTranscriptView = React.forwardRef<
               }
               const teammateStatus = agentId ? currentTeammates?.find(t => t.agentId === agentId)?.status : undefined;
               // If no metadata yet but spawn succeeded (isError due to interception), assume running
-              const effectiveStatus = teammateStatus || (tool.result && (toolMsg as any).isError ? 'running' : tool.result ? 'completed' : null);
+              const effectiveStatus = teammateStatus || (tool.result && toolMsg.isError ? 'running' : tool.result ? 'completed' : null);
               if (effectiveStatus === 'running') {
                 return (
                   <span className="flex items-center gap-1 shrink-0">
@@ -1337,10 +1338,10 @@ export const RichTranscriptView = React.forwardRef<
               return null;
             })() : (
               <>
-                {tool.result && !(toolMsg as any).isError && (
+                {tool.result && !toolMsg.isError && (
                   <MaterialSymbol icon="check_circle" size={16} className="rich-transcript-tool-success w-4 h-4 text-[var(--nim-success)] shrink-0" />
                 )}
-                {tool.result && (toolMsg as any).isError && (
+                {tool.result && toolMsg.isError && (
                   <MaterialSymbol icon="cancel" size={16} className="rich-transcript-tool-error w-4 h-4 text-[var(--nim-error)] shrink-0" />
                 )}
               </>
@@ -1551,7 +1552,7 @@ export const RichTranscriptView = React.forwardRef<
                 >
                   {messages.map((message, index) => {
                     const isUser = message.type === 'user_message';
-                    const isTool = (message.type === 'tool_call' || message.type === 'interactive_prompt' || message.type === 'subagent');
+                    const isTool = isToolLikeMessage(message);
                     const isCollapsed = collapsedMessages.has(index);
 
                     // Hide assistant/tool messages that sit between agent notifications.
@@ -1559,15 +1560,15 @@ export const RichTranscriptView = React.forwardRef<
                     // message - they appear as dark bars with scrollbars and add visual noise.
                     // NEVER hide interactive tool widgets (ToolPermission, ExitPlanMode, etc.) that require user action.
                     // Also never hide assistant messages that would carry interactive widgets in toolMessagesBefore.
-                    if (message.type === 'assistant_message' || (message.type === 'tool_call' || message.type === 'interactive_prompt' || message.type === 'subagent')) {
+                    if (message.type === 'assistant_message' || isToolLikeMessage(message)) {
                       const INTERACTIVE_WIDGETS = ['ToolPermission', 'ExitPlanMode', 'AskUserQuestion', 'GitCommitProposal'];
-                      const isInteractiveWidget = (message.type === 'tool_call' || message.type === 'interactive_prompt' || message.type === 'subagent') && message.toolCall?.toolName &&
+                      const isInteractiveWidget = isToolLikeMessage(message) && message.toolCall?.toolName &&
                         INTERACTIVE_WIDGETS.includes(message.toolCall.toolName);
                       // For assistant messages, check if preceding tool messages contain interactive widgets
                       let hasInteractiveToolsBefore = false;
                       if (message.type === 'assistant_message') {
                         let checkPrev = index - 1;
-                        while (checkPrev >= 0 && (messages[checkPrev].type === 'tool_call' || messages[checkPrev].type === 'interactive_prompt' || messages[checkPrev].type === 'subagent')) {
+                        while (checkPrev >= 0 && isToolLikeMessage(messages[checkPrev])) {
                           if (messages[checkPrev].toolCall?.toolName && INTERACTIVE_WIDGETS.includes(messages[checkPrev].toolCall!.toolName)) {
                             hasInteractiveToolsBefore = true;
                             break;
@@ -1594,7 +1595,7 @@ export const RichTranscriptView = React.forwardRef<
                     const toolMessagesBefore: { message: TranscriptViewMessage, index: number }[] = [];
                     if (message.type === 'assistant_message') {
                       let checkIdx = index - 1;
-                      while (checkIdx >= 0 && (messages[checkIdx].type === 'tool_call' || messages[checkIdx].type === 'interactive_prompt' || messages[checkIdx].type === 'subagent')) {
+                      while (checkIdx >= 0 && isToolLikeMessage(messages[checkIdx])) {
                         toolMessagesBefore.unshift({ message: messages[checkIdx], index: checkIdx });
                         checkIdx--;
                       }
@@ -1603,7 +1604,7 @@ export const RichTranscriptView = React.forwardRef<
                     // Skip rendering tool messages - they'll be rendered with their assistant message
                     if (isTool) {
                       let nextIndex = index + 1;
-                      while (nextIndex < messages.length && (messages[nextIndex].type === 'tool_call' || messages[nextIndex].type === 'interactive_prompt' || messages[nextIndex].type === 'subagent')) {
+                      while (nextIndex < messages.length && isToolLikeMessage(messages[nextIndex])) {
                         nextIndex++;
                       }
                       if (nextIndex < messages.length && messages[nextIndex].type === 'assistant_message') {
@@ -1615,7 +1616,7 @@ export const RichTranscriptView = React.forwardRef<
                     // Check if this is the start of a new message group
                     let effectivePrevMessage = null;
                     let checkIdx = index - 1;
-                    while (checkIdx >= 0 && (messages[checkIdx].type === 'tool_call' || messages[checkIdx].type === 'interactive_prompt' || messages[checkIdx].type === 'subagent')) {
+                    while (checkIdx >= 0 && isToolLikeMessage(messages[checkIdx])) {
                       checkIdx--;
                     }
                     if (checkIdx >= 0) {
@@ -1630,13 +1631,6 @@ export const RichTranscriptView = React.forwardRef<
                           {renderToolCard(message, index, 0)}
                         </div>
                       );
-                    }
-
-                    // Hide system-generated user-role messages that have no meaningful content
-                    // (tool results, slash command output). These have isUserInput explicitly set to false.
-                    // But keep messages with actual text content (e.g., compaction summaries).
-                    if (isUser && message.type !== 'user_message' && !message.metadata?.isTeammateMessage && !message.text?.trim()) {
-                      return <div key={`${sessionId}-${index}`} style={{ display: 'none' }} />;
                     }
 
                     // Render teammate/sub-agent messages as compact inline notifications
@@ -1800,7 +1794,7 @@ export const RichTranscriptView = React.forwardRef<
                         {!isUser && (() => {
                           // Check if this is the last message in the assistant group
                           let nextNonToolIdx = index + 1;
-                          while (nextNonToolIdx < messages.length && (messages[nextNonToolIdx].type === 'tool_call' || messages[nextNonToolIdx].type === 'interactive_prompt' || messages[nextNonToolIdx].type === 'subagent')) {
+                          while (nextNonToolIdx < messages.length && isToolLikeMessage(messages[nextNonToolIdx])) {
                             nextNonToolIdx++;
                           }
                           const isEndOfGroup = nextNonToolIdx >= messages.length || messages[nextNonToolIdx].type !== 'assistant_message';

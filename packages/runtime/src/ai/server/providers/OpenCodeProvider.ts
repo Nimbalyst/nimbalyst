@@ -21,7 +21,6 @@ import {
   ProviderConfig,
   DocumentContext,
   StreamChunk,
-  Message,
   ProviderCapabilities,
   AIModel,
   AIProviderType,
@@ -228,7 +227,7 @@ export class OpenCodeProvider extends BaseAgentProvider {
     message: string,
     documentContext?: DocumentContext,
     sessionId?: string,
-    messages?: Message[],
+    messages?: any[],
     workspacePath?: string,
     attachments?: ChatAttachment[]
   ): AsyncIterableIterator<StreamChunk> {

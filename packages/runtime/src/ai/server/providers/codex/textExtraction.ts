@@ -1,9 +1,7 @@
 /**
  * Shared utility for extracting text content from Codex SDK events.
  *
- * Consolidates text extraction logic used by both:
- * - codexEventParser.ts (for parsing events at save time)
- * - CodexOutputRenderer.tsx (for parsing events at display time)
+ * Used by codexEventParser.ts for parsing events at save time.
  */
 
 /**

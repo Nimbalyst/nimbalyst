@@ -67,6 +67,13 @@ function stripSystemReminderTags(content: string): string {
     .trim();
 }
 
+// Separate ID counter for server-message view models. Starts far from the
+// optimistic counter range (-1, -2, ...) used in the renderer to avoid collisions.
+let serverMsgIdCounter = -1_000_000;
+function nextServerMsgId(): number {
+  return serverMsgIdCounter--;
+}
+
 /**
  * Convert a raw server/provider message into a TranscriptViewMessage
  * for in-memory session state. Used by the legacy addMessage path.
@@ -81,7 +88,7 @@ function viewMessageFromServerMessage(msg: any): TranscriptViewMessage {
   const type = roleToType[msg.role] ?? 'assistant_message';
 
   const vm: TranscriptViewMessage = {
-    id: -(msg.timestamp || Date.now()),
+    id: nextServerMsgId(),
     sequence: -1,
     createdAt: new Date(msg.timestamp || Date.now()),
     type,

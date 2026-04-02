@@ -17,7 +17,7 @@
 import { atom } from 'jotai';
 import { atomFamily } from '../debug/atomFamilyRegistry';
 import { store } from '@nimbalyst/runtime/store';
-import { ModelIdentifier, type ChatAttachment, type Message, type TranscriptViewMessage } from '@nimbalyst/runtime/ai/server/types';
+import { ModelIdentifier, type ChatAttachment, type TranscriptViewMessage } from '@nimbalyst/runtime/ai/server/types';
 import type { SessionMeta } from '@nimbalyst/runtime';
 import { workstreamStateAtom, setWorkstreamActiveChildAtom } from './workstreamState';
 
@@ -27,6 +27,14 @@ export type { SessionMeta };
 
 /** @deprecated Use SessionMeta directly */
 export type SessionListItem = SessionMeta;
+
+// Monotonically decreasing counter for optimistic message IDs.
+// Avoids collisions from -Date.now() when multiple messages are created
+// in the same millisecond.
+let optimisticIdCounter = -1;
+export function nextOptimisticId(): number {
+  return optimisticIdCounter--;
+}
 
 /**
  * @deprecated Use SessionMeta and sessionRegistryAtom instead
@@ -1583,14 +1591,17 @@ export const reloadSessionDataAtom = atom(
 
           // Collect optimistic messages (negative IDs) that aren't yet in the DB.
           // These were added locally before the provider persisted them.
-          // Drop any optimistic message whose text+type now appears in the DB
-          // (the canonical version has arrived with a real positive ID).
+          // Drop any optimistic message whose type+text+createdAt matches a DB
+          // message (within 5s tolerance). This avoids premature eviction when a
+          // user sends two identical messages (e.g. "yes" twice).
           const optimisticMessages = localMessages.filter(
             (m: TranscriptViewMessage) =>
               m.id < 0 &&
               !dbMessages.some(
                 (db: TranscriptViewMessage) =>
-                  db.type === m.type && db.text === m.text
+                  db.type === m.type &&
+                  db.text === m.text &&
+                  Math.abs(db.createdAt.getTime() - m.createdAt.getTime()) < 5000
               )
           );
 
