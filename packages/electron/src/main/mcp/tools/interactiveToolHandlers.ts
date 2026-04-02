@@ -684,78 +684,144 @@ export async function handleGitCommitProposal(
     workspacePath
   );
 
-  // Wait indefinitely for user confirmation.
+  // Wait for user confirmation with DB polling fallback.
+  // The IPC listener is the fast path; DB polling catches responses when the
+  // transport drops (the bug that caused this tool to hang indefinitely).
   return new Promise((resolve) => {
     const getFilePath = (f: FileToStage) =>
       typeof f === "string" ? f : f.path;
+
+    let settled = false;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+    type CommitResult = {
+      action: "committed" | "cancelled";
+      commitHash?: string;
+      commitDate?: string;
+      error?: string;
+      filesCommitted?: string[];
+      commitMessage?: string;
+    };
+
+    const settle = (result: CommitResult, source: string) => {
+      if (settled) return;
+      settled = true;
+
+      console.log(
+        `[MCP Server] Git commit proposal settled via ${source}: action=${result.action}, hash=${result.commitHash || "none"}`
+      );
+
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+      ipcMain.removeListener(responseChannel, onResponse);
+
+      if (result.action === "committed" && result.commitHash) {
+        const filesCount =
+          result.filesCommitted?.length ||
+          proposalArgs.filesToStage!.map(getFilePath).length;
+        resolve({
+          content: [
+            {
+              type: "text",
+              text: `User confirmed and committed ${filesCount} file(s).\nCommit hash: ${
+                result.commitHash
+              }${
+                result.commitDate
+                  ? `\nCommit date: ${result.commitDate}`
+                  : ""
+              }\nCommit message: ${
+                result.commitMessage || proposalArgs.commitMessage
+              }`,
+            },
+          ],
+          isError: false,
+        });
+      } else if (result.action === "committed" && !result.commitHash) {
+        resolve({
+          content: [
+            {
+              type: "text",
+              text: `Commit failed: No commit hash returned. The files may not have been staged correctly.`,
+            },
+          ],
+          isError: true,
+        });
+      } else {
+        resolve({
+          content: [
+            {
+              type: "text",
+              text: result.error
+                ? `Commit failed: ${result.error}`
+                : "User cancelled the commit proposal.",
+            },
+          ],
+          isError: result.error ? true : false,
+        });
+      }
+    };
+
+    const onResponse = (_event: unknown, result: CommitResult) =>
+      settle(result, "ipc");
 
     const responseChannel = `git-commit-proposal-response:${sessionId || "unknown"}:${proposalId}`;
     console.log(
       `[MCP Server] Registering git commit proposal listener on channel: ${responseChannel}`
     );
-    ipcMain.once(
-      responseChannel,
-      async (
-        _event,
-        result: {
-          action: "committed" | "cancelled";
-          commitHash?: string;
-          commitDate?: string;
-          error?: string;
-          filesCommitted?: string[];
-          commitMessage?: string;
-        }
-      ) => {
-        console.log(
-          `[MCP Server] Git commit proposal response received: action=${result.action}, hash=${result.commitHash || "none"}`
-        );
+    ipcMain.on(responseChannel, onResponse);
 
-        if (result.action === "committed" && result.commitHash) {
-          const filesCount =
-            result.filesCommitted?.length ||
-            proposalArgs.filesToStage!.map(getFilePath).length;
-          resolve({
-            content: [
-              {
-                type: "text",
-                text: `User confirmed and committed ${filesCount} file(s).\nCommit hash: ${
-                  result.commitHash
-                }${
-                  result.commitDate
-                    ? `\nCommit date: ${result.commitDate}`
-                    : ""
-                }\nCommit message: ${
-                  result.commitMessage || proposalArgs.commitMessage
-                }`,
-              },
-            ],
-            isError: false,
-          });
-        } else if (result.action === "committed" && !result.commitHash) {
-          resolve({
-            content: [
-              {
-                type: "text",
-                text: `Commit failed: No commit hash returned. The files may not have been staged correctly.`,
-              },
-            ],
-            isError: true,
-          });
-        } else {
-          resolve({
-            content: [
-              {
-                type: "text",
-                text: result.error
-                  ? `Commit failed: ${result.error}`
-                  : "User cancelled the commit proposal.",
-              },
-            ],
-            isError: result.error ? true : false,
-          });
+    // Database polling fallback: if the IPC path fails (e.g., transport drop),
+    // poll for a response message written by the durable prompt handler.
+    if (targetSessionId && targetSessionId !== "unknown") {
+      const POLL_INTERVAL = 1000;
+      const MAX_POLL_TIME = 10 * 60 * 1000;
+      const pollStart = Date.now();
+
+      pollTimer = setInterval(async () => {
+        if (settled || Date.now() - pollStart > MAX_POLL_TIME) {
+          if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+          }
+          return;
         }
-      }
-    );
+
+        try {
+          const messages = await AgentMessagesRepository.list(
+            targetSessionId,
+            { limit: 20 }
+          );
+          for (const msg of messages) {
+            try {
+              const content = JSON.parse(msg.content);
+              if (
+                content.type === "git_commit_proposal_response" &&
+                content.proposalId === proposalId
+              ) {
+                settle(
+                  {
+                    action: content.action || "cancelled",
+                    commitHash: content.commitHash,
+                    commitDate: content.commitDate,
+                    error: content.error,
+                    filesCommitted: content.filesCommitted,
+                    commitMessage: content.commitMessage,
+                  },
+                  "db-poll"
+                );
+                return;
+              }
+            } catch {
+              // Not valid JSON, skip
+            }
+          }
+        } catch {
+          // Database error, continue polling
+        }
+      }, POLL_INTERVAL);
+    }
 
     // Send the proposal to the renderer
     commitWindow.webContents.send("mcp:gitCommitProposal", {
