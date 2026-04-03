@@ -6,7 +6,7 @@
  * service transparently ensures the session is transformed first.
  */
 
-import { TranscriptTransformer } from './TranscriptTransformer';
+import { TranscriptTransformer, type OnCanonicalEventWritten } from './TranscriptTransformer';
 import { TranscriptProjector, type TranscriptViewMessage } from './TranscriptProjector';
 import type { IRawMessageStore, ISessionMetadataStore } from './TranscriptTransformer';
 import type { ITranscriptEventStore, TranscriptEvent, TranscriptEventType } from './types';
@@ -23,6 +23,14 @@ export class TranscriptMigrationService {
   }
 
   /**
+   * Set callback fired after each canonical event write.
+   * Used to notify the renderer in real-time during streaming.
+   */
+  setOnEventWritten(cb: OnCanonicalEventWritten): void {
+    this.transformer.setOnEventWritten(cb);
+  }
+
+  /**
    * Get canonical events for a session, transforming lazily if needed.
    * This is the primary API for consumers.
    */
@@ -35,7 +43,7 @@ export class TranscriptMigrationService {
       offset?: number;
     },
   ): Promise<TranscriptEvent[]> {
-    await this.transformer.ensureTransformed(sessionId, provider);
+    await this.transformer.ensureUpToDate(sessionId, provider);
     return this.transcriptStore.getSessionEvents(sessionId, options);
   }
 
@@ -55,7 +63,19 @@ export class TranscriptMigrationService {
    * the transcript store directly (e.g. efficient tail queries).
    */
   async ensureTransformed(sessionId: string, provider: string): Promise<void> {
-    await this.transformer.ensureTransformed(sessionId, provider);
+    await this.transformer.ensureUpToDate(sessionId, provider);
+  }
+
+  /**
+   * Process new raw messages for a session incrementally.
+   * Call after writing raw messages to ai_agent_messages.
+   * Returns the canonical events that were written.
+   */
+  async processNewMessages(
+    sessionId: string,
+    provider: string,
+  ): Promise<TranscriptEvent[]> {
+    return this.transformer.processNewMessages(sessionId, provider);
   }
 
   /**
@@ -68,7 +88,7 @@ export class TranscriptMigrationService {
     count: number,
     options?: { excludeEventTypes?: TranscriptEventType[] },
   ): Promise<TranscriptEvent[]> {
-    await this.transformer.ensureTransformed(sessionId, provider);
+    await this.transformer.ensureUpToDate(sessionId, provider);
     return this.transcriptStore.getTailEvents(sessionId, count, options);
   }
 
@@ -80,11 +100,22 @@ export class TranscriptMigrationService {
 
     if (
       status.transformStatus === 'complete' &&
-      status.transformVersion === TranscriptTransformer.CURRENT_VERSION
+      status.transformVersion != null &&
+      (status.transformVersion === TranscriptTransformer.CURRENT_VERSION ||
+       status.transformVersion >= TranscriptTransformer.LIVE_WRITE_VERSION)
     ) {
       return false;
     }
 
     return true;
+  }
+
+  /**
+   * @deprecated No longer needed. All sessions are processed by the transformer.
+   * Kept temporarily for backwards compatibility during provider migration.
+   */
+  async markSessionAsLive(sessionId: string): Promise<void> {
+    // No-op: the transformer now handles all sessions uniformly.
+    // Previously this set LIVE_WRITE_VERSION to skip transformer processing.
   }
 }

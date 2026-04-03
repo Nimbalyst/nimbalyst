@@ -367,7 +367,7 @@ const SystemReminderCard: React.FC<{
         <MaterialSymbol icon="notification_important" size={14} />
         <span className="font-medium uppercase tracking-[0.08em]">System Reminder</span>
         <span className="ml-auto text-[10px] text-[var(--nim-text-faint)]">
-          {formatMessageTime(message.createdAt.getTime())}
+          {formatMessageTime(message.createdAt?.getTime() ?? 0)}
         </span>
       </div>
       <p className="m-0 text-[0.875rem] leading-relaxed text-[var(--nim-text-muted)] whitespace-normal break-words">
@@ -809,14 +809,14 @@ export const RichTranscriptView = React.forwardRef<
   const { restartAfterIndex, restartAtBottom } = useMemo(() => {
     if (!appStartTime || messages.length === 0) return { restartAfterIndex: -1, restartAtBottom: false };
     // Only show restart indicator if this session has messages from before the restart
-    const hasPreRestartMessages = messages.some(m => m.createdAt.getTime() <= appStartTime);
+    const hasPreRestartMessages = messages.some(m => (m.createdAt?.getTime() ?? 0) <= appStartTime);
     if (!hasPreRestartMessages) return { restartAfterIndex: -1, restartAtBottom: false };
     // If all messages are before restart, show at bottom
-    if (messages[messages.length - 1].createdAt.getTime() <= appStartTime) return { restartAfterIndex: -1, restartAtBottom: true };
+    if ((messages[messages.length - 1].createdAt?.getTime() ?? 0) <= appStartTime) return { restartAfterIndex: -1, restartAtBottom: true };
     // Find the first message after restart that will actually be rendered visibly:
     // Skip tool messages (they render hidden, grouped with the next assistant message)
     for (let i = 0; i < messages.length; i++) {
-      if (messages[i].createdAt.getTime() > appStartTime && messages[i].type !== 'tool_call') {
+      if ((messages[i].createdAt?.getTime() ?? 0) > appStartTime && messages[i].type !== 'tool_call') {
         return { restartAfterIndex: i, restartAtBottom: false };
       }
     }
@@ -1426,7 +1426,7 @@ export const RichTranscriptView = React.forwardRef<
               {!isSubAgent && getToolCallDiffs && tool.providerToolCallId && tool.result !== undefined && tool.result !== null && (
                 <ToolCallChanges
                   toolCallItemId={tool.providerToolCallId}
-                  toolCallTimestamp={toolMsg.createdAt.getTime()}
+                  toolCallTimestamp={toolMsg.createdAt?.getTime() ?? 0}
                   getToolCallDiffs={getToolCallDiffs}
                   isExpanded={isExpanded}
                   workspacePath={workspacePath}
@@ -1661,7 +1661,7 @@ export const RichTranscriptView = React.forwardRef<
                               <summary className="flex items-center gap-1.5 py-0.5 text-xs text-[var(--nim-text-faint)] hover:text-[var(--nim-text-muted)]">
                                 <MaterialSymbol icon="chevron_right" size={14} className="teammate-chevron transition-transform shrink-0 w-3.5" />
                                 <span className="flex-1 truncate">{label}: {preview}</span>
-                                <span className="text-[10px] shrink-0">{formatMessageTime(message.createdAt.getTime())}</span>
+                                <span className="text-[10px] shrink-0">{formatMessageTime(message.createdAt?.getTime() ?? 0)}</span>
                               </summary>
                               <div className="teammate-content ml-5 mt-1 mb-0.5">
                                 <MarkdownRenderer content={content} isUser={false} onOpenFile={onOpenFile} />
@@ -1671,7 +1671,7 @@ export const RichTranscriptView = React.forwardRef<
                             <div className="flex items-center gap-1.5 py-0.5 text-xs text-[var(--nim-text-faint)]">
                               <MaterialSymbol icon="chevron_right" size={14} className="shrink-0 w-3.5 invisible" />
                               <span className="flex-1 truncate">{label}: {content}</span>
-                              <span className="text-[10px] shrink-0">{formatMessageTime(message.createdAt.getTime())}</span>
+                              <span className="text-[10px] shrink-0">{formatMessageTime(message.createdAt?.getTime() ?? 0)}</span>
                             </div>
                           )}
                         </div>
@@ -1733,7 +1733,7 @@ export const RichTranscriptView = React.forwardRef<
                                 </span>
                               )}
                               <span className="rich-transcript-message-time text-xs text-[var(--nim-text-faint)]">
-                                {formatMessageTime(message.createdAt.getTime())}
+                                {formatMessageTime(message.createdAt?.getTime() ?? 0)}
                               </span>
                             </div>
                             <div className="rich-transcript-message-actions flex items-center gap-1">
@@ -1813,8 +1813,8 @@ export const RichTranscriptView = React.forwardRef<
                             startIdx--;
                           }
                           if (startIdx < 0) return null; // No preceding user input message
-                          const startTimestamp = messages[startIdx].createdAt.getTime();
-                          const endTimestamp = message.createdAt.getTime();
+                          const startTimestamp = messages[startIdx].createdAt?.getTime() ?? 0;
+                          const endTimestamp = message.createdAt?.getTime() ?? 0;
                           const duration = formatDuration(startTimestamp, endTimestamp);
                           if (!duration || duration === '0ms') return null;
                           const fileStats = computeTurnFileStats(messages, startIdx, index);

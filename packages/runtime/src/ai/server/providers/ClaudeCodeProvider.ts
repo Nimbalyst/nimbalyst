@@ -60,8 +60,6 @@ import {
 } from './claudeCode/messagePreparation';
 import {
   applyToolResultToToolCall,
-  buildToolResultMessage,
-  buildToolUseMessage,
   isSearchableAssistantChunk,
 } from './claudeCode/toolChunkUtils';
 import {
@@ -72,7 +70,6 @@ import {
   buildBedrockToolErrorGuidance,
   detectResultChunkErrorFlags,
   extractResultChunkErrorMessage,
-  isAuthenticationSummary,
 } from './claudeCode/resultChunkUtils';
 
 import {
@@ -80,6 +77,7 @@ import {
   pollForAskUserQuestionResponse,
   type PendingAskUserQuestionEntry,
 } from './claudeCode/askUserQuestion';
+import { ClaudeCodeTranscriptAdapter } from './claudeCode/ClaudeCodeTranscriptAdapter';
 
 import {
   resolveImmediateToolDecision as resolveImmediateToolDecisionHelper,
@@ -616,6 +614,19 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         }), metadataToLog, hideMessages, undefined, true /* searchable */);
       }
 
+      // Create transcript adapter as chunk parser (returns ParsedItems for the streaming loop).
+      // Canonical events are written by the TranscriptTransformer from raw ai_agent_messages.
+      const transcriptAdapter = sessionId
+        ? new ClaudeCodeTranscriptAdapter(null, sessionId)
+        : null;
+
+      // Canonical transcript: user message
+      transcriptAdapter?.userMessage(
+        message,
+        documentContext?.mode === 'planning' ? 'planning' : 'agent',
+        attachments as any,
+      );
+
       // console.log('[CLAUDE-CODE] Calling SDK query() - this spawns the claude process...');
       const queryCallStart = Date.now();
       const leadQuery = query({
@@ -727,855 +738,201 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
               console.warn(`[CLAUDE-CODE] Time to first chunk was ${timeToFirstChunk}ms (>10s threshold) - possible Windows Defender/antivirus delay during subprocess spawn`);
             }
           }
-          if (typeof chunk === 'string') {
-            // Text chunk - always display it
-            // if (chunkCount <= 3) {
-            // }
-            fullContent += chunk;
-            yield {
-              type: 'text',
-              content: chunk
-            };
+          // All chunk types go through the adapter. Provider dispatches on parsed items
+          // for side effects only -- the adapter owns all parsing and canonical event emission.
+          const parsed = transcriptAdapter?.processChunk(chunk) ?? [];
+          let breakOuter = false;
+          for (const item of parsed) {
+            switch (item.kind) {
+              case 'text':
+                fullContent += item.text;
+                break;
 
-            // Check if the string looks like an error
-            if (chunk.toLowerCase().includes('error') ||
-                chunk.toLowerCase().includes('invalid') ||
-                chunk.toLowerCase().includes('failed')) {
-              console.warn('[CLAUDE-CODE] String chunk might contain an error:', chunk);
-            }
-          } else if (chunk && typeof chunk === 'object') {
-            // Handle different message types from the SDK
-            // if (chunkCount <= 5) {
-            // }
+              case 'session_id':
+                if (sessionId) this.sessions.captureSessionId(sessionId, item.id);
+                break;
 
-            if (chunk.session_id && sessionId) {
-              this.sessions.captureSessionId(sessionId, chunk.session_id);
-            }
+              case 'usage':
+                usageData = item.usage;
+                if (item.isPerStep) lastAssistantUsage = item.usage;
+                if (item.modelUsage) modelUsageData = item.modelUsage;
+                break;
 
-            if (chunk.type === 'assistant' && chunk.message) {
-            // Check for SDK-detected authentication error (first-class detection)
-            // This is much more reliable than string matching in message content
-            if (chunk.error === 'authentication_failed') {
-              console.error('[CLAUDE-CODE] Authentication error detected via SDK error field');
-              this.logError(sessionId, 'claude-code', new Error('Authentication failed'), 'assistant_chunk', 'authentication_error', hideMessages);
-              yield {
-                type: 'error',
-                error: 'Authentication failed. Please log in to continue.',
-                isAuthError: true
-              };
-              yield { type: 'complete', isComplete: true };
-              break;
-            }
+              case 'tool_use': {
+                toolCallCount++;
+                const { toolId, toolName, args, isMcp, isSubagent } = item;
 
-            // Capture usage data from the message if available
-            if (chunk.message.usage) {
-              usageData = chunk.message.usage;
-              // Track per-step usage from assistant messages (not overwritten by cumulative result.usage)
-              lastAssistantUsage = chunk.message.usage;
-            }
-
-            const content = chunk.message.content as any;
-            if (Array.isArray(content)) {
-              for (const rawBlock of content) {
-                const block = rawBlock as any;
-                if (block.type === 'text') {
-                  fullContent += block.text;
-                  yield {
-                    type: 'text',
-                    content: block.text
-                  };
-                } else if (block.type === 'tool_use') {
-                  // Handle tool calls from Claude
-                  toolCallCount++;
-                  const toolId = block.id || `tool-${toolCallCount}`;
-
-                  const toolName = block.name;
-                  const toolArgs = block.input;
-                  const isMcpTool = toolName?.startsWith('mcp__');
-
-                  // Detect TodoWrite tool invocations and extract todos
-                  if (toolName === 'TodoWrite' && toolArgs && toolArgs.todos) {
-                    // Emit todo update event to renderer via IPC (don't await - let it happen async)
-                    this.emitTodoUpdate(sessionId, toolArgs.todos).catch(err => {
-                      console.error('[CLAUDE-CODE] Failed to emit todo update:', err);
-                    });
-                  }
-
-                  // SDK-native tools that are executed by the Claude Code SDK itself
-                  // AskUserQuestion is included because we handle it in canUseTool (user input, not local execution)
-                  const isSdkNativeTool = SDK_NATIVE_TOOLS.includes(toolName);
-
-                  let executionResult: any | undefined;
-
-                  if (!toolName) {
-                  } else if (isMcpTool) {
-                    // MCP tools are handled by the SDK, but we need to log the tool_use for reconstruction
-                    // The result will come later in a tool_result block (non-blocking for streaming)
-                    if (sessionId) {
-                      this.logAgentMessageNonBlocking(
-                        sessionId,
-                        'claude-code',
-                        'output',
-                        buildToolUseMessage(toolId, toolName, toolArgs)
-                      );
-                    }
-                  } else if (isSdkNativeTool) {
-                    // SDK executes these tools itself, result will come in a tool_result block
-                  } else if (this.toolHandler) {
-                    const toolStartTime = Date.now();
-                    try {
-                      executionResult = await this.executeToolCall(toolName, toolArgs);
-                      // if (executionResult !== undefined) {
-                      //   try {
-                      //   } catch (stringifyError) {
-                      //   }
-                      // }
-                    } catch (error) {
-                      const errorMessage = error instanceof Error ? error.message : 'Tool execution failed';
-                      const errorResult = (error as any)?.toolResult ?? { success: false, error: errorMessage };
-                      executionResult = errorResult;
-                      console.error('[CLAUDE-CODE] Tool execution failed:', error);
-                      yield {
-                        type: 'tool_error',
-                        toolError: {
-                          name: toolName,
-                          arguments: toolArgs,
-                          error: errorMessage,
-                          result: errorResult
-                        }
-                      };
-                    }
-                  } else {
-                  }
-
-                  // Create tool call object
-                  const toolCall = {
-                    id: toolId,
-                    name: toolName || 'unknown',
-                    arguments: toolArgs,
-                    ...(executionResult !== undefined ? { result: executionResult } : {})
-                  };
-
-                  // Store in map for later result updates
-                  toolCallsById.set(toolId, toolCall);
-
-                  // Only emit tool call if we executed it ourselves and have a result
-                  // SDK-native tools will be emitted when their result arrives
-                  if (executionResult !== undefined) {
-                    // Log tool call and result to database in format that UI can reconstruct (non-blocking for streaming)
-                    if (sessionId) {
-                      // Log the tool_use block
-                      this.logAgentMessageNonBlocking(
-                        sessionId,
-                        'claude-code',
-                        'output',
-                        buildToolUseMessage(toolId, toolName || 'unknown', toolArgs),
-                        undefined,
-                        hideMessages
-                      );
-
-                      // Log the tool_result block
-                      this.logAgentMessageNonBlocking(
-                        sessionId,
-                        'claude-code',
-                        'output',
-                        buildToolResultMessage(toolId, executionResult, false),
-                        undefined,
-                        hideMessages
-                      );
-                    }
-
-                    yield {
-                      type: 'tool_call',
-                      toolCall
-                    };
-                  } else {
-                  }
-                } else if (block.type === 'tool_result') {
-                  // Handle tool results from Claude Code SDK
-                  const toolResultId = block.tool_use_id || block.id;
-                  const toolResult = block.content;
-                  const isError = block.is_error || false;
-
-                  //   typeof toolResult === 'string'
-                  //     ? toolResult.substring(0, 500)
-                  //     : JSON.stringify(toolResult, null, 2).substring(0, 500)
-                  // );
-
-                  // Find the corresponding tool call and update it with result
-                  const toolCall = toolCallsById.get(toolResultId);
-                  if (toolCall) {
-                    const toolResultApplication = applyToolResultToToolCall(
-                      toolCall,
-                      toolResult,
-                      isError
-                    );
-                    if (toolResultApplication.isDuplicate) {
-                      continue; // Skip this tool_result block
-                    }
-
-                    // Teammate side-effects (shutdown detection, team context tracking)
-                    this.processTeammateToolResult(sessionId, toolCall.name, toolCall.arguments, toolResult, toolCall.isError === true, toolCall.id);
-
-                    // Log ONLY the tool_result block to database (non-blocking for streaming)
-                    // The tool_use block was already logged by raw chunk logging at line 264
-                    if (sessionId) {
-                      this.logAgentMessageNonBlocking(
-                        sessionId,
-                        'claude-code',
-                        'output',
-                        buildToolResultMessage(toolCall.id, toolCall.result, toolCall.isError || false),
-                        undefined,
-                        hideMessages
-                      );
-                    }
-
-                    // Re-emit the tool call with the result
-                    yield {
-                      type: 'tool_call',
-                      toolCall
-                    };
-                  } else {
-                  }
+                if (toolName === 'TodoWrite' && args?.todos) {
+                  this.emitTodoUpdate(sessionId, args.todos as any[]).catch(() => {});
                 }
-              }
-            } else if (typeof content === 'string') {
-              fullContent += content;
-              yield {
-                type: 'text',
-                content
-              };
-            }
-          } else if (chunk.type === 'tool_call' || chunk.type === 'tool_use') {
-            // Standalone tool call event
-            toolCallCount++;
-            const toolChunk = chunk as any;
 
-            const toolName = toolChunk.name || 'unknown';
-            const toolArgs = toolChunk.input;
-            const isMcpTool = toolName.startsWith('mcp__');
-
-            const isSdkNativeTool = SDK_NATIVE_TOOLS.includes(toolName);
-
-            let executionResult: any | undefined;
-
-            if (isMcpTool) {
-              // MCP tools are handled by the SDK, but we need to log the tool_use for reconstruction
-              // The result will come later in a tool_result block (non-blocking for streaming)
-              if (sessionId) {
-                const mcpToolId = toolChunk.id || `tool-${toolCallCount}`;
-                this.logAgentMessageNonBlocking(
-                  sessionId,
-                  'claude-code',
-                  'output',
-                  buildToolUseMessage(mcpToolId, toolName, toolArgs)
-                );
-              }
-            } else if (isSdkNativeTool) {
-              // SDK executes these tools itself, we just observe them
-            } else if (this.toolHandler) {
-              const toolStartTime = Date.now();
-              try {
-                executionResult = await this.executeToolCall(toolName, toolArgs);
-                // if (executionResult !== undefined) {
-                //   try {
-                //   } catch (stringifyError) {
-                //   }
-                // }
-              } catch (error) {
-                const errorMessage = error instanceof Error ? error.message : 'Tool execution failed';
-                const errorResult = (error as any)?.toolResult ?? { success: false, error: errorMessage };
-                executionResult = errorResult;
-                console.error('[CLAUDE-CODE] Tool execution failed:', error);
-                yield {
-                  type: 'tool_error',
-                  toolError: {
-                    name: toolName,
-                    arguments: toolArgs,
-                    error: errorMessage,
-                    result: errorResult
-                  }
-                };
-              }
-            } else {
-            }
-
-            // Create tool call object
-            const toolId = toolChunk.id || `tool-${toolCallCount}`;
-            const toolCall = {
-              id: toolId,
-              name: toolName,
-              arguments: toolArgs,
-              ...(executionResult !== undefined ? { result: executionResult } : {})
-            };
-
-            // Store in map for later result updates
-            toolCallsById.set(toolId, toolCall);
-
-            // Only emit tool call if we executed it ourselves and have a result
-            // SDK-native tools will be emitted when their result arrives
-            if (executionResult !== undefined) {
-              // Log tool call and result to database in format that UI can reconstruct (non-blocking for streaming)
-              if (sessionId) {
-                // Log the tool_use block
-                this.logAgentMessageNonBlocking(
-                  sessionId,
-                  'claude-code',
-                  'output',
-                  buildToolUseMessage(toolId, toolName, toolArgs),
-                  undefined,
-                  hideMessages
-                );
-
-                // Log the tool_result block
-                this.logAgentMessageNonBlocking(
-                  sessionId,
-                  'claude-code',
-                  'output',
-                  buildToolResultMessage(toolId, executionResult, false),
-                  undefined,
-                  hideMessages
-                );
-              }
-
-              yield {
-                type: 'tool_call',
-                toolCall
-              };
-            } else {
-            }
-          } else if (chunk.type === 'text') {
-            const text = chunk.text || chunk.content || '';
-            fullContent += text;
-            yield {
-              type: 'text',
-              content: text
-            };
-          } else if (chunk.type === 'result') {
-            // Final result - capture comprehensive usage data if available
-
-            // The result chunk often has the most complete usage data
-            if (chunk.usage) {
-              usageData = chunk.usage;
-            }
-
-            // Capture modelUsage which has per-model breakdown with inputTokens, outputTokens, costUSD, etc.
-            if (chunk.modelUsage) {
-              modelUsageData = chunk.modelUsage;
-            }
-
-            if (chunk.is_error) {
-              console.error('[CLAUDE-CODE] Result error:', chunk);
-
-              let errorMessage = extractResultChunkErrorMessage(chunk);
-              const { isAuthError, isExpiredSessionError, isServerError } = detectResultChunkErrorFlags(errorMessage);
-
-              // If it's an expired session error, clear the stored session ID and provide guidance
-              if (isExpiredSessionError && sessionId) {
-                console.log(`[CLAUDE-CODE] Detected expired session error for session ${sessionId}, clearing providerSessionId`);
-                this.sessions.expireSession(sessionId);
-                // Provide user-friendly error message
-                errorMessage = 'Your previous conversation session has expired and can no longer be resumed. Please send a new message to start a fresh conversation - your chat history is still visible but the AI will start with a clean context.';
-              }
-
-              // Check if this is a Bedrock tool search incompatibility error
-              const isBedrockToolError = isBedrockToolSearchError(errorMessage);
-
-              // If it's a server error, suggest checking status page
-              if (isServerError) {
-                errorMessage = `${errorMessage}\n\nClaude may be experiencing issues. Check https://status.anthropic.com for service status.`;
-              }
-
-              // If it's a Bedrock tool error, provide helpful guidance
-              if (isBedrockToolError) {
-                errorMessage = buildBedrockToolErrorGuidance(errorMessage);
-              }
-
-              // If rate limit on a 1M context model, hint that it may not be available on their plan
-              const isRateLimitError = /rate limit/i.test(errorMessage);
-              const is1mModel = this.config.model != null && this.config.model.includes('-1m');
-              if (isRateLimitError && is1mModel) {
-                errorMessage += '\n\nThis 1M context model may not be available on your plan.';
-              }
-
-              // Log error to database (as 'output' since errors are provider responses)
-              const errorType = isAuthError ? 'authentication_error' : isBedrockToolError ? 'bedrock_tool_error' : isExpiredSessionError ? 'expired_session_error' : 'api_error';
-              this.logError(sessionId, 'claude-code', new Error(errorMessage), 'result_chunk', errorType, hideMessages);
-
-              // Yield error to UI with appropriate flags
-              yield {
-                type: 'error',
-                error: errorMessage,
-                ...(isAuthError && { isAuthError: true }),
-                ...(isBedrockToolError && { isBedrockToolError: true }),
-                ...(isExpiredSessionError && { isExpiredSessionError: true }),
-                ...(isServerError && { isServerError: true })
-              };
-
-              // CRITICAL: Send completion and break on result errors (like "prompt too long")
-              // Without this, the UI thinks the agent is still processing and /compact won't work
-              await this.flushPendingWrites();
-              yield {
-                type: 'complete',
-                isComplete: true
-              };
-
-              // Break out of the loop since we have an error
-              break;
-            }
-
-            // For slash commands, the result contains the command output directly
-            // (e.g., /context returns context usage in chunk.result)
-            // In SDK 0.2.x, slash command output comes via result.result instead of user message with <local-command-stdout>
-            if (isSlashCommand && chunk.result && typeof chunk.result === 'string' && chunk.result.trim().length > 0) {
-              fullContent = chunk.result;
-              yield {
-                type: 'text',
-                content: chunk.result,
-                isSystem: true
-              };
-            }
-            // Don't yield result content as text for non-slash commands - it's already been sent in the assistant message
-            // Only errors need to be displayed from result chunks
-          } else if (chunk.type === 'system') {
-            // Handle system messages from Claude Code (initialization, etc.)
-            // console.log(`[CLAUDE-CODE] System chunk subtype=${chunk.subtype}${chunk.task_id ? ` task_id=${chunk.task_id}` : ''}`);
-
-            // Store session_id if present
-            if (chunk.session_id && sessionId) {
-              this.sessions.captureSessionId(sessionId, chunk.session_id);
-            }
-
-            // System messages like 'init' are informational - don't display to user
-            if (chunk.subtype === 'init') {
-              // Clean up stale "running" tasks from previous sessions/restarts.
-              // The activeTasks Map is in-memory only, so after restart any
-              // previously-running tasks in metadata are orphaned.
-              if (sessionId && this.activeTasks.size === 0) {
-                (async () => {
+                const isSdkNativeTool = SDK_NATIVE_TOOLS.includes(toolName);
+                if (!toolName || isMcp || isSdkNativeTool || isSubagent) {
+                  // Handled by SDK or is a subagent spawn
+                } else if (this.toolHandler) {
                   try {
-                    const { AISessionsRepository } = await import('../../../storage/repositories/AISessionsRepository');
-                    const currentSession = await AISessionsRepository.get(sessionId);
-                    const tasks = currentSession?.metadata?.currentTasks;
-                    if (Array.isArray(tasks) && tasks.some((t: any) => t.status === 'running')) {
-                      const cleaned = tasks.map((t: any) =>
-                        t.status === 'running' ? { ...t, status: 'stopped' } : t
-                      );
-                      await AISessionsRepository.updateMetadata(sessionId, {
-                        metadata: { ...currentSession?.metadata, currentTasks: cleaned }
-                      });
-                      this.emit('message:logged', { sessionId, direction: 'output' });
-                      console.log(`[CLAUDE-CODE] Cleaned up ${tasks.filter((t: any) => t.status === 'running').length} stale running tasks`);
-                    }
-                  } catch (e) {
-                    // Non-critical cleanup, don't block init
+                    await this.executeToolCall(toolName, args);
+                  } catch (error) {
+                    console.error('[CLAUDE-CODE] Tool execution failed:', error);
                   }
-                })();
-              }
-              //   cwd: chunk.cwd,
-              //   model: chunk.model,
-              //   session_id: chunk.session_id,
-              //   toolCount: chunk.tools?.length || 0,
-              //   mcpServers: chunk.mcp_servers || [],
-              //   apiKeySource: chunk.apiKeySource,
-              //   slashCommands: chunk.slash_commands || [],
-              //   agents: chunk.agents || [],
-              //   skills: chunk.skills || [],
-              //   plugins: chunk.plugins || []
-              // });
-
-              // Log all chunk properties to discover what's available
-
-              // Capture available slash commands
-              if (chunk.slash_commands && Array.isArray(chunk.slash_commands)) {
-                this.slashCommands = chunk.slash_commands;
-                ClaudeCodeProvider.cachedSdkSlashCommands = chunk.slash_commands;
-              }
-              if (chunk.skills && Array.isArray(chunk.skills)) {
-                this.skills = chunk.skills;
-                ClaudeCodeProvider.cachedSdkSkills = chunk.skills;
-              }
-
-              // Track session initialization with MCP, slash commands, agents, skills, and plugins counts
-              // This will be picked up by AIService which has access to analytics
-              const mcpServerCount = Array.isArray(chunk.mcp_servers) ? chunk.mcp_servers.length : 0;
-              const slashCommandCount = Array.isArray(chunk.slash_commands) ? chunk.slash_commands.length : 0;
-              const agentCount = Array.isArray(chunk.agents) ? chunk.agents.length : 0;
-              const skillCount = Array.isArray(chunk.skills) ? chunk.skills.length : 0;
-              const pluginCount = Array.isArray(chunk.plugins) ? chunk.plugins.length : 0;
-
-              // Store initialization data for AIService to retrieve
-              (this as any)._initData = {
-                mcpServerCount,
-                slashCommandCount,
-                agentCount,
-                skillCount,
-                pluginCount,
-                toolCount: chunk.tools?.length || 0
-              };
-
-              //   mcpServerCount,
-              //   slashCommandCount,
-              //   agentCount,
-              //   skillCount,
-              //   pluginCount,
-              //   toolCount: chunk.tools?.length || 0
-              // });
-
-              // Warn if API key source is "none" - this means Claude Code didn't find credentials
-              if (chunk.apiKeySource === 'none') {
-              }
-
-              // Start MCP server health checks after init
-              if (mcpServerCount > 0) {
-                this.currentSessionId = sessionId;
-                this.mcpQuery = this.leadQuery;
-                // Do an initial status check, then start periodic polling
-                this.checkMcpServerStatuses().catch(() => {});
-                this.startMcpHealthChecks();
-              }
-            } else if (chunk.subtype === 'task_started') {
-              // SDK-native sub-agent started
-              const taskChunk = chunk as any;
-              this.activeTasks.set(taskChunk.task_id, {
-                taskId: taskChunk.task_id,
-                description: taskChunk.description || '',
-                taskType: taskChunk.task_type,
-                status: 'running',
-                startedAt: Date.now(),
-                toolUseId: taskChunk.tool_use_id,
-                toolCount: 0,
-                tokenCount: 0,
-                durationMs: 0,
-              });
-              this.emitTaskUpdate(sessionId).catch(() => {});
-            } else if (chunk.subtype === 'task_progress') {
-              // SDK-native sub-agent progress update
-              const taskChunk = chunk as any;
-              const existing = this.activeTasks.get(taskChunk.task_id);
-              if (existing) {
-                existing.toolCount = taskChunk.usage?.tool_uses ?? existing.toolCount;
-                existing.tokenCount = taskChunk.usage?.total_tokens ?? existing.tokenCount;
-                existing.durationMs = taskChunk.usage?.duration_ms ?? existing.durationMs;
-                existing.lastToolName = taskChunk.last_tool_name ?? existing.lastToolName;
-                this.emitTaskUpdate(sessionId).catch(() => {});
-              }
-            } else if (chunk.subtype === 'task_notification') {
-              // SDK-native sub-agent completed/failed/stopped
-              const taskChunk = chunk as any;
-              const existing = this.activeTasks.get(taskChunk.task_id);
-              if (existing) {
-                existing.status = taskChunk.status || 'completed';
-                existing.summary = taskChunk.summary;
-                if (taskChunk.usage) {
-                  existing.toolCount = taskChunk.usage.tool_uses ?? existing.toolCount;
-                  existing.tokenCount = taskChunk.usage.total_tokens ?? existing.tokenCount;
-                  existing.durationMs = taskChunk.usage.duration_ms ?? existing.durationMs;
                 }
-                this.emitTaskUpdate(sessionId).catch(() => {});
+
+                toolCallsById.set(toolId, { id: toolId, name: toolName, arguments: args });
+                break;
               }
-            } else if (chunk.subtype === 'compact_boundary') {
-              // Handle /compact command response
-              //   pre_tokens: chunk.compact_metadata?.pre_tokens,
-              //   trigger: chunk.compact_metadata?.trigger
-              // });
 
-              // Mark that we received a compact boundary (prevents false "no output" error)
-              receivedCompactBoundary = true;
+              case 'tool_result': {
+                const toolCall = toolCallsById.get(item.toolUseId);
+                if (toolCall) {
+                  const { isDuplicate } = applyToolResultToToolCall(toolCall, item.content, item.isError);
+                  if (isDuplicate) break;
 
-              // Reset lastAssistantUsage so we don't report stale pre-compaction context fill.
-              // The compaction turn has no assistant message, so this will be undefined,
-              // and we won't emit contextFillTokens. The next real turn will have accurate data.
-              lastAssistantUsage = undefined;
+                  this.processTeammateToolResult(sessionId, toolCall.name, toolCall.arguments, item.content, toolCall.isError === true, toolCall.id);
 
-              // Display compact completion message to user
-              const preTokens = chunk.compact_metadata?.pre_tokens || 'unknown';
-              yield {
-                type: 'text',
-                content: `✓ Conversation compacted (was ${preTokens} tokens)`
-              };
-            } else {
-              // Other system messages might be relevant
-
-              // Check if this system message has displayable content
-              if (chunk.message || chunk.text || chunk.content) {
-                const messageText = chunk.message || chunk.text || chunk.content;
-                yield {
-                  type: 'text',
-                  content: typeof messageText === 'string' ? messageText : JSON.stringify(messageText)
-                };
-              }
-            }
-            // Don't yield most system messages to UI - they're internal
-          } else if (chunk.type === 'user') {
-            // Handle user messages (including tool results and slash command output)
-
-            const content = chunk.message?.content;
-
-            // Check if content is an array (typical for tool results)
-            if (Array.isArray(content)) {
-              for (const block of content) {
-                if (block.type === 'tool_result') {
-                  // Handle tool results from Claude Code SDK
-                  const toolResultId = block.tool_use_id || block.id;
-                  const toolResult = block.content;
-                  const isError = block.is_error || false;
-
-                  //   typeof toolResult === 'string'
-                  //     ? toolResult.substring(0, 500)
-                  //     : JSON.stringify(toolResult, null, 2).substring(0, 500)
-                  // );
-
-                  // Find the corresponding tool call and update it with result
-                  const toolCall = toolCallsById.get(toolResultId);
-                  if (toolCall) {
-                    const toolResultApplication = applyToolResultToToolCall(
-                      toolCall,
-                      toolResult,
-                      isError
-                    );
-                    if (toolResultApplication.isDuplicate) {
-                      continue; // Skip this tool_result
-                    }
-
-                    // Check if this tool result completes a tracked sub-agent task.
-                    // Background agents deliver results as tool_results matching the Agent tool_use_id.
-                    if (toolResultId) {
-                      for (const task of this.activeTasks.values()) {
-                        if (task.toolUseId === toolResultId && task.status === 'running') {
-                          task.status = toolCall.isError ? 'failed' : 'completed';
-                          if (typeof toolResult === 'string') {
-                            task.summary = toolResult.substring(0, 200);
-                          }
-                          this.emitTaskUpdate(sessionId).catch(() => {});
-                          break;
-                        }
+                  if (item.toolUseId) {
+                    for (const task of this.activeTasks.values()) {
+                      if (task.toolUseId === item.toolUseId && task.status === 'running') {
+                        task.status = toolCall.isError ? 'failed' : 'completed';
+                        if (typeof item.content === 'string') task.summary = (item.content as string).substring(0, 200);
+                        this.emitTaskUpdate(sessionId).catch(() => {});
+                        break;
                       }
                     }
-
-                    // Teammate side-effects (shutdown detection, team context tracking)
-                    this.processTeammateToolResult(sessionId, toolCall.name, toolCall.arguments, toolResult, toolCall.isError === true, toolCall.id);
-
-                    // Log ONLY the tool_result block to database (non-blocking for streaming)
-                    // The tool_use block was already logged when the tool was first called
-                    if (sessionId) {
-                      this.logAgentMessageNonBlocking(
-                        sessionId,
-                        'claude-code',
-                        'output',
-                        buildToolResultMessage(toolCall.id, toolCall.result, toolCall.isError || false),
-                        undefined,
-                        hideMessages
-                      );
-                    }
-
-                    // Re-emit the tool call with the result
-                    yield {
-                      type: 'tool_call',
-                      toolCall
-                    };
-                  } else {
                   }
                 }
-              }
-            }
-
-            // Check if this is a slash command result with <local-command-stdout>
-            if (typeof content === 'string' && content.includes('<local-command-stdout>')) {
-              // Extract and display the command output
-              const match = content.match(/<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/);
-              if (match && match[1]) {
-                const commandOutput = match[1].trim();
-
-                // Track that we received content (prevents false "no output" error)
-                fullContent += commandOutput;
-
-                // Yield as a system message type
-                yield {
-                  type: 'text',
-                  content: commandOutput,
-                  isSystem: true
-                };
-              }
-            }
-
-            // Check if this is a slash command error result with <local-command-stderr>
-            if (typeof content === 'string' && content.includes('<local-command-stderr>')) {
-              // Extract and display the command error
-              const match = content.match(/<local-command-stderr>([\s\S]*?)<\/local-command-stderr>/);
-              if (match && match[1]) {
-                const commandError = match[1].trim();
-                console.error('[CLAUDE-CODE] Slash command error detected:', commandError);
-
-                // Log error to database for persistence
-                // The logError call saves the message to the database and emits 'message:logged'
-                // which triggers a session reload in the UI, displaying the error
-                // Do NOT yield an error chunk here - that would cause duplicate display via ai:error IPC
-                // Pass hideMessages so /context errors (auto-triggered) stay hidden
-                this.logError(sessionId, 'claude-code', new Error(commandError), 'slash_command_stderr', 'slash_command_error', hideMessages);
-              }
-            }
-            // Other user messages are internal - don't display
-          } else if (chunk.type === 'summary') {
-            // Handle summary messages from Claude Code
-            const summary = chunk.summary || '';
-
-            const isAuthenticationError = isAuthenticationSummary(summary);
-
-            if (isAuthenticationError) {
-              console.error('[CLAUDE-CODE] Authentication error detected in summary:', summary);
-              console.error('[CLAUDE-CODE] Full summary chunk:', JSON.stringify(chunk, null, 2));
-
-              // Pass through the error message directly
-              // The LoginRequiredWidget in MessageSegment will handle displaying a proper UI
-              const errorMessage = summary;
-
-              // Log error to database (as 'output' since errors are provider responses)
-              this.logError(sessionId, 'claude-code', new Error(errorMessage), 'summary_chunk', 'authentication_error', hideMessages);
-
-              // Yield error to UI with isAuthError flag for structured detection
-              yield {
-                type: 'error',
-                error: errorMessage,
-                isAuthError: true
-              };
-
-              // Send completion event before breaking
-              yield {
-                type: 'complete',
-                isComplete: true
-              };
-
-              // Break out of the loop since we have an error
-              break;
-            } else {
-              // Non-error summary - always display it
-
-              // Always yield summaries to the UI with context
-              const displayMessage = summary ?
-                `[Claude Agent]: ${summary}` :
-                `[Claude Agent]: ${JSON.stringify(chunk)}`;
-
-              yield {
-                type: 'text',
-                content: displayMessage
-              };
-            }
-          } else if (chunk.type === 'tool_progress') {
-            // Tool progress updates (elapsed time for long-running tools) - informational only
-            // These are handled visually through the tool call streaming in the transcript
-          } else if (chunk.type === 'tool_use_summary') {
-            // Summary of tool use activity (common in agent teams) - informational only
-            // The individual tool calls are already rendered in the transcript hierarchy
-          } else if (chunk.type === 'auth_status') {
-            // Handle SDK auth status messages (first-class authentication detection)
-            // This is the preferred way to detect auth issues rather than string matching
-            if (chunk.error || chunk.isAuthenticating === false) {
-              const errorMessage = chunk.error || 'Authentication required';
-              console.error('[CLAUDE-CODE] Auth status error:', errorMessage);
-              this.logError(sessionId, 'claude-code', new Error(errorMessage), 'auth_status_chunk', 'authentication_error', hideMessages);
-              yield {
-                type: 'error',
-                error: errorMessage,
-                isAuthError: true
-              };
-              // Don't break here - auth_status might be informational during auth flow
-            }
-            // Log auth output for debugging (but don't display to user)
-            if (chunk.output && chunk.output.length > 0) {
-              console.log('[CLAUDE-CODE] Auth status output:', chunk.output.join('\n'));
-            }
-          } else if (chunk.type === 'rate_limit_event') {
-            // Handle rate limit events from the Claude Code SDK
-            // Statuses: "allowed" (ok), "allowed_warning" (approaching limit), blocked/rate_limited (hit limit)
-            const info = chunk.rate_limit_info;
-            if (!info) {
-              // No info, silently skip
-            } else if (info.status === 'allowed') {
-              // All good, silently consume - the sidebar usage indicator handles display
-            } else {
-              // Either a warning (allowed_warning) or an actual block - show in transcript
-              // Pass resetsAt as Unix timestamp (seconds) to avoid timezone issues with ISO string parsing
-              const resetsAtUnix = info.resetsAt || null;
-              const limitType = info.rateLimitType === 'five_hour' ? '5-hour session' : info.rateLimitType || 'unknown';
-              const utilization = info.utilization != null ? Math.round(info.utilization * 100) : null;
-              const isWarning = info.status === 'allowed_warning';
-              const marker = isWarning ? '[RATE_LIMIT_WARNING]' : '[RATE_LIMIT]';
-              const utilizationStr = utilization != null ? ` usage=${utilization}` : '';
-              const modelStr = this.config.model ? ` model=${this.config.model}` : '';
-              // Yield as text (not error) so it doesn't interrupt the stream or trigger error handling
-              yield {
-                type: 'text',
-                content: `\n\n<!-- ${marker} limitType=${limitType} resetsAtUnix=${resetsAtUnix || 'unknown'}${utilizationStr}${modelStr} -->\n\n`
-              };
-            }
-          } else {
-            // Unknown chunk type - display it anyway so nothing is lost
-
-            // Try to extract any text content from the unknown chunk
-            let extractedContent = '';
-            let hadTextContent = false;
-
-            // Try various common fields that might contain text
-            if (typeof chunk === 'string') {
-              extractedContent = chunk;
-              hadTextContent = true;
-            } else if (chunk) {
-              // Try to extract text from various possible fields
-              const rawContent = chunk.text ||
-                               chunk.content ||
-                               chunk.message ||
-                               chunk.data ||
-                               chunk.output ||
-                               chunk.response ||
-                               chunk.value ||
-                               '';
-
-              if (rawContent) {
-                hadTextContent = true;
-                // Wrap extracted text with context
-                // Serialize objects to JSON, keep strings as-is
-                const contentToDisplay = typeof rawContent === 'string'
-                  ? rawContent
-                  : JSON.stringify(rawContent, null, 2);
-                extractedContent = `\n\n⚠️ **Unhandled message from Claude Code** (type: \`${chunk.type || 'unknown'}\`):\n\n${contentToDisplay}\n\n`;
+                break;
               }
 
-              // If still no content, check for nested message content
-              if (!extractedContent && chunk.message?.content) {
-                const nestedContent = typeof chunk.message.content === 'string'
-                  ? chunk.message.content
-                  : JSON.stringify(chunk.message.content);
-                if (nestedContent) {
-                  hadTextContent = true;
-                  extractedContent = `\n\n⚠️ **Unhandled message from Claude Code** (type: \`${chunk.type || 'unknown'}\`):\n\n${nestedContent}\n\n`;
+              case 'error': {
+                let errorMessage = item.message;
+                const errorChunk = item.chunk;
+
+                if (errorChunk?.type === 'assistant' && errorChunk?.error === 'authentication_failed') {
+                  this.logError(sessionId, 'claude-code', new Error(errorMessage), 'assistant_chunk', 'authentication_error', hideMessages);
+                  yield { type: 'error', error: errorMessage, isAuthError: true };
+                  yield { type: 'complete', isComplete: true };
+                  breakOuter = true;
+                  break;
                 }
+
+                if (errorChunk?.type === 'result') {
+                  errorMessage = extractResultChunkErrorMessage(errorChunk);
+                  const { isAuthError, isExpiredSessionError, isServerError } = detectResultChunkErrorFlags(errorMessage);
+
+                  if (isExpiredSessionError && sessionId) {
+                    this.sessions.expireSession(sessionId);
+                    errorMessage = 'Your previous conversation session has expired and can no longer be resumed. Please send a new message to start a fresh conversation - your chat history is still visible but the AI will start with a clean context.';
+                  }
+
+                  const isBedrockToolError = isBedrockToolSearchError(errorMessage);
+                  if (isServerError) errorMessage += '\n\nClaude may be experiencing issues. Check https://status.anthropic.com for service status.';
+                  if (isBedrockToolError) errorMessage = buildBedrockToolErrorGuidance(errorMessage);
+
+                  const isRateLimitError = /rate limit/i.test(errorMessage);
+                  const is1mModel = this.config.model != null && this.config.model.includes('-1m');
+                  if (isRateLimitError && is1mModel) errorMessage += '\n\nThis 1M context model may not be available on your plan.';
+
+                  const errorType = isAuthError ? 'authentication_error' : isBedrockToolError ? 'bedrock_tool_error' : isExpiredSessionError ? 'expired_session_error' : 'api_error';
+                  this.logError(sessionId, 'claude-code', new Error(errorMessage), 'result_chunk', errorType, hideMessages);
+                  transcriptAdapter?.systemMessage(errorMessage, 'error');
+
+                  yield {
+                    type: 'error',
+                    error: errorMessage,
+                    ...(isAuthError && { isAuthError: true }),
+                    ...(isBedrockToolError && { isBedrockToolError: true }),
+                    ...(isExpiredSessionError && { isExpiredSessionError: true }),
+                    ...(isServerError && { isServerError: true }),
+                  };
+
+                  await this.flushPendingWrites();
+                  yield { type: 'complete', isComplete: true };
+                  breakOuter = true;
+                  break;
+                }
+
+                yield { type: 'error', error: errorMessage };
+                break;
               }
 
-              // If we still have no content but have an object, stringify it
-              if (!extractedContent && Object.keys(chunk).length > 0) {
-                // Format it nicely for display with clear separation
-                extractedContent = `\n\n---\n\n⚠️ **Unhandled message from Claude Code:**\n\n` +
-                                 `Type: \`${chunk.type || 'unknown'}\`\n\n` +
-                                 `\`\`\`json\n${JSON.stringify(chunk, null, 2)}\n\`\`\`\n\n` +
-                                 `---\n\n`;
+              // -- Lifecycle items (side effects only, not transcript-relevant) --
+
+              case 'system_init':
+                yield* this.handleSystemInit(item.chunk, sessionId, hideMessages);
+                break;
+
+              case 'system_task':
+                this.handleSystemTask(item.subtype, item.chunk, sessionId);
+                break;
+
+              case 'system_compact':
+                receivedCompactBoundary = true;
+                lastAssistantUsage = undefined;
+                yield { type: 'text', content: `Conversation compacted (was ${item.preTokens} tokens)` };
+                break;
+
+              case 'system_message':
+                yield { type: 'text', content: item.text };
+                break;
+
+              case 'summary': {
+                if (item.isAuthError) {
+                  // console.error('[CLAUDE-CODE] Authentication error detected in summary:', item.text);
+                  this.logError(sessionId, 'claude-code', new Error(item.text), 'summary_chunk', 'authentication_error', hideMessages);
+                  yield { type: 'error', error: item.text, isAuthError: true };
+                  yield { type: 'complete', isComplete: true };
+                  breakOuter = true;
+                } else {
+                  const displayMessage = item.text
+                    ? `[Claude Agent]: ${item.text}`
+                    : `[Claude Agent]: ${JSON.stringify(item.chunk)}`;
+                  yield { type: 'text', content: displayMessage };
+                }
+                break;
               }
-            }
 
-            // If we extracted any content, yield it to the UI
-            if (extractedContent) {
-              yield {
-                type: 'text',
-                content: extractedContent
-              };
-            }
+              case 'auth_status': {
+                const authChunk = item.chunk;
+                if (authChunk.error || authChunk.isAuthenticating === false) {
+                  const errorMessage = authChunk.error || 'Authentication required';
+                  // console.error('[CLAUDE-CODE] Auth status error:', errorMessage);
+                  this.logError(sessionId, 'claude-code', new Error(errorMessage), 'auth_status_chunk', 'authentication_error', hideMessages);
+                  yield { type: 'error', error: errorMessage, isAuthError: true };
+                }
+                if (authChunk.output?.length > 0) {
+                  // console.log('[CLAUDE-CODE] Auth status output:', authChunk.output.join('\n'));
+                }
+                break;
+              }
 
-            // Also check if this looks like an error
-            const chunkStr = JSON.stringify(chunk).toLowerCase();
-            if (chunkStr.includes('error') || chunkStr.includes('fail') || chunkStr.includes('invalid')) {
+              case 'rate_limit': {
+                const info = item.chunk.rate_limit_info;
+                if (info && info.status !== 'allowed') {
+                  const resetsAtUnix = info.resetsAt || null;
+                  const limitType = info.rateLimitType === 'five_hour' ? '5-hour session' : info.rateLimitType || 'unknown';
+                  const utilization = info.utilization != null ? Math.round(info.utilization * 100) : null;
+                  const isWarning = info.status === 'allowed_warning';
+                  const marker = isWarning ? '[RATE_LIMIT_WARNING]' : '[RATE_LIMIT]';
+                  const utilizationStr = utilization != null ? ` usage=${utilization}` : '';
+                  const modelStr = this.config.model ? ` model=${this.config.model}` : '';
+                  yield { type: 'text', content: `\n\n<!-- ${marker} limitType=${limitType} resetsAtUnix=${resetsAtUnix || 'unknown'}${utilizationStr}${modelStr} -->\n\n` };
+                }
+                break;
+              }
+
+              case 'tool_progress':
+              case 'tool_use_summary':
+                // Informational only -- handled visually through transcript
+                break;
+
+              case 'unknown':
+                if (item.extractedText) {
+                  yield { type: 'text', content: item.extractedText };
+                }
+                break;
             }
           }
-          }
+          if (breakOuter) break;
         }
       } catch (iterError) {
         // Don't log abort errors - they're expected when user cancels
@@ -1733,14 +1090,15 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       }
 
       // Compute context fill from last assistant message's usage (not cumulative result.usage).
-      // Formula: input_tokens + cache_read_input_tokens + cache_creation_input_tokens
-      // This reflects actual tokens in context window and updates after compaction.
       // CRITICAL: Use lastAssistantUsage, NOT usageData (which gets overwritten by cumulative result.usage).
       const lastMessageContextTokens = lastAssistantUsage
         ? (lastAssistantUsage.input_tokens || 0)
           + (lastAssistantUsage.cache_read_input_tokens || 0)
           + (lastAssistantUsage.cache_creation_input_tokens || 0)
         : undefined;
+
+      // Canonical transcript: turn ended with usage
+      transcriptAdapter?.turnEnded(usageData, modelUsageData);
 
       yield {
         type: 'complete',
@@ -2107,6 +1465,98 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
    * Process teammate-related side-effects after a tool_result is received.
    * Called from both chunk-processing paths to avoid duplication.
    */
+
+  /** Handle system init chunk -- capture slash commands, skills, MCP health, etc. */
+  private *handleSystemInit(chunk: any, sessionId: string | undefined, hideMessages: boolean): Generator<StreamChunk> {
+    // Clean up stale "running" tasks from previous sessions/restarts
+    if (sessionId && this.activeTasks.size === 0) {
+      (async () => {
+        try {
+          const { AISessionsRepository } = await import('../../../storage/repositories/AISessionsRepository');
+          const currentSession = await AISessionsRepository.get(sessionId);
+          const tasks = currentSession?.metadata?.currentTasks;
+          if (Array.isArray(tasks) && tasks.some((t: any) => t.status === 'running')) {
+            const cleaned = tasks.map((t: any) =>
+              t.status === 'running' ? { ...t, status: 'stopped' } : t
+            );
+            await AISessionsRepository.updateMetadata(sessionId, {
+              metadata: { ...currentSession?.metadata, currentTasks: cleaned }
+            });
+            this.emit('message:logged', { sessionId, direction: 'output' });
+            // console.log(`[CLAUDE-CODE] Cleaned up ${tasks.filter((t: any) => t.status === 'running').length} stale running tasks`);
+          }
+        } catch {
+          // Non-critical cleanup
+        }
+      })();
+    }
+
+    if (chunk.slash_commands && Array.isArray(chunk.slash_commands)) {
+      this.slashCommands = chunk.slash_commands;
+      ClaudeCodeProvider.cachedSdkSlashCommands = chunk.slash_commands;
+    }
+    if (chunk.skills && Array.isArray(chunk.skills)) {
+      this.skills = chunk.skills;
+      ClaudeCodeProvider.cachedSdkSkills = chunk.skills;
+    }
+
+    const mcpServerCount = Array.isArray(chunk.mcp_servers) ? chunk.mcp_servers.length : 0;
+    (this as any)._initData = {
+      mcpServerCount,
+      slashCommandCount: Array.isArray(chunk.slash_commands) ? chunk.slash_commands.length : 0,
+      agentCount: Array.isArray(chunk.agents) ? chunk.agents.length : 0,
+      skillCount: Array.isArray(chunk.skills) ? chunk.skills.length : 0,
+      pluginCount: Array.isArray(chunk.plugins) ? chunk.plugins.length : 0,
+      toolCount: chunk.tools?.length || 0,
+    };
+
+    if (mcpServerCount > 0) {
+      this.currentSessionId = sessionId;
+      this.mcpQuery = this.leadQuery;
+      this.checkMcpServerStatuses().catch(() => {});
+      this.startMcpHealthChecks();
+    }
+  }
+
+  /** Handle system task chunks (task_started, task_progress, task_notification) */
+  private handleSystemTask(subtype: string, chunk: any, sessionId: string | undefined): void {
+    if (subtype === 'task_started') {
+      this.activeTasks.set(chunk.task_id, {
+        taskId: chunk.task_id,
+        description: chunk.description || '',
+        taskType: chunk.task_type,
+        status: 'running',
+        startedAt: Date.now(),
+        toolUseId: chunk.tool_use_id,
+        toolCount: 0,
+        tokenCount: 0,
+        durationMs: 0,
+      });
+      this.emitTaskUpdate(sessionId).catch(() => {});
+    } else if (subtype === 'task_progress') {
+      const existing = this.activeTasks.get(chunk.task_id);
+      if (existing) {
+        existing.toolCount = chunk.usage?.tool_uses ?? existing.toolCount;
+        existing.tokenCount = chunk.usage?.total_tokens ?? existing.tokenCount;
+        existing.durationMs = chunk.usage?.duration_ms ?? existing.durationMs;
+        existing.lastToolName = chunk.last_tool_name ?? existing.lastToolName;
+        this.emitTaskUpdate(sessionId).catch(() => {});
+      }
+    } else if (subtype === 'task_notification') {
+      const existing = this.activeTasks.get(chunk.task_id);
+      if (existing) {
+        existing.status = chunk.status || 'completed';
+        existing.summary = chunk.summary;
+        if (chunk.usage) {
+          existing.toolCount = chunk.usage.tool_uses ?? existing.toolCount;
+          existing.tokenCount = chunk.usage.total_tokens ?? existing.tokenCount;
+          existing.durationMs = chunk.usage.duration_ms ?? existing.durationMs;
+        }
+        this.emitTaskUpdate(sessionId).catch(() => {});
+      }
+    }
+  }
+
   private processTeammateToolResult(
     sessionId: string | undefined,
     toolName: string,

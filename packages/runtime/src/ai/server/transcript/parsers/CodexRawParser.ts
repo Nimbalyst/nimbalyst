@@ -1,0 +1,332 @@
+/**
+ * CodexRawParser -- parses OpenAI Codex / OpenCode raw messages into
+ * canonical event descriptors.
+ *
+ * Extracted from TranscriptTransformer.transformCodexOutputMessage().
+ * Handles Codex SDK event formats including todo_list, tool calls,
+ * text, errors, usage, and reasoning.
+ *
+ * Also used for OpenCode since both providers share the same
+ * AgentProtocol event format for raw messages.
+ */
+
+import type { RawMessage } from '../TranscriptTransformer';
+import { parseCodexEvent, type ParsedCodexToolCall } from '../../providers/codex/codexEventParser';
+import { parseMcpToolName } from '../utils';
+import type {
+  IRawMessageParser,
+  ParseContext,
+  CanonicalEventDescriptor,
+} from './IRawMessageParser';
+
+export class CodexRawParser implements IRawMessageParser {
+  private toolIdCounter = 0;
+
+  async parseMessage(
+    msg: RawMessage,
+    context: ParseContext,
+  ): Promise<CanonicalEventDescriptor[]> {
+    if (msg.hidden) return [];
+
+    // Codex parser only handles output messages.
+    // Input messages (user prompts) use the same format as Claude Code
+    // and are handled by the ClaudeCodeRawParser for input direction.
+    if (msg.direction === 'input') {
+      return this.parseInputMessage(msg);
+    }
+
+    return this.parseOutputMessage(msg, context);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Input message parsing (simple user prompts)
+  // ---------------------------------------------------------------------------
+
+  private parseInputMessage(msg: RawMessage): CanonicalEventDescriptor[] {
+    const descriptors: CanonicalEventDescriptor[] = [];
+
+    try {
+      const parsed = JSON.parse(msg.content);
+      if (parsed.prompt) {
+        if (this.isSystemReminderContent(parsed.prompt, msg.metadata)) {
+          descriptors.push({
+            type: 'system_message',
+            text: parsed.prompt,
+            systemType: 'status',
+            createdAt: msg.createdAt,
+          });
+        } else {
+          descriptors.push({
+            type: 'user_message',
+            text: parsed.prompt,
+            mode: (msg.metadata?.mode as 'agent' | 'planning') ?? 'agent',
+            attachments: msg.metadata?.attachments as any,
+            createdAt: msg.createdAt,
+          });
+        }
+      }
+    } catch {
+      const content = String(msg.content ?? '');
+      if (content.trim()) {
+        if (this.isSystemReminderContent(content, msg.metadata)) {
+          descriptors.push({
+            type: 'system_message',
+            text: content,
+            systemType: 'status',
+            createdAt: msg.createdAt,
+          });
+        } else {
+          descriptors.push({
+            type: 'user_message',
+            text: content,
+            createdAt: msg.createdAt,
+          });
+        }
+      }
+    }
+
+    return descriptors;
+  }
+
+  private isSystemReminderContent(
+    content: string,
+    metadata?: Record<string, unknown>,
+  ): boolean {
+    return (
+      metadata?.promptType === 'system_reminder' ||
+      /<SYSTEM_REMINDER>[\s\S]*<\/SYSTEM_REMINDER>/.test(content)
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Output message parsing
+  // ---------------------------------------------------------------------------
+
+  private async parseOutputMessage(
+    msg: RawMessage,
+    context: ParseContext,
+  ): Promise<CanonicalEventDescriptor[]> {
+    const descriptors: CanonicalEventDescriptor[] = [];
+
+    try {
+      const parsed = JSON.parse(msg.content);
+
+      // Handle todo_list items directly from raw JSON (not in ParsedCodexEvent)
+      const item = parsed.item;
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        const itemRecord = item as Record<string, unknown>;
+        if (itemRecord.type === 'todo_list' && Array.isArray(itemRecord.items)) {
+          const todoItems = (itemRecord.items as Array<Record<string, unknown>>)
+            .filter((t): t is Record<string, unknown> => t != null && typeof t === 'object')
+            .map(t => ({
+              text: typeof t.text === 'string' ? t.text : String(t.text ?? ''),
+              completed: !!t.completed,
+            }));
+          if (todoItems.length > 0) {
+            const todoText = todoItems
+              .map(t => `- [${t.completed ? 'x' : ' '}] ${t.text}`)
+              .join('\n');
+            descriptors.push({
+              type: 'assistant_message',
+              text: todoText,
+              createdAt: msg.createdAt,
+            });
+          }
+          return descriptors;
+        }
+      }
+
+      const codexEvents = parseCodexEvent(parsed);
+
+      if (codexEvents.length === 0) {
+        return [];
+      }
+
+      for (const ce of codexEvents) {
+        if (ce.error) {
+          descriptors.push({
+            type: 'system_message',
+            text: ce.error,
+            systemType: 'error',
+            createdAt: msg.createdAt,
+          });
+        }
+
+        if (ce.text) {
+          descriptors.push({
+            type: 'assistant_message',
+            text: ce.text,
+            createdAt: msg.createdAt,
+          });
+        }
+
+        if (ce.toolCall) {
+          const toolDescriptors = this.parseCodexToolCall(msg, ce.toolCall, context);
+          descriptors.push(...toolDescriptors);
+        }
+
+        if (ce.usage) {
+          descriptors.push({
+            type: 'turn_ended',
+            contextFill: {
+              inputTokens: ce.usage.input_tokens,
+              cacheReadInputTokens: 0,
+              cacheCreationInputTokens: 0,
+              outputTokens: ce.usage.output_tokens,
+              totalContextTokens: ce.usage.input_tokens,
+            },
+            contextWindow: ce.contextSnapshot?.contextWindow ?? 0,
+            cumulativeUsage: {
+              inputTokens: ce.usage.input_tokens,
+              outputTokens: ce.usage.output_tokens,
+              cacheReadInputTokens: 0,
+              cacheCreationInputTokens: 0,
+              costUSD: 0,
+              webSearchRequests: 0,
+            },
+            contextCompacted: false,
+          });
+        }
+
+        if (ce.reasoning) {
+          descriptors.push({
+            type: 'assistant_message',
+            text: ce.reasoning,
+            createdAt: msg.createdAt,
+          });
+        }
+      }
+    } catch {
+      // Not JSON -- treat as plain text assistant message
+      const content = String(msg.content ?? '');
+      if (content.trim()) {
+        descriptors.push({
+          type: 'assistant_message',
+          text: content,
+          createdAt: msg.createdAt,
+        });
+      }
+    }
+
+    return descriptors;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Tool call handling
+  // ---------------------------------------------------------------------------
+
+  private parseCodexToolCall(
+    msg: RawMessage,
+    tc: ParsedCodexToolCall,
+    context: ParseContext,
+  ): CanonicalEventDescriptor[] {
+    const descriptors: CanonicalEventDescriptor[] = [];
+    const toolName = tc.name;
+    const toolId = tc.id ?? `codex-tool-${++this.toolIdCounter}`;
+    const args = (tc.arguments ?? {}) as Record<string, unknown>;
+    const hasResult = tc.result !== undefined && tc.result !== null;
+
+    const isMcpTool = toolName.startsWith('mcp__');
+    let mcpServer: string | null = null;
+    let mcpTool: string | null = null;
+    if (isMcpTool) {
+      const parsed = parseMcpToolName(toolName);
+      if (parsed) {
+        mcpServer = parsed.server;
+        mcpTool = parsed.tool;
+      }
+    }
+
+    // If we've already created this tool call, just produce a completion if there's a result
+    if (context.hasToolCall(toolId)) {
+      if (hasResult) {
+        const { resultText, isError } = this.extractCodexToolResult(tc.result);
+        descriptors.push({
+          type: 'tool_call_completed',
+          providerToolCallId: toolId,
+          status: isError ? 'error' : 'completed',
+          result: resultText,
+          isError,
+        });
+      }
+      return descriptors;
+    }
+
+    // Determine target file path
+    let targetFilePath: string | null = null;
+    if (typeof args.file_path === 'string') targetFilePath = args.file_path;
+    else if (typeof args.path === 'string') targetFilePath = args.path;
+
+    // Create new tool call
+    descriptors.push({
+      type: 'tool_call_started',
+      toolName,
+      toolDisplayName: this.codexToolDisplayName(toolName),
+      arguments: args,
+      targetFilePath,
+      mcpServer,
+      mcpTool,
+      providerToolCallId: toolId,
+      createdAt: msg.createdAt,
+    });
+
+    // If tool call already has a result, complete immediately
+    if (hasResult) {
+      const { resultText, isError } = this.extractCodexToolResult(tc.result);
+      descriptors.push({
+        type: 'tool_call_completed',
+        providerToolCallId: toolId,
+        status: isError ? 'error' : 'completed',
+        result: resultText,
+        isError,
+      });
+    }
+
+    return descriptors;
+  }
+
+  private extractCodexToolResult(result: unknown): { resultText: string; isError: boolean } {
+    let actualResult = result;
+    let isError = false;
+
+    if (typeof result === 'object' && result !== null && !Array.isArray(result)) {
+      const r = result as Record<string, unknown>;
+      if ('success' in r && 'result' in r) {
+        actualResult = r.result;
+        isError = r.success === false || !!r.error;
+      } else {
+        isError = 'error' in r;
+      }
+    }
+
+    // MCP content envelope: { content: [{ type: "text", text: "..." }] }
+    if (typeof actualResult === 'object' && actualResult !== null && !Array.isArray(actualResult)) {
+      const obj = actualResult as Record<string, unknown>;
+      if (Array.isArray(obj.content)) {
+        let extracted = '';
+        for (const block of obj.content) {
+          if (block && typeof block === 'object' && (block as any).type === 'text' && (block as any).text) {
+            extracted += (block as any).text;
+          }
+        }
+        if (extracted) {
+          actualResult = extracted;
+        }
+      }
+    }
+
+    const resultText = typeof actualResult === 'string'
+      ? actualResult
+      : actualResult != null ? JSON.stringify(actualResult) : '';
+
+    return { resultText, isError };
+  }
+
+  private codexToolDisplayName(toolName: string): string {
+    const mcp = parseMcpToolName(toolName);
+    if (mcp) return mcp.tool;
+    if (toolName === 'file_change') return 'File Change';
+    if (toolName.includes('command') || toolName === 'shell') return 'Bash';
+    return toolName;
+  }
+}

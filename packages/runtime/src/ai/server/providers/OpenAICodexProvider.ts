@@ -26,6 +26,7 @@ import { McpConfigService } from '../services/McpConfigService';
 import { MCPServerConfig } from '../../../types/MCPServerConfig';
 import { safeJSONSerialize } from '../../../utils/serialization';
 import { AskUserQuestionPrompt, AskUserQuestionPromptOption } from './shared/askUserQuestionTypes';
+import { AgentProtocolTranscriptAdapter } from './agentProtocol/AgentProtocolTranscriptAdapter';
 
 interface OpenAICodexProviderDeps {
   protocol?: CodexSDKProtocol;
@@ -862,7 +863,17 @@ export class OpenAICodexProvider extends BaseAgentProvider {
         existingSessionId
       });
 
-      // Send message using protocol
+      // Create transcript adapter as event parser (returns ParsedItems for the streaming loop).
+      // Canonical events are written by the TranscriptTransformer from raw ai_agent_messages.
+      const transcriptAdapter = new AgentProtocolTranscriptAdapter(null, sessionId ?? '');
+
+      transcriptAdapter.userMessage(
+        prompt,
+        documentContext?.mode === 'planning' ? 'planning' : 'agent',
+        attachments as any,
+      );
+
+      // Send message using protocol -- adapter parses all events
       for await (const event of this.protocol.sendMessage(session, {
         content: prompt,
         attachments,
@@ -875,49 +886,50 @@ export class OpenAICodexProvider extends BaseAgentProvider {
 
         // Store EACH raw event immediately as a separate database row
         if (sessionId) {
-          await this.storeRawEventIfPresent(event, sessionId);
+          try {
+            await this.storeRawEventIfPresent(event, sessionId);
+          } catch {
+            // DB not available (e.g., tests) -- non-critical, continue streaming
+          }
         }
 
-        // Convert protocol events to stream chunks
-        if (event.type === 'error') {
-          yield { type: 'error', error: event.error };
-        } else if (event.type === 'raw_event') {
-          // Raw SDK events are persisted for audit/history but not rendered directly.
-        } else if (event.type === 'reasoning') {
-          // Don't yield reasoning events - they're stored but not part of the visible stream
-        } else if (event.type === 'text') {
-          fullText += event.content;
-          yield { type: 'text', content: event.content };
-        } else if (event.type === 'tool_call') {
-          if (event.toolCall) {
-            if (OpenAICodexProvider.isSessionNamingToolCall(event.toolCall.name)) {
-              usedSessionNamingToolThisTurn = true;
-            }
-            this.handleAskUserQuestionToolCall(event.toolCall, sessionId);
-            yield { type: 'tool_call', toolCall: event.toolCall };
-          }
-        } else if (event.type === 'complete') {
-          yield {
-            type: 'complete',
-            content: event.content,
-            isComplete: true,
-            usage: event.usage,
-            ...(event.contextFillTokens !== undefined ? { contextFillTokens: event.contextFillTokens } : {}),
-            ...(event.contextWindow !== undefined ? { contextWindow: event.contextWindow } : {}),
-          };
-        } else {
-          // Unknown event type - log and surface so nothing is silently dropped
-          console.warn(`[CODEX] Unhandled protocol event type: ${event.type}`, event);
-          if (sessionId) {
-            void this.logAgentMessageBestEffort(sessionId, 'output', JSON.stringify(event), {
-              metadata: { eventType: event.type, codexProvider: true, unhandled: true },
-              hidden: false,
-              searchable: false,
-            });
-          }
-          // If the event has text content, surface it to the user
-          if (event.content) {
-            yield { type: 'text', content: event.content };
+        for (const item of transcriptAdapter.processEvent(event)) {
+          switch (item.kind) {
+            case 'text':
+              // Content rendered from canonical events -- no StreamChunk yield
+              fullText += item.text;
+              break;
+
+            case 'tool_call':
+              // Content rendered from canonical events -- no StreamChunk yield.
+              // Side effects only:
+              if (OpenAICodexProvider.isSessionNamingToolCall(item.toolCall.name)) {
+                usedSessionNamingToolThisTurn = true;
+              }
+              this.handleAskUserQuestionToolCall(item.toolCall, sessionId);
+              // AIService still needs tool_call yields for file tracking / worktree detection
+              yield { type: 'tool_call', toolCall: item.toolCall };
+              break;
+
+            case 'complete':
+              yield {
+                type: 'complete',
+                content: item.event.content,
+                isComplete: true,
+                usage: item.event.usage,
+                ...(item.event.contextFillTokens !== undefined ? { contextFillTokens: item.event.contextFillTokens } : {}),
+                ...(item.event.contextWindow !== undefined ? { contextWindow: item.event.contextWindow } : {}),
+              };
+              break;
+
+            case 'error':
+              yield { type: 'error', error: item.message };
+              break;
+
+            case 'raw_event':
+            case 'reasoning':
+            case 'unknown':
+              break;
           }
         }
       }

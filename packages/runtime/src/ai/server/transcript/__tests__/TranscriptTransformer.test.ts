@@ -214,6 +214,32 @@ describe('TranscriptTransformer', () => {
       expect(transcriptStore.getAll()).toHaveLength(0);
     });
 
+    it('processes live-write sessions (version >= LIVE_WRITE_VERSION) via transformer', async () => {
+      const rawStore = createMockRawStore([
+        makeRawMessage({
+          id: 1,
+          sessionId: SESSION_ID,
+          direction: 'input',
+          content: 'Hello world',
+        }),
+      ]);
+      const transformer = new TranscriptTransformer(rawStore, transcriptStore, metadataStore);
+
+      // Pre-set version to LIVE_WRITE_VERSION (legacy adapter sessions)
+      // These are now processed normally by the transformer
+      await metadataStore.updateTransformStatus(SESSION_ID, {
+        transformVersion: TranscriptTransformer.LIVE_WRITE_VERSION,
+        lastRawMessageId: 0,
+        lastTransformedAt: new Date(),
+        transformStatus: 'complete',
+      });
+
+      const result = await transformer.ensureTransformed(SESSION_ID, PROVIDER);
+      expect(result).toBe(true);
+      // Raw messages ARE now transformed -- transformer handles all sessions
+      expect(transcriptStore.getAll().length).toBeGreaterThan(0);
+    });
+
     it('transforms from beginning when status is null', async () => {
       const rawStore = createMockRawStore([
         makeRawMessage({
@@ -764,6 +790,60 @@ describe('TranscriptTransformer', () => {
       expect(payload.toolName).toBe('AskUserQuestion');
       expect(payload.status).toBe('completed');
       expect(payload.result).toBe('Yes');
+    });
+
+    it('deduplicates nimbalyst_tool_use when assistant message already contains the same tool_use block', async () => {
+      const rawStore = createMockRawStore([
+        // Assistant message containing a tool_use block for AskUserQuestion
+        makeRawMessage({
+          id: 1,
+          sessionId: SESSION_ID,
+          direction: 'output',
+          content: JSON.stringify({
+            type: 'assistant',
+            message: {
+              role: 'assistant',
+              content: [
+                { type: 'tool_use', id: 'tool-dedup-1', name: 'AskUserQuestion', input: { questions: [{ question: 'Pick one?' }] } },
+              ],
+            },
+          }),
+        }),
+        // Separate nimbalyst_tool_use with the SAME tool ID
+        makeRawMessage({
+          id: 2,
+          sessionId: SESSION_ID,
+          direction: 'output',
+          content: JSON.stringify({
+            type: 'nimbalyst_tool_use',
+            id: 'tool-dedup-1',
+            name: 'AskUserQuestion',
+            input: { questions: [{ question: 'Pick one?' }] },
+          }),
+        }),
+        // Tool result
+        makeRawMessage({
+          id: 3,
+          sessionId: SESSION_ID,
+          direction: 'output',
+          content: JSON.stringify({
+            type: 'nimbalyst_tool_result',
+            tool_use_id: 'tool-dedup-1',
+            result: 'Option A',
+          }),
+        }),
+      ]);
+      const transformer = new TranscriptTransformer(rawStore, transcriptStore, metadataStore);
+
+      await transformer.ensureTransformed(SESSION_ID, PROVIDER);
+
+      const events = await transcriptStore.getSessionEvents(SESSION_ID);
+      // Should produce exactly 1 tool_call event, not 2
+      const toolEvents = events.filter(e => e.eventType === 'tool_call');
+      expect(toolEvents).toHaveLength(1);
+      expect((toolEvents[0].payload as any).toolName).toBe('AskUserQuestion');
+      expect((toolEvents[0].payload as any).status).toBe('completed');
+      expect((toolEvents[0].payload as any).result).toBe('Option A');
     });
 
     it('handles non-JSON output as plain assistant text', async () => {

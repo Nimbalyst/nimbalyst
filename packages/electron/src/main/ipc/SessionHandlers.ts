@@ -1,6 +1,6 @@
 import { SessionManager, ProviderFactory } from '@nimbalyst/runtime/ai/server';
 import { AISessionsRepository, TranscriptMigrationRepository } from '@nimbalyst/runtime';
-import { TranscriptProjector, convertCanonicalToLegacyMessages } from '@nimbalyst/runtime/ai/server/transcript';
+import { TranscriptProjector } from '@nimbalyst/runtime/ai/server/transcript';
 import {
     ModelIdentifier,
     shouldBlockStartedSessionProviderSwitch,

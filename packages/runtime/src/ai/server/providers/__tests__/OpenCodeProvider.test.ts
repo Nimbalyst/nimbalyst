@@ -141,7 +141,8 @@ describe('OpenCodeProvider', () => {
       chunks.push(chunk);
     }
 
-    expect(chunks.some((c) => c.type === 'text' && c.content === 'hello from opencode')).toBe(true);
+    // Text content goes through canonical transcript events, not StreamChunks
+    expect(chunks.some((c) => c.type === 'text')).toBe(false);
     expect(chunks.some((c) => c.type === 'complete')).toBe(true);
   });
 

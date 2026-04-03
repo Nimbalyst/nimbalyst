@@ -5,4 +5,8 @@ export type { TranscriptViewModel, TranscriptViewMessage } from './TranscriptPro
 export { TranscriptTransformer } from './TranscriptTransformer';
 export type { IRawMessageStore, RawMessage, ISessionMetadataStore } from './TranscriptTransformer';
 export { TranscriptMigrationService } from './TranscriptMigrationService';
+export type { OnCanonicalEventWritten } from './TranscriptTransformer';
 export { parseToolResult } from './toolResultParser';
+export type { IRawMessageParser, ParseContext, CanonicalEventDescriptor } from './parsers/IRawMessageParser';
+export { ClaudeCodeRawParser } from './parsers/ClaudeCodeRawParser';
+export { CodexRawParser } from './parsers/CodexRawParser';

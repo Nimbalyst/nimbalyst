@@ -1,0 +1,159 @@
+/**
+ * IRawMessageParser -- interface for provider-specific raw message parsers.
+ *
+ * Each parser takes a RawMessage and returns CanonicalEventDescriptors.
+ * Parsers are stateless across calls to the transformer -- any per-batch
+ * dedup state (e.g. processedTextMessageIds) is internal to the parser
+ * instance created per transformMessages() batch.
+ *
+ * The transformer handles writing descriptors to the DB and updating
+ * the tool ID tracking maps.
+ */
+
+import type { RawMessage } from '../TranscriptTransformer';
+import type { TranscriptEvent, InteractivePromptPayload, TurnEndedPayload, UserMessagePayload } from '../types';
+
+// ---------------------------------------------------------------------------
+// Parse context (provided by the transformer to parsers)
+// ---------------------------------------------------------------------------
+
+export interface ParseContext {
+  sessionId: string;
+  /** Check if a tool call with this provider ID has already been created in this batch */
+  hasToolCall(providerToolCallId: string): boolean;
+  /** Check if a subagent with this ID has already been created in this batch */
+  hasSubagent(subagentId: string): boolean;
+  /** Look up existing canonical event for tool matching on resume (DB lookup) */
+  findByProviderToolCallId(id: string): Promise<TranscriptEvent | null>;
+}
+
+// ---------------------------------------------------------------------------
+// Canonical event descriptors (plain data, no DB writes)
+// ---------------------------------------------------------------------------
+
+export interface UserMessageDescriptor {
+  type: 'user_message';
+  text: string;
+  mode?: 'agent' | 'planning';
+  inputType?: 'user' | 'system_message';
+  attachments?: UserMessagePayload['attachments'];
+  createdAt?: Date;
+}
+
+export interface AssistantMessageDescriptor {
+  type: 'assistant_message';
+  text: string;
+  mode?: 'agent' | 'planning';
+  createdAt?: Date;
+}
+
+export interface SystemMessageDescriptor {
+  type: 'system_message';
+  text: string;
+  systemType?: 'status' | 'slash_command' | 'error' | 'init';
+  searchable?: boolean;
+  createdAt?: Date;
+}
+
+export interface ToolCallStartedDescriptor {
+  type: 'tool_call_started';
+  toolName: string;
+  toolDisplayName: string;
+  arguments: Record<string, unknown>;
+  targetFilePath?: string | null;
+  mcpServer?: string | null;
+  mcpTool?: string | null;
+  providerToolCallId?: string | null;
+  subagentId?: string | null;
+  createdAt?: Date;
+}
+
+export interface ToolCallCompletedDescriptor {
+  type: 'tool_call_completed';
+  providerToolCallId: string;
+  status: 'completed' | 'error';
+  result?: string;
+  isError?: boolean;
+  exitCode?: number;
+  durationMs?: number;
+}
+
+export interface ToolProgressDescriptor {
+  type: 'tool_progress';
+  providerToolCallId: string;
+  toolName: string;
+  elapsedSeconds: number;
+  progressContent: string;
+  subagentId?: string | null;
+  createdAt?: Date;
+}
+
+export interface SubagentStartedDescriptor {
+  type: 'subagent_started';
+  subagentId: string;
+  agentType: string;
+  teammateName?: string | null;
+  teamName?: string | null;
+  teammateMode?: string | null;
+  isBackground?: boolean;
+  prompt: string;
+  createdAt?: Date;
+}
+
+export interface SubagentCompletedDescriptor {
+  type: 'subagent_completed';
+  subagentId: string;
+  status: 'completed';
+  resultSummary?: string;
+}
+
+export interface InteractivePromptCreatedDescriptor {
+  type: 'interactive_prompt_created';
+  payload: InteractivePromptPayload;
+  subagentId?: string | null;
+  createdAt?: Date;
+}
+
+export interface InteractivePromptUpdatedDescriptor {
+  type: 'interactive_prompt_updated';
+  requestId: string;
+  update: Partial<InteractivePromptPayload>;
+}
+
+export interface TurnEndedDescriptor {
+  type: 'turn_ended';
+  contextFill: TurnEndedPayload['contextFill'];
+  contextWindow: number;
+  cumulativeUsage: TurnEndedPayload['cumulativeUsage'];
+  contextCompacted?: boolean;
+  subagentId?: string | null;
+  createdAt?: Date;
+}
+
+export type CanonicalEventDescriptor =
+  | UserMessageDescriptor
+  | AssistantMessageDescriptor
+  | SystemMessageDescriptor
+  | ToolCallStartedDescriptor
+  | ToolCallCompletedDescriptor
+  | ToolProgressDescriptor
+  | SubagentStartedDescriptor
+  | SubagentCompletedDescriptor
+  | InteractivePromptCreatedDescriptor
+  | InteractivePromptUpdatedDescriptor
+  | TurnEndedDescriptor;
+
+// ---------------------------------------------------------------------------
+// Parser interface
+// ---------------------------------------------------------------------------
+
+export interface IRawMessageParser {
+  /**
+   * Parse a single raw message and return canonical event descriptors.
+   * The transformer calls this for each raw message in sequence.
+   */
+  parseMessage(
+    msg: RawMessage,
+    context: ParseContext,
+  ): Promise<CanonicalEventDescriptor[]>;
+}

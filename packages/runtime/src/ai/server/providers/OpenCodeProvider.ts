@@ -30,6 +30,7 @@ import { OpenCodeSDKProtocol } from '../protocols/OpenCodeSDKProtocol';
 import { McpConfigService } from '../services/McpConfigService';
 import { MCPServerConfig } from '../../../types/MCPServerConfig';
 import { safeJSONSerialize } from '../../../utils/serialization';
+import { AgentProtocolTranscriptAdapter } from './agentProtocol/AgentProtocolTranscriptAdapter';
 
 interface OpenCodeProviderDeps {
   protocol?: OpenCodeSDKProtocol;
@@ -301,7 +302,17 @@ export class OpenCodeProvider extends BaseAgentProvider {
         existingSessionId
       });
 
-      // Send message using protocol
+      // Create transcript adapter as event parser (returns ParsedItems for the streaming loop).
+      // Canonical events are written by the TranscriptTransformer from raw ai_agent_messages.
+      const transcriptAdapter = new AgentProtocolTranscriptAdapter(null, sessionId ?? '');
+
+      transcriptAdapter.userMessage(
+        messageWithContext,
+        documentContext?.mode === 'planning' ? 'planning' : 'agent',
+        attachments as any,
+      );
+
+      // Send message using protocol -- adapter parses all events
       for await (const event of this.protocol.sendMessage(session, {
         content: messageWithContext,
         attachments,
@@ -323,44 +334,50 @@ export class OpenCodeProvider extends BaseAgentProvider {
           });
         }
 
-        // Convert protocol events to stream chunks
-        if (event.type === 'error') {
-          yield { type: 'error', error: event.error };
-        } else if (event.type === 'raw_event') {
-          // Persisted above, not rendered
-        } else if (event.type === 'reasoning') {
-          // Stored but not part of visible stream
-        } else if (event.type === 'text') {
-          fullText += event.content;
-          yield { type: 'text', content: event.content };
-        } else if (event.type === 'tool_call') {
-          if (event.toolCall) {
-            yield { type: 'tool_call', toolCall: event.toolCall };
+        for (const item of transcriptAdapter.processEvent(event)) {
+          switch (item.kind) {
+            case 'text':
+              // Content rendered from canonical events -- no StreamChunk yield
+              fullText += item.text;
+              break;
+
+            case 'tool_call':
+              // AIService needs tool_call yields for file tracking / worktree detection
+              yield { type: 'tool_call', toolCall: item.toolCall };
+              break;
+
+            case 'tool_result':
+              // AIService needs tool results for file tracking
+              yield {
+                type: 'tool_call',
+                toolCall: {
+                  id: item.toolResult.id,
+                  name: item.toolResult.name,
+                  result: item.toolResult.result,
+                },
+              };
+              break;
+
+            case 'complete':
+              yield {
+                type: 'complete',
+                content: item.event.content,
+                isComplete: true,
+                usage: item.event.usage,
+                ...(item.event.contextFillTokens !== undefined ? { contextFillTokens: item.event.contextFillTokens } : {}),
+                ...(item.event.contextWindow !== undefined ? { contextWindow: item.event.contextWindow } : {}),
+              };
+              break;
+
+            case 'error':
+              yield { type: 'error', error: item.message };
+              break;
+
+            case 'raw_event':
+            case 'reasoning':
+            case 'planning_mode':
+              break;
           }
-        } else if (event.type === 'tool_result') {
-          if (event.toolResult) {
-            yield {
-              type: 'tool_call',
-              toolCall: {
-                id: event.toolResult.id,
-                name: event.toolResult.name,
-                result: event.toolResult.result,
-              },
-            };
-          }
-        } else if (event.type === 'planning_mode_entered') {
-          yield { type: 'text', content: '\n[Entering planning mode]\n' };
-        } else if (event.type === 'planning_mode_exited') {
-          yield { type: 'text', content: '\n[Exiting planning mode]\n' };
-        } else if (event.type === 'complete') {
-          yield {
-            type: 'complete',
-            content: event.content,
-            isComplete: true,
-            usage: event.usage,
-            ...(event.contextFillTokens !== undefined ? { contextFillTokens: event.contextFillTokens } : {}),
-            ...(event.contextWindow !== undefined ? { contextWindow: event.contextWindow } : {}),
-          };
         }
       }
 

@@ -1,19 +1,29 @@
-/**
- * TranscriptTransformer -- lazy migration pipeline that transforms old
- * ai_agent_messages rows into canonical ai_transcript_events rows on demand.
+  /**
+ * TranscriptTransformer -- the single path from raw ai_agent_messages to
+ * canonical ai_transcript_events.
  *
- * Used for sessions created before the canonical transcript system shipped.
- * The raw ai_agent_messages log is preserved as the source of truth; this
- * transformer reads it and writes derived canonical events via TranscriptWriter.
+ * Supports two modes:
+ * 1. Batch: ensureUpToDate() for lazy migration on session load
+ * 2. Incremental: processNewMessages() for real-time processing during streaming
+ *
+ * The raw ai_agent_messages log is the sole source of truth. This transformer
+ * reads it and writes derived canonical events via TranscriptWriter.
+ *
+ * Parsing logic is delegated to per-provider parsers (ClaudeCodeRawParser,
+ * CodexRawParser). The transformer owns the write path: it processes
+ * CanonicalEventDescriptors returned by parsers, calls TranscriptWriter,
+ * and manages the tool/subagent ID tracking maps.
  */
 
 import { TranscriptWriter } from './TranscriptWriter';
-import { parseCodexEvent, type ParsedCodexToolCall } from '../providers/codex/codexEventParser';
-import { parseMcpToolName } from './utils';
-import type { ITranscriptEventStore } from './types';
-
-// Tool names that represent sub-agent spawns
-const SUBAGENT_TOOLS = new Set(['Task', 'Agent']);
+import type { ITranscriptEventStore, TranscriptEvent } from './types';
+import { ClaudeCodeRawParser } from './parsers/ClaudeCodeRawParser';
+import { CodexRawParser } from './parsers/CodexRawParser';
+import type {
+  IRawMessageParser,
+  ParseContext,
+  CanonicalEventDescriptor,
+} from './parsers/IRawMessageParser';
 
 // ---------------------------------------------------------------------------
 // Dependencies (injected via interfaces)
@@ -54,11 +64,31 @@ export interface ISessionMetadataStore {
 }
 
 // ---------------------------------------------------------------------------
+// Callback type for real-time event notification
+// ---------------------------------------------------------------------------
+
+export type OnCanonicalEventWritten = (event: TranscriptEvent) => void;
+
+// ---------------------------------------------------------------------------
 // Transformer
 // ---------------------------------------------------------------------------
 
 export class TranscriptTransformer {
-  static readonly CURRENT_VERSION = 2;
+  /** Version for transformer-managed sessions. Bump to force re-transformation. */
+  static readonly CURRENT_VERSION = 4;
+
+  /**
+   * @deprecated Kept for backwards compatibility with existing session metadata.
+   * Sessions with this version are now processed normally via the transformer.
+   * Will be removed once all sessions have been re-transformed.
+   */
+  static readonly LIVE_WRITE_VERSION = 1000;
+
+  /**
+   * Callback fired after each canonical event is written.
+   * Used to notify the renderer in real-time during streaming.
+   */
+  private onEventWritten: OnCanonicalEventWritten | null = null;
 
   constructor(
     private rawStore: IRawMessageStore,
@@ -66,28 +96,42 @@ export class TranscriptTransformer {
     private metadataStore: ISessionMetadataStore,
   ) {}
 
+  /** Set callback fired after each canonical event write (for UI notification) */
+  setOnEventWritten(cb: OnCanonicalEventWritten): void {
+    this.onEventWritten = cb;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Public API
+  // ---------------------------------------------------------------------------
+
   /**
-   * Ensure a session has canonical rows. Call before reading canonical transcript.
-   * Returns true if transformation was needed, false if already up to date.
+   * Ensure a session's canonical events are up to date. Call before reading
+   * canonical transcript. Returns true if new events were written.
+   *
+   * This is the lazy migration entry point: on session load, it processes
+   * any raw messages that haven't been transformed yet.
    */
-  async ensureTransformed(sessionId: string, provider: string): Promise<boolean> {
+  async ensureUpToDate(sessionId: string, provider: string): Promise<boolean> {
     const status = await this.metadataStore.getTransformStatus(sessionId);
 
     // Complete at current version -- resume to pick up any new raw messages
-    // written since the last transform. Without dual-write, new turns append
-    // raw messages after the transform ran. resumeTransformation is a no-op
+    // written since the last transform. resumeTransformation is a no-op
     // when there are no new messages (one DB query, no writes).
     if (
       status.transformStatus === 'complete' &&
-      status.transformVersion === TranscriptTransformer.CURRENT_VERSION
+      status.transformVersion != null &&
+      (status.transformVersion === TranscriptTransformer.CURRENT_VERSION ||
+       status.transformVersion >= TranscriptTransformer.LIVE_WRITE_VERSION)
     ) {
       return this.resumeTransformation(sessionId, provider, status.lastRawMessageId ?? undefined, true);
     }
 
-    // Version mismatch (upgrade or downgrade) -- re-transform from scratch
+    // Version mismatch (old transformer version, not live) -- re-transform from scratch
     if (
       status.transformVersion != null &&
-      status.transformVersion !== TranscriptTransformer.CURRENT_VERSION
+      status.transformVersion !== TranscriptTransformer.CURRENT_VERSION &&
+      status.transformVersion < TranscriptTransformer.LIVE_WRITE_VERSION
     ) {
       await this.transcriptStore.deleteSessionEvents(sessionId);
       return this.transformFromBeginning(sessionId, provider);
@@ -110,6 +154,102 @@ export class TranscriptTransformer {
 
     return false;
   }
+
+  /**
+   * @deprecated Use ensureUpToDate instead. Kept for backwards compatibility.
+   */
+  async ensureTransformed(sessionId: string, provider: string): Promise<boolean> {
+    return this.ensureUpToDate(sessionId, provider);
+  }
+
+  /**
+   * Process new raw messages for a session incrementally.
+   * Call after writing raw messages to ai_agent_messages.
+   *
+   * This reads messages with id > lastRawMessageId (watermark), parses them,
+   * writes canonical events, updates the watermark, and fires onEventWritten
+   * for each event so the renderer can update in real-time.
+   *
+   * Returns the canonical events that were written.
+   */
+  async processNewMessages(
+    sessionId: string,
+    provider: string,
+  ): Promise<TranscriptEvent[]> {
+    const status = await this.metadataStore.getTransformStatus(sessionId);
+    const afterId = status.lastRawMessageId ?? 0;
+
+    // If session has never been initialized, set up watermark
+    if (status.transformStatus == null) {
+      await this.metadataStore.updateTransformStatus(sessionId, {
+        transformVersion: TranscriptTransformer.CURRENT_VERSION,
+        lastRawMessageId: 0,
+        lastTransformedAt: new Date(),
+        transformStatus: 'complete',
+      });
+    }
+
+    const messages = await this.rawStore.getMessages(sessionId, afterId);
+    if (messages.length === 0) return [];
+
+    const writer = new TranscriptWriter(this.transcriptStore, provider);
+    const parser = this.createParser(provider);
+
+    const startSequence = await this.transcriptStore.getNextSequence(sessionId);
+    writer.seedSequence(startSequence);
+
+    const writtenEvents: TranscriptEvent[] = [];
+
+    // For incremental processing, use DB lookups for tool ID resolution
+    // instead of in-memory maps (no batch state to carry over)
+    const toolEventIds = new Map<string, number>();
+    const subagentEventIds = new Map<string, number>();
+
+    const context: ParseContext = {
+      sessionId,
+      hasToolCall: (id: string) => {
+        if (toolEventIds.has(id)) return true;
+        // No synchronous DB check; the parser should use findByProviderToolCallId for async
+        return false;
+      },
+      hasSubagent: (id: string) => subagentEventIds.has(id),
+      findByProviderToolCallId: (id: string) => this.transcriptStore.findByProviderToolCallId(id),
+    };
+
+    let lastRawMessageId = afterId;
+
+    for (const msg of messages) {
+      try {
+        const descriptors = await parser.parseMessage(msg, context);
+        for (const desc of descriptors) {
+          const event = await this.processDescriptorWithNotify(
+            writer,
+            sessionId,
+            desc,
+            toolEventIds,
+            subagentEventIds,
+          );
+          if (event) writtenEvents.push(event);
+        }
+      } catch {
+        // Skip unparseable messages -- the raw log is preserved
+      }
+      lastRawMessageId = msg.id;
+    }
+
+    await this.metadataStore.updateTransformStatus(sessionId, {
+      transformVersion: TranscriptTransformer.CURRENT_VERSION,
+      lastRawMessageId,
+      lastTransformedAt: new Date(),
+      transformStatus: 'complete',
+    });
+
+    return writtenEvents;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Internal: batch transformation
+  // ---------------------------------------------------------------------------
 
   private async transformFromBeginning(sessionId: string, provider: string): Promise<boolean> {
     try {
@@ -162,7 +302,6 @@ export class TranscriptTransformer {
       const messages = await this.rawStore.getMessages(sessionId, afterId);
       if (messages.length === 0) {
         if (!alreadyComplete) {
-          // Settle pending/error sessions to complete so they don't re-query
           await this.metadataStore.updateTransformStatus(sessionId, {
             transformVersion: TranscriptTransformer.CURRENT_VERSION,
             lastRawMessageId: afterId ?? 0,
@@ -194,64 +333,56 @@ export class TranscriptTransformer {
     }
   }
 
-  /**
-   * Transform raw messages into canonical events.
-   * Parses ai_agent_messages content and writes ai_transcript_events via TranscriptWriter.
-   */
+  // ---------------------------------------------------------------------------
+  // Parser creation
+  // ---------------------------------------------------------------------------
+
+  private createParser(provider: string): IRawMessageParser {
+    if (provider === 'openai-codex' || provider === 'open-code') {
+      return new CodexRawParser();
+    }
+    return new ClaudeCodeRawParser();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Core transformation: parse messages -> process descriptors -> write events
+  // ---------------------------------------------------------------------------
+
   private async transformMessages(
     sessionId: string,
     messages: RawMessage[],
     provider: string,
   ): Promise<{ lastRawMessageId: number; eventsWritten: number }> {
     const writer = new TranscriptWriter(this.transcriptStore, provider);
-    const isCodex = provider === 'openai-codex';
+    const parser = this.createParser(provider);
 
-    // Seed the sequence counter once to avoid N separate MAX(sequence) queries
     const startSequence = await this.transcriptStore.getNextSequence(sessionId);
     writer.seedSequence(startSequence);
 
-    // Track tool_use IDs to their canonical event IDs for matching results
     const toolEventIds = new Map<string, number>();
-    // Track subagent tool IDs (Agent/Task spawns) for parent-child grouping
     const subagentEventIds = new Map<string, number>();
-    // Track API message IDs that have had text content processed (dedup accumulated chunks)
-    const processedTextMessageIds = new Set<string>();
     let eventsWritten = 0;
     let lastRawMessageId = 0;
 
-    for (const msg of messages) {
-      if (msg.hidden) {
-        lastRawMessageId = msg.id;
-        continue;
-      }
+    const context: ParseContext = {
+      sessionId,
+      hasToolCall: (id: string) => toolEventIds.has(id),
+      hasSubagent: (id: string) => subagentEventIds.has(id),
+      findByProviderToolCallId: (id: string) => this.transcriptStore.findByProviderToolCallId(id),
+    };
 
+    for (const msg of messages) {
       try {
-        if (msg.direction === 'input') {
-          eventsWritten += await this.transformInputMessage(
+        const descriptors = await parser.parseMessage(msg, context);
+        for (const desc of descriptors) {
+          const event = await this.processDescriptorWithNotify(
             writer,
             sessionId,
-            msg,
+            desc,
             toolEventIds,
             subagentEventIds,
           );
-        } else if (msg.direction === 'output') {
-          if (isCodex) {
-            eventsWritten += await this.transformCodexOutputMessage(
-              writer,
-              sessionId,
-              msg,
-              toolEventIds,
-            );
-          } else {
-            eventsWritten += await this.transformOutputMessage(
-              writer,
-              sessionId,
-              msg,
-              toolEventIds,
-              subagentEventIds,
-              processedTextMessageIds,
-            );
-          }
+          if (event) eventsWritten++;
         }
       } catch {
         // Skip unparseable messages -- the raw log is preserved
@@ -264,641 +395,163 @@ export class TranscriptTransformer {
   }
 
   // ---------------------------------------------------------------------------
-  // Input message transformation
+  // Descriptor processing: maps descriptors to TranscriptWriter calls
   // ---------------------------------------------------------------------------
 
-  private async transformInputMessage(
+  /**
+   * Process a descriptor, write the canonical event, update tracking maps,
+   * and fire onEventWritten callback. Returns the written event (or null
+   * for updates that don't produce a new row).
+   */
+  private async processDescriptorWithNotify(
     writer: TranscriptWriter,
     sessionId: string,
-    msg: RawMessage,
+    desc: CanonicalEventDescriptor,
     toolEventIds: Map<string, number>,
     subagentEventIds: Map<string, number>,
-  ): Promise<number> {
-    let eventsWritten = 0;
-
-    try {
-      const parsed = JSON.parse(msg.content);
-
-      if (parsed.prompt) {
-        // Claude Code format: { prompt: "...", options: {...} }
-        if (parsed.prompt.startsWith('[System:')) {
-          // System continuation messages
-          const event = await writer.appendSystemMessage(sessionId, parsed.prompt, {
-            systemType: 'status',
-            searchable: false,
-            createdAt: msg.createdAt,
-          });
-          if (event) eventsWritten++;
-        } else if (this.isSystemReminderContent(parsed.prompt, msg.metadata)) {
-          const event = await writer.appendSystemMessage(sessionId, parsed.prompt, {
-            systemType: 'status',
-            createdAt: msg.createdAt,
-          });
-          if (event) eventsWritten++;
-        } else {
-          const mode = (msg.metadata?.mode as 'agent' | 'planning') ?? 'agent';
-          const event = await writer.appendUserMessage(sessionId, parsed.prompt, {
-            mode,
-            attachments: msg.metadata?.attachments as any,
-            createdAt: msg.createdAt,
-          });
-          if (event) eventsWritten++;
-        }
-      } else if (parsed.type === 'user' && parsed.message) {
-        // SDK format: { type: "user", message: { role: "user", content: ... } }
-        const content = parsed.message.content;
-
-        if (Array.isArray(content)) {
-          // Check for tool_result blocks
-          for (const block of content) {
-            if (block.type === 'tool_result') {
-              eventsWritten += await this.handleToolResult(
-                writer,
-                block,
-                toolEventIds,
-                subagentEventIds,
-              );
-            }
-          }
-        } else if (typeof content === 'string') {
-          if (this.isSystemReminderContent(content, msg.metadata)) {
-            const event = await writer.appendSystemMessage(sessionId, content, {
-              systemType: 'status',
-              createdAt: msg.createdAt,
-            });
-            if (event) eventsWritten++;
-          } else {
-            const event = await writer.appendUserMessage(sessionId, content, {
-              createdAt: msg.createdAt,
-            });
-            if (event) eventsWritten++;
-          }
-        }
-      }
-    } catch {
-      // Not JSON -- treat as plain text user message
-      const content = String(msg.content ?? '');
-      if (content.trim()) {
-        if (this.isSystemReminderContent(content, msg.metadata)) {
-          const event = await writer.appendSystemMessage(sessionId, content, {
-            systemType: 'status',
-            createdAt: msg.createdAt,
-          });
-          if (event) eventsWritten++;
-        } else {
-          const event = await writer.appendUserMessage(sessionId, content, {
-            createdAt: msg.createdAt,
-          });
-          if (event) eventsWritten++;
-        }
-      }
+  ): Promise<TranscriptEvent | null> {
+    const event = await this.processDescriptor(writer, sessionId, desc, toolEventIds, subagentEventIds);
+    if (event) {
+      this.onEventWritten?.(event);
     }
-
-    return eventsWritten;
+    return event;
   }
 
-  // ---------------------------------------------------------------------------
-  // Output message transformation
-  // ---------------------------------------------------------------------------
-
-  private async transformOutputMessage(
+  private async processDescriptor(
     writer: TranscriptWriter,
     sessionId: string,
-    msg: RawMessage,
+    desc: CanonicalEventDescriptor,
     toolEventIds: Map<string, number>,
     subagentEventIds: Map<string, number>,
-    processedTextMessageIds: Set<string>,
-  ): Promise<number> {
-    let eventsWritten = 0;
-
-    try {
-      const parsed = JSON.parse(msg.content);
-
-      if (parsed.type === 'text' && parsed.content !== undefined) {
-        // Claude Code text chunk: { type: 'text', content: '...' }
-        const event = await writer.appendAssistantMessage(sessionId, String(parsed.content), {
-          createdAt: msg.createdAt,
+  ): Promise<TranscriptEvent | null> {
+    switch (desc.type) {
+      case 'user_message': {
+        return writer.appendUserMessage(sessionId, desc.text, {
+          mode: desc.mode,
+          attachments: desc.attachments,
+          createdAt: desc.createdAt,
         });
-        if (event) eventsWritten++;
-      } else if (parsed.type === 'assistant' && parsed.message) {
-        // parent_tool_use_id on the outer wrapper indicates child tools of a subagent
-        const parentToolUseId: string | undefined = parsed.parent_tool_use_id;
+      }
 
-        // The SDK sends both streaming chunks (with message.id/model) and accumulated
-        // echo chunks (without these fields) containing duplicate content.
-        // Track message IDs to skip duplicate text blocks.
-        const messageId: string | undefined = parsed.message.id;
-
-        // Full assistant message with structured content
-        if (Array.isArray(parsed.message.content)) {
-          for (const block of parsed.message.content) {
-            if (block.type === 'text' && block.text) {
-              // Deduplicate text:
-              // 1. If we've seen this message ID before, skip (repeated streaming chunk)
-              // 2. If no message ID AND we've already processed text from streaming chunks,
-              //    this is likely an accumulated echo -- skip
-              if (messageId && processedTextMessageIds.has(messageId)) {
-                continue;
-              }
-              if (!messageId && processedTextMessageIds.size > 0) {
-                continue;
-              }
-              if (messageId) processedTextMessageIds.add(messageId);
-              const event = await writer.appendAssistantMessage(sessionId, block.text, {
-                createdAt: msg.createdAt,
-              });
-              if (event) eventsWritten++;
-            } else if (block.type === 'tool_use') {
-              eventsWritten += await this.handleToolUse(
-                writer,
-                sessionId,
-                msg,
-                block,
-                toolEventIds,
-                subagentEventIds,
-                parentToolUseId,
-              );
-            } else if (block.type === 'tool_result') {
-              eventsWritten += await this.handleToolResult(writer, block, toolEventIds, subagentEventIds);
-            }
-          }
-        }
-      } else if (parsed.type === 'error' && parsed.error) {
-        // Error message
-        const errorContent =
-          typeof parsed.error === 'string' ? parsed.error : JSON.stringify(parsed.error);
-        const event = await writer.appendSystemMessage(sessionId, errorContent, {
-          systemType: 'error',
-          createdAt: msg.createdAt,
+      case 'assistant_message': {
+        return writer.appendAssistantMessage(sessionId, desc.text, {
+          mode: desc.mode,
+          createdAt: desc.createdAt,
         });
-        if (event) eventsWritten++;
-      } else if (parsed.type === 'nimbalyst_tool_use') {
-        // Internal tool call (AskUserQuestion, ToolPermission, etc.)
-        eventsWritten += await this.handleNimbalystToolUse(
-          writer,
-          sessionId,
-          msg,
-          parsed,
-          toolEventIds,
-        );
-      } else if (parsed.type === 'nimbalyst_tool_result') {
-        // Internal tool result
-        eventsWritten += await this.handleToolResult(writer, {
-          tool_use_id: parsed.tool_use_id || parsed.id,
-          content: parsed.result,
-          is_error: parsed.is_error,
-        }, toolEventIds, subagentEventIds);
-      } else if (parsed.type === 'user' && parsed.message) {
-        // Tool results that come as output direction (slash commands etc.)
-        if (Array.isArray(parsed.message.content)) {
-          for (const block of parsed.message.content) {
-            if (block.type === 'tool_result') {
-              eventsWritten += await this.handleToolResult(writer, block, toolEventIds, subagentEventIds);
-            }
-          }
-        } else if (typeof parsed.message.content === 'string' && parsed.message.content.trim()) {
-          const event = await writer.appendSystemMessage(
-            sessionId,
-            parsed.message.content,
-            { systemType: 'status', createdAt: msg.createdAt },
-          );
-          if (event) eventsWritten++;
-        }
       }
-    } catch {
-      // Not JSON -- treat as plain text assistant message
-      const content = String(msg.content ?? '');
-      if (content.trim()) {
-        const event = await writer.appendAssistantMessage(sessionId, content, {
-          createdAt: msg.createdAt,
+
+      case 'system_message': {
+        return writer.appendSystemMessage(sessionId, desc.text, {
+          systemType: desc.systemType,
+          searchable: desc.searchable,
+          createdAt: desc.createdAt,
         });
-        if (event) eventsWritten++;
-      }
-    }
-
-    return eventsWritten;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Codex output message transformation
-  // ---------------------------------------------------------------------------
-
-  private async transformCodexOutputMessage(
-    writer: TranscriptWriter,
-    sessionId: string,
-    msg: RawMessage,
-    toolEventIds: Map<string, number>,
-  ): Promise<number> {
-    let eventsWritten = 0;
-
-    try {
-      const parsed = JSON.parse(msg.content);
-
-      // Handle todo_list items directly from raw JSON (not in ParsedCodexEvent)
-      const item = parsed.item;
-      if (item && typeof item === 'object' && !Array.isArray(item)) {
-        const itemRecord = item as Record<string, unknown>;
-        if (itemRecord.type === 'todo_list' && Array.isArray(itemRecord.items)) {
-          const todoItems = (itemRecord.items as Array<Record<string, unknown>>)
-            .filter((t): t is Record<string, unknown> => t != null && typeof t === 'object')
-            .map(t => ({
-              text: typeof t.text === 'string' ? t.text : String(t.text ?? ''),
-              completed: !!t.completed,
-            }));
-          if (todoItems.length > 0) {
-            const todoText = todoItems
-              .map(t => `- [${t.completed ? 'x' : ' '}] ${t.text}`)
-              .join('\n');
-            const event = await writer.appendAssistantMessage(sessionId, todoText, {
-              createdAt: msg.createdAt,
-            });
-            if (event) eventsWritten++;
-          }
-          return eventsWritten;
-        }
       }
 
-      const codexEvents = parseCodexEvent(parsed);
-
-      if (codexEvents.length === 0) {
-        // Unrecognized event structure -- skip silently (raw log preserved)
-        return 0;
-      }
-
-      for (const ce of codexEvents) {
-        if (ce.error) {
-          const event = await writer.appendSystemMessage(sessionId, ce.error, {
-            systemType: 'error',
-            createdAt: msg.createdAt,
-          });
-          if (event) eventsWritten++;
-        }
-
-        if (ce.text) {
-          const event = await writer.appendAssistantMessage(sessionId, ce.text, {
-            createdAt: msg.createdAt,
-          });
-          if (event) eventsWritten++;
-        }
-
-        if (ce.toolCall) {
-          eventsWritten += await this.handleCodexToolCall(
-            writer,
-            sessionId,
-            msg,
-            ce.toolCall,
-            toolEventIds,
-          );
-        }
-
-        if (ce.usage) {
-          await writer.recordTurnEnded(sessionId, {
-            contextFill: {
-              inputTokens: ce.usage.input_tokens,
-              cacheReadInputTokens: 0,
-              cacheCreationInputTokens: 0,
-              outputTokens: ce.usage.output_tokens,
-              totalContextTokens: ce.usage.input_tokens,
-            },
-            contextWindow: ce.contextSnapshot?.contextWindow ?? 0,
-            cumulativeUsage: {
-              inputTokens: ce.usage.input_tokens,
-              outputTokens: ce.usage.output_tokens,
-              cacheReadInputTokens: 0,
-              cacheCreationInputTokens: 0,
-              costUSD: 0,
-              webSearchRequests: 0,
-            },
-            contextCompacted: false,
-          });
-          eventsWritten++;
-        }
-
-        if (ce.reasoning) {
-          const event = await writer.appendAssistantMessage(sessionId, ce.reasoning, {
-            createdAt: msg.createdAt,
-          });
-          if (event) eventsWritten++;
-        }
-      }
-    } catch {
-      // Not JSON -- treat as plain text assistant message
-      const content = String(msg.content ?? '');
-      if (content.trim()) {
-        const event = await writer.appendAssistantMessage(sessionId, content, {
-          createdAt: msg.createdAt,
+      case 'tool_call_started': {
+        const event = await writer.createToolCall(sessionId, {
+          toolName: desc.toolName,
+          toolDisplayName: desc.toolDisplayName,
+          arguments: desc.arguments,
+          targetFilePath: desc.targetFilePath,
+          mcpServer: desc.mcpServer,
+          mcpTool: desc.mcpTool,
+          providerToolCallId: desc.providerToolCallId,
+          subagentId: desc.subagentId,
+          createdAt: desc.createdAt,
         });
-        if (event) eventsWritten++;
+        if (desc.providerToolCallId) {
+          toolEventIds.set(desc.providerToolCallId, event.id);
+        }
+        return event;
       }
-    }
 
-    return eventsWritten;
-  }
-
-  private codexToolIdCounter = 0;
-
-  private async handleCodexToolCall(
-    writer: TranscriptWriter,
-    sessionId: string,
-    msg: RawMessage,
-    tc: ParsedCodexToolCall,
-    toolEventIds: Map<string, number>,
-  ): Promise<number> {
-    const toolName = tc.name;
-    const toolId = tc.id ?? `codex-tool-${++this.codexToolIdCounter}`;
-    const args = (tc.arguments ?? {}) as Record<string, unknown>;
-    const hasResult = tc.result !== undefined && tc.result !== null;
-
-    const isMcpTool = toolName.startsWith('mcp__');
-    let mcpServer: string | null = null;
-    let mcpTool: string | null = null;
-    if (isMcpTool) {
-      const parsed = parseMcpToolName(toolName);
-      if (parsed) {
-        mcpServer = parsed.server;
-        mcpTool = parsed.tool;
-      }
-    }
-
-    // If we've already created this tool call, update with result
-    const existingEventId = toolEventIds.get(toolId);
-    if (existingEventId != null && hasResult) {
-      await this.updateCodexToolResult(writer, existingEventId, tc.result);
-      return 0; // update, not a new event
-    }
-
-    // Deduplicate
-    if (existingEventId != null) return 0;
-
-    // Determine target file path
-    let targetFilePath: string | null = null;
-    if (typeof args.file_path === 'string') targetFilePath = args.file_path;
-    else if (typeof args.path === 'string') targetFilePath = args.path;
-
-    // Create new tool call
-    const event = await writer.createToolCall(sessionId, {
-      toolName,
-      toolDisplayName: this.codexToolDisplayName(toolName),
-      arguments: args,
-      targetFilePath,
-      mcpServer,
-      mcpTool,
-      providerToolCallId: toolId,
-      createdAt: msg.createdAt,
-    });
-
-    toolEventIds.set(toolId, event.id);
-
-    // If tool call already has a result, update immediately
-    if (hasResult) {
-      await this.updateCodexToolResult(writer, event.id, tc.result);
-    }
-
-    return 1;
-  }
-
-  private async updateCodexToolResult(
-    writer: TranscriptWriter,
-    eventId: number,
-    result: unknown,
-  ): Promise<void> {
-    // Codex SDK wraps MCP tool results in { success, result, status, error? }.
-    // Unwrap to store the canonical MCP response text, consistent with Claude Code.
-    let actualResult = result;
-    let isError = false;
-
-    if (typeof result === 'object' && result !== null && !Array.isArray(result)) {
-      const r = result as Record<string, unknown>;
-      if ('success' in r && 'result' in r) {
-        actualResult = r.result;
-        isError = r.success === false || !!r.error;
-      } else {
-        isError = 'error' in r;
-      }
-    }
-
-    // MCP content envelope: { content: [{ type: "text", text: "..." }] }
-    // Extract inner text, matching how handleToolResult processes Claude Code results.
-    if (typeof actualResult === 'object' && actualResult !== null && !Array.isArray(actualResult)) {
-      const obj = actualResult as Record<string, unknown>;
-      if (Array.isArray(obj.content)) {
-        let extracted = '';
-        for (const block of obj.content) {
-          if (block && typeof block === 'object' && (block as any).type === 'text' && (block as any).text) {
-            extracted += (block as any).text;
+      case 'tool_call_completed': {
+        let eventId = toolEventIds.get(desc.providerToolCallId);
+        if (!eventId) {
+          const existing = await this.transcriptStore.findByProviderToolCallId(desc.providerToolCallId);
+          if (existing) {
+            eventId = existing.id;
+            toolEventIds.set(desc.providerToolCallId, eventId);
           }
         }
-        if (extracted) {
-          actualResult = extracted;
-        }
+        if (!eventId) return null;
+
+        await writer.updateToolCall(eventId, {
+          status: desc.status,
+          result: desc.result,
+          isError: desc.isError,
+          exitCode: desc.exitCode,
+          durationMs: desc.durationMs,
+        });
+        // Return the updated event for notification
+        return this.transcriptStore.getEventById(eventId);
       }
-    }
 
-    const resultText = typeof actualResult === 'string'
-      ? actualResult
-      : actualResult != null ? JSON.stringify(actualResult) : '';
+      case 'tool_progress': {
+        const parentEventId = toolEventIds.get(desc.providerToolCallId);
+        if (!parentEventId) return null;
 
-    await writer.updateToolCall(eventId, {
-      status: isError ? 'error' : 'completed',
-      result: resultText,
-      isError,
-    });
-  }
-
-  private codexToolDisplayName(toolName: string): string {
-    const mcp = parseMcpToolName(toolName);
-    if (mcp) return mcp.tool;
-    if (toolName === 'file_change') return 'File Change';
-    if (toolName.includes('command') || toolName === 'shell') return 'Bash';
-    return toolName;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Tool handling helpers
-  // ---------------------------------------------------------------------------
-
-  private async handleToolUse(
-    writer: TranscriptWriter,
-    sessionId: string,
-    msg: RawMessage,
-    block: any,
-    toolEventIds: Map<string, number>,
-    subagentEventIds: Map<string, number>,
-    parentToolUseId?: string,
-  ): Promise<number> {
-    const toolName = block.name ?? 'unknown';
-    const toolId: string | undefined = block.id;
-    const args = block.input ?? block.arguments ?? {};
-
-    // Detect subagent spawn (Agent/Task tools)
-    if (SUBAGENT_TOOLS.has(toolName) && toolId) {
-      // Deduplicate: SDK sends streaming + accumulated chunks with the same tool_use
-      if (subagentEventIds.has(toolId)) return 0;
-
-      const prompt = typeof args.prompt === 'string' ? args.prompt : JSON.stringify(args);
-      const teammateName = typeof args.name === 'string' ? args.name : null;
-      const teamName = typeof args.team_name === 'string' ? args.team_name : null;
-      const teammateMode = typeof args.mode === 'string' ? args.mode : null;
-      const isBackground = args.run_in_background === true;
-
-      const event = await writer.createSubagent(sessionId, {
-        subagentId: toolId,
-        agentType: toolName,
-        teammateName,
-        teamName,
-        teammateMode,
-        isBackground,
-        prompt,
-        createdAt: msg.createdAt,
-      });
-
-      subagentEventIds.set(toolId, event.id);
-      // Also track as tool event for result matching
-      toolEventIds.set(toolId, event.id);
-      return 1;
-    }
-
-    const isMcpTool = toolName.startsWith('mcp__');
-    let mcpServer: string | null = null;
-    let mcpTool: string | null = null;
-
-    if (isMcpTool) {
-      const parts = toolName.split('__');
-      if (parts.length >= 3) {
-        mcpServer = parts[1];
-        mcpTool = parts.slice(2).join('__');
+        return writer.appendToolProgress(sessionId, {
+          parentEventId,
+          toolName: desc.toolName,
+          elapsedSeconds: desc.elapsedSeconds,
+          progressContent: desc.progressContent,
+          subagentId: desc.subagentId,
+          createdAt: desc.createdAt,
+        });
       }
-    }
 
-    // Deduplicate: SDK sends streaming + accumulated chunks with the same tool_use
-    if (toolId && toolEventIds.has(toolId)) return 0;
-
-    // Resolve parent subagent for nested tool calls
-    const resolvedParent = parentToolUseId ?? block.parent_tool_use_id;
-    const subagentId = resolvedParent && subagentEventIds.has(resolvedParent) ? resolvedParent : undefined;
-
-    const event = await writer.createToolCall(sessionId, {
-      toolName,
-      toolDisplayName: toolName,
-      arguments: args,
-      mcpServer,
-      mcpTool,
-      providerToolCallId: toolId ?? null,
-      subagentId,
-      createdAt: msg.createdAt,
-    });
-
-    if (toolId) {
-      toolEventIds.set(toolId, event.id);
-    }
-
-    return 1;
-  }
-
-  private async handleToolResult(
-    writer: TranscriptWriter,
-    block: any,
-    toolEventIds: Map<string, number>,
-    subagentEventIds?: Map<string, number>,
-  ): Promise<number> {
-    const toolUseId = block.tool_use_id || block.id;
-    if (!toolUseId) return 0;
-
-    // Check if this completes a subagent
-    const subagentEventId = subagentEventIds?.get(toolUseId);
-    if (subagentEventId != null) {
-      const resultText = typeof block.content === 'string'
-        ? block.content
-        : JSON.stringify(block.content);
-      await writer.updateSubagent(subagentEventId, {
-        status: 'completed',
-        resultSummary: resultText?.substring(0, 500),
-      });
-      return 0;
-    }
-
-    let eventId = toolEventIds.get(toolUseId);
-    // On resume, the tool_use may have been processed in a previous batch.
-    // Fall back to a DB lookup so the result still gets attached.
-    if (!eventId) {
-      const existing = await this.transcriptStore.findByProviderToolCallId(toolUseId);
-      if (existing) {
-        eventId = existing.id;
-        toolEventIds.set(toolUseId, eventId);
+      case 'subagent_started': {
+        const event = await writer.createSubagent(sessionId, {
+          subagentId: desc.subagentId,
+          agentType: desc.agentType,
+          teammateName: desc.teammateName,
+          teamName: desc.teamName,
+          teammateMode: desc.teammateMode,
+          isBackground: desc.isBackground,
+          prompt: desc.prompt,
+          createdAt: desc.createdAt,
+        });
+        subagentEventIds.set(desc.subagentId, event.id);
+        toolEventIds.set(desc.subagentId, event.id);
+        return event;
       }
-    }
-    if (!eventId) return 0;
 
-    let resultText = '';
-    if (typeof block.content === 'string') {
-      resultText = block.content;
-    } else if (Array.isArray(block.content)) {
-      const hasNonText = block.content.some((inner: any) => inner.type !== 'text');
-      if (hasNonText) {
-        // Preserve non-text content (e.g. image blocks) as JSON so
-        // CanonicalTranscriptConverter.parseToolResult() can reconstruct it
-        resultText = JSON.stringify(block.content);
-      } else {
-        for (const inner of block.content) {
-          if (inner.type === 'text' && inner.text) {
-            resultText += inner.text;
-          }
-        }
+      case 'subagent_completed': {
+        const eventId = subagentEventIds.get(desc.subagentId);
+        if (!eventId) return null;
+
+        await writer.updateSubagent(eventId, {
+          status: desc.status,
+          resultSummary: desc.resultSummary,
+        });
+        return this.transcriptStore.getEventById(eventId);
       }
-    } else if (block.content != null) {
-      resultText = JSON.stringify(block.content);
+
+      case 'interactive_prompt_created': {
+        return writer.createInteractivePrompt(sessionId, desc.payload, {
+          subagentId: desc.subagentId,
+          createdAt: desc.createdAt,
+        });
+      }
+
+      case 'interactive_prompt_updated': {
+        return null;
+      }
+
+      case 'turn_ended': {
+        return writer.recordTurnEnded(sessionId, {
+          contextFill: desc.contextFill,
+          contextWindow: desc.contextWindow,
+          cumulativeUsage: desc.cumulativeUsage,
+          contextCompacted: desc.contextCompacted,
+          subagentId: desc.subagentId,
+        });
+      }
+
+      default:
+        return null;
     }
-
-    await writer.updateToolCall(eventId, {
-      status: block.is_error ? 'error' : 'completed',
-      result: resultText,
-      isError: block.is_error ?? false,
-    });
-
-    return 0; // Update, not a new event
-  }
-
-  private async handleNimbalystToolUse(
-    writer: TranscriptWriter,
-    sessionId: string,
-    msg: RawMessage,
-    parsed: any,
-    toolEventIds: Map<string, number>,
-  ): Promise<number> {
-    const toolName = parsed.name ?? 'unknown';
-    const args = parsed.input ?? {};
-
-    // Deduplicate: the SDK may also emit this tool as a regular tool_use block
-    // in the assistant content. handleToolUse would have already created a
-    // canonical event for it using the same providerToolCallId.
-    if (parsed.id && toolEventIds.has(parsed.id)) return 0;
-
-    const event = await writer.createToolCall(sessionId, {
-      toolName,
-      toolDisplayName: toolName,
-      arguments: args,
-      providerToolCallId: parsed.id ?? null,
-      createdAt: msg.createdAt,
-    });
-
-    if (parsed.id) {
-      toolEventIds.set(parsed.id, event.id);
-    }
-
-    return 1;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Helpers
-  // ---------------------------------------------------------------------------
-
-  private isSystemReminderContent(
-    content: string,
-    metadata?: Record<string, unknown>,
-  ): boolean {
-    return (
-      metadata?.promptType === 'system_reminder' ||
-      /<SYSTEM_REMINDER>[\s\S]*<\/SYSTEM_REMINDER>/.test(content)
-    );
   }
 }

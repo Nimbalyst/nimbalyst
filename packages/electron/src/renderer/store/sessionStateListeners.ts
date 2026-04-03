@@ -44,6 +44,15 @@ import {
 import { workstreamActiveChildAtom, workstreamStateAtom } from './atoms/workstreamState';
 import { setWindowModeAtom } from './atoms/windowMode';
 import { triggerWorktreeRefreshAtom } from './atoms/gitOperations';
+import { TranscriptProjector } from '@nimbalyst/runtime/ai/server/transcript/TranscriptProjector';
+import type { TranscriptEvent } from '@nimbalyst/runtime/ai/server/transcript/types';
+
+/**
+ * Per-session accumulator of canonical events received via IPC.
+ * Used to incrementally build the transcript during live streaming
+ * without reloading from the database.
+ */
+const liveCanonicalEvents = new Map<string, TranscriptEvent[]>();
 
 // Track blitz IDs for which an analysis session creation has already been triggered.
 // Prevents duplicate IPC calls when multiple children complete near-simultaneously.
@@ -181,28 +190,23 @@ export function initSessionStateListeners(): () => void {
         // is null (e.g., after HMR re-evaluates the sessions module, or during
         // a race between listener init and session list init). This final reload
         // on session:completed ensures all messages are loaded regardless.
-        {
-          if (resolvedWorkspacePath) {
-            // Immediate reload
-            store.set(reloadSessionDataAtom, { sessionId, workspacePath: resolvedWorkspacePath });
+        //
+        // For sessions with live canonical events, DB reloads are safe because
+        // handleTranscriptEvent merges DB messages with live-projected messages.
+        if (resolvedWorkspacePath) {
+          // Immediate reload
+          store.set(reloadSessionDataAtom, { sessionId, workspacePath: resolvedWorkspacePath });
 
-            // Schedule a verification reload after a short delay.
-            // This is a safety net that catches multiple failure modes:
-            // 1. The immediate reload raced with final DB writes and got stale data
-            // 2. The reload was aborted by version tracking (concurrent reload events)
-            // 3. The IPC call failed silently
-            // 4. Non-blocking writes hadn't flushed despite the provider's flush call
-            // The cost is one extra DB read per session completion - negligible.
-            const verificationWorkspacePath = resolvedWorkspacePath;
-            const existingVerification = verificationReloadTimers.get(sessionId);
-            if (existingVerification) {
-              clearTimeout(existingVerification);
-            }
-            verificationReloadTimers.set(sessionId, setTimeout(() => {
-              verificationReloadTimers.delete(sessionId);
-              store.set(reloadSessionDataAtom, { sessionId, workspacePath: verificationWorkspacePath });
-            }, VERIFICATION_RELOAD_DELAY_MS));
+          // Schedule a verification reload after a short delay.
+          const verificationWorkspacePath = resolvedWorkspacePath;
+          const existingVerification = verificationReloadTimers.get(sessionId);
+          if (existingVerification) {
+            clearTimeout(existingVerification);
           }
+          verificationReloadTimers.set(sessionId, setTimeout(() => {
+            verificationReloadTimers.delete(sessionId);
+            store.set(reloadSessionDataAtom, { sessionId, workspacePath: verificationWorkspacePath });
+          }, VERIFICATION_RELOAD_DELAY_MS));
         }
 
         // If this session is in a worktree, trigger a git panel refresh
@@ -322,6 +326,9 @@ export function initSessionStateListeners(): () => void {
     // cascading slowdown. Throttling limits to one reload per RELOAD_THROTTLE_MS
     // while firing immediately on the first event after a quiet period (so tool
     // results are picked up promptly, not delayed until streaming stops).
+    //
+    // For sessions with live canonical events, DB reloads are still safe because
+    // handleTranscriptEvent merges DB messages with live-projected messages.
     {
       const now = Date.now();
       const lastFired = reloadLastFiredAt.get(sessionId) ?? 0;
@@ -678,6 +685,65 @@ export function initSessionStateListeners(): () => void {
   // Subscribe to message logged events and interactive prompt events
   let cleanupMessageLogged: (() => void) | undefined;
   let cleanupTitleUpdated: (() => void) | undefined;
+  // ---------------------------------------------------------------------------
+  // Live canonical transcript event handler
+  // ---------------------------------------------------------------------------
+  const handleTranscriptEvent = (transcriptEvent: TranscriptEvent) => {
+    const { sessionId } = transcriptEvent;
+    if (!sessionId) return;
+
+    // Accumulate canonical events for this session.
+    // On first event, seed the accumulator from the current session's messages
+    // so we never lose messages that were loaded from the DB before streaming started.
+    // After seeding, the accumulator is the authoritative source and DB reloads
+    // merge INTO it rather than replacing it -- no timing sensitivity.
+    let events = liveCanonicalEvents.get(sessionId);
+    if (!events) {
+      events = [];
+      liveCanonicalEvents.set(sessionId, events);
+
+      // Seed from current session data: the session was loaded from DB before
+      // streaming started, so sessionStoreAtom already has projected messages.
+      // We don't re-seed events from DB here (would need async IPC). Instead,
+      // we rely on the fact that reloadSessionDataAtom will merge cleanly below.
+    }
+
+    // For update events (tool_call_completed, subagent_completed, interactive_prompt_updated),
+    // replace the existing event with the updated version
+    const existingIdx = events.findIndex(e => e.id === transcriptEvent.id);
+    if (existingIdx >= 0) {
+      events[existingIdx] = transcriptEvent;
+    } else {
+      events.push(transcriptEvent);
+    }
+
+    // Re-project live events into messages. If the session already has DB-loaded
+    // messages (from reloadSessionDataAtom), merge: keep DB messages that aren't
+    // covered by live events, then append/replace with live-projected messages.
+    const liveViewModel = TranscriptProjector.project(events);
+    const currentSession = store.get(sessionStoreAtom(sessionId));
+    if (currentSession) {
+      const dbMessages = currentSession.messages ?? [];
+      const liveMessages = liveViewModel.messages;
+
+      // Build merged list: start with DB messages, then append live messages
+      // that aren't already present (by ID). Live versions win for any ID collision.
+      const liveIds = new Set(liveMessages.map(m => m.id));
+      const merged = [
+        ...dbMessages.filter(m => !liveIds.has(m.id)),
+        ...liveMessages,
+      ];
+      // Sort by ID to maintain chronological order (IDs are sequential)
+      merged.sort((a, b) => a.id - b.id);
+
+      // console.log(`[TRANSCRIPT-DEBUG] handleTranscriptEvent: ${dbMessages.length} DB + ${liveMessages.length} live = ${merged.length} merged`);
+      store.set(sessionStoreAtom(sessionId), {
+        ...currentSession,
+        messages: merged,
+      });
+    }
+  };
+
   let cleanupAskUserQuestion: (() => void) | undefined;
   let cleanupAskUserQuestionAnswered: (() => void) | undefined;
   let cleanupSessionCancelled: (() => void) | undefined;
@@ -690,7 +756,9 @@ export function initSessionStateListeners(): () => void {
   let cleanupNotificationClicked: (() => void) | undefined;
   let cleanupSyncReadState: (() => void) | undefined;
   let cleanupSyncDraftInput: (() => void) | undefined;
+  let cleanupTranscriptEvent: (() => void) | undefined;
   if (window.electronAPI?.on) {
+    cleanupTranscriptEvent = window.electronAPI.on('transcript:event', handleTranscriptEvent);
     cleanupMessageLogged = window.electronAPI.on('ai:message-logged', handleMessageLogged);
     cleanupTitleUpdated = window.electronAPI.on('session:title-updated', handleTitleUpdated);
     cleanupAskUserQuestion = window.electronAPI.on('ai:askUserQuestion', handleAskUserQuestion);
@@ -745,5 +813,7 @@ export function initSessionStateListeners(): () => void {
     cleanupNotificationClicked?.();
     cleanupSyncReadState?.();
     cleanupSyncDraftInput?.();
+    cleanupTranscriptEvent?.();
+    liveCanonicalEvents.clear();
   };
 }

@@ -26,7 +26,7 @@ import { logger } from '../utils/logger';
 import { initializeSync, shutdownSync, isSyncEnabled, reinitializeSync } from './SyncManager';
 import { shutdownTrackerSync, initializeTrackerSync } from './TrackerSyncManager';
 import { onAuthStateChange } from './StytchAuthService';
-import { windowStates } from '../window/WindowManager';
+import { windows, windowStates } from '../window/WindowManager';
 
 class RepositoryManager {
   private sessionStore: SessionStore | null = null;
@@ -145,6 +145,19 @@ class RepositoryManager {
         sessionMetadataStore,
       );
       TranscriptMigrationRepository.setService(migrationService);
+
+      // Wire up real-time canonical event notification to renderer windows.
+      // The TranscriptTransformer fires this callback after writing each canonical event
+      // (both during batch migration and incremental processNewMessages).
+      migrationService.setOnEventWritten((event) => {
+        for (const win of windows.values()) {
+          try {
+            win.webContents.send('transcript:event', event);
+          } catch {
+            // Window may be destroyed
+          }
+        }
+      });
 
       this.initialized = true;
       logger.main.info('[RepositoryManager] All repositories initialized successfully');

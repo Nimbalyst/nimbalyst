@@ -8,7 +8,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { webcrypto } from 'crypto';
 import { TrackerSyncProvider } from '../TrackerSync';
-import type { TrackerItemPayload, TrackerSyncStatus } from '../trackerSyncTypes';
+import type { TrackerInitialSyncSummary, TrackerItemPayload, TrackerSyncStatus } from '../trackerSyncTypes';
 
 // ============================================================================
 // Mock WebSocket
@@ -128,6 +128,7 @@ async function createTestProvider(overrides?: Partial<{
   onStatusChange: (s: TrackerSyncStatus) => void;
   onItemUpserted: (item: TrackerItemPayload) => void;
   onItemDeleted: (id: string) => void;
+  onInitialSyncComplete: (summary: TrackerInitialSyncSummary) => void | Promise<void>;
 }>): Promise<TestContext> {
   const key = await generateTestKey();
   const statuses: TrackerSyncStatus[] = [];
@@ -144,6 +145,7 @@ async function createTestProvider(overrides?: Partial<{
     onStatusChange: overrides?.onStatusChange ?? ((s) => statuses.push(s)),
     onItemUpserted: overrides?.onItemUpserted ?? ((item) => upsertedItems.push(item)),
     onItemDeleted: overrides?.onItemDeleted ?? ((id) => deletedIds.push(id)),
+    onInitialSyncComplete: overrides?.onInitialSyncComplete,
   });
 
   return {
@@ -296,6 +298,43 @@ describe('TrackerSyncProvider connection lifecycle', () => {
     await vi.advanceTimersByTimeAsync(120000);
     expect(mockWsInstances.length).toBe(countBefore);
   });
+
+  it('should report initial sync summary after the final sync response', async () => {
+    const summaries: TrackerInitialSyncSummary[] = [];
+    const { provider, getWs } = await createTestProvider({
+      onInitialSyncComplete: (summary) => {
+        summaries.push(summary);
+      },
+    });
+
+    await provider.connect();
+    await vi.advanceTimersByTimeAsync(0);
+
+    const ws = getWs();
+    ws.simulateMessage({
+      type: 'trackerSyncResponse',
+      items: [],
+      deletedItemIds: [],
+      sequence: 50,
+      hasMore: true,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    ws.simulateMessage({
+      type: 'trackerSyncResponse',
+      items: [],
+      deletedItemIds: ['deleted-1'],
+      sequence: 51,
+      hasMore: false,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(summaries).toEqual([{
+      remoteItemCount: 0,
+      remoteDeletedCount: 1,
+      sequence: 51,
+    }]);
+  });
 });
 
 // ============================================================================
@@ -322,6 +361,8 @@ describe('TrackerSyncProvider encryption', () => {
 
     const payload = makePayload({
       itemId: 'enc-bug-1',
+      issueNumber: 123,
+      issueKey: 'NIM-123',
       title: 'Secret bug title',
     });
 
@@ -331,6 +372,8 @@ describe('TrackerSyncProvider encryption', () => {
     const upsertMsg = ws.sentMessages.find(m => m.type === 'trackerUpsert');
     expect(upsertMsg).toBeDefined();
     expect(upsertMsg.itemId).toBe('enc-bug-1');
+    expect(upsertMsg.issueNumber).toBe(123);
+    expect(upsertMsg.issueKey).toBe('NIM-123');
     // Payload should be encrypted -- NOT contain the plaintext title
     expect(upsertMsg.encryptedPayload).toBeDefined();
     expect(upsertMsg.iv).toBeDefined();
@@ -381,6 +424,49 @@ describe('TrackerSyncProvider encryption', () => {
     expect(upsertedItems).toHaveLength(1);
     expect(upsertedItems[0].itemId).toBe('dec-bug-1');
     expect(upsertedItems[0].title).toBe('Decrypted title');
+  });
+
+  it('should apply server-assigned issue identity from sync metadata', async () => {
+    const { provider, key, upsertedItems, getWs } = await createTestProvider();
+
+    await provider.connect();
+    await vi.advanceTimersByTimeAsync(0);
+
+    const payload = makePayload({
+      itemId: 'dec-bug-2',
+      title: 'Assigned key item',
+    });
+    const plaintext = new TextEncoder().encode(JSON.stringify(payload));
+    const iv = webcrypto.getRandomValues(new Uint8Array(12));
+    const ciphertext = await webcrypto.subtle.encrypt(
+      { name: 'AES-GCM', iv },
+      key,
+      plaintext
+    );
+
+    const ws = getWs();
+    ws.simulateMessage({
+      type: 'trackerSyncResponse',
+      items: [{
+        itemId: 'dec-bug-2',
+        issueNumber: 204,
+        issueKey: 'NIM-204',
+        version: 1,
+        encryptedPayload: btoa(String.fromCharCode(...new Uint8Array(ciphertext))),
+        iv: btoa(String.fromCharCode(...iv)),
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        sequence: 1,
+      }],
+      deletedItemIds: [],
+      sequence: 1,
+      hasMore: false,
+    });
+
+    await flushAsync();
+
+    expect(upsertedItems[0].issueNumber).toBe(204);
+    expect(upsertedItems[0].issueKey).toBe('NIM-204');
   });
 });
 

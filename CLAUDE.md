@@ -189,6 +189,7 @@ Read the file **in its entirety** before making changes. These documents contain
 | [STATE_PERSISTENCE.md](./docs/STATE_PERSISTENCE.md) | Documents migration safety patterns for persisted state that may be missing fields added after it was saved. Covers `createDefault*()` functions, `??` operator merging, and the checklist for adding new persisted fields. | Adding new fields to any persisted state interface (workspace state, app settings, workstream state), or debugging "Cannot read properties of undefined" errors on app load. |
 | [UI_PATTERNS.md](./docs/UI_PATTERNS.md) | Covers the canonical `--nim-*` CSS variable names and their Tailwind equivalents, container queries (not media queries), Tailwind conditional class patterns using ternaries, and text selection opt-in rules. | Writing UI components, styling with CSS or Tailwind, fixing styling inconsistencies, or adding responsive behavior to panels and components. |
 | [AI_PROVIDER_TYPES.md](./docs/AI_PROVIDER_TYPES.md) | Distinguishes Agent providers (Claude Code with MCP support, file system access) from Chat providers (Claude Chat, OpenAI, LM Studio with direct API calls). Documents model selection rules and provider-specific behaviors. | Working on AI integration, adding new AI providers, modifying how models are selected, or debugging provider-specific issues. |
+| [TRANSCRIPT_ARCHITECTURE.md](./docs/TRANSCRIPT_ARCHITECTURE.md) | Documents the two-tier transcript storage (raw messages -> canonical events), the TranscriptTransformer pipeline, per-provider parsers (ClaudeCodeRawParser, CodexRawParser), CanonicalEventDescriptor types, watermark-based processing, and mobile sync integration. | Working on transcript rendering, adding new parser support, debugging missing/duplicate events, modifying how raw messages are transformed, or understanding the canonical event pipeline. |
 | [CONTEXT_WINDOW_USAGE_TRACKING.md](./docs/CONTEXT_WINDOW_USAGE_TRACKING.md) | Explains how context window fill percentage is extracted from Claude Agent SDK streaming chunks (per-step vs cumulative usage), compaction handling, and subagent isolation. | Working on context usage display, token tracking, ClaudeCodeProvider streaming, or debugging why context percentage is wrong. |
 | [INTERNAL_MCP_SERVERS.md](./docs/INTERNAL_MCP_SERVERS.md) | Documents how to implement MCP servers that run inside Nimbalyst, including the server lifecycle, tool registration, and how to expose functionality to Claude Code sessions. | Adding new MCP server functionality, creating new tools for AI agents, or understanding how existing MCP servers work. |
 | [CUSTOM_TOOL_WIDGETS.md](./docs/CUSTOM_TOOL_WIDGETS.md) | Explains how to create custom React widgets that replace the generic tool call display for specific MCP tools. Covers the widget registry, props interface, and rendering lifecycle. | Creating visual displays for MCP tool results, customizing how specific tools appear in the chat transcript, or debugging widget rendering issues. |
@@ -231,22 +232,23 @@ For implementation details, see `/packages/electron/CLAUDE.md`.
 
 ## Canonical Transcript Storage
 
-The AI transcript system uses a two-tier architecture:
+The AI transcript system uses a two-tier architecture. See [TRANSCRIPT_ARCHITECTURE.md](./docs/TRANSCRIPT_ARCHITECTURE.md) for the full design.
 
-- **`ai_agent_messages`** -- Append-only raw source log preserving provider-native payloads. Not used for rendering or search.
-- **`ai_transcript_events`** -- Canonical, provider-agnostic transcript rows optimized for rendering, search, and sync.
+- **`ai_agent_messages`** -- Append-only raw source log preserving provider-native payloads. Sole source of truth.
+- **`ai_transcript_events`** -- Canonical, provider-agnostic events derived from raw messages. Used for rendering, search, and sync.
 
-**Key components:**
-- **TranscriptWriter** -- Shared service for writing canonical events (in `packages/runtime/src/ai/server/transcript/`)
-- **TranscriptProjector** -- Pure function that projects canonical events into UI view models
-- **TranscriptTransformer** -- Transforms raw `ai_agent_messages` into canonical `ai_transcript_events` on first read via `ensureTransformed()`
-- **TranscriptMigrationService** -- Wraps TranscriptTransformer for use in IPC handlers
+**Key components** (in `packages/runtime/src/ai/server/transcript/`):
+- **TranscriptTransformer** -- Single path from raw messages to canonical events. Batch mode (`ensureUpToDate`) for lazy migration on session load; incremental mode (`processNewMessages`) for real-time processing during streaming.
+- **Per-provider parsers** (`parsers/ClaudeCodeRawParser`, `parsers/CodexRawParser`) -- Parse raw messages into `CanonicalEventDescriptor[]`. Parsers are pure functions; the transformer handles writing.
+- **TranscriptWriter** -- Writes canonical events to DB. Called by the transformer only.
+- **TranscriptProjector** -- Projects canonical events into UI view models.
+- **TranscriptMigrationService** -- High-level API wrapping the transformer for IPC handlers.
 
 **Rules:**
-- All providers write only to `ai_agent_messages` (raw log); there is no dual-write
-- New sessions start with null canonical status -- TranscriptTransformer runs on first read
-- Old sessions are lazily transformed on first access (same path as new sessions)
-- Canonical errors are non-fatal -- raw log is always written
+- All providers write only to `ai_agent_messages` (raw log) via `logAgentMessage()`; there is no dual-write
+- The transformer is the single writer of canonical events -- no other code path writes to `ai_transcript_events`
+- Watermark-based processing: only raw messages with `id > lastRawMessageId` are transformed
+- Canonical events can be regenerated at any time by bumping `CURRENT_VERSION`
 - Only `user_message`, `assistant_message`, and `system_message` events are searchable
 
 ## Decision Logging
