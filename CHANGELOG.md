@@ -20,6 +20,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.8] - 2026-04-03
+
+
+### Added
+- Tracker user identity system with configurable table columns and resizable panels
+- Multi-type tracker items with type tags and feature type support
+- Rich tracker transcript widgets with structured data and click-to-navigate
+- Linked tracker items moved from transcript banner to dedicated sidebar panel
+- Tracker sync identity hardening and issue-key workflows
+- Complete tracker field exposure, archive sync, and reconnect support
+- Dev-only background task tracker shell
+- Meta-agent session type for orchestrating multiple AI coding sessions
+
+### Changed
+- Unified transcript write path through single TranscriptTransformer
+- Extracted shared SettingsToggle component and consolidated Advanced Settings layout
+- Kanban dynamically discovers status columns from actual items
+
+### Fixed
+- TrackerToolWidget uses toolName from canonical transcript type
+- Stale draft sync echoes on iOS rejected to prevent text jumbling
+- Tracker sync not working between users (three bugs)
+- PDF viewer extension fails to load due to code splitting
+- TrackerSync reconnects through JWT expiration instead of giving up
+- Splash screen no longer sets alwaysOnTop
+- Kanban context menu archive now acts on multiselected sessions
+- Tracker MCP notifications, duplicate search, and Mine filter
+- Auth deep link login on secondary dev instances and tracker sync reconnect loop
+- TranscriptPeek on session kanban board failing due to dynamic imports
+- Persisted hidden gutter buttons and removed dead projectState blob
+- Workerd process group killed on test teardown to prevent orphaned processes
+- Git commit proposal no longer hangs on transport drop
+- MCP config lookup uses parent project path for worktree sessions
+
 ## [0.57.7] - 2026-04-02
 
 

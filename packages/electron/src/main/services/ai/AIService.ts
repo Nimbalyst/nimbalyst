@@ -753,7 +753,7 @@ export class AIService {
 
     if (promptType === 'ask_user_question_request') {
       const provider = ProviderFactory.getProvider(session.provider as AIProviderType, sessionId);
-      const resolved = isAskUserQuestionProvider(provider)
+      const resolved = provider && isAskUserQuestionProvider(provider)
         ? provider.resolveAskUserQuestion(promptId, response.answers || response, sessionId, respondedBy)
         : false;
 

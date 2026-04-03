@@ -47,6 +47,7 @@ export interface DocumentContext {
   // Session context (populated by backend before sending to provider)
   sessionType?: SessionType;
   permissionsPath?: string;  // Path for permission lookups (may differ from worktreePath)
+  mcpConfigWorkspacePath?: string;  // Path for MCP config lookup (parent project for worktrees)
   attachments?: ChatAttachment[];
   branchedFromSessionId?: string;  // For session forking
   branchedFromProviderSessionId?: string;
