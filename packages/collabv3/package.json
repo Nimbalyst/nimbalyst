@@ -1,6 +1,6 @@
 {
   "name": "@nimbalyst/collabv3",
-  "version": "0.1.56",
+  "version": "0.1.60",
   "private": true,
   "type": "module",
   "scripts": {

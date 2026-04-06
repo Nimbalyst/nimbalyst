@@ -151,6 +151,12 @@ export interface TrackerItemPayload {
    * by taking the most recent value for each field based on these timestamps.
    */
   fieldUpdatedAt: Record<string, number>;
+
+  /** Server-side created timestamp (epoch ms). Set during sync from EncryptedTrackerItem envelope. */
+  serverCreatedAt?: number;
+
+  /** Server-side updated timestamp (epoch ms). Set during sync from EncryptedTrackerItem envelope. */
+  serverUpdatedAt?: number;
 }
 
 export interface TrackerComment {

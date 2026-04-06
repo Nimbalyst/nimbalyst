@@ -342,8 +342,8 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
     });
 
     // Connect
+    // logger.main.info('[TrackerSyncManager] Connecting tracker sync', { serverUrl, orgId, projectId });
     await provider.connect();
-    // logger.main.info('[TrackerSyncManager] Tracker sync initialized successfully for', workspacePath);
 
     // Push shareable unsynced items to the server.
     // `pending` means "should sync once a provider is available".
@@ -451,14 +451,20 @@ async function hydrateTrackerItem(
 
   const isArchived = item.archived === true;
 
+  // Use server timestamps when available (from EncryptedTrackerItem envelope),
+  // falling back to NOW() only for items without server timestamps.
+  // This prevents sync from bumping the "updated" time on every re-sync.
+  const serverCreated = payload.serverCreatedAt ? new Date(payload.serverCreatedAt) : null;
+  const serverUpdated = payload.serverUpdatedAt ? new Date(payload.serverUpdatedAt) : null;
+
   await database.query(
     `INSERT INTO tracker_items (
       id, issue_number, issue_key, type, data, workspace, document_path, line_number, created, updated, last_indexed, sync_status, archived, archived_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, NOW(), NOW(), $8, 'synced', $9, $10)
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, COALESCE($11, NOW()), COALESCE($12, NOW()), $8, 'synced', $9, $10)
     ON CONFLICT (id) DO UPDATE SET
       issue_number = COALESCE($2, tracker_items.issue_number),
       issue_key = COALESCE($3, tracker_items.issue_key),
-      type = $4, data = $5, updated = NOW(), last_indexed = $8, sync_status = 'synced',
+      type = $4, data = $5, last_indexed = $8, sync_status = 'synced',
       archived = CASE WHEN $9 = TRUE THEN TRUE ELSE tracker_items.archived END,
       archived_at = CASE WHEN $9 = TRUE THEN $10 ELSE tracker_items.archived_at END`,
     [
@@ -472,6 +478,8 @@ async function hydrateTrackerItem(
       item.lastIndexed,
       isArchived,
       isArchived ? (item.archivedAt || new Date().toISOString()) : null,
+      serverCreated,
+      serverUpdated,
     ]
   );
 

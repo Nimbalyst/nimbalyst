@@ -91,7 +91,17 @@ export class TeamTrackerRoom implements DurableObject {
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
+    `);
 
+    // Migrate: add issue_number and issue_key columns if missing (pre-existing DOs)
+    try {
+      sql.exec(`ALTER TABLE tracker_items ADD COLUMN issue_number INTEGER`);
+    } catch { /* column already exists */ }
+    try {
+      sql.exec(`ALTER TABLE tracker_items ADD COLUMN issue_key TEXT`);
+    } catch { /* column already exists */ }
+
+    sql.exec(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_tracker_items_issue_number ON tracker_items(issue_number)
       WHERE issue_number IS NOT NULL;
       CREATE UNIQUE INDEX IF NOT EXISTS idx_tracker_items_issue_key ON tracker_items(issue_key)
@@ -193,7 +203,12 @@ export class TeamTrackerRoom implements DurableObject {
    * Handle HTTP requests (WebSocket upgrades and REST endpoints).
    */
   async fetch(request: Request): Promise<Response> {
-    await this.ensureInitialized();
+    try {
+      await this.ensureInitialized();
+    } catch (err) {
+      log.error('ensureInitialized failed:', err instanceof Error ? err.message : String(err));
+      return new Response(`DO init error: ${err instanceof Error ? err.message : String(err)}`, { status: 500 });
+    }
 
     const url = new URL(request.url);
 
@@ -346,43 +361,50 @@ export class TeamTrackerRoom implements DurableObject {
     }
 
     // Fetch current state of upserted items
+    // Batch IN clauses to stay within SQLite bound parameter limits (DO SQLite can be < 999)
     const items: EncryptedTrackerItem[] = [];
     if (upsertedItemIds.size > 0) {
-      const placeholders = Array.from(upsertedItemIds).map(() => '?').join(',');
-      const itemRows = sql.exec<{
-        item_id: string;
-        issue_number?: number | null;
-        issue_key?: string | null;
-        version: number;
-        encrypted_payload: string;
-        iv: string;
-        created_at: number;
-        updated_at: number;
-      }>(
-        `SELECT item_id, issue_number, issue_key, version, encrypted_payload, iv, created_at, updated_at
-         FROM tracker_items
-         WHERE item_id IN (${placeholders})`,
-        ...Array.from(upsertedItemIds)
-      ).toArray();
+      const allIds = Array.from(upsertedItemIds);
+      const BATCH_SIZE = 50;
 
-      // Get max changelog sequence for each item to include in response
-      for (const row of itemRows) {
-        const seqRow = sql.exec<{ max_seq: number }>(
-          `SELECT MAX(sequence) as max_seq FROM changelog WHERE item_id = ?`,
-          row.item_id
-        ).toArray()[0];
+      for (let i = 0; i < allIds.length; i += BATCH_SIZE) {
+        const batch = allIds.slice(i, i + BATCH_SIZE);
+        const placeholders = batch.map(() => '?').join(',');
+        const itemRows = sql.exec<{
+          item_id: string;
+          issue_number?: number | null;
+          issue_key?: string | null;
+          version: number;
+          encrypted_payload: string;
+          iv: string;
+          created_at: number;
+          updated_at: number;
+        }>(
+          `SELECT item_id, issue_number, issue_key, version, encrypted_payload, iv, created_at, updated_at
+           FROM tracker_items
+           WHERE item_id IN (${placeholders})`,
+          ...batch
+        ).toArray();
 
-        items.push({
-          itemId: row.item_id,
-          issueNumber: row.issue_number ?? undefined,
-          issueKey: row.issue_key ?? undefined,
-          version: row.version,
-          encryptedPayload: row.encrypted_payload,
-          iv: row.iv,
-          createdAt: row.created_at,
-          updatedAt: row.updated_at,
-          sequence: seqRow?.max_seq ?? 0,
-        });
+        // Get max changelog sequence for each item to include in response
+        for (const row of itemRows) {
+          const seqRow = sql.exec<{ max_seq: number }>(
+            `SELECT MAX(sequence) as max_seq FROM changelog WHERE item_id = ?`,
+            row.item_id
+          ).toArray()[0];
+
+          items.push({
+            itemId: row.item_id,
+            issueNumber: row.issue_number ?? undefined,
+            issueKey: row.issue_key ?? undefined,
+            version: row.version,
+            encryptedPayload: row.encrypted_payload,
+            iv: row.iv,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+            sequence: seqRow?.max_seq ?? 0,
+          });
+        }
       }
     }
 

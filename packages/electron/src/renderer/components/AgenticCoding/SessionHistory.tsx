@@ -2353,6 +2353,10 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                 parentSessionId: c.parentSessionId || null,
                 childCount: c.childCount || 0,
                 uncommittedCount: c.uncommittedCount || 0,
+                // Metadata fields for TrackerPanel and kanban
+                ...(c.phase && { phase: c.phase }),
+                ...(c.tags && { tags: c.tags }),
+                ...(c.linkedTrackerItemIds && { linkedTrackerItemIds: c.linkedTrackerItemIds }),
               }));
 
               return { sessionId: session.id, children };
@@ -2382,7 +2386,10 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         let didUpdateRegistry = false;
         for (const result of successfulResults) {
           for (const child of result.children) {
-            registry.set(child.id, child);
+            const existing = registry.get(child.id);
+            // Merge with existing entry to preserve metadata fields (linkedTrackerItemIds, phase, tags)
+            // that may have been loaded by the main sessions:list query
+            registry.set(child.id, existing ? { ...existing, ...child } : child);
             didUpdateRegistry = true;
           }
         }

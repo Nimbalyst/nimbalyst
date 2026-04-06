@@ -142,13 +142,11 @@ function applyIssueIdentity(
   payload: TrackerItemPayload,
   encryptedItem: EncryptedTrackerItem,
 ): TrackerItemPayload {
-  if (encryptedItem.issueNumber == null && encryptedItem.issueKey == null) {
-    return payload;
-  }
-
   return {
     ...payload,
     issueNumber: encryptedItem.issueNumber ?? payload.issueNumber,
+    serverCreatedAt: encryptedItem.createdAt,
+    serverUpdatedAt: encryptedItem.updatedAt,
     issueKey: encryptedItem.issueKey ?? payload.issueKey,
     fieldUpdatedAt: {
       ...payload.fieldUpdatedAt,
@@ -216,6 +214,8 @@ export class TrackerSyncProvider {
       url = `${serverUrl}/sync/${roomId}?token=${encodeURIComponent(jwt)}`;
     }
 
+    console.log('[TrackerSync] Connecting to:', url.replace(/token=[^&]+/, 'token=<redacted>'));
+
     const ws = new WebSocket(url);
     this.ws = ws;
 
@@ -230,16 +230,23 @@ export class TrackerSyncProvider {
       this.handleMessage(event);
     });
 
-    ws.addEventListener('error', () => {
-      // WebSocket error events carry no useful detail -- the close event
-      // that follows has the code and reason. Just log that it happened.
-      console.error('[TrackerSync] WebSocket error (details in close event)');
+    let closeReceived = false;
+
+    ws.addEventListener('error', (evt: any) => {
+      console.error('[TrackerSync] WebSocket error:', evt?.message || '(no details)');
+      // If close doesn't arrive within 2s, trigger reconnect manually.
+      // Some environments don't fire close after error when connection never opened.
+      setTimeout(() => {
+        if (!closeReceived && this.ws === ws) {
+          console.warn('[TrackerSync] No close event after error, forcing reconnect');
+          this.handleDisconnect();
+        }
+      }, 2000);
     });
 
     ws.addEventListener('close', (event) => {
-      console.log('[TrackerSync] WebSocket closed:', event.code, event.reason);
-      // Auth errors (expired JWT) should still attempt reconnect --
-      // getJwt() will fetch a fresh token. Only stop if fresh token also fails.
+      closeReceived = true;
+      console.log('[TrackerSync] WebSocket closed:', event.code, event.reason || '');
       this.handleDisconnect();
     });
   }

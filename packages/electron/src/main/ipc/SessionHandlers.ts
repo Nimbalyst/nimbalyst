@@ -620,12 +620,14 @@ export async function registerSessionHandlers() {
             const { rows } = await database.query<any>(
                 `SELECT s.id, s.provider, s.model, s.session_type, s.mode, s.agent_role, s.created_by_session_id, s.title, s.workspace_id,
                         s.worktree_id, s.parent_session_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned,
+                        s.metadata,
                         COUNT(m.id) as message_count
                  FROM ai_sessions s
                  LEFT JOIN ai_agent_messages m ON s.id = m.session_id AND m.direction = 'input' AND (m.hidden = FALSE OR m.hidden IS NULL)
                  WHERE s.parent_session_id = $1 AND s.workspace_id = $2
                  GROUP BY s.id, s.provider, s.model, s.session_type, s.mode, s.agent_role, s.created_by_session_id, s.title, s.workspace_id,
-                          s.worktree_id, s.parent_session_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned
+                          s.worktree_id, s.parent_session_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned,
+                          s.metadata
                  ORDER BY s.created_at ASC`,
                 [parentSessionId, workspacePath]
             );
@@ -657,20 +659,27 @@ export async function registerSessionHandlers() {
                 console.error('[SessionHandlers] Failed to get uncommitted counts for children:', error);
             }
 
-            const children = rows.map((row: any) => ({
-                id: row.id,
-                title: row.title || 'Untitled Session',
-                provider: row.provider,
-                model: row.model,
-                agentRole: row.agent_role || 'standard',
-                createdBySessionId: row.created_by_session_id || null,
-                createdAt: row.created_at instanceof Date ? row.created_at.getTime() : new Date(row.created_at).getTime(),
-                updatedAt: row.updated_at instanceof Date ? row.updated_at.getTime() : new Date(row.updated_at).getTime(),
-                parentSessionId: row.parent_session_id,
-                isArchived: row.is_archived || false,
-                isPinned: row.is_pinned || false,
-                uncommittedCount: uncommittedMap.get(row.id) || 0,
-            }));
+            const children = rows.map((row: any) => {
+                const metadata = row.metadata ?? {};
+                return {
+                    id: row.id,
+                    title: row.title || 'Untitled Session',
+                    provider: row.provider,
+                    model: row.model,
+                    agentRole: row.agent_role || 'standard',
+                    createdBySessionId: row.created_by_session_id || null,
+                    createdAt: row.created_at instanceof Date ? row.created_at.getTime() : new Date(row.created_at).getTime(),
+                    updatedAt: row.updated_at instanceof Date ? row.updated_at.getTime() : new Date(row.updated_at).getTime(),
+                    parentSessionId: row.parent_session_id,
+                    isArchived: row.is_archived || false,
+                    isPinned: row.is_pinned || false,
+                    uncommittedCount: uncommittedMap.get(row.id) || 0,
+                    // Metadata fields needed by TrackerPanel, kanban, etc.
+                    phase: metadata.phase || undefined,
+                    tags: Array.isArray(metadata.tags) ? metadata.tags : undefined,
+                    linkedTrackerItemIds: Array.isArray(metadata.linkedTrackerItemIds) ? metadata.linkedTrackerItemIds : undefined,
+                };
+            });
 
             return { success: true, children };
         } catch (error) {

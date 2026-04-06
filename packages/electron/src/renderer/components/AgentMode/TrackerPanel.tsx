@@ -54,6 +54,7 @@ export const TrackerPanel: React.FC<TrackerPanelProps> = React.memo(({
     const ids = new Set<string>();
     // Include parent workstream's linked items
     const parentMeta = sessionRegistry.get(workstreamId);
+    // console.log('[TrackerPanel] workstreamId:', workstreamId, 'parentMeta linked:', parentMeta?.linkedTrackerItemIds, 'childSessions:', workstreamSessions.length);
     if (parentMeta?.linkedTrackerItemIds) {
       for (const id of parentMeta.linkedTrackerItemIds) {
         if (!id.startsWith('file:')) ids.add(id);
