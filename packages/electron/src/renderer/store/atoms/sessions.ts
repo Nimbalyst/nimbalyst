@@ -918,6 +918,10 @@ export const loadSessionChildrenAtom = atom(
               parentSessionId: parentSessionId,
               childCount: 0,
               uncommittedCount: child.uncommittedCount || 0,
+              // Metadata fields for TrackerPanel and kanban
+              ...(child.phase && { phase: child.phase }),
+              ...(child.tags && { tags: child.tags }),
+              ...(child.linkedTrackerItemIds && { linkedTrackerItemIds: child.linkedTrackerItemIds }),
             });
             set(sessionRegistryAtom, registry);
           }
@@ -1591,9 +1595,16 @@ export const reloadSessionDataAtom = atom(
 
           // Collect optimistic messages (negative IDs) that aren't yet in the DB.
           // These were added locally before the provider persisted them.
-          // Drop any optimistic message whose type+text+createdAt matches a DB
-          // message (within 5s tolerance). This avoids premature eviction when a
-          // user sends two identical messages (e.g. "yes" twice).
+          // Drop any optimistic message whose type+text matches a DB message
+          // with a similar timestamp (within 5s tolerance). The timestamp check
+          // avoids premature eviction when a user sends two identical messages
+          // (e.g. "yes" twice). Use safe getTime() in case createdAt is a string
+          // after IPC serialization rather than a Date object.
+          const safeGetTime = (d: Date | string | unknown): number => {
+            if (d instanceof Date) return d.getTime();
+            if (typeof d === 'string') return new Date(d).getTime();
+            return 0;
+          };
           const optimisticMessages = localMessages.filter(
             (m: TranscriptViewMessage) =>
               m.id < 0 &&
@@ -1601,7 +1612,7 @@ export const reloadSessionDataAtom = atom(
                 (db: TranscriptViewMessage) =>
                   db.type === m.type &&
                   db.text === m.text &&
-                  Math.abs(db.createdAt.getTime() - m.createdAt.getTime()) < 5000
+                  Math.abs(safeGetTime(db.createdAt) - safeGetTime(m.createdAt)) < 5000
               )
           );
 

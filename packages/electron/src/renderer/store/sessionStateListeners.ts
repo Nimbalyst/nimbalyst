@@ -728,9 +728,14 @@ export function initSessionStateListeners(): () => void {
 
       // Build merged list: start with DB messages, then append live messages
       // that aren't already present (by ID). Live versions win for any ID collision.
+      // Also drop optimistic messages (negative IDs) once live canonical events
+      // include a user_message -- the real version is now in the live set, so
+      // keeping the optimistic copy causes a duplicate that persists across
+      // every subsequent handleTranscriptEvent merge.
       const liveIds = new Set(liveMessages.map(m => m.id));
+      const hasLiveUserMessage = liveMessages.some(m => m.type === 'user_message');
       const merged = [
-        ...dbMessages.filter(m => !liveIds.has(m.id)),
+        ...dbMessages.filter(m => !liveIds.has(m.id) && !(m.id < 0 && hasLiveUserMessage)),
         ...liveMessages,
       ];
       // Sort by ID to maintain chronological order (IDs are sequential)
