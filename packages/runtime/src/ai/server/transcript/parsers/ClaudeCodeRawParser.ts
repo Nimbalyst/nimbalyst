@@ -155,6 +155,12 @@ export class ClaudeCodeRawParser implements IRawMessageParser {
           createdAt: msg.createdAt,
         });
       } else if (parsed.type === 'assistant' && parsed.message) {
+        // Skip synthetic assistant messages that echo an error (model: "<synthetic>",
+        // top-level error field). The real error arrives as a separate type: "error"
+        // message, so processing both creates duplicate widgets.
+        if (parsed.error) {
+          return descriptors;
+        }
         const parentToolUseId: string | undefined = parsed.parent_tool_use_id;
         const messageId: string | undefined = parsed.message.id;
 
