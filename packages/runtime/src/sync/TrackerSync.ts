@@ -315,6 +315,7 @@ export class TrackerSyncProvider {
       iv,
       issueNumber: payload.issueNumber,
       issueKey: payload.issueKey,
+      orgKeyFingerprint: this.config.orgKeyFingerprint,
     });
   }
 
@@ -358,6 +359,7 @@ export class TrackerSyncProvider {
           iv,
           issueNumber: payload.issueNumber,
           issueKey: payload.issueKey,
+          orgKeyFingerprint: this.config.orgKeyFingerprint,
         };
       })
     );
@@ -400,6 +402,15 @@ export class TrackerSyncProvider {
     // Decrypt all items
     for (const encryptedItem of msg.items) {
       try {
+        // Check fingerprint before attempting decrypt (if available)
+        if (encryptedItem.orgKeyFingerprint && this.config.orgKeyFingerprint &&
+            encryptedItem.orgKeyFingerprint !== this.config.orgKeyFingerprint) {
+          console.warn('[TrackerSync] Item encrypted with different key version:',
+            encryptedItem.itemId, 'item fp:', encryptedItem.orgKeyFingerprint,
+            'local fp:', this.config.orgKeyFingerprint);
+          continue;
+        }
+
         const payload = await decryptPayload(
           encryptedItem.encryptedPayload,
           encryptedItem.iv,
@@ -454,6 +465,15 @@ export class TrackerSyncProvider {
   private async handleUpsertBroadcast(msg: TrackerUpsertBroadcastMessage): Promise<void> {
     console.log('[TrackerSync] Received upsert broadcast for item:', msg.item.itemId, 'sequence:', msg.item.sequence);
     try {
+      // Check fingerprint before attempting decrypt (if available)
+      if (msg.item.orgKeyFingerprint && this.config.orgKeyFingerprint &&
+          msg.item.orgKeyFingerprint !== this.config.orgKeyFingerprint) {
+        console.warn('[TrackerSync] Broadcast item encrypted with different key version:',
+          msg.item.itemId, 'item fp:', msg.item.orgKeyFingerprint,
+          'local fp:', this.config.orgKeyFingerprint);
+        return;
+      }
+
       const payload = await decryptPayload(
         msg.item.encryptedPayload,
         msg.item.iv,

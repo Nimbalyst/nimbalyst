@@ -18,13 +18,23 @@ function normalizeTrackerSyncScope(scope: unknown, fallback: TrackerSyncPolicy['
   return scope === 'workspace' || scope === 'project' ? scope : fallback;
 }
 
+/**
+ * Determine the effective sync policy for a tracker type.
+ *
+ * Priority chain:
+ * 1. Workspace-level override (stored in workspace state)
+ * 2. Model registry (if loaded -- renderer always has it, main process may not)
+ * 3. Caller-provided syncMode (from the renderer, which always has the model)
+ * 4. Default: 'local'
+ */
 export function getEffectiveTrackerSyncPolicy(
   workspacePath: string,
   trackerType: string,
+  callerSyncMode?: string,
 ): TrackerSyncPolicy {
   const modelPolicy = globalRegistry.get(trackerType)?.sync;
   const fallback: TrackerSyncPolicy = {
-    mode: modelPolicy?.mode ?? 'local',
+    mode: normalizeTrackerSyncMode(modelPolicy?.mode ?? callerSyncMode, 'local'),
     scope: modelPolicy?.scope ?? 'project',
   };
 

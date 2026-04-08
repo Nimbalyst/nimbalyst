@@ -103,3 +103,15 @@ Lesson: Any code that deletes user-facing files should use `shell.trashItem()`, 
 Told the user to run `npx wrangler d1 migrations apply nimbalyst-collab-db --remote` without checking the actual database name in `packages/collabv3/wrangler.toml`. The real name was `nimbalyst-collabv3`. Wrangler errored with "Couldn't find a D1 DB with the name or binding".
 
 Lesson: Always check configuration files (wrangler.toml, package.json, etc.) for exact names before giving commands. Never guess identifiers.
+
+## Tracker sync completely broken: registry never loaded in main process
+
+**Date**: 2026-04-08
+
+`TrackerPolicyService.ts` calls `globalRegistry.get(trackerType)` to determine the sync policy for a tracker type, but `loadBuiltinTrackers()` was never called in the main process. The registry was always empty, so every type fell through to the `?? 'local'` fallback, meaning no tracker items ever synced. This was invisible because items were still created locally -- the sync just silently never happened.
+
+The bug was compounded by an earlier inline-item deletion fix that also masked the problem: items could appear to sync because they were synced *before* some code change broke the registry loading, and old synced items remained visible.
+
+Additionally, `reporterEmail` was never auto-populated on tracker item creation, even though `authorIdentity` was being stored in the data JSON. The UI field that shows "created by" is `reporterEmail`, not `authorIdentity`.
+
+Lesson: When a service in the main process depends on a runtime registry (like `globalRegistry`), verify the registry is actually populated in that process context. The renderer and main process have separate module instances -- `loadBuiltinTrackers()` in the renderer does NOT populate the main process's registry. Also, when adding encryption/fingerprint features on top of sync, test the basic sync flow first to confirm items actually sync at all.

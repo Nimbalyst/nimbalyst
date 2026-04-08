@@ -755,6 +755,8 @@ export interface TrackerUpsertMessage {
   iv: string;
   issueNumber?: number;
   issueKey?: string;
+  /** Fingerprint of the org key used to encrypt this payload */
+  orgKeyFingerprint?: string;
 }
 
 /** Delete a tracker item */
@@ -766,7 +768,7 @@ export interface TrackerDeleteMessage {
 /** Batch create/update encrypted tracker items */
 export interface TrackerBatchUpsertMessage {
   type: 'trackerBatchUpsert';
-  items: { itemId: string; encryptedPayload: string; iv: string; issueNumber?: number; issueKey?: string }[];
+  items: { itemId: string; encryptedPayload: string; iv: string; issueNumber?: number; issueKey?: string; orgKeyFingerprint?: string }[];
 }
 
 // ============================================================================
@@ -824,6 +826,8 @@ export interface EncryptedTrackerItem {
   updatedAt: number;
   /** Sequence number in the changelog (for cursor-based sync) */
   sequence: number;
+  /** Fingerprint of the org key used to encrypt this payload (null for legacy items) */
+  orgKeyFingerprint?: string | null;
 }
 
 // ============================================================================
@@ -906,6 +910,7 @@ export type TeamServerMessage =
   | TeamDocIndexSyncResponseMessage
   | TeamDocIndexBroadcastMessage
   | TeamDocIndexRemoveBroadcastMessage
+  | TeamOrgKeyRotatedMessage
   | TeamErrorMessage;
 
 /** Full team state snapshot */
@@ -962,6 +967,12 @@ export interface TeamIdentityKeyUploadedMessage {
   userId: string;
 }
 
+/** Broadcast: the org encryption key was rotated (fingerprint changed) */
+export interface TeamOrgKeyRotatedMessage {
+  type: 'orgKeyRotated';
+  fingerprint: string;
+}
+
 /** Full document list response */
 export interface TeamDocIndexSyncResponseMessage {
   type: 'docIndexSyncResponse';
@@ -1010,6 +1021,8 @@ export interface TeamState {
     gitRemoteHash: string | null;
     createdBy: string;
     createdAt: number;
+    /** Server-authoritative fingerprint of the current org encryption key */
+    currentOrgKeyFingerprint?: string | null;
   } | null;
   members: MemberInfo[];
   documents: EncryptedDocIndexEntry[];

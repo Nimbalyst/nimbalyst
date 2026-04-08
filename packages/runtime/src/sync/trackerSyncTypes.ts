@@ -23,6 +23,9 @@ export interface TrackerSyncConfig {
   /** AES-256-GCM key for encrypting/decrypting tracker items */
   encryptionKey: CryptoKey;
 
+  /** Fingerprint of the org key (included in writes, checked on reads) */
+  orgKeyFingerprint?: string;
+
   /** Current user's ID */
   userId: string;
 
@@ -198,9 +201,9 @@ export interface TrackerSyncResult {
 /** Client -> Server messages */
 export type TrackerClientMessage =
   | { type: 'trackerSync'; sinceSequence: number }
-  | { type: 'trackerUpsert'; itemId: string; encryptedPayload: string; iv: string; issueNumber?: number; issueKey?: string }
+  | { type: 'trackerUpsert'; itemId: string; encryptedPayload: string; iv: string; issueNumber?: number; issueKey?: string; orgKeyFingerprint?: string }
   | { type: 'trackerDelete'; itemId: string }
-  | { type: 'trackerBatchUpsert'; items: { itemId: string; encryptedPayload: string; iv: string; issueNumber?: number; issueKey?: string }[] };
+  | { type: 'trackerBatchUpsert'; items: { itemId: string; encryptedPayload: string; iv: string; issueNumber?: number; issueKey?: string; orgKeyFingerprint?: string }[] };
 
 /** Server -> Client messages */
 export type TrackerServerMessage =
@@ -245,6 +248,8 @@ export interface EncryptedTrackerItem {
   createdAt: number;
   updatedAt: number;
   sequence: number;
+  /** Fingerprint of the org key used to encrypt this payload (null for legacy items) */
+  orgKeyFingerprint?: string | null;
 }
 
 // ============================================================================

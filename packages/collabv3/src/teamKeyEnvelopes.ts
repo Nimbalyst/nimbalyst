@@ -189,3 +189,57 @@ export async function handleDeleteAllKeyEnvelopes(
     return errorResponse('Internal server error', 500, corsHeaders);
   }
 }
+
+// ============================================================================
+// PUT /api/teams/{orgId}/org-key-fingerprint -- Set current org key fingerprint (admin)
+// ============================================================================
+
+export async function handleSetOrgKeyFingerprint(
+  orgId: string,
+  request: Request,
+  auth: AuthResult,
+  env: Env,
+  corsHeaders: Record<string, string>
+): Promise<Response> {
+  try {
+    const adminErr = await requireAdminViaTeamRoom(orgId, auth.userId, env);
+    if (adminErr) return errorResponse(adminErr, 403, corsHeaders);
+
+    const body = await request.json() as { fingerprint: string };
+    if (!body.fingerprint) {
+      return errorResponse('fingerprint is required', 400, corsHeaders);
+    }
+
+    await teamRoomPost(orgId, 'set-org-key-fingerprint', { fingerprint: body.fingerprint }, env);
+
+    log.info('Org key fingerprint set for team:', orgId);
+    return jsonResponse({ success: true }, 200, corsHeaders);
+  } catch (err) {
+    log.error('Set org key fingerprint error:', err);
+    return errorResponse('Internal server error', 500, corsHeaders);
+  }
+}
+
+// ============================================================================
+// GET /api/teams/{orgId}/org-key-fingerprint -- Get current org key fingerprint
+// ============================================================================
+
+export async function handleGetOrgKeyFingerprint(
+  orgId: string,
+  auth: AuthResult,
+  env: Env,
+  corsHeaders: Record<string, string>
+): Promise<Response> {
+  try {
+    const memberErr = await requireMemberViaTeamRoom(orgId, auth.userId, env);
+    if (memberErr) return errorResponse(memberErr, 403, corsHeaders);
+
+    const resp = await teamRoomGet(orgId, 'get-org-key-fingerprint', env);
+    const data = await resp.json() as { fingerprint: string | null };
+
+    return jsonResponse(data, 200, corsHeaders);
+  } catch (err) {
+    log.error('Get org key fingerprint error:', err);
+    return errorResponse('Internal server error', 500, corsHeaders);
+  }
+}

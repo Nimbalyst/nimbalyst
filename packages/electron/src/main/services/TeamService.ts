@@ -51,6 +51,8 @@ import {
   hasOrgKey,
   fetchAndUnwrapOrgKey,
   fetchOwnEnvelope,
+  getOrgKeyFingerprint,
+  clearOrgKey,
 } from './OrgKeyService';
 
 // ============================================================================
@@ -528,7 +530,13 @@ async function createTeam(name: string, workspacePath?: string, accountOrgId?: s
     // 3. Generate org encryption key
     await generateAndStoreOrgKey(result.orgId);
 
-    // 4. Wrap org key for self and upload envelope
+    // 4. Post initial org key fingerprint to server
+    const initialFingerprint = getOrgKeyFingerprint(result.orgId);
+    if (initialFingerprint) {
+      await fetchTeamApi(`/api/teams/${result.orgId}/org-key-fingerprint`, 'PUT', { fingerprint: initialFingerprint }, result.orgId);
+    }
+
+    // 5. Wrap org key for self and upload envelope
     const myPublicKeyJwk = await exportPublicKeyJwk();
     const envelope = await wrapOrgKeyForMember(result.orgId, myPublicKeyJwk);
     await uploadEnvelope(result.orgId, result.creatorMemberId, envelope, orgJwt);
@@ -616,6 +624,17 @@ async function removeMember(orgId: string, memberId: string): Promise<void> {
 
     // Generate new org encryption key
     await generateAndStoreOrgKey(orgId);
+
+    // Post the new key's fingerprint to the server (triggers orgKeyRotated broadcast)
+    const newFingerprint = getOrgKeyFingerprint(orgId);
+    if (newFingerprint) {
+      try {
+        await fetchTeamApi(`/api/teams/${orgId}/org-key-fingerprint`, 'PUT', { fingerprint: newFingerprint }, orgId);
+        logger.main.info('[TeamService] Posted new org key fingerprint:', newFingerprint);
+      } catch (fpErr) {
+        logger.main.error('[TeamService] Failed to post org key fingerprint:', fpErr);
+      }
+    }
 
     // Get remaining members and wrap new key for each
     const { members } = await listMembers(orgId);
@@ -712,32 +731,60 @@ async function ensureOrgKeyForWorkspace(workspacePath: string): Promise<{
 
   // Check if we already have the org key locally
   if (hasOrgKey(team.orgId)) {
-    // Key is cached locally, but ensure our envelope exists on the server.
-    // After a DO wipe, the local key cache survives but server envelopes are gone.
-    // Without this, other members can't get the key from the server.
-    // Don't gate on team.role -- after a DO wipe the server may report 'member'
-    // even for the original admin who has the key locally.
+    // Verify our local key matches the server's current key fingerprint.
+    // If it doesn't match, the key was rotated by another admin and ours is stale.
+    let keyIsStale = false;
     try {
       const orgJwt = await getOrgScopedJwt(team.orgId);
-      await getOrCreateIdentityKeyPair();
-      await uploadIdentityKeyToOrg(orgJwt);
+      const localFp = getOrgKeyFingerprint(team.orgId);
 
-      const existingEnvelope = await fetchOwnEnvelope(team.orgId, orgJwt);
-      if (!existingEnvelope) {
-        logger.main.info('[TeamService] Has local key but no server envelope, re-uploading for:', team.orgId);
-        const myPublicKeyJwk = await exportPublicKeyJwk();
-        const envelope = await wrapOrgKeyForMember(team.orgId, myPublicKeyJwk);
-        const myMemberId = getMemberIdFromJwt(orgJwt);
-        if (myMemberId) {
-          await uploadEnvelope(team.orgId, myMemberId, envelope, orgJwt);
-          logger.main.info('[TeamService] Re-uploaded envelope for:', team.orgId);
+      // Check server fingerprint
+      try {
+        const fpResp = await fetchTeamApi(`/api/teams/${team.orgId}/org-key-fingerprint`, 'GET', undefined, team.orgId) as { fingerprint: string | null };
+        if (fpResp.fingerprint && localFp && fpResp.fingerprint !== localFp) {
+          logger.main.warn('[TeamService] Org key is stale (local:', localFp, 'server:', fpResp.fingerprint, ')');
+          clearOrgKey(team.orgId);
+          keyIsStale = true;
+        } else if (!fpResp.fingerprint && localFp) {
+          // Server has no fingerprint yet (legacy team) -- seed it if we're an admin
+          logger.main.info('[TeamService] Server has no org key fingerprint, seeding:', localFp);
+          try {
+            await fetchTeamApi(`/api/teams/${team.orgId}/org-key-fingerprint`, 'PUT', { fingerprint: localFp }, team.orgId);
+          } catch {
+            // Non-fatal -- admin-only, may fail if we're not admin
+          }
         }
+      } catch {
+        // Network error checking fingerprint -- proceed with local key
       }
+
+      if (!keyIsStale) {
+        // Key is current. Ensure our envelope exists on the server.
+        // After a DO wipe, the local key cache survives but server envelopes are gone.
+        await getOrCreateIdentityKeyPair();
+        await uploadIdentityKeyToOrg(orgJwt);
+
+        const existingEnvelope = await fetchOwnEnvelope(team.orgId, orgJwt);
+        if (!existingEnvelope) {
+          logger.main.info('[TeamService] Has local key but no server envelope, re-uploading for:', team.orgId);
+          const myPublicKeyJwk = await exportPublicKeyJwk();
+          const envelope = await wrapOrgKeyForMember(team.orgId, myPublicKeyJwk);
+          const myMemberId = getMemberIdFromJwt(orgJwt);
+          if (myMemberId) {
+            await uploadEnvelope(team.orgId, myMemberId, envelope, orgJwt);
+            logger.main.info('[TeamService] Re-uploaded envelope for:', team.orgId);
+          }
+        }
+        return { team, hasKey: true };
+      }
+      // If key was stale, fall through to re-fetch from server
     } catch (err) {
-      // Non-fatal -- we still have the key locally
-      logger.main.warn('[TeamService] Failed to verify/re-upload envelope:', err);
+      if (!keyIsStale) {
+        // Non-fatal -- we still have the key locally
+        logger.main.warn('[TeamService] Failed to verify/re-upload envelope:', err);
+        return { team, hasKey: true };
+      }
     }
-    return { team, hasKey: true };
   }
 
   // Try to fetch and unwrap from server
@@ -922,7 +969,24 @@ export async function autoMatchTeamForWorkspace(workspacePath: string): Promise<
  * Called by admin's client on workspace open to distribute org keys to new members.
  */
 export async function autoWrapForNewMembers(orgId: string): Promise<void> {
+  // Verify our local key is current before wrapping for others.
+  // Wrapping a stale key for new members would spread split-brain encryption.
+  const localFp = getOrgKeyFingerprint(orgId);
+  if (!localFp) return; // No local key at all
+
   const orgJwt = await getOrgScopedJwt(orgId);
+
+  try {
+    const fpResp = await fetchTeamApi(`/api/teams/${orgId}/org-key-fingerprint`, 'GET', undefined, orgId) as { fingerprint: string | null };
+    if (fpResp.fingerprint && fpResp.fingerprint !== localFp) {
+      logger.main.warn('[TeamService] autoWrap skipped: local org key is stale (local:', localFp, 'server:', fpResp.fingerprint, ')');
+      return;
+    }
+  } catch {
+    // Network error -- skip wrapping to be safe (don't risk spreading a stale key)
+    logger.main.warn('[TeamService] autoWrap skipped: could not verify org key fingerprint');
+    return;
+  }
 
   // Get all members and all existing envelopes
   const { members } = await listMembers(orgId);
@@ -1109,6 +1173,30 @@ export function registerTeamHandlers(): void {
     try {
       await autoWrapForNewMembers(orgId);
       return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  safeHandle('team:handle-org-key-rotated', async (_event, orgId: string, serverFingerprint: string) => {
+    try {
+      const localFp = getOrgKeyFingerprint(orgId);
+      if (localFp && localFp !== serverFingerprint) {
+        logger.main.warn('[TeamService] Org key rotated! Local key is stale. Clearing and re-fetching.');
+        clearOrgKey(orgId);
+
+        // Attempt to fetch the new key from our envelope
+        const orgJwt = await getOrgScopedJwt(orgId);
+        const key = await fetchAndUnwrapOrgKey(orgId, orgJwt);
+        if (key) {
+          logger.main.info('[TeamService] Successfully re-fetched org key after rotation');
+          return { success: true, keyRefreshed: true };
+        } else {
+          logger.main.warn('[TeamService] No envelope available yet after key rotation');
+          return { success: true, keyRefreshed: false };
+        }
+      }
+      return { success: true, keyRefreshed: false };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }

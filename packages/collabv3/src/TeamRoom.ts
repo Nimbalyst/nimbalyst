@@ -334,6 +334,11 @@ export class TeamRoom implements DurableObject {
       updatedAt: row.updated_at,
     }));
 
+    // Current org key fingerprint (if set)
+    const orgKeyFpRow = sql.exec<{ value: string }>(
+      `SELECT value FROM metadata WHERE key = 'current_org_key_fingerprint'`
+    ).toArray()[0];
+
     const team: TeamState = {
       metadata: metaRow ? {
         orgId: metaRow.org_id,
@@ -341,6 +346,7 @@ export class TeamRoom implements DurableObject {
         gitRemoteHash: metaRow.git_remote_hash,
         createdBy: metaRow.created_by,
         createdAt: metaRow.created_at,
+        currentOrgKeyFingerprint: orgKeyFpRow?.value ?? null,
       } : null,
       members,
       documents,
@@ -683,6 +689,15 @@ export class TeamRoom implements DurableObject {
         return this.jsonOk({ success: true });
       }
 
+      if (path.endsWith('/internal/set-org-key-fingerprint')) {
+        const { fingerprint } = body as { fingerprint: string };
+        if (!fingerprint) return this.jsonError('fingerprint required', 400);
+
+        this.setMetadataValue('current_org_key_fingerprint', fingerprint);
+        this.broadcast({ type: 'orgKeyRotated', fingerprint });
+        return this.jsonOk({ success: true });
+      }
+
       if (path.endsWith('/internal/seed')) {
         // Phase 5: one-time D1 data seeding. Stub for now.
         return this.jsonOk({ success: true, seeded: false, message: 'Seeding not yet implemented' });
@@ -753,6 +768,15 @@ export class TeamRoom implements DurableObject {
           email: r.email,
         }));
         return this.jsonOk({ members });
+      }
+
+      // GET /internal/get-org-key-fingerprint
+      // Returns { fingerprint } (null if not yet set)
+      if (path.endsWith('/internal/get-org-key-fingerprint')) {
+        const row = sql.exec<{ value: string }>(
+          `SELECT value FROM metadata WHERE key = 'current_org_key_fingerprint'`
+        ).toArray()[0];
+        return this.jsonOk({ fingerprint: row?.value ?? null });
       }
 
       // GET /internal/get-key-envelope?userId=...

@@ -101,6 +101,14 @@ export class TeamTrackerRoom implements DurableObject {
       sql.exec(`ALTER TABLE tracker_items ADD COLUMN issue_key TEXT`);
     } catch { /* column already exists */ }
 
+    // Migrate: add org_key_fingerprint column for split-brain key detection
+    try {
+      sql.exec(`ALTER TABLE tracker_items ADD COLUMN org_key_fingerprint TEXT`);
+    } catch { /* column already exists */ }
+    try {
+      sql.exec(`ALTER TABLE changelog ADD COLUMN org_key_fingerprint TEXT`);
+    } catch { /* column already exists */ }
+
     sql.exec(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_tracker_items_issue_number ON tracker_items(issue_number)
       WHERE issue_number IS NOT NULL;
@@ -295,6 +303,7 @@ export class TeamTrackerRoom implements DurableObject {
             message.encryptedPayload,
             message.iv,
             { issueNumber: message.issueNumber, issueKey: message.issueKey },
+            message.orgKeyFingerprint,
           );
           break;
 
@@ -377,10 +386,11 @@ export class TeamTrackerRoom implements DurableObject {
           version: number;
           encrypted_payload: string;
           iv: string;
+          org_key_fingerprint?: string | null;
           created_at: number;
           updated_at: number;
         }>(
-          `SELECT item_id, issue_number, issue_key, version, encrypted_payload, iv, created_at, updated_at
+          `SELECT item_id, issue_number, issue_key, version, encrypted_payload, iv, org_key_fingerprint, created_at, updated_at
            FROM tracker_items
            WHERE item_id IN (${placeholders})`,
           ...batch
@@ -403,6 +413,7 @@ export class TeamTrackerRoom implements DurableObject {
             createdAt: row.created_at,
             updatedAt: row.updated_at,
             sequence: seqRow?.max_seq ?? 0,
+            orgKeyFingerprint: row.org_key_fingerprint ?? null,
           });
         }
       }
@@ -435,6 +446,7 @@ export class TeamTrackerRoom implements DurableObject {
     encryptedPayload: string,
     iv: string,
     incomingIssueIdentity?: { issueNumber?: number; issueKey?: string },
+    orgKeyFingerprint?: string,
   ): Promise<void> {
     const sql = this.state.storage.sql;
     const now = Date.now();
@@ -452,27 +464,29 @@ export class TeamTrackerRoom implements DurableObject {
       // Update existing item
       sql.exec(
         `UPDATE tracker_items
-         SET issue_number = ?, issue_key = ?, version = ?, encrypted_payload = ?, iv = ?, updated_at = ?
+         SET issue_number = ?, issue_key = ?, version = ?, encrypted_payload = ?, iv = ?, org_key_fingerprint = ?, updated_at = ?
          WHERE item_id = ?`,
         issueIdentity.issueNumber,
         issueIdentity.issueKey,
         newVersion,
         encryptedPayload,
         iv,
+        orgKeyFingerprint ?? null,
         now,
         itemId
       );
     } else {
       // Insert new item
       sql.exec(
-        `INSERT INTO tracker_items (item_id, issue_number, issue_key, version, encrypted_payload, iv, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO tracker_items (item_id, issue_number, issue_key, version, encrypted_payload, iv, org_key_fingerprint, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         itemId,
         issueIdentity.issueNumber,
         issueIdentity.issueKey,
         newVersion,
         encryptedPayload,
         iv,
+        orgKeyFingerprint ?? null,
         now,
         now
       );
@@ -480,12 +494,13 @@ export class TeamTrackerRoom implements DurableObject {
 
     // Append to changelog
     sql.exec(
-      `INSERT INTO changelog (item_id, action, encrypted_payload, iv, version, created_at)
-       VALUES (?, 'upsert', ?, ?, ?, ?)`,
+      `INSERT INTO changelog (item_id, action, encrypted_payload, iv, version, org_key_fingerprint, created_at)
+       VALUES (?, 'upsert', ?, ?, ?, ?, ?)`,
       itemId,
       encryptedPayload,
       iv,
       newVersion,
+      orgKeyFingerprint ?? null,
       now
     );
 
@@ -512,6 +527,7 @@ export class TeamTrackerRoom implements DurableObject {
       createdAt: existing ? now : now, // For broadcast, created_at is approximate
       updatedAt: now,
       sequence,
+      orgKeyFingerprint: orgKeyFingerprint ?? null,
     };
 
     const senderMessage: TrackerServerMessage = {
@@ -580,7 +596,7 @@ export class TeamTrackerRoom implements DurableObject {
   private async handleTrackerBatchUpsert(
     ws: WebSocket,
     connState: ConnectionState,
-    items: { itemId: string; encryptedPayload: string; iv: string; issueNumber?: number; issueKey?: string }[]
+    items: { itemId: string; encryptedPayload: string; iv: string; issueNumber?: number; issueKey?: string; orgKeyFingerprint?: string }[]
   ): Promise<void> {
     // Process each item individually (SQLite handles transaction internally per DO)
     for (const item of items) {
@@ -591,6 +607,7 @@ export class TeamTrackerRoom implements DurableObject {
         item.encryptedPayload,
         item.iv,
         { issueNumber: item.issueNumber, issueKey: item.issueKey },
+        item.orgKeyFingerprint,
       );
     }
   }

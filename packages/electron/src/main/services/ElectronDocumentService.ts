@@ -1001,6 +1001,11 @@ export class ElectronDocumentService implements DocumentService {
       source: row.source || (row.document_path ? 'inline' : 'native'),
       sourceRef: row.source_ref || undefined,
       // Collaborative fields from JSONB data
+      assigneeEmail: data.assigneeEmail || undefined,
+      reporterEmail: data.reporterEmail || undefined,
+      authorIdentity: data.authorIdentity || undefined,
+      lastModifiedBy: data.lastModifiedBy || undefined,
+      createdByAgent: data.createdByAgent || false,
       assigneeId: data.assigneeId || undefined,
       reporterId: data.reporterId || undefined,
       labels: data.labels || undefined,
@@ -1553,6 +1558,7 @@ export class ElectronDocumentService implements DocumentService {
     content?: any;
     source?: string;
     sourceRef?: string;
+    syncMode?: string;
   }): Promise<TrackerItem> {
     // Check if this type allows creation
     const { globalRegistry } = await import('@nimbalyst/runtime/plugins/TrackerPlugin/models/TrackerDataModel');
@@ -1571,6 +1577,7 @@ export class ElectronDocumentService implements DocumentService {
       priority: payload.priority,
       created: new Date().toISOString().split('T')[0],
       authorIdentity,
+      reporterEmail: authorIdentity.email || authorIdentity.gitEmail || undefined,
     };
     if (payload.description) data.description = payload.description;
     if (payload.owner) data.owner = payload.owner;
@@ -1581,7 +1588,7 @@ export class ElectronDocumentService implements DocumentService {
 
     const source = payload.source || 'native';
     const contentJson = payload.content ? JSON.stringify(payload.content) : null;
-    const syncPolicy = getEffectiveTrackerSyncPolicy(payload.workspace, payload.type);
+    const syncPolicy = getEffectiveTrackerSyncPolicy(payload.workspace, payload.type, payload.syncMode);
     const syncStatus = getInitialTrackerSyncStatus(syncPolicy);
 
     await database.query(
@@ -2289,7 +2296,7 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
     syncMode?: string;
   }) => {
     try {
-      const syncPolicy = getEffectiveTrackerSyncPolicy(payload.workspace, payload.type);
+      const syncPolicy = getEffectiveTrackerSyncPolicy(payload.workspace, payload.type, payload.syncMode);
       console.log('[DocumentService] create-tracker-item called:', {
         id: payload.id,
         type: payload.type,
@@ -2333,7 +2340,7 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
         updateKeys: Object.keys(payload.updates),
       });
       const item = await requireDocumentService(event).updateTrackerItem(payload.itemId, payload.updates);
-      const syncPolicy = getEffectiveTrackerSyncPolicy(item.workspace, item.type);
+      const syncPolicy = getEffectiveTrackerSyncPolicy(item.workspace, item.type, payload.syncMode);
 
       if (shouldSyncTrackerPolicy(syncPolicy)) {
         const syncActive = isTrackerSyncActive(item.workspace);

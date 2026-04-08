@@ -9,6 +9,7 @@
 import { atom } from 'jotai';
 import { store } from '@nimbalyst/runtime/store';
 import type { TeamSyncProvider as TeamSyncProviderType } from '@nimbalyst/runtime/sync';
+import { errorNotificationService } from '../../services/ErrorNotificationService';
 
 // ============================================================
 // Types
@@ -329,6 +330,41 @@ export async function initSharedDocuments(workspacePath: string, retryCount = 0)
         (window as any).electronAPI.team.autoWrapNewMembers(orgId).catch((err: unknown) => {
           console.error('[collabDocuments] auto-wrap after identityKeyUploaded failed:', err);
         });
+      },
+
+      onOrgKeyRotated: (fingerprint) => {
+        // The org encryption key was rotated by another admin.
+        // Notify the main process to invalidate the local key and re-fetch.
+        console.log('[collabDocuments] Org key rotated, new fingerprint:', fingerprint);
+        errorNotificationService.showInfo(
+          'Team encryption key updated',
+          'The team encryption key was rotated by an admin. Fetching the updated key...',
+          { duration: 5000 }
+        );
+        (window as any).electronAPI.invoke('team:handle-org-key-rotated', orgId, fingerprint)
+          .then((result: { success: boolean; keyRefreshed?: boolean; error?: string }) => {
+            if (result?.success && result.keyRefreshed) {
+              errorNotificationService.showInfo(
+                'Encryption key updated',
+                'Successfully fetched the new team encryption key. Sync resumed.',
+                { duration: 5000 }
+              );
+            } else if (result?.success && !result.keyRefreshed) {
+              errorNotificationService.showWarning(
+                'Waiting for updated key',
+                'An admin needs to share the updated encryption key with you. Some items may be temporarily unreadable.',
+                { duration: 10000 }
+              );
+            }
+          })
+          .catch((err: unknown) => {
+            console.error('[collabDocuments] Failed to handle org key rotation:', err);
+            errorNotificationService.showWarning(
+              'Key rotation failed',
+              'Failed to fetch the updated encryption key. Try reopening the workspace.',
+              { duration: 10000 }
+            );
+          });
       },
 
       onStatusChange: (status) => {

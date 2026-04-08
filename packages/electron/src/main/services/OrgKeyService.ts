@@ -56,7 +56,12 @@ const TRUST_VERIFICATIONS_FILE = 'trust-verifications.enc';
 // ============================================================================
 
 let keyManager: ECDHKeyManager | null = null;
-let orgKeysCache: Map<string, string> = new Map(); // orgId -> base64 raw key bytes
+interface OrgKeyEntry {
+  rawKeyBase64: string;
+  fingerprint: string;
+}
+
+let orgKeysCache: Map<string, OrgKeyEntry> = new Map(); // orgId -> key + fingerprint
 let orgKeysCacheLoaded = false;
 
 // Trust verification state (local, per-device)
@@ -168,6 +173,16 @@ export function computeKeyFingerprint(publicKeyJwk: string): string {
     .join(':');
 }
 
+/**
+ * Compute a compact fingerprint for an org encryption key (raw AES-256 bytes as base64).
+ * Uses first 16 bytes (128 bits) of SHA-256 as lowercase hex -- sufficient for collision
+ * resistance, short enough for wire protocol and logging.
+ */
+export function computeOrgKeyFingerprint(rawKeyBase64: string): string {
+  const hash = createHash('sha256').update(rawKeyBase64).digest();
+  return hash.subarray(0, 16).toString('hex');
+}
+
 // ============================================================================
 // Org Encryption Key Storage
 // ============================================================================
@@ -179,9 +194,26 @@ function loadOrgKeysFromDisk(): void {
   const saved = loadEncrypted(ORG_KEYS_FILE);
   if (saved) {
     try {
-      const entries: Array<[string, string]> = JSON.parse(saved);
-      orgKeysCache = new Map(entries);
+      const entries: Array<[string, string | OrgKeyEntry]> = JSON.parse(saved);
+      orgKeysCache = new Map();
+      let migrated = false;
+      for (const [orgId, value] of entries) {
+        if (typeof value === 'string') {
+          // Legacy format: plain base64 string without fingerprint -- auto-migrate
+          orgKeysCache.set(orgId, {
+            rawKeyBase64: value,
+            fingerprint: computeOrgKeyFingerprint(value),
+          });
+          migrated = true;
+        } else {
+          orgKeysCache.set(orgId, value);
+        }
+      }
       logger.main.info(`[OrgKeyService] Loaded ${orgKeysCache.size} org encryption keys`);
+      if (migrated) {
+        saveOrgKeysToDisk();
+        logger.main.info('[OrgKeyService] Migrated org keys to fingerprinted format');
+      }
     } catch {
       orgKeysCache = new Map();
     }
@@ -198,7 +230,10 @@ function saveOrgKeysToDisk(): void {
  */
 function storeOrgKeyRaw(orgId: string, rawKeyBase64: string): void {
   loadOrgKeysFromDisk();
-  orgKeysCache.set(orgId, rawKeyBase64);
+  orgKeysCache.set(orgId, {
+    rawKeyBase64,
+    fingerprint: computeOrgKeyFingerprint(rawKeyBase64),
+  });
   saveOrgKeysToDisk();
 }
 
@@ -207,10 +242,10 @@ function storeOrgKeyRaw(orgId: string, rawKeyBase64: string): void {
  */
 export async function getOrgKey(orgId: string): Promise<CryptoKey | null> {
   loadOrgKeysFromDisk();
-  const raw = orgKeysCache.get(orgId);
-  if (!raw) return null;
+  const entry = orgKeysCache.get(orgId);
+  if (!entry) return null;
 
-  const keyBytes = base64ToUint8Array(raw);
+  const keyBytes = base64ToUint8Array(entry.rawKeyBase64);
   return crypto.subtle.importKey(
     'raw',
     keyBytes,
@@ -226,6 +261,26 @@ export async function getOrgKey(orgId: string): Promise<CryptoKey | null> {
 export function hasOrgKey(orgId: string): boolean {
   loadOrgKeysFromDisk();
   return orgKeysCache.has(orgId);
+}
+
+/**
+ * Get the fingerprint of the locally cached org key, or null if not stored.
+ */
+export function getOrgKeyFingerprint(orgId: string): string | null {
+  loadOrgKeysFromDisk();
+  const entry = orgKeysCache.get(orgId);
+  return entry?.fingerprint ?? null;
+}
+
+/**
+ * Clear the locally cached org key (e.g., when detected as stale).
+ */
+export function clearOrgKey(orgId: string): void {
+  loadOrgKeysFromDisk();
+  if (orgKeysCache.delete(orgId)) {
+    saveOrgKeysToDisk();
+    logger.main.info('[OrgKeyService] Cleared stale org key for:', orgId);
+  }
 }
 
 // ============================================================================

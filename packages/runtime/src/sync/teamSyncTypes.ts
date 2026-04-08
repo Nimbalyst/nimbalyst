@@ -56,6 +56,9 @@ export interface TeamSyncConfig {
   /** Called when a document is removed */
   onDocumentRemoved?: (documentId: string) => void;
 
+  /** Called when the org encryption key is rotated (fingerprint changed) */
+  onOrgKeyRotated?: (fingerprint: string) => void;
+
   /** Called when connection status changes */
   onStatusChange?: (status: TeamSyncStatus) => void;
 
@@ -146,6 +149,7 @@ export type TeamServerMessage =
   | TeamDocIndexSyncResponseMessage
   | TeamDocIndexBroadcastMessage
   | TeamDocIndexRemoveBroadcastMessage
+  | TeamOrgKeyRotatedMessage
   | TeamErrorMessage;
 
 export interface TeamSyncResponseMessage {
@@ -207,6 +211,11 @@ export interface TeamDocIndexRemoveBroadcastMessage {
   documentId: string;
 }
 
+export interface TeamOrgKeyRotatedMessage {
+  type: 'orgKeyRotated';
+  fingerprint: string;
+}
+
 export interface TeamErrorMessage {
   type: 'error';
   code: string;
@@ -221,6 +230,8 @@ export interface ServerTeamState {
     gitRemoteHash: string | null;
     createdBy: string;
     createdAt: number;
+    /** Server-authoritative fingerprint of the current org encryption key */
+    currentOrgKeyFingerprint?: string | null;
   } | null;
   members: MemberInfo[];
   documents: EncryptedDocIndexEntry[];

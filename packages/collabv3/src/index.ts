@@ -45,6 +45,8 @@ import {
   handleListKeyEnvelopes,
   handleDeleteKeyEnvelope,
   handleDeleteAllKeyEnvelopes,
+  handleSetOrgKeyFingerprint,
+  handleGetOrgKeyFingerprint,
 } from './teamKeyEnvelopes';
 import { teamRoomPost, teamRoomGet } from './teamRoomHelpers';
 import { NIMBALYST_ORG_TYPE_KEY, getExplicitOrgType, resolveDiscoveredOrgType, selectPreferredPersonalOrg } from './personalOrg';
@@ -567,6 +569,17 @@ async function handleApiRequest(
     // DELETE /api/teams/{orgId}/project-identity - Clear project identity
     if (subPath === '/project-identity' && request.method === 'DELETE') {
       return handleClearProjectIdentity(teamOrgId, auth, env, corsHeaders);
+    }
+
+    // Org Key Fingerprint Routes
+    // PUT /api/teams/{orgId}/org-key-fingerprint - Set current fingerprint (admin)
+    if (subPath === '/org-key-fingerprint' && request.method === 'PUT') {
+      return handleSetOrgKeyFingerprint(teamOrgId, request, auth, env, corsHeaders);
+    }
+
+    // GET /api/teams/{orgId}/org-key-fingerprint - Get current fingerprint
+    if (subPath === '/org-key-fingerprint' && request.method === 'GET') {
+      return handleGetOrgKeyFingerprint(teamOrgId, auth, env, corsHeaders);
     }
 
     // Key Envelope Routes

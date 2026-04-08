@@ -30,6 +30,7 @@ import type {
   TeamDocIndexSyncResponseMessage,
   TeamDocIndexBroadcastMessage,
   TeamDocIndexRemoveBroadcastMessage,
+  TeamOrgKeyRotatedMessage,
   EncryptedDocIndexEntry,
   ServerTeamState,
 } from './teamSyncTypes';
@@ -275,6 +276,9 @@ export class TeamSyncProvider {
         case 'docIndexRemoveBroadcast':
           this.handleDocIndexRemoveBroadcast(message);
           break;
+        case 'orgKeyRotated':
+          this.handleOrgKeyRotated(message);
+          break;
         case 'error':
           console.error('[TeamSync] Server error:', message.code, message.message);
           break;
@@ -387,6 +391,11 @@ export class TeamSyncProvider {
     } catch (err) {
       console.error('[TeamSync] Failed to decrypt doc index broadcast:', msg.document.documentId, err);
     }
+  }
+
+  private handleOrgKeyRotated(msg: TeamOrgKeyRotatedMessage): void {
+    console.log('[TeamSync] Org key rotated, new fingerprint:', msg.fingerprint);
+    this.config.onOrgKeyRotated?.(msg.fingerprint);
   }
 
   private handleDocIndexRemoveBroadcast(msg: TeamDocIndexRemoveBroadcastMessage): void {

@@ -817,7 +817,7 @@ export async function handleTrackerCreate(
     // getCurrentIdentity imported statically at top of file
     const authorIdentity = getCurrentIdentity(workspacePath);
     const syncPolicy = workspacePath
-      ? getEffectiveTrackerSyncPolicy(workspacePath, args.type)
+      ? getEffectiveTrackerSyncPolicy(workspacePath, args.type, model?.sync?.mode)
       : { mode: 'local' as const, scope: 'project' as const };
     const syncStatus = getInitialTrackerSyncStatus(syncPolicy);
 
@@ -1080,7 +1080,9 @@ export async function handleTrackerUpdate(
     const refreshedRow = await resolveTrackerRowByReference(db, row.id, workspacePath);
     const effectiveWorkspacePath = refreshedRow?.workspace || workspacePath;
     if (refreshedRow && effectiveWorkspacePath) {
-      const syncPolicy = getEffectiveTrackerSyncPolicy(effectiveWorkspacePath, refreshedRow.type);
+      const { globalRegistry: reg } = await import("@nimbalyst/runtime/plugins/TrackerPlugin/models/TrackerDataModel");
+      const updateModel = reg.get(refreshedRow.type);
+      const syncPolicy = getEffectiveTrackerSyncPolicy(effectiveWorkspacePath, refreshedRow.type, updateModel?.sync?.mode);
       if (shouldSyncTrackerPolicy(syncPolicy)) {
         if (isTrackerSyncActive(effectiveWorkspacePath)) {
           try {

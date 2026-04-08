@@ -12,6 +12,8 @@
  */
 
 import { BrowserWindow } from 'electron';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 import { safeHandle } from '../utils/ipcRegistry';
 import { logger } from '../utils/logger';
 import { getNormalizedGitRemote } from '../utils/gitUtils';
@@ -19,8 +21,9 @@ import { database } from '../database/PGLiteDatabaseWorker';
 import { getSessionSyncConfig } from '../utils/store';
 import { getStytchUserId, isAuthenticated } from './StytchAuthService';
 import { findTeamForWorkspace, getOrgScopedJwt, autoWrapForNewMembers } from './TeamService';
-import { getOrgKey, fetchAndUnwrapOrgKey, getOrCreateIdentityKeyPair, uploadIdentityKeyToOrg } from './OrgKeyService';
+import { getOrgKey, getOrgKeyFingerprint, fetchAndUnwrapOrgKey, getOrCreateIdentityKeyPair, uploadIdentityKeyToOrg } from './OrgKeyService';
 import { windows as windowMap, windowStates } from '../window/windowState';
+import { removeInlineTrackerItem } from '@nimbalyst/runtime/plugins/TrackerPlugin/documentHeader/frontmatterUtils';
 import type { TrackerSyncStatus, TrackerItemPayload } from '@nimbalyst/runtime/sync';
 import * as syncModule from '@nimbalyst/runtime/sync';
 
@@ -277,6 +280,8 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
       logger.main.warn(`[TrackerSyncManager] Auto-wrap for new members of ${projectId} failed:`, err);
     });
 
+    const orgKeyFingerprint = getOrgKeyFingerprint(orgId) ?? undefined;
+
     let provider: import('@nimbalyst/runtime/sync').TrackerSyncProvider;
     provider = new TrackerSyncProvider({
       serverUrl,
@@ -284,6 +289,7 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
       projectId,
       userId,
       encryptionKey,
+      orgKeyFingerprint,
 
       getJwt: async () => {
         // Use org-scoped JWT for the team org, not the personal session JWT
@@ -525,8 +531,34 @@ async function hydrateTrackerItem(
 
 /**
  * Remove a tracker item from PGLite when deleted remotely.
+ * For inline items, also removes the line from the source markdown file
+ * to prevent the file scanner from re-creating the item.
  */
 async function removeTrackerItem(itemId: string, workspacePath: string): Promise<void> {
+  // Check if this is an inline item before deleting from DB
+  const result = await database.query<any>(
+    `SELECT source, document_path FROM tracker_items WHERE id = $1`,
+    [itemId]
+  );
+  const row = result.rows[0];
+
+  // Remove inline item from source markdown file
+  if (row?.source === 'inline' && row.document_path) {
+    const fullPath = path.join(workspacePath, row.document_path);
+    try {
+      const fileContent = await fs.readFile(fullPath, 'utf-8');
+      const updated = removeInlineTrackerItem(fileContent, itemId);
+      if (updated !== null) {
+        await fs.writeFile(fullPath, updated, 'utf-8');
+        logger.main.info('[TrackerSyncManager] Removed inline item from file:', row.document_path);
+      }
+    } catch (err: any) {
+      if (err?.code !== 'ENOENT') {
+        logger.main.warn('[TrackerSyncManager] Failed to remove inline item from file:', err);
+      }
+    }
+  }
+
   await database.query(
     `DELETE FROM tracker_items WHERE id = $1 AND sync_status = 'synced'`,
     [itemId]
