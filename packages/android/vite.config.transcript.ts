@@ -27,6 +27,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@nimbalyst/runtime': fileURLToPath(new URL('../runtime/src', import.meta.url)),
+      '@nimbalyst/extension-sdk': fileURLToPath(new URL('../extension-sdk/src', import.meta.url)),
     },
   },
   base: './',
