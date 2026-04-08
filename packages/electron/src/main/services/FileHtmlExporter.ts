@@ -13,6 +13,7 @@
  */
 import { Marked, type Tokens } from 'marked';
 import hljs from 'highlight.js';
+import * as fs from 'fs';
 import * as path from 'path';
 
 // ---------------------------------------------------------------------------
@@ -38,6 +39,45 @@ const fileMarked = new Marked({
     },
   } as any,
 });
+
+// ---------------------------------------------------------------------------
+// Image inlining — resolve local image paths to base64 data URIs
+// ---------------------------------------------------------------------------
+
+const IMAGE_MIME_TYPES: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.webp': 'image/webp',
+  '.ico': 'image/x-icon',
+  '.bmp': 'image/bmp',
+  '.avif': 'image/avif',
+};
+
+/**
+ * Replace local image `src` attributes in rendered HTML with inline base64
+ * data URIs so shared pages can display them without access to the local FS.
+ */
+function inlineLocalImages(html: string, fileDir: string): string {
+  return html.replace(/<img\s([^>]*?)src="([^"]+)"([^>]*?)>/g, (_match, before, src, after) => {
+    // Skip absolute URLs and data URIs
+    if (/^(https?:|data:|\/\/)/.test(src)) return _match;
+
+    const imagePath = path.resolve(fileDir, decodeURIComponent(src));
+    try {
+      const imageBuffer = fs.readFileSync(imagePath);
+      const ext = path.extname(imagePath).toLowerCase();
+      const mimeType = IMAGE_MIME_TYPES[ext] || 'application/octet-stream';
+      const base64 = imageBuffer.toString('base64');
+      return `<img ${before}src="data:${mimeType};base64,${base64}"${after}>`;
+    } catch {
+      // File not found — keep original src so it degrades visibly
+      return _match;
+    }
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -278,8 +318,10 @@ pre.hljs .hljs-meta { color: var(--text-muted); }
  */
 export function exportFileToHtml(filePath: string, content: string): string {
   const fileName = path.basename(filePath);
+  const fileDir = path.dirname(filePath);
   const { body } = stripFrontmatter(content);
-  const contentHtml = fileMarked.parse(body) as string;
+  const rawHtml = fileMarked.parse(body) as string;
+  const contentHtml = inlineLocalImages(rawHtml, fileDir);
   const rawMarkdownB64 = Buffer.from(content).toString('base64');
   return buildFileHtml(fileName, contentHtml, rawMarkdownB64);
 }
