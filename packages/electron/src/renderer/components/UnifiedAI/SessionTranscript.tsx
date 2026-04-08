@@ -1628,7 +1628,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
             ? "Ask a question. @ for files. / for commands"
             : enableSlashCommands
               ? "Type your message... (Enter to send, Shift+Enter for new line, @ for files, / for commands)"
-              : "Type your message... (Enter to send, Shift+Enter for new line, @ for files)"
+              : "Type your message... (Enter to send, Shift+Enter for new line, @ for files, @@ for sessions, / for commands)"
         }
         mode={aiMode}
         onModeChange={handleAIModeChange}

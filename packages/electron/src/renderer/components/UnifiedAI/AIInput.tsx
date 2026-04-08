@@ -124,7 +124,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     onCancel,
     disabled,
     isLoading,
-    placeholder = "Type your message... (Enter to send, Shift+Enter for new line, @ for files)",
+    placeholder = "Type your message... (Enter to send, Shift+Enter for new line, @ for files, @@ for sessions, / for commands)",
     workspacePath,
     sessionId,
     onNavigateHistory,
