@@ -434,103 +434,122 @@ interface MatchCandidate {
 
 /** Exported for testing */
 /**
- * Build ToolCallWindow[] from canonical ai_transcript_events.
- * Returns null if the canonical store is not available or the session has no canonical events.
- * Used as a faster alternative to parsing raw ai_agent_messages.
+ * Load ToolCallWindow[] for a single session by parsing raw ai_agent_messages.
+ *
+ * We query ai_agent_messages (the raw log) instead of ai_transcript_events (the
+ * canonical view) because the linkage table ai_tool_call_file_edits has a FK to
+ * ai_agent_messages.id. Canonical event IDs are local-only derived values that
+ * change when events are regenerated, so they cannot be used for stable linkage.
  */
-export async function getCanonicalToolCallWindows(
+export async function getRawToolCallWindows(
   sessionId: string,
+  workspacePath?: string,
   options?: { afterDate?: Date; beforeDate?: Date },
-): Promise<ToolCallWindow[] | null> {
-  if (!TranscriptEventRepository.hasStore()) {
-    return null;
-  }
-
+): Promise<ToolCallWindow[]> {
   try {
-    const store = TranscriptEventRepository.getStore();
-    const events = await store.getSessionEvents(sessionId, {
-      eventTypes: ['tool_call'],
-      createdAfter: options?.afterDate,
-      createdBefore: options?.beforeDate,
-    });
+    const conditions = [
+      'session_id = $1',
+      "direction = 'output'",
+      'hidden = FALSE',
+    ];
+    const params: any[] = [sessionId];
+    let paramIdx = 2;
 
-    if (events.length === 0) {
-      return null;
+    if (options?.afterDate) {
+      conditions.push(`(EXTRACT(EPOCH FROM created_at) * 1000) >= $${paramIdx}`);
+      params.push(options.afterDate.getTime());
+      paramIdx++;
+    }
+    if (options?.beforeDate) {
+      conditions.push(`(EXTRACT(EPOCH FROM created_at) * 1000) <= $${paramIdx}`);
+      params.push(options.beforeDate.getTime());
+      paramIdx++;
     }
 
-    return events.map((event: TranscriptEvent) => {
-      const payload = event.payload as unknown as ToolCallPayload;
-      return {
-        messageId: event.id,
-        messageCreatedAt: event.createdAt.getTime(),
-        sessionId: event.sessionId,
-        toolName: payload.toolName,
-        toolCallItemId: event.providerToolCallId,
-        toolUseId: event.providerToolCallId,
-        argsText: stringifyArgs(payload.arguments),
-        outputText: payload.result ?? '',
-        args: payload.arguments,
-        isCompleted: payload.status === 'completed' || payload.status === 'error',
-      };
-    });
+    const messagesResult = await database.query<AgentMessageRow>(
+      `SELECT id, content, EXTRACT(EPOCH FROM created_at) * 1000 AS created_at_ms
+       FROM ai_agent_messages
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY id ASC`,
+      params,
+    );
+
+    const windows: ToolCallWindow[] = [];
+    for (const msg of messagesResult.rows) {
+      const msgWindows = parseToolCallWindows(
+        ensureNumber(msg.id),
+        msg.content,
+        new Date(ensureNumber(msg.created_at_ms)),
+        sessionId,
+        workspacePath,
+      );
+      windows.push(...msgWindows);
+    }
+    return windows;
   } catch (error) {
-    logger.main.warn('[ToolCallMatcher] Failed to read canonical tool events:', error);
-    return null;
+    logger.main.warn('[ToolCallMatcher] Failed to read raw tool call windows:', error);
+    return [];
   }
 }
 
 /**
- * Batch version: load ToolCallWindow[] for multiple sessions in a single SQL query.
- * Returns null if the canonical store is not available.
+ * Batch version: load ToolCallWindow[] for multiple sessions from raw ai_agent_messages.
  */
-async function getCanonicalToolCallWindowsMultiSession(
+async function getRawToolCallWindowsMultiSession(
   sessionIds: string[],
   options?: { afterDate?: Date; beforeDate?: Date },
-): Promise<Map<string, ToolCallWindow[]> | null> {
-  if (!TranscriptEventRepository.hasStore()) {
-    return null;
-  }
-
+): Promise<Map<string, ToolCallWindow[]>> {
   try {
-    const store = TranscriptEventRepository.getStore();
-    const events = await store.getMultiSessionEvents(sessionIds, {
-      eventTypes: ['tool_call'],
-      createdAfter: options?.afterDate,
-      createdBefore: options?.beforeDate,
-    });
+    if (sessionIds.length === 0) return new Map();
 
-    if (events.length === 0) {
-      return null;
+    const conditions = [
+      'session_id = ANY($1::text[])',
+      "direction = 'output'",
+      'hidden = FALSE',
+    ];
+    const params: any[] = [sessionIds];
+    let paramIdx = 2;
+
+    if (options?.afterDate) {
+      conditions.push(`(EXTRACT(EPOCH FROM created_at) * 1000) >= $${paramIdx}`);
+      params.push(options.afterDate.getTime());
+      paramIdx++;
     }
+    if (options?.beforeDate) {
+      conditions.push(`(EXTRACT(EPOCH FROM created_at) * 1000) <= $${paramIdx}`);
+      params.push(options.beforeDate.getTime());
+      paramIdx++;
+    }
+
+    const messagesResult = await database.query<AgentMessageRow & { session_id: string }>(
+      `SELECT session_id, id, content, EXTRACT(EPOCH FROM created_at) * 1000 AS created_at_ms
+       FROM ai_agent_messages
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY id ASC`,
+      params,
+    );
 
     const result = new Map<string, ToolCallWindow[]>();
-    for (const event of events) {
-      const payload = event.payload as unknown as ToolCallPayload;
-      const window: ToolCallWindow = {
-        messageId: event.id,
-        messageCreatedAt: event.createdAt.getTime(),
-        sessionId: event.sessionId,
-        toolName: payload.toolName,
-        toolCallItemId: event.providerToolCallId,
-        toolUseId: event.providerToolCallId,
-        argsText: stringifyArgs(payload.arguments),
-        outputText: payload.result ?? '',
-        args: payload.arguments,
-        isCompleted: payload.status === 'completed' || payload.status === 'error',
-      };
-
-      let arr = result.get(event.sessionId);
-      if (!arr) {
-        arr = [];
-        result.set(event.sessionId, arr);
+    for (const msg of messagesResult.rows) {
+      const msgWindows = parseToolCallWindows(
+        ensureNumber(msg.id),
+        msg.content,
+        new Date(ensureNumber(msg.created_at_ms)),
+        msg.session_id,
+      );
+      for (const w of msgWindows) {
+        let arr = result.get(msg.session_id);
+        if (!arr) {
+          arr = [];
+          result.set(msg.session_id, arr);
+        }
+        arr.push(w);
       }
-      arr.push(window);
     }
-
     return result;
   } catch (error) {
-    logger.main.warn('[ToolCallMatcher] Failed to read canonical tool events (multi-session):', error);
-    return null;
+    logger.main.warn('[ToolCallMatcher] Failed to read raw tool call windows (multi-session):', error);
+    return new Map();
   }
 }
 
@@ -712,18 +731,16 @@ class ToolCallMatcherImpl {
 
       const sessionWindows = new Map<string, ToolCallWindow[]>();
 
-      // Load canonical tool call windows for all sessions in a single query
+      // Load tool call windows from raw ai_agent_messages for all sessions
       const windowStart = input.fileTimestamp - TIME_CUTOFF_MS;
       const windowEnd = input.fileTimestamp + TIME_CUTOFF_MS;
-      const batchWindows = await getCanonicalToolCallWindowsMultiSession(candidateSessionIds, {
+      const batchWindows = await getRawToolCallWindowsMultiSession(candidateSessionIds, {
         afterDate: new Date(windowStart),
         beforeDate: new Date(windowEnd),
       });
-      if (batchWindows) {
-        for (const [sessionId, windows] of batchWindows) {
-          if (windows.length > 0) {
-            sessionWindows.set(sessionId, windows);
-          }
+      for (const [sessionId, windows] of batchWindows) {
+        if (windows.length > 0) {
+          sessionWindows.set(sessionId, windows);
         }
       }
 
@@ -879,12 +896,8 @@ class ToolCallMatcherImpl {
       }
       const sessionFiles = [...sessionFilesByKey.values()];
 
-      // 3. Load tool call windows from canonical transcript events
-      let windows: ToolCallWindow[] = [];
-      const canonicalWindows = await getCanonicalToolCallWindows(sessionId);
-      if (canonicalWindows && canonicalWindows.length > 0) {
-        windows = canonicalWindows;
-      }
+      // 3. Load tool call windows from raw ai_agent_messages
+      const windows = await getRawToolCallWindows(sessionId, workspacePath);
 
       if (windows.length === 0 || sessionFiles.length === 0) return 0;
 

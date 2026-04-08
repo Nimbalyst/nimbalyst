@@ -1750,6 +1750,29 @@ class PGLiteWorker {
       console.error('[PGLite Worker] Failed to add canonical transform columns:', error);
       // Non-fatal - lazy transformation will be unavailable but app continues
     }
+
+    // Migration: Ensure ai_tool_call_file_edits FK points to ai_agent_messages (not ai_transcript_events).
+    // A previous buggy migration may have re-pointed it to ai_transcript_events.
+    try {
+      const fkCheck = await this.db.query(`
+        SELECT conname FROM pg_constraint
+        WHERE conrelid = 'ai_tool_call_file_edits'::regclass
+          AND conname = 'fk_atcfe_message'
+          AND confrelid = 'ai_transcript_events'::regclass
+      `);
+      if (fkCheck.rows.length > 0) {
+        await this.db.exec(`TRUNCATE ai_tool_call_file_edits`);
+        await this.db.exec(`ALTER TABLE ai_tool_call_file_edits DROP CONSTRAINT fk_atcfe_message`);
+        await this.db.exec(`
+          ALTER TABLE ai_tool_call_file_edits
+            ADD CONSTRAINT fk_atcfe_message
+            FOREIGN KEY (message_id) REFERENCES ai_agent_messages(id) ON DELETE CASCADE
+        `);
+        console.log('[PGLite Worker] Fixed ai_tool_call_file_edits FK: restored reference to ai_agent_messages');
+      }
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to fix ai_tool_call_file_edits FK:', error);
+    }
   }
 
   async query(message) {

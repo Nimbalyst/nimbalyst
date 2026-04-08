@@ -187,10 +187,16 @@ export function createTranscriptEventStore(
     async findByProviderToolCallId(providerToolCallId): Promise<TranscriptEvent | null> {
       await ensureReady();
 
+      // Order by id DESC to return the most recent event with this tool call ID.
+      // Codex recycles IDs across different tool types within a session
+      // (e.g., item_5 for both a command_execution and an mcp_tool_call),
+      // so multiple events may share the same provider_tool_call_id.
+      // The latest one is the event we want to update on completion.
       const { rows } = await db.query<TranscriptEventRow>(
         `SELECT ${SELECT_COLS}
           FROM ai_transcript_events
           WHERE provider_tool_call_id = $1
+          ORDER BY id DESC
           LIMIT 1`,
         [providerToolCallId],
       );
