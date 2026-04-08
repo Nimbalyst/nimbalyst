@@ -20,6 +20,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.9] - 2026-04-08
+
+
+### Fixed
+- Tool call file edit FK violation and Codex duplicate tool call widgets
+- Files scope dropdown now stays above transcript actions
+- Tracker sync reconnects indefinitely instead of giving up after 10 attempts
+- Org key split-brain encryption and tracker sync reliability
+- Tracker panel, sync timestamps, and Durable Object migration
+- Duplicate user messages in transcript during streaming
+
 ## [0.57.8] - 2026-04-03
 
 
