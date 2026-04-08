@@ -73,12 +73,31 @@ export type TrackerSyncStatus =
 // ============================================================================
 
 /**
- * The decrypted payload of a tracker item.
- * This is JSON-serialized, encrypted with AES-256-GCM, and sent as an opaque blob.
+ * System metadata carried in the sync payload.
+ * These are infrastructure fields, not user-defined business data.
+ */
+export interface TrackerPayloadSystem {
+  authorIdentity?: TrackerIdentity | null;
+  lastModifiedBy?: TrackerIdentity | null;
+  createdByAgent?: boolean;
+  linkedSessions?: string[];
+  linkedCommitSha?: string;
+  documentId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * The decrypted payload of a tracker item (v2 -- generic).
+ *
+ * JSON-serialized, encrypted with AES-256-GCM, sent as an opaque blob.
  * The server never sees any of these fields.
+ *
+ * All user-defined business data lives in `fields`.
+ * System/infrastructure metadata lives in `system`.
  */
 export interface TrackerItemPayload {
-  /** Unique item ID (opaque UUID, also stored in plaintext on server for routing) */
+  /** Unique item ID (also stored in plaintext on server for routing) */
   itemId: string;
 
   /** Human-readable sequential number assigned by the tracker room */
@@ -87,78 +106,31 @@ export interface TrackerItemPayload {
   /** Human-readable key like NIM-123 assigned by the tracker room */
   issueKey?: string;
 
-  /** Tracker type (bug, task, plan, idea, decision, or custom) */
-  type: string;
+  /** Primary tracker type */
+  primaryType: string;
 
-  /** Item title */
-  title: string;
+  /** Whether the item is archived */
+  archived: boolean;
 
-  /** Item description (plain text or inline markdown) */
-  description?: string;
+  /** System/infrastructure metadata */
+  system: TrackerPayloadSystem;
 
-  /** Status value (from tracker YAML data model) */
-  status: string;
+  /** All user-defined field data (schema-driven) */
+  fields: Record<string, unknown>;
 
-  /** Priority value (from tracker YAML data model) */
-  priority: string;
-
-  /** Assignee email (stable cross-org identifier) */
-  assigneeEmail?: string;
-
-  /** Reporter email (stable cross-org identifier) */
-  reporterEmail?: string;
-
-  /** Structured author identity */
-  authorIdentity?: TrackerIdentity | null;
-
-  /** Structured last-modifier identity */
-  lastModifiedBy?: TrackerIdentity | null;
-
-  /** Whether this item was created by an AI agent */
-  createdByAgent?: boolean;
-
-  /** @deprecated Use assigneeEmail instead */
-  assigneeId?: string;
-
-  /** @deprecated Use reporterEmail instead */
-  reporterId?: string;
-
-  /** Labels */
-  labels: string[];
-
-  /** Linked AI session IDs */
-  linkedSessions: string[];
-
-  /** Linked git commit SHA */
-  linkedCommitSha?: string;
-
-  /** Optional DocumentRoom ID for rich collaborative content */
-  documentId?: string;
+  /**
+   * Per-field timestamps for Last-Write-Wins conflict resolution.
+   * Keys cover both `fields` keys and `system` keys.
+   */
+  fieldUpdatedAt: Record<string, number>;
 
   /** Comments thread */
   comments: TrackerComment[];
 
-  /** Whether the item is archived */
-  archived?: boolean;
-
-  /** When the item was archived (ISO timestamp) */
-  archivedAt?: string;
-
-  /** Custom fields defined by the tracker YAML data model */
-  customFields: Record<string, unknown>;
-
-  /**
-   * Per-field timestamps for Last-Write-Wins conflict resolution.
-   * Key is the field name, value is Unix timestamp ms of the last update.
-   * When two clients update the same item concurrently, the client resolves
-   * by taking the most recent value for each field based on these timestamps.
-   */
-  fieldUpdatedAt: Record<string, number>;
-
-  /** Server-side created timestamp (epoch ms). Set during sync from EncryptedTrackerItem envelope. */
+  /** Server-side created timestamp (epoch ms). Set from EncryptedTrackerItem envelope. */
   serverCreatedAt?: number;
 
-  /** Server-side updated timestamp (epoch ms). Set during sync from EncryptedTrackerItem envelope. */
+  /** Server-side updated timestamp (epoch ms). Set from EncryptedTrackerItem envelope. */
   serverUpdatedAt?: number;
 }
 
@@ -253,106 +225,132 @@ export interface EncryptedTrackerItem {
 }
 
 // ============================================================================
-// TrackerItem <-> TrackerItemPayload Mapping
+// TrackerRecord <-> TrackerItemPayload Mapping
 // ============================================================================
 
 import type { TrackerItem, TrackerIdentity } from '../core/DocumentService';
+import type { TrackerRecord } from '../core/TrackerRecord';
+import { trackerItemToRecord, trackerRecordToItem } from '../core/TrackerRecord';
 
 /**
- * Convert a local TrackerItem (PGLite shape) to a TrackerItemPayload (sync wire shape).
- * Used when promoting a local item to a shared item, or when pushing local changes to the server.
+ * Convert a TrackerRecord to a TrackerItemPayload for sync.
  */
-export function trackerItemToPayload(item: TrackerItem, userId: string): TrackerItemPayload {
+export function recordToPayload(record: TrackerRecord): TrackerItemPayload {
   const now = Date.now();
+
+  // Build fieldUpdatedAt from record's fieldUpdatedAt, filling gaps with now
+  const fieldUpdatedAt: Record<string, number> = { ...record.fieldUpdatedAt };
+  for (const key of Object.keys(record.fields)) {
+    if (!fieldUpdatedAt[key]) fieldUpdatedAt[key] = now;
+  }
+  // System field timestamps
+  const systemKeys = [
+    'authorIdentity', 'lastModifiedBy', 'createdByAgent',
+    'linkedSessions', 'linkedCommitSha', 'documentId',
+    'createdAt', 'updatedAt',
+  ];
+  for (const key of systemKeys) {
+    if (!fieldUpdatedAt[key]) fieldUpdatedAt[key] = now;
+  }
+  // Routing field timestamps
+  fieldUpdatedAt.issueNumber = fieldUpdatedAt.issueNumber ?? now;
+  fieldUpdatedAt.issueKey = fieldUpdatedAt.issueKey ?? now;
+  fieldUpdatedAt.archived = fieldUpdatedAt.archived ?? now;
+  fieldUpdatedAt.comments = fieldUpdatedAt.comments ?? now;
+
   return {
-    itemId: item.id,
-    issueNumber: item.issueNumber,
-    issueKey: item.issueKey,
-    type: item.type,
-    title: item.title,
-    description: item.description,
-    status: item.status,
-    priority: item.priority || 'medium',
-    assigneeEmail: item.assigneeEmail,
-    reporterEmail: item.reporterEmail,
-    authorIdentity: item.authorIdentity || null,
-    lastModifiedBy: item.lastModifiedBy || null,
-    createdByAgent: item.createdByAgent || false,
-    // Keep deprecated fields for backward compat with older clients
-    assigneeId: item.assigneeId,
-    reporterId: item.reporterId || userId,
-    labels: item.labels || [],
-    linkedSessions: item.linkedSessions || [],
-    linkedCommitSha: item.linkedCommitSha,
-    documentId: item.documentId,
-    archived: item.archived || false,
-    archivedAt: item.archivedAt,
-    comments: [],
-    customFields: item.customFields || {},
-    fieldUpdatedAt: {
-      title: now,
-      issueNumber: now,
-      issueKey: now,
-      status: now,
-      priority: now,
-      description: now,
-      assigneeEmail: now,
-      reporterEmail: now,
-      authorIdentity: now,
-      lastModifiedBy: now,
-      // Keep deprecated field timestamps for backward compat
-      assigneeId: now,
-      reporterId: now,
-      labels: now,
-      linkedSessions: now,
-      linkedCommitSha: now,
-      documentId: now,
-      archived: now,
-      comments: now,
-      customFields: now,
+    itemId: record.id,
+    issueNumber: record.issueNumber,
+    issueKey: record.issueKey,
+    primaryType: record.primaryType,
+    archived: record.archived,
+    system: {
+      authorIdentity: record.system.authorIdentity,
+      lastModifiedBy: record.system.lastModifiedBy,
+      createdByAgent: record.system.createdByAgent,
+      linkedSessions: record.system.linkedSessions,
+      linkedCommitSha: record.system.linkedCommitSha,
+      documentId: record.system.documentId,
+      createdAt: record.system.createdAt,
+      updatedAt: record.system.updatedAt,
     },
+    fields: { ...record.fields },
+    fieldUpdatedAt,
+    comments: record.system.comments ?? [],
   };
 }
 
 /**
- * Convert a TrackerItemPayload (sync wire shape) to a partial TrackerItem (PGLite shape).
- * The caller must supply workspace and other context fields.
- * Used when hydrating synced items into the local PGLite database.
+ * Convert a TrackerItemPayload back to a TrackerRecord.
+ * The caller must supply workspace context.
+ * Handles both new-format (fields/system) and old-format (top-level fields) payloads
+ * for backward compatibility with encrypted items already on the server.
+ */
+export function payloadToRecord(payload: TrackerItemPayload, workspace: string): TrackerRecord {
+  // Handle old-format payloads that have top-level fields instead of fields/system
+  const p = payload as any;
+  const sys = payload.system ?? {};
+  const fields = payload.fields ?? {};
+
+  // If payload has top-level fields (old format), migrate them into fields bag
+  if (!payload.fields && p.title) {
+    for (const key of ['title', 'description', 'status', 'priority', 'assigneeEmail', 'reporterEmail', 'labels', 'linkedCommitSha', 'documentId']) {
+      if (p[key] !== undefined) fields[key] = p[key];
+    }
+    if (p.customFields && typeof p.customFields === 'object') {
+      Object.assign(fields, p.customFields);
+    }
+  }
+
+  return {
+    id: payload.itemId,
+    primaryType: payload.primaryType ?? p.type ?? '',
+    typeTags: [payload.primaryType ?? p.type ?? ''],
+    issueNumber: payload.issueNumber,
+    issueKey: payload.issueKey,
+    source: 'native',
+    archived: payload.archived ?? false,
+    syncStatus: 'synced',
+    system: {
+      workspace,
+      createdAt: sys.createdAt ?? new Date().toISOString(),
+      updatedAt: sys.updatedAt ?? new Date().toISOString(),
+      lastIndexed: new Date().toISOString(),
+      authorIdentity: sys.authorIdentity ?? p.authorIdentity,
+      lastModifiedBy: sys.lastModifiedBy ?? p.lastModifiedBy,
+      createdByAgent: sys.createdByAgent ?? p.createdByAgent,
+      linkedSessions: sys.linkedSessions ?? p.linkedSessions,
+      linkedCommitSha: sys.linkedCommitSha ?? p.linkedCommitSha,
+      documentId: sys.documentId ?? p.documentId,
+      comments: payload.comments,
+    },
+    fields,
+    fieldUpdatedAt: { ...payload.fieldUpdatedAt },
+  };
+}
+
+/**
+ * Convert a legacy TrackerItem to a TrackerItemPayload for sync.
+ * Convenience wrapper: converts to TrackerRecord first, then to payload.
+ */
+export function trackerItemToPayload(item: TrackerItem, _userId: string): TrackerItemPayload {
+  const record = trackerItemToRecord(item);
+  return recordToPayload(record);
+}
+
+/**
+ * Convert a TrackerItemPayload to a legacy TrackerItem.
+ * Convenience wrapper: converts to TrackerRecord first, then to TrackerItem.
  */
 export function payloadToTrackerItem(
   payload: TrackerItemPayload,
   workspace: string
 ): Omit<TrackerItem, 'module' | 'lastIndexed'> & { module: string; lastIndexed: Date } {
+  const record = payloadToRecord(payload, workspace);
+  const item = trackerRecordToItem(record);
   return {
-    id: payload.itemId,
-    issueNumber: payload.issueNumber,
-    issueKey: payload.issueKey,
-    type: payload.type,
-    title: payload.title,
-    description: payload.description,
-    status: payload.status,
-    priority: payload.priority as TrackerItem['priority'],
-    owner: payload.assigneeEmail || payload.assigneeId,
-    module: '',  // Synced items don't have a source file
-    workspace,
-    tags: undefined,
-    created: undefined,
-    updated: undefined,
+    ...item,
+    module: '',
     lastIndexed: new Date(),
-    authorIdentity: payload.authorIdentity || null,
-    lastModifiedBy: payload.lastModifiedBy || null,
-    createdByAgent: payload.createdByAgent || false,
-    assigneeEmail: payload.assigneeEmail,
-    reporterEmail: payload.reporterEmail,
-    assigneeId: payload.assigneeId,
-    reporterId: payload.reporterId,
-    labels: payload.labels,
-    linkedSessions: payload.linkedSessions,
-    linkedCommitSha: payload.linkedCommitSha,
-    documentId: payload.documentId,
-    customFields: payload.customFields,
-    archived: payload.archived || false,
-    archivedAt: payload.archivedAt,
-    syncStatus: 'synced',
   };
 }

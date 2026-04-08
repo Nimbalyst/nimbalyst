@@ -11,9 +11,10 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useAtomValue } from 'jotai';
 import { StravuEditor, MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
 import type { EditorConfig } from '@nimbalyst/runtime/editor';
-import type { TrackerItem, TrackerItemType } from '@nimbalyst/runtime';
+import type { TrackerRecord } from '@nimbalyst/runtime/core/TrackerRecord';
 import { globalRegistry } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
 import type { FieldDefinition } from '@nimbalyst/runtime/plugins/TrackerPlugin/models/TrackerDataModel';
+import { getRecordTitle, getRecordStatus, getRecordPriority, getRecordField } from '@nimbalyst/runtime/plugins/TrackerPlugin/trackerRecordAccessors';
 import { TrackerFieldEditor, type TeamMemberOption } from '@nimbalyst/runtime/plugins/TrackerPlugin/components/TrackerFieldEditor';
 import { UserAvatar } from '@nimbalyst/runtime/plugins/TrackerPlugin/components/UserAvatar';
 import { trackerItemByIdAtom } from '@nimbalyst/runtime/plugins/TrackerPlugin/trackerDataAtoms';
@@ -80,22 +81,22 @@ function formatTimestamp(value: string | Date | number | undefined): string {
   });
 }
 
-/** Whether this item is a native DB item (no file backing) */
-function isNativeItem(item: TrackerItem): boolean {
-  return item.source === 'native' || !item.module;
+/** Whether this record is a native DB item (no file backing) */
+function isNativeItem(record: TrackerRecord): boolean {
+  return record.source === 'native' || !record.system.documentPath;
 }
 
-/** Whether this item's metadata fields are editable */
-function isEditable(item: TrackerItem): boolean {
-  return isNativeItem(item) || item.source === 'frontmatter' || item.source === 'import' || item.source === 'inline';
+/** Whether this record's metadata fields are editable */
+function isEditable(record: TrackerRecord): boolean {
+  return isNativeItem(record) || record.source === 'frontmatter' || record.source === 'import' || record.source === 'inline';
 }
 
 /** Source label for the metadata footer */
-function getSourceLabel(item: TrackerItem): string | null {
-  if (!item.source || item.source === 'native') return 'Database (no file backing)';
-  if (item.source === 'inline') return `Inline marker${item.sourceRef ? ` in ${item.sourceRef}` : ''}`;
-  if (item.source === 'frontmatter') return `Frontmatter${item.sourceRef ? ` in ${item.sourceRef}` : ''}`;
-  if (item.source === 'import') return `Imported${item.sourceRef ? ` from ${item.sourceRef}` : ''}`;
+function getSourceLabel(record: TrackerRecord): string | null {
+  if (!record.source || record.source === 'native') return 'Database (no file backing)';
+  if (record.source === 'inline') return `Inline marker${record.sourceRef ? ` in ${record.sourceRef}` : ''}`;
+  if (record.source === 'frontmatter') return `Frontmatter${record.sourceRef ? ` in ${record.sourceRef}` : ''}`;
+  if (record.source === 'import') return `Imported${record.sourceRef ? ` from ${record.sourceRef}` : ''}`;
   return null;
 }
 
@@ -179,7 +180,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
   const item = useAtomValue(trackerItemByIdAtom(itemId));
   const sessionRegistry = useAtomValue(sessionRegistryAtom);
 
-  const model = useMemo(() => globalRegistry.get(item?.type ?? ''), [item?.type]);
+  const model = useMemo(() => globalRegistry.get(item?.primaryType ?? ''), [item?.primaryType]);
 
   // Fetch team members for user picker dropdowns via IPC
   const [teamMembers, setTeamMembers] = useState<TeamMemberOption[]>([]);
@@ -201,8 +202,8 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
       }
     })();
   }, [workspacePath]);
-  const typeColor = TYPE_COLORS[item?.type ?? ''] || '#6b7280';
-  const icon = model?.icon || getTypeIcon(item?.type ?? '');
+  const typeColor = TYPE_COLORS[item?.primaryType ?? ''] || '#6b7280';
+  const icon = model?.icon || getTypeIcon(item?.primaryType ?? '');
 
   // Resolve linked sessions from registry (silently filter deleted ones)
   // Two sources: 1) tracker item's linkedSessions[] (forward link from DB items)
@@ -210,13 +211,13 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
   const linkedSessions = useMemo(() => {
     const sessionSet = new Set<string>();
 
-    // Forward: tracker item stores session IDs
-    const forwardIds: string[] = item?.linkedSessions || [];
+    // Forward: tracker record stores session IDs in system
+    const forwardIds: string[] = item?.system?.linkedSessions || [];
     for (const id of forwardIds) sessionSet.add(id);
 
     // Reverse: sessions that link to this item by ID or by file path
     const trackerItemId = item?.id;
-    const filePath = item?.module;
+    const filePath = item?.system?.documentPath;
     const fileRef = filePath ? `file:${filePath}` : null;
 
     // console.log('[TrackerItemDetail] reverse lookup:', { trackerItemId, filePath, fileRef });
@@ -236,9 +237,9 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
   }, [item, sessionRegistry]);
 
   // Local state for text fields (debounced save)
-  const [localTitle, setLocalTitle] = useState(item?.title ?? '');
-  const [localDescription, setLocalDescription] = useState(item?.description ?? '');
-  const [localCustomFields, setLocalCustomFields] = useState<Record<string, any>>(item?.customFields ?? {});
+  const [localTitle, setLocalTitle] = useState(item ? getRecordTitle(item) : '');
+  const [localDescription, setLocalDescription] = useState(item ? (item.fields.description as string ?? '') : '');
+  const [localCustomFields, setLocalCustomFields] = useState<Record<string, any>>({});
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editable = item ? isEditable(item) : false;
   const hasRichContent = item ? isNativeItem(item) : false; // Only native items have embedded Lexical content
@@ -255,9 +256,9 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
   // re-renders when its own item changes -- no prop-drilling churn from parent re-renders.
   useEffect(() => {
     if (!item) return;
-    setLocalTitle(item.title ?? '');
-    setLocalDescription(item.description ?? '');
-    setLocalCustomFields(item.customFields ?? {});
+    setLocalTitle(getRecordTitle(item));
+    setLocalDescription(item.fields.description as string ?? '');
+    setLocalCustomFields({});
     // Clear any stale debounce timer from the previous item
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
@@ -311,16 +312,16 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
   }, [onClose]);
 
   const syncMode = useMemo(() => {
-    const tracker = globalRegistry.get(item?.type ?? '');
+    const tracker = globalRegistry.get(item?.primaryType ?? '');
     return tracker?.sync?.mode || 'local';
-  }, [item?.type]);
+  }, [item?.primaryType]);
 
   /** Save a field update -- routes to file-based save for file-backed items, DB for native */
   const saveField = useCallback(async (updates: Record<string, any>) => {
     if (!editable || !item) return;
     try {
-      if ((item.source === 'frontmatter' || item.source === 'import' || item.source === 'inline') && item.module) {
-        // File-backed items with a real module path: update in source file
+      if ((item.source === 'frontmatter' || item.source === 'import' || item.source === 'inline') && item.system.documentPath) {
+        // File-backed items with a real document path: update in source file
         await window.electronAPI.documentService.updateTrackerItemInFile({
           itemId: item.id,
           updates,
@@ -404,25 +405,36 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
 
   /** Open the source document in Files mode */
   const handleOpenDocument = useCallback(() => {
-    if (!item?.module) return;
+    if (!item?.system.documentPath) return;
     const documentService = (window as any).documentService;
     if (!documentService?.openDocument || !documentService?.getDocumentByPath) return;
 
     if (onSwitchToFilesMode) onSwitchToFilesMode();
 
-    documentService.getDocumentByPath(item.module).then((doc: any) => {
+    documentService.getDocumentByPath(item.system.documentPath).then((doc: any) => {
       if (doc) {
         documentService.openDocument(doc.id);
       }
     });
-  }, [item?.module, onSwitchToFilesMode]);
+  }, [item?.system.documentPath, onSwitchToFilesMode]);
 
   // Separate fields into categories for layout
   const { primaryFields, customFields } = useMemo(() => {
     if (!model) return { primaryFields: [] as FieldDefinition[], customFields: [] as FieldDefinition[] };
 
     const builtinNames = new Set(['title', 'description', 'created', 'updated']);
-    const primaryNames = new Set(['status', 'priority', 'owner', 'assigneeEmail', 'reporterEmail', 'dueDate']);
+    // Resolve primary field names from schema roles instead of hardcoding
+    const primaryNames = new Set<string>();
+    for (const role of ['workflowStatus', 'priority', 'assignee', 'reporter', 'dueDate'] as const) {
+      const fieldName = model.roles?.[role];
+      if (fieldName) primaryNames.add(fieldName);
+    }
+    // Fallback conventional names when roles aren't declared
+    if (primaryNames.size === 0) {
+      for (const name of ['status', 'priority', 'owner', 'assigneeEmail', 'reporterEmail', 'dueDate']) {
+        if (model.fields.some(f => f.name === name)) primaryNames.add(name);
+      }
+    }
     const primary: FieldDefinition[] = [];
     const custom: FieldDefinition[] = [];
 
@@ -445,17 +457,8 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
     // handleTextFieldChange stores owner (and other string fields) in localCustomFields,
     // so we must check it first to avoid resetting input on each keystroke.
     if (fieldName in localCustomFields) return localCustomFields[fieldName];
-    // Top-level TrackerItem fields (select, etc. -- not stored in localCustomFields)
-    if (fieldName === 'status') return item.status;
-    if (fieldName === 'priority') return item.priority;
-    if (fieldName === 'owner') return item.owner;
-    if (fieldName === 'assigneeEmail') return item.assigneeEmail;
-    if (fieldName === 'reporterEmail') return item.reporterEmail;
-    if (fieldName === 'tags') return item.tags;
-    if (fieldName === 'progress') return item.progress;
-    if (fieldName === 'dueDate') return item.dueDate;
-    // Remaining custom fields
-    return item.customFields?.[fieldName];
+    // All fields are now in record.fields (schema-driven)
+    return item.fields[fieldName];
   }, [item, localCustomFields]);
 
   /** Determine whether a field change should be immediate or debounced */
@@ -527,7 +530,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
               data-testid="tracker-detail-title"
             />
           ) : (
-            <h3 className="text-base font-semibold text-nim m-0 leading-snug">{item.title}</h3>
+            <h3 className="text-base font-semibold text-nim m-0 leading-snug">{getRecordTitle(item)}</h3>
           )}
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             <span
@@ -537,11 +540,11 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
                 backgroundColor: `${typeColor}20`,
               }}
             >
-              {model?.displayName || item.type}
+              {model?.displayName || item.primaryType}
             </span>
             {/* Secondary type tags */}
-            {(item.typeTags ?? [])
-              .filter(tag => tag !== item.type)
+            {item.typeTags
+              .filter(tag => tag !== item.primaryType)
               .map(tag => {
                 const tagModel = globalRegistry.get(tag);
                 const tagColor = TYPE_COLORS[tag] || '#6b7280';
@@ -588,13 +591,14 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
               title={item.archived ? 'Unarchive' : 'Archive'}
             >
               <MaterialSymbol icon={item.archived ? 'unarchive' : 'archive'} size={18} />
+
             </button>
           )}
           {onDelete && (
             <button
               className="p-1 rounded hover:bg-nim-tertiary text-nim-muted hover:text-[#ef4444]"
               onClick={() => {
-                if (window.confirm(`Delete "${item.title}"? This cannot be undone.`)) {
+                if (window.confirm(`Delete "${getRecordTitle(item)}"? This cannot be undone.`)) {
                   onDelete(item.id);
                 }
               }}
@@ -641,8 +645,8 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
         {/* Type tags editor (for native/editable items) */}
         {editable && (
           <TypeTagsEditor
-            typeTags={item.typeTags ?? [item.type]}
-            primaryType={item.type}
+            typeTags={item.typeTags}
+            primaryType={item.primaryType}
             onUpdate={(newTags) => {
               // Save via IPC -- typeTags are stored in the DB column, not JSONB data
               window.electronAPI.documentService.updateTrackerItem({
@@ -691,10 +695,10 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
             </div>
           ) : hasRichContent && !contentLoaded ? (
             <div className="text-sm text-nim-faint py-4 text-center">Loading...</div>
-          ) : item.module ? (
+          ) : item.system.documentPath ? (
             <div className="flex items-center gap-2 py-2">
               <span className="text-sm text-nim-muted flex-1 truncate font-mono">
-                {item.module}
+                {item.system.documentPath}
               </span>
               <button
                 className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded border border-nim text-nim-muted hover:text-nim hover:bg-nim-tertiary transition-colors"
@@ -758,16 +762,16 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-medium text-nim-muted uppercase tracking-wide">Comments</h4>
             </div>
-            <CommentsSection itemId={item.id} comments={(item as any).comments} />
+            <CommentsSection itemId={item.id} comments={item.system.comments} />
           </div>
         )}
 
         {/* Activity log */}
-        {(item as any).activity?.length > 0 && (
+        {item.system.activity && item.system.activity.length > 0 && (
           <div className="space-y-2">
             <h4 className="text-xs font-medium text-nim-muted uppercase tracking-wide">Activity</h4>
             <div className="space-y-1">
-              {((item as any).activity as any[]).slice(-10).reverse().map((entry: any) => (
+              {item.system.activity.slice(-10).reverse().map((entry: any) => (
                 <div key={entry.id} className="flex items-start gap-2 text-[11px]">
                   <span className="text-nim-muted shrink-0">{entry.authorIdentity?.displayName || 'Unknown'}</span>
                   <span className="text-nim-faint">
@@ -788,29 +792,29 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
         <div className="pt-1 border-t border-nim">
           <div className="grid grid-cols-2 gap-2 text-[11px]">
             {/* Author identity */}
-            {item.authorIdentity && (
+            {item.system.authorIdentity && (
               <div className="col-span-2 flex items-center gap-1.5">
                 <span className="text-nim-faint shrink-0">Created by</span>
-                <UserAvatar identity={item.authorIdentity} showName size={16} />
-                {item.createdByAgent && (
+                <UserAvatar identity={item.system.authorIdentity} showName size={16} />
+                {item.system.createdByAgent && (
                   <span className="text-[10px] text-nim-faint bg-nim-tertiary px-1 py-0.5 rounded">via AI</span>
                 )}
               </div>
             )}
             {/* Last modifier */}
-            {item.lastModifiedBy && item.lastModifiedBy.displayName !== item.authorIdentity?.displayName && (
+            {item.system.lastModifiedBy && item.system.lastModifiedBy.displayName !== item.system.authorIdentity?.displayName && (
               <div className="col-span-2 flex items-center gap-1.5">
                 <span className="text-nim-faint shrink-0">Modified by</span>
-                <UserAvatar identity={item.lastModifiedBy} showName size={16} />
+                <UserAvatar identity={item.system.lastModifiedBy} showName size={16} />
               </div>
             )}
             <div>
               <span className="text-nim-faint">Created</span>
-              <div className="text-nim-muted">{formatTimestamp(item.created)}</div>
+              <div className="text-nim-muted">{formatTimestamp(item.system.createdAt)}</div>
             </div>
             <div>
               <span className="text-nim-faint">Updated</span>
-              <div className="text-nim-muted">{formatTimestamp(item.updated || item.lastIndexed)}</div>
+              <div className="text-nim-muted">{formatTimestamp(item.system.updatedAt || item.system.lastIndexed)}</div>
             </div>
             {item.issueKey && (
               <div>
@@ -840,10 +844,10 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
                 <div className="text-nim-muted truncate">{sourceLabel}</div>
               </div>
             )}
-            {item.module && !sourceLabel && (
+            {item.system.documentPath && !sourceLabel && (
               <div className="col-span-2">
                 <span className="text-nim-faint">Source</span>
-                <div className="text-nim-muted font-mono truncate">{item.module}</div>
+                <div className="text-nim-muted font-mono truncate">{item.system.documentPath}</div>
               </div>
             )}
           </div>

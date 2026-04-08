@@ -1,0 +1,327 @@
+/**
+ * Canonical tracker record -- the single authoritative shape for tracker items.
+ *
+ * All user-defined business data lives in `fields`.
+ * System/infrastructure metadata lives in `system`.
+ * No layer outside the schema may assume field names.
+ */
+
+import type { TrackerIdentity, TrackerActivity, TrackerItem, TrackerItemSource } from './DocumentService';
+import type { TrackerComment } from '../sync/trackerSyncTypes';
+
+// ---------------------------------------------------------------------------
+// Canonical Record
+// ---------------------------------------------------------------------------
+
+export interface TrackerRecordSystem {
+  workspace: string;
+  documentPath?: string;
+  lineNumber?: number;
+  createdAt: string;
+  updatedAt: string;
+  lastIndexed?: string;
+  authorIdentity?: TrackerIdentity | null;
+  lastModifiedBy?: TrackerIdentity | null;
+  createdByAgent?: boolean;
+  linkedSessions?: string[];
+  linkedCommitSha?: string;
+  documentId?: string;
+  activity?: TrackerActivity[];
+  comments?: TrackerComment[];
+}
+
+export interface TrackerRecord {
+  id: string;
+  primaryType: string;
+  typeTags: string[];
+  issueNumber?: number;
+  issueKey?: string;
+  source: 'native' | 'inline' | 'frontmatter' | 'import';
+  sourceRef?: string;
+  archived: boolean;
+  syncStatus: 'local' | 'pending' | 'synced';
+  content?: unknown;
+  system: TrackerRecordSystem;
+  fields: Record<string, unknown>;
+  fieldUpdatedAt: Record<string, number>;
+}
+
+// ---------------------------------------------------------------------------
+// Fields that live in `system`, NOT in `fields`
+// ---------------------------------------------------------------------------
+
+const SYSTEM_KEYS = new Set([
+  'authorIdentity',
+  'lastModifiedBy',
+  'createdByAgent',
+  'linkedSessions',
+  'linkedCommitSha',
+  'documentId',
+  'activity',
+  'comments',
+  // also pulled from row-level columns, not from data JSONB
+  'assigneeId',
+  'reporterId',
+]);
+
+/**
+ * Fields on the old TrackerItem that map to top-level TrackerRecord props
+ * or system metadata -- not to `fields`.
+ */
+const NON_FIELD_KEYS = new Set([
+  // top-level record props
+  'id', 'type', 'typeTags', 'issueNumber', 'issueKey',
+  'source', 'sourceRef', 'archived', 'archivedAt', 'syncStatus',
+  'content', 'module', 'lineNumber', 'workspace', 'lastIndexed',
+  'created', 'updated',
+  // system keys
+  ...SYSTEM_KEYS,
+  // deprecated compat keys
+  'assigneeId', 'reporterId',
+  // old catch-all that's being replaced
+  'customFields',
+]);
+
+// ---------------------------------------------------------------------------
+// TrackerItem <-> TrackerRecord converters
+// ---------------------------------------------------------------------------
+
+/**
+ * Convert a legacy TrackerItem to the canonical TrackerRecord.
+ * All TrackerItem properties that aren't system/routing keys go into `fields`.
+ * No privileged field vocabulary -- the converter is generic.
+ */
+export function trackerItemToRecord(item: TrackerItem): TrackerRecord {
+  const fields: Record<string, unknown> = {};
+
+  // Move all non-system, non-routing properties into the fields bag.
+  // This is generic -- no hardcoded list of "business fields".
+  for (const [key, value] of Object.entries(item)) {
+    if (value === undefined) continue;
+    if (NON_FIELD_KEYS.has(key)) continue;
+    fields[key] = value;
+  }
+
+  // Merge customFields into fields (customFields was the old catch-all)
+  if (item.customFields) {
+    for (const [key, value] of Object.entries(item.customFields)) {
+      if (value !== undefined && !NON_FIELD_KEYS.has(key)) {
+        fields[key] = value;
+      }
+    }
+  }
+
+  const now = Date.now();
+  const fieldUpdatedAt: Record<string, number> = {};
+  for (const key of Object.keys(fields)) {
+    fieldUpdatedAt[key] = now;
+  }
+
+  return {
+    id: item.id,
+    primaryType: item.type,
+    typeTags: item.typeTags ?? [item.type],
+    issueNumber: item.issueNumber,
+    issueKey: item.issueKey,
+    source: (item.source as TrackerRecord['source']) ?? 'native',
+    sourceRef: item.sourceRef,
+    archived: item.archived ?? false,
+    syncStatus: (item.syncStatus as TrackerRecord['syncStatus']) ?? 'local',
+    content: item.content,
+    system: {
+      workspace: item.workspace,
+      documentPath: item.module || undefined,
+      lineNumber: item.lineNumber,
+      createdAt: item.created ?? new Date().toISOString(),
+      updatedAt: item.updated ?? new Date().toISOString(),
+      lastIndexed: item.lastIndexed instanceof Date
+        ? item.lastIndexed.toISOString()
+        : typeof item.lastIndexed === 'string'
+          ? item.lastIndexed
+          : undefined,
+      authorIdentity: item.authorIdentity,
+      lastModifiedBy: item.lastModifiedBy,
+      createdByAgent: item.createdByAgent,
+      linkedSessions: item.linkedSessions,
+      linkedCommitSha: item.linkedCommitSha,
+      documentId: item.documentId,
+    },
+    fields,
+    fieldUpdatedAt,
+  };
+}
+
+/**
+ * Convert a canonical TrackerRecord back to the legacy TrackerItem shape.
+ * Used during the migration period while consumers still expect TrackerItem.
+ *
+ * Maps record.fields back to TrackerItem's top-level properties.
+ * All fields that don't map to a TrackerItem property go into customFields.
+ */
+export function trackerRecordToItem(record: TrackerRecord): TrackerItem {
+  const f = record.fields;
+
+  // TrackerItem has these properties that come from fields.
+  // Everything else goes into customFields.
+  const trackerItemFieldProps = new Set([
+    'title', 'status', 'priority', 'owner', 'description',
+    'tags', 'dueDate', 'progress', 'assigneeEmail', 'reporterEmail', 'labels',
+  ]);
+  const customFields: Record<string, any> = {};
+  for (const [key, value] of Object.entries(f)) {
+    if (!trackerItemFieldProps.has(key)) {
+      customFields[key] = value;
+    }
+  }
+
+  return {
+    id: record.id,
+    type: record.primaryType,
+    typeTags: record.typeTags,
+    issueNumber: record.issueNumber,
+    issueKey: record.issueKey,
+    // Map fields to TrackerItem's fixed properties
+    title: (f.title as string) ?? '',
+    status: (f.status as string) ?? 'to-do',
+    priority: f.priority as TrackerItem['priority'],
+    owner: f.owner as string | undefined,
+    description: f.description as string | undefined,
+    tags: f.tags as string[] | undefined,
+    dueDate: f.dueDate as string | undefined,
+    progress: f.progress as number | undefined,
+    assigneeEmail: f.assigneeEmail as string | undefined,
+    reporterEmail: f.reporterEmail as string | undefined,
+    labels: f.labels as string[] | undefined,
+    module: record.system.documentPath ?? '',
+    lineNumber: record.system.lineNumber,
+    workspace: record.system.workspace,
+    created: record.system.createdAt,
+    updated: record.system.updatedAt,
+    lastIndexed: record.system.lastIndexed ? new Date(record.system.lastIndexed) : new Date(),
+    content: record.content,
+    archived: record.archived,
+    archivedAt: undefined, // not stored on TrackerRecord -- derive from activity if needed
+    source: record.source as TrackerItemSource,
+    sourceRef: record.sourceRef,
+    authorIdentity: record.system.authorIdentity,
+    lastModifiedBy: record.system.lastModifiedBy,
+    createdByAgent: record.system.createdByAgent,
+    linkedSessions: record.system.linkedSessions,
+    linkedCommitSha: record.system.linkedCommitSha,
+    documentId: record.system.documentId,
+    syncStatus: record.syncStatus as TrackerItem['syncStatus'],
+    customFields: Object.keys(customFields).length > 0 ? customFields : undefined,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// DB Row <-> TrackerRecord converters
+// ---------------------------------------------------------------------------
+
+/**
+ * Convert a PGLite tracker_items row to a TrackerRecord.
+ *
+ * The row has top-level SQL columns (id, type, workspace, etc.)
+ * plus a JSONB `data` column that contains all field values and
+ * system metadata mixed together.
+ */
+export function dbRowToRecord(row: any): TrackerRecord {
+  const data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data || {};
+
+  const typeTags: string[] = row.type_tags?.length > 0
+    ? row.type_tags
+    : [row.type];
+
+  // Separate system keys from user fields
+  const fields: Record<string, unknown> = {};
+  const fieldUpdatedAt: Record<string, number> = {};
+  const now = Date.now();
+
+  for (const [key, value] of Object.entries(data)) {
+    if (NON_FIELD_KEYS.has(key) || SYSTEM_KEYS.has(key)) continue;
+    if (value !== undefined) {
+      fields[key] = value;
+      fieldUpdatedAt[key] = now;
+    }
+  }
+
+  return {
+    id: row.id,
+    primaryType: row.type,
+    typeTags,
+    issueNumber: row.issue_number ?? undefined,
+    issueKey: row.issue_key ?? undefined,
+    source: row.source || (row.document_path ? 'inline' : 'native'),
+    sourceRef: row.source_ref ?? undefined,
+    archived: row.archived ?? false,
+    syncStatus: row.sync_status || 'local',
+    content: row.content ?? undefined,
+    system: {
+      workspace: row.workspace,
+      documentPath: row.document_path || undefined,
+      lineNumber: row.line_number ?? undefined,
+      createdAt: data.created || (row.created ? new Date(row.created).toISOString() : new Date().toISOString()),
+      updatedAt: data.updated || (row.updated ? new Date(row.updated).toISOString() : new Date().toISOString()),
+      lastIndexed: row.last_indexed ? new Date(row.last_indexed).toISOString() : undefined,
+      authorIdentity: data.authorIdentity || undefined,
+      lastModifiedBy: data.lastModifiedBy || undefined,
+      createdByAgent: data.createdByAgent || false,
+      linkedSessions: data.linkedSessions || undefined,
+      linkedCommitSha: data.linkedCommitSha || undefined,
+      documentId: data.documentId || undefined,
+      activity: data.activity || undefined,
+    },
+    fields,
+    fieldUpdatedAt,
+  };
+}
+
+/**
+ * Prepare parameters for inserting/updating a TrackerRecord in PGLite.
+ *
+ * Returns the JSONB `data` payload (merging fields + system metadata)
+ * and the top-level column values needed for the SQL statement.
+ */
+export function recordToDbParams(record: TrackerRecord): {
+  id: string;
+  type: string;
+  typeTags: string[];
+  data: string;
+  workspace: string;
+  documentPath: string;
+  lineNumber: number | null;
+  syncStatus: string;
+  content: string | null;
+  archived: boolean;
+  source: string;
+  sourceRef: string | null;
+} {
+  // Build the JSONB data object: merge fields + system metadata
+  const data: Record<string, unknown> = { ...record.fields };
+
+  // System metadata stored in JSONB
+  if (record.system.authorIdentity) data.authorIdentity = record.system.authorIdentity;
+  if (record.system.lastModifiedBy) data.lastModifiedBy = record.system.lastModifiedBy;
+  if (record.system.createdByAgent) data.createdByAgent = record.system.createdByAgent;
+  if (record.system.linkedSessions?.length) data.linkedSessions = record.system.linkedSessions;
+  if (record.system.linkedCommitSha) data.linkedCommitSha = record.system.linkedCommitSha;
+  if (record.system.documentId) data.documentId = record.system.documentId;
+  if (record.system.activity?.length) data.activity = record.system.activity;
+  if (record.system.createdAt) data.created = record.system.createdAt;
+  if (record.system.updatedAt) data.updated = record.system.updatedAt;
+
+  return {
+    id: record.id,
+    type: record.primaryType,
+    typeTags: record.typeTags,
+    data: JSON.stringify(data),
+    workspace: record.system.workspace,
+    documentPath: record.system.documentPath ?? '',
+    lineNumber: record.system.lineNumber ?? null,
+    syncStatus: record.syncStatus,
+    content: record.content ? JSON.stringify(record.content) : null,
+    archived: record.archived,
+    source: record.source,
+    sourceRef: record.sourceRef ?? null,
+  };
+}

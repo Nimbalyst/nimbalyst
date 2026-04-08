@@ -7,12 +7,11 @@ import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useFloating, offset, flip, shift, FloatingPortal } from '@floating-ui/react';
 import { useAtomValue } from 'jotai';
 import type {
-  TrackerItem,
   TrackerItemType,
-  TrackerItemStatus,
-  TrackerItemPriority
 } from '../../../core/DocumentService';
+import type { TrackerRecord } from '../../../core/TrackerRecord';
 import { trackerItemsByTypeAtom, trackerDataLoadedAtom } from '../trackerDataAtoms';
+import { getRecordTitle, getRecordStatus, getRecordPriority, getFieldByRole, resolveRoleFieldName } from '../trackerRecordAccessors';
 import { globalRegistry, parseDate } from '../models';
 import {usePostHog} from "posthog-js/react";
 import {
@@ -47,7 +46,7 @@ interface TrackerTableProps {
   /** Currently selected item ID for row highlighting */
   selectedItemId?: string | null;
   /** Override items instead of reading from atoms (used for archived view) */
-  overrideItems?: TrackerItem[];
+  overrideItems?: TrackerRecord[];
   /** Callback for bulk/single archive action */
   onArchiveItems?: (itemIds: string[], archive: boolean) => void;
   /** Callback for bulk/single delete action */
@@ -225,7 +224,7 @@ const BUILTIN_STATUS_COLORS: Record<string, string> = {
   'blocked': '#ef4444',
 };
 
-function getStatusColor(status: TrackerItemStatus, trackerType?: string): string {
+function getStatusColor(status: string, trackerType?: string): string {
   // Check built-in statuses first
   if (BUILTIN_STATUS_COLORS[status]) {
     return BUILTIN_STATUS_COLORS[status];
@@ -235,7 +234,7 @@ function getStatusColor(status: TrackerItemStatus, trackerType?: string): string
   if (trackerType) {
     const model = globalRegistry.get(trackerType);
     if (model) {
-      const statusField = model.fields.find(f => f.name === 'status');
+      const statusField = model.fields.find(f => f.name === resolveRoleFieldName(model.type, 'workflowStatus'));
       if (statusField?.options) {
         const option = statusField.options.find(o => o.value === status);
         if (option?.color) {
@@ -248,7 +247,7 @@ function getStatusColor(status: TrackerItemStatus, trackerType?: string): string
   return '#6b7280';
 }
 
-function getPriorityColor(priority: TrackerItemPriority | undefined): string {
+function getPriorityColor(priority: string | undefined): string {
   if (!priority) return '#6b7280';
   const priorityColors: Record<string, string> = {
     'critical': '#dc2626',
@@ -294,7 +293,7 @@ function formatDate(date: Date): string {
 }
 
 /**
- * Convert full-document tracker items (from frontmatter) to TrackerItem format
+ * Convert full-document tracker items (from frontmatter) to TrackerRecord format
  * Works for any tracker type that supports fullDocument mode (plan, decision, etc.)
  */
 /**
@@ -326,17 +325,11 @@ function formatObjectForStringField(value: Record<string, any>): string {
 export function resolveTrackerFrontmatter(frontmatter: Record<string, any> | undefined, trackerType: string): Record<string, any> | null {
   if (!frontmatter) return null;
 
-  // Check type-specific key first (e.g. 'planStatus', 'decisionStatus')
-  const specificKey = `${trackerType}Status`;
-  if (frontmatter[specificKey] && typeof frontmatter[specificKey] === 'object') {
-    return frontmatter[specificKey] as Record<string, any>;
-  }
-
-  // Check generic trackerStatus with nested type field
+  // Check trackerStatus with nested type field (canonical format)
   if (frontmatter.trackerStatus && typeof frontmatter.trackerStatus === 'object') {
     const trackerData = frontmatter.trackerStatus as Record<string, any>;
     if (trackerData.type === trackerType) {
-      // Top-level fields are canonical, embedded fields are backward-compat fallback
+      // Top-level fields are canonical, trackerStatus holds only `type`
       const { trackerStatus: _, ...topLevel } = frontmatter;
       return { ...trackerData, ...topLevel };
     }
@@ -345,80 +338,78 @@ export function resolveTrackerFrontmatter(frontmatter: Record<string, any> | und
   return null;
 }
 
-export function convertFullDocumentToTrackerItems(metadata: any[], trackerType: TrackerItemType): TrackerItem[] {
+export function convertFullDocumentToTrackerItems(metadata: any[], trackerType: TrackerItemType): TrackerRecord[] {
   return metadata
     .filter(doc => {
-      // Only include documents that have matching tracker frontmatter
       const hasTrackerStatus = resolveTrackerFrontmatter(doc.frontmatter, trackerType) !== null;
-
-      // Exclude agent files
       const pathLower = doc.path.toLowerCase();
       const isAgentFile = pathLower.includes('/agents/') || pathLower.includes('\\agents\\');
-
       return hasTrackerStatus && !isAgentFile;
     })
     .map(doc => {
       const trackerStatus = resolveTrackerFrontmatter(doc.frontmatter, trackerType) || {};
       const frontmatter = doc.frontmatter;
 
-      // Use raw status value from frontmatter - custom trackers define their own statuses
-      const statusValue = (trackerStatus.status || frontmatter.status || 'to-do').toLowerCase() as TrackerItemStatus;
-
       // Use file modified date for full-document trackers (more accurate than frontmatter)
-      // This ensures recently-edited plans appear at the top regardless of frontmatter state
       let actualDate: Date | null = null;
-
       if (doc.lastModified) {
-        // lastModified can be a Date object or ISO string
         if (doc.lastModified instanceof Date) {
           actualDate = doc.lastModified;
         } else {
           const parsed = new Date(doc.lastModified);
-          if (!isNaN(parsed.getTime())) {
-            actualDate = parsed;
-          }
+          if (!isNaN(parsed.getTime())) actualDate = parsed;
         }
       }
 
-      // Collect custom fields from the tracker model's field definitions
-      const customFields: Record<string, any> = {};
+      // Build fields from the tracker model's field definitions
+      const fields: Record<string, unknown> = {
+        title: trackerStatus.title || frontmatter.title || doc.path.split('/').pop()?.replace('.md', '') || 'Untitled',
+        status: (trackerStatus.status || frontmatter.status || 'to-do').toLowerCase(),
+        priority: trackerStatus.priority || frontmatter.priority || 'medium',
+        owner: trackerStatus.owner || frontmatter.owner,
+        tags: trackerStatus.tags || frontmatter.tags,
+        progress: trackerStatus.progress || frontmatter.progress,
+      };
+
+      // Add all model-defined fields
       const model = globalRegistry.get(trackerType);
       if (model) {
-        const builtinFields = new Set(['title', 'status', 'priority', 'owner', 'tags', 'progress']);
         for (const field of model.fields) {
-          if (builtinFields.has(field.name)) continue;
+          if (fields[field.name] !== undefined) continue;
           let value = trackerStatus[field.name] ?? frontmatter[field.name];
-          // For date fields, also check the common 'date' frontmatter key as fallback
           if (value === undefined && (field.type === 'date' || field.type === 'datetime')) {
             value = trackerStatus.date ?? frontmatter.date;
           }
           if (value !== undefined && value !== null) {
-            // Parse dates into Date objects at the data layer
             if (field.type === 'date' || field.type === 'datetime') {
-              customFields[field.name] = parseDate(value) ?? value;
+              fields[field.name] = parseDate(value) ?? value;
             } else if (field.type === 'string' && typeof value === 'object' && value !== null) {
-              // Format objects for string fields (e.g. automation schedule)
-              customFields[field.name] = formatObjectForStringField(value);
+              fields[field.name] = formatObjectForStringField(value);
             } else {
-              customFields[field.name] = value;
+              fields[field.name] = value;
             }
           }
         }
       }
 
       return {
-        type: trackerType,
-        title: trackerStatus.title || frontmatter.title || doc.path.split('/').pop()?.replace('.md', '') || 'Untitled',
-        status: statusValue,
-        priority: (trackerStatus.priority || frontmatter.priority || 'medium') as TrackerItemPriority,
-        module: doc.path,
-        lineNumber: 0,
-        owner: trackerStatus.owner || frontmatter.owner,
-        tags: trackerStatus.tags || frontmatter.tags,
-        progress: trackerStatus.progress || frontmatter.progress,
-        lastIndexed: actualDate || new Date(0), // Use epoch for invalid dates
-        customFields: Object.keys(customFields).length > 0 ? customFields : undefined,
-      } as TrackerItem;
+        id: trackerStatus.planId || trackerStatus.decisionId || trackerStatus.id || `fm:${trackerType}:${doc.path}`,
+        primaryType: trackerType,
+        typeTags: [trackerType],
+        source: 'frontmatter' as const,
+        archived: false,
+        syncStatus: 'local' as const,
+        system: {
+          workspace: doc.workspace || '',
+          documentPath: doc.path,
+          lineNumber: 0,
+          createdAt: (trackerStatus.created || frontmatter.created || '').toString(),
+          updatedAt: (trackerStatus.updated || frontmatter.updated || '').toString(),
+          lastIndexed: (actualDate || new Date(0)).toISOString(),
+        },
+        fields,
+        fieldUpdatedAt: {},
+      } satisfies TrackerRecord;
     });
 }
 
@@ -428,21 +419,29 @@ export function convertFullDocumentToTrackerItems(metadata: any[], trackerType: 
  */
 function renderCell(
   col: TrackerColumnDef,
-  item: TrackerItem,
+  item: TrackerRecord,
   value: any,
   editingCell: { itemId: string; field: string } | null,
-  isItemEditable: (item: TrackerItem) => boolean,
+  isItemEditable: (item: TrackerRecord) => boolean,
   setEditingCell: (cell: { itemId: string; field: 'status' | 'priority' | 'title' } | null) => void,
   editingTitle: string,
   setEditingTitle: (title: string) => void,
   titleInputRef: React.RefObject<HTMLInputElement>,
-  handleFieldUpdate: (item: TrackerItem, field: string, value: string) => void,
+  handleFieldUpdate: (item: TrackerRecord, field: string, value: string) => void,
 ): React.ReactNode {
+  // Resolve field values via schema roles (generic for any schema)
+  const title = getRecordTitle(item);
+  const status = getRecordStatus(item);
+  const priority = getRecordPriority(item);
+  const progress = getFieldByRole(item, 'progress') as number | undefined;
+  const labels = getFieldByRole(item, 'tags') as string[] | undefined;
+  const module = item.system.documentPath;
+
   switch (col.id) {
     case 'type':
       return (
-        <span className={`type-icon flex items-center justify-center w-5 h-5 rounded`} style={{ color: getTypeColor(item.type) }}>
-          <span className="material-symbols-outlined text-sm">{getTypeIcon(item.type)}</span>
+        <span className={`type-icon flex items-center justify-center w-5 h-5 rounded`} style={{ color: getTypeColor(item.primaryType) }}>
+          <span className="material-symbols-outlined text-sm">{getTypeIcon(item.primaryType)}</span>
         </span>
       );
 
@@ -455,11 +454,11 @@ function renderCell(
             value={editingTitle}
             onChange={(e) => setEditingTitle(e.target.value)}
             onBlur={() => {
-              if (editingTitle.trim() && editingTitle !== item.title) handleFieldUpdate(item, 'title', editingTitle.trim());
+              if (editingTitle.trim() && editingTitle !== (item.fields.title as string)) handleFieldUpdate(item, 'title', editingTitle.trim());
               else setEditingCell(null);
             }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') { if (editingTitle.trim() && editingTitle !== item.title) handleFieldUpdate(item, 'title', editingTitle.trim()); else setEditingCell(null); }
+              if (e.key === 'Enter') { if (editingTitle.trim() && editingTitle !== title) handleFieldUpdate(item, 'title', editingTitle.trim()); else setEditingCell(null); }
               else if (e.key === 'Escape') setEditingCell(null);
             }}
             onClick={(e) => e.stopPropagation()}
@@ -474,19 +473,19 @@ function renderCell(
               {item.issueKey}
             </div>
           )}
-          <div className="title-text font-medium text-[var(--nim-text)]">{item.title}</div>
+          <div className="title-text font-medium text-[var(--nim-text)]">{title}</div>
         </div>
       );
 
     case 'status': {
       if (isItemEditable(item) && editingCell?.itemId === item.id && editingCell?.field === 'status') {
-        const tracker = globalRegistry.get(item.type);
-        const statusField = tracker?.fields.find(f => f.name === 'status');
+        const tracker = globalRegistry.get(item.primaryType);
+        const statusField = tracker?.fields.find(fld => fld.name === 'status');
         const rawOptions = statusField?.options || ['to-do', 'in-progress', 'done', 'blocked'];
         return (
           <select
             autoFocus
-            value={item.status}
+            value={status}
             onChange={(e) => handleFieldUpdate(item, 'status', e.target.value)}
             onBlur={() => setEditingCell(null)}
             onClick={(e) => e.stopPropagation()}
@@ -494,20 +493,20 @@ function renderCell(
           >
             {rawOptions.map(opt => {
               const val = typeof opt === 'string' ? opt : opt.value;
-              const label = typeof opt === 'string' ? opt.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : opt.label;
-              return <option key={val} value={val}>{label}</option>;
+              const lbl = typeof opt === 'string' ? opt.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : opt.label;
+              return <option key={val} value={val}>{lbl}</option>;
             })}
           </select>
         );
       }
-      const statusColor = getStatusColor(item.status, item.type);
+      const statusColor = getStatusColor(status, item.primaryType);
       return (
         <span
           className={`status-badge inline-block py-0.5 px-2 rounded-[10px] text-[11px] font-medium border ${isItemEditable(item) ? 'cursor-pointer hover:opacity-80' : ''}`}
           style={{ backgroundColor: `${statusColor}20`, color: statusColor, borderColor: statusColor }}
           onClick={(e) => { if (isItemEditable(item)) { e.stopPropagation(); setEditingCell({ itemId: item.id, field: 'status' }); } }}
         >
-          {item.status.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+          {status.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
         </span>
       );
     }
@@ -517,7 +516,7 @@ function renderCell(
         return (
           <select
             autoFocus
-            value={item.priority || 'medium'}
+            value={priority || 'medium'}
             onChange={(e) => handleFieldUpdate(item, 'priority', e.target.value)}
             onBlur={() => setEditingCell(null)}
             onClick={(e) => e.stopPropagation()}
@@ -532,44 +531,17 @@ function renderCell(
       return (
         <span
           className={`priority-badge font-semibold text-xs ${isItemEditable(item) ? 'cursor-pointer hover:opacity-80' : ''}`}
-          style={{ color: getPriorityColor(item.priority || 'medium') }}
+          style={{ color: getPriorityColor(priority || 'medium') }}
           onClick={(e) => { if (isItemEditable(item)) { e.stopPropagation(); setEditingCell({ itemId: item.id, field: 'priority' }); } }}
         >
-          {(item.priority || 'medium').charAt(0).toUpperCase() + (item.priority || 'medium').slice(1)}
+          {(priority || 'medium').charAt(0).toUpperCase() + (priority || 'medium').slice(1)}
         </span>
       );
     }
 
-    case 'owner':
-      return <UserAvatar identity={item.authorIdentity || item.owner} showName />;
-
-    case 'assignee':
-      return <UserAvatar identity={item.assigneeEmail} showName />;
-
-    case 'progress':
-      if (item.progress == null) return null;
-      return (
-        <div className="flex flex-col items-center gap-0.5">
-          <span className="text-[11px] font-semibold text-[var(--nim-text)]">{item.progress}%</span>
-          <div className="w-full h-1 bg-[var(--nim-bg-tertiary)] rounded-sm relative overflow-hidden">
-            <div className="absolute top-0 left-0 h-full bg-[var(--nim-primary)] rounded-sm" style={{ width: `${item.progress}%` }}></div>
-          </div>
-        </div>
-      );
-
-    case 'labels':
-      if (!item.labels?.length) return null;
-      return (
-        <div className="flex flex-wrap gap-0.5">
-          {item.labels.map(l => (
-            <span key={l} className="inline-block px-1.5 py-0.5 text-[10px] rounded bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)]">{l}</span>
-          ))}
-        </div>
-      );
-
     case 'module':
-      if (item.module) {
-        return <span className="text-[var(--nim-text-muted)] text-xs font-mono whitespace-nowrap overflow-hidden text-ellipsis block">{item.module}</span>;
+      if (module) {
+        return <span className="text-[var(--nim-text-muted)] text-xs font-mono whitespace-nowrap overflow-hidden text-ellipsis block">{module}</span>;
       }
       return (
         <span className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ backgroundColor: '#6b728015', color: '#9ca3af' }} title="Stored in database" data-testid="tracker-source-db-badge">
@@ -578,8 +550,10 @@ function renderCell(
         </span>
       );
 
-    case 'updated':
-      return <span className="text-[var(--nim-text-faint)] text-xs">{formatRelativeDate(item.lastIndexed)}</span>;
+    case 'updated': {
+      const lastIndexed = item.system.lastIndexed ? new Date(item.system.lastIndexed) : new Date(0);
+      return <span className="text-[var(--nim-text-faint)] text-xs">{formatRelativeDate(lastIndexed)}</span>;
+    }
 
     case 'created':
       if (!value) return null;
@@ -590,11 +564,63 @@ function renderCell(
       return <span className="text-[var(--nim-text-faint)] text-xs">{formatRelativeDate(value as Date)}</span>;
 
     default: {
-      // Custom field rendering
+      // Generic field rendering -- dispatch by col.render type
       if (value == null) return null;
-      if (value instanceof Date) return <span className="text-[var(--nim-text-muted)] text-xs">{value.toLocaleDateString()}</span>;
-      if (Array.isArray(value)) return <span className="text-[var(--nim-text-muted)] text-xs">{value.join(', ')}</span>;
-      return <span className="text-[var(--nim-text-muted)] text-xs">{String(value)}</span>;
+
+      switch (col.render) {
+        case 'avatar':
+          return <UserAvatar identity={value as string} showName />;
+
+        case 'progress': {
+          const pct = typeof value === 'number' ? value : 0;
+          return (
+            <div className="flex flex-col items-center gap-0.5">
+              <span className="text-[11px] font-semibold text-[var(--nim-text)]">{pct}%</span>
+              <div className="w-full h-1 bg-[var(--nim-bg-tertiary)] rounded-sm relative overflow-hidden">
+                <div className="absolute top-0 left-0 h-full bg-[var(--nim-primary)] rounded-sm" style={{ width: `${pct}%` }}></div>
+              </div>
+            </div>
+          );
+        }
+
+        case 'tags':
+          if (!Array.isArray(value) || value.length === 0) return null;
+          return (
+            <div className="flex flex-wrap gap-0.5">
+              {(value as string[]).map((l: string) => (
+                <span key={l} className="inline-block px-1.5 py-0.5 text-[10px] rounded bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)]">{l}</span>
+              ))}
+            </div>
+          );
+
+        case 'date':
+          if (value instanceof Date) return <span className="text-[var(--nim-text-faint)] text-xs">{formatRelativeDate(value)}</span>;
+          if (typeof value === 'string') {
+            const d = new Date(value);
+            return <span className="text-[var(--nim-text-faint)] text-xs">{isNaN(d.getTime()) ? value : formatRelativeDate(d)}</span>;
+          }
+          return null;
+
+        case 'badge': {
+          const strVal = String(value);
+          const badgeColor = col.role === 'workflowStatus' ? getStatusColorFromRegistry(strVal, item.primaryType)
+            : col.role === 'priority' ? getPriorityColorFromRegistry(strVal)
+            : '#6b7280';
+          return (
+            <span
+              className={`status-badge inline-block py-0.5 px-2 rounded-[10px] text-[11px] font-medium border ${isItemEditable(item) ? 'cursor-pointer hover:opacity-80' : ''}`}
+              style={{ backgroundColor: `${badgeColor}20`, color: badgeColor, borderColor: badgeColor }}
+              onClick={(e) => { if (isItemEditable(item)) { e.stopPropagation(); setEditingCell({ itemId: item.id, field: col.id as any }); } }}
+            >
+              {strVal.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+            </span>
+          );
+        }
+
+        default:
+          if (Array.isArray(value)) return <span className="text-[var(--nim-text-muted)] text-xs">{value.join(', ')}</span>;
+          return <span className="text-[var(--nim-text-muted)] text-xs">{String(value)}</span>;
+      }
     }
   }
 }
@@ -650,22 +676,20 @@ export function TrackerTable({
 
   // Items from source (atom or override)
   const items = useMemo(() => {
-    return sourceItems.map((item: TrackerItem) => {
-      const dateSource = item.updated || item.created;
+    return sourceItems.map((item: TrackerRecord) => {
+      const dateSource = item.system.updatedAt || item.system.createdAt;
       let actualDate: Date | null = null;
       if (dateSource) {
-        if (typeof dateSource === 'number') {
-          actualDate = new Date(dateSource);
-        } else if (typeof dateSource === 'string') {
-          const parsed = new Date(dateSource);
-          if (!isNaN(parsed.getTime())) {
-            actualDate = parsed;
-          }
+        const parsed = new Date(dateSource);
+        if (!isNaN(parsed.getTime())) {
+          actualDate = parsed;
         }
       }
+      // Ensure lastIndexed is a valid ISO string for sorting
+      const lastIndexed = actualDate ? actualDate.toISOString() : (item.system.lastIndexed || new Date(0).toISOString());
       return {
         ...item,
-        lastIndexed: item.lastIndexed instanceof Date ? item.lastIndexed : (actualDate || new Date(0)),
+        system: { ...item.system, lastIndexed },
       };
     });
   }, [sourceItems]);
@@ -690,9 +714,9 @@ export function TrackerTable({
   const titleInputRef = useRef<HTMLInputElement>(null);
 
   /** Whether an item's fields can be edited inline */
-  const isItemEditable = useCallback((item: TrackerItem): boolean => {
+  const isItemEditable = useCallback((item: TrackerRecord): boolean => {
     // Native (by source or no module), frontmatter, import, and inline items are all editable
-    return item.source === 'native' || !item.module || item.source === 'frontmatter' || item.source === 'import' || item.source === 'inline';
+    return item.source === 'native' || !item.system.documentPath || item.source === 'frontmatter' || item.source === 'import' || item.source === 'inline';
   }, []);
 
   // Multi-select state
@@ -724,7 +748,7 @@ export function TrackerTable({
   }, [activeTypeFilter]);
 
   // Track sorted items in a ref so event handlers can access them
-  const sortedItemsRef = useRef<TrackerItem[]>([]);
+  const sortedItemsRef = useRef<TrackerRecord[]>([]);
 
   // Focus title input when editing starts
   useEffect(() => {
@@ -734,22 +758,20 @@ export function TrackerTable({
     }
   }, [editingCell]);
 
-  const handleFieldUpdate = useCallback(async (item: TrackerItem, field: string, value: string) => {
+  const handleFieldUpdate = useCallback(async (item: TrackerRecord, field: string, value: string) => {
     const electronAPI = (window as any).electronAPI;
     if (!electronAPI?.documentService) return;
 
     try {
-      if ((item.source === 'frontmatter' || item.source === 'import' || item.source === 'inline') && item.module) {
-        // File-backed items with a real module path: update in source file
+      if ((item.source === 'frontmatter' || item.source === 'import' || item.source === 'inline') && item.system.documentPath) {
         if (electronAPI.documentService.updateTrackerItemInFile) {
           await electronAPI.documentService.updateTrackerItemInFile({
             itemId: item.id,
             updates: { [field]: value },
           });
         }
-      } else if (!item.module || item.source === 'native') {
-        // Native DB items
-        const tracker = globalRegistry.get(item.type);
+      } else if (!item.system.documentPath || item.source === 'native') {
+        const tracker = globalRegistry.get(item.primaryType);
         const syncMode = tracker?.sync?.mode || 'local';
         await electronAPI.documentService.updateTrackerItem({
           itemId: item.id,
@@ -769,43 +791,27 @@ export function TrackerTable({
     setCustomFieldFilters({});
   }, [activeTypeFilter]);
 
-  const sortItems = useCallback((itemsToSort: TrackerItem[], sortColumn: SortColumn, sortDir: SortDirection) => {
+  const sortItems = useCallback((itemsToSort: TrackerRecord[], sortColumn: SortColumn, sortDir: SortDirection) => {
     const sorted = [...itemsToSort].sort((a, b) => {
       let compareValue = 0;
 
       switch (sortColumn) {
-        case 'title':
-          compareValue = a.title.localeCompare(b.title);
-          break;
         case 'type':
-          compareValue = a.type.localeCompare(b.type);
+          compareValue = a.primaryType.localeCompare(b.primaryType);
           break;
-        case 'status':
-          compareValue = a.status.localeCompare(b.status);
-          break;
-        case 'priority': {
-          const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
-          const aPriority = a.priority ? (priorityOrder[a.priority] ?? 4) : 4;
-          const bPriority = b.priority ? (priorityOrder[b.priority] ?? 4) : 4;
-          compareValue = aPriority - bPriority;
-          break;
-        }
-        case 'progress': {
-          const aProgress = a.progress ?? -1; // Items without progress sort to bottom
-          const bProgress = b.progress ?? -1;
-          compareValue = aProgress - bProgress;
-          break;
-        }
         case 'module':
-          compareValue = a.module.localeCompare(b.module);
+          compareValue = (a.system.documentPath ?? '').localeCompare(b.system.documentPath ?? '');
           break;
-        case 'lastIndexed':
-          compareValue = a.lastIndexed.getTime() - b.lastIndexed.getTime();
+        case 'lastIndexed': {
+          const aTime = a.system.lastIndexed ? new Date(a.system.lastIndexed).getTime() : 0;
+          const bTime = b.system.lastIndexed ? new Date(b.system.lastIndexed).getTime() : 0;
+          compareValue = aTime - bTime;
           break;
+        }
         default: {
-          // Sort by custom field
-          const aVal = a.customFields?.[sortColumn];
-          const bVal = b.customFields?.[sortColumn];
+          // Generic field sort via getCellValue (handles all schema fields + builtins)
+          const aVal = getCellValue(a, sortColumn);
+          const bVal = getCellValue(b, sortColumn);
           if (aVal == null && bVal == null) { compareValue = 0; break; }
           if (aVal == null) { compareValue = 1; break; }
           if (bVal == null) { compareValue = -1; break; }
@@ -830,32 +836,32 @@ export function TrackerTable({
         const matchesSearch =
           item.issueKey?.toLowerCase().includes(searchLower) ||
           String(item.issueNumber ?? '').includes(searchLower) ||
-          item.title.toLowerCase().includes(searchLower) ||
-          item.module.toLowerCase().includes(searchLower) ||
-          (item.owner && item.owner.toLowerCase().includes(searchLower)) ||
-          (item.tags && item.tags.some(tag => tag.toLowerCase().includes(searchLower)));
+          getRecordTitle(item).toLowerCase().includes(searchLower) ||
+          (item.system.documentPath ?? '').toLowerCase().includes(searchLower) ||
+          (String(getFieldByRole(item, 'assignee') ?? '')).toLowerCase().includes(searchLower) ||
+          (Array.isArray(getFieldByRole(item, 'tags')) && (getFieldByRole(item, 'tags') as string[]).some((tag: string) => tag.toLowerCase().includes(searchLower)));
         if (!matchesSearch) return false;
       }
 
       // Apply type filter
-      if (activeTypeFilter !== 'all' && item.type !== activeTypeFilter) {
+      if (activeTypeFilter !== 'all' && item.primaryType !== activeTypeFilter) {
         return false;
       }
 
       // Apply status filter
-      if (statusFilter !== 'all' && item.status !== statusFilter) {
+      if (statusFilter !== 'all' && getRecordStatus(item) !== statusFilter) {
         return false;
       }
 
       // Apply priority filter
-      if (priorityFilter !== 'all' && item.priority !== priorityFilter) {
+      if (priorityFilter !== 'all' && getRecordPriority(item) !== priorityFilter) {
         return false;
       }
 
       // Apply custom field filters
       for (const [fieldKey, selectedValues] of Object.entries(customFieldFilters)) {
         if (selectedValues.size === 0) continue;
-        const value = item.customFields?.[fieldKey];
+        const value = item.fields[fieldKey];
         if (Array.isArray(value)) {
           // For array fields (e.g. tags), pass if any selected value is in the array
           if (!value.some(v => selectedValues.has(String(v)))) return false;
@@ -884,7 +890,7 @@ export function TrackerTable({
   }, []);
 
   /** Context menu handler */
-  const handleContextMenu = useCallback((e: React.MouseEvent, item: TrackerItem, index: number) => {
+  const handleContextMenu = useCallback((e: React.MouseEvent, item: TrackerRecord, index: number) => {
     e.preventDefault();
     e.stopPropagation();
 
@@ -1030,7 +1036,7 @@ export function TrackerTable({
     if (row) row.scrollIntoView({ block: 'nearest' });
   }, [focusedIndex]);
 
-  const handleRowClick = (item: TrackerItem, index: number, e: React.MouseEvent) => {
+  const handleRowClick = (item: TrackerRecord, index: number, e: React.MouseEvent) => {
     // Multi-select: Cmd/Ctrl+click toggles, Shift+click extends range
     if (e.metaKey || e.ctrlKey) {
       e.preventDefault();
@@ -1064,9 +1070,9 @@ export function TrackerTable({
     // Track analytics
     if (posthog) {
       posthog.capture('tracker_item_clicked', {
-        trackerType: item.type,
-        itemStatus: item.status,
-        isInline: item.lineNumber !== undefined && item.lineNumber !== 0,
+        trackerType: item.primaryType,
+        itemStatus: item.fields.status,
+        isInline: item.system.lineNumber !== undefined && item.system.lineNumber !== 0,
       });
     }
 
@@ -1078,7 +1084,7 @@ export function TrackerTable({
 
     // Editable items (native, frontmatter, import) - start editing title inline
     if (isItemEditable(item)) {
-      setEditingTitle(item.title);
+      setEditingTitle((item.fields.title as string) ?? '');
       setEditingCell({ itemId: item.id, field: 'title' });
       return;
     }
@@ -1091,21 +1097,21 @@ export function TrackerTable({
     openItemInEditor(item);
   };
 
-  const openItemInEditor = (item: TrackerItem) => {
+  const openItemInEditor = (item: TrackerRecord) => {
     if (onSwitchToFilesMode) {
       onSwitchToFilesMode();
     }
 
     const documentService = (window as any).documentService;
     if (documentService && documentService.openDocument) {
-      documentService.getDocumentByPath(item.module).then((doc: any) => {
+      documentService.getDocumentByPath(item.system.documentPath).then((doc: any) => {
         if (doc) {
-          const fullPath = item.workspace && doc.path
-            ? `${item.workspace}/${doc.path}`.replace(/\/+/g, '/')
+          const fullPath = item.system.workspace && doc.path
+            ? `${item.system.workspace}/${doc.path}`.replace(/\/+/g, '/')
             : doc.path;
 
           documentService.openDocument(doc.id).then(() => {
-            if (item.lineNumber !== undefined && item.lineNumber !== 0) {
+            if (item.system.lineNumber !== undefined && item.system.lineNumber !== 0) {
               const editorRegistry = (window as any).__editorRegistry;
               if (editorRegistry && item.id) {
                 setTimeout(() => {
@@ -1149,7 +1155,7 @@ export function TrackerTable({
     if (activeTypeFilter && activeTypeFilter !== 'all') {
       const model = globalRegistry.get(activeTypeFilter);
       if (model) {
-        const statusField = model.fields.find(f => f.name === 'status');
+        const statusField = model.fields.find(f => f.name === resolveRoleFieldName(model.type, 'workflowStatus'));
         if (statusField?.options && statusField.options.length > 0) {
           return [
             allOption,
@@ -1202,7 +1208,7 @@ export function TrackerTable({
       if (!filterableTypes.has(col.type)) continue;
       const valSet = new Set<string>();
       for (const item of items) {
-        const val = item.customFields?.[col.key];
+        const val = item.fields[col.key];
         if (val == null) continue;
         if (Array.isArray(val)) {
           val.forEach(v => valSet.add(String(v)));
@@ -1279,7 +1285,7 @@ export function TrackerTable({
               <span>{option.label}</span>
               {option.value === 'all' && <span className={`count py-0.5 px-1.5 rounded-[10px] text-[11px] font-semibold ${internalTypeFilter === option.value ? 'bg-[var(--nim-primary)] text-[var(--nim-bg)]' : 'bg-[var(--nim-bg-tertiary)]'}`}>{items.length}</span>}
               {option.value !== 'all' && (
-                <span className={`count py-0.5 px-1.5 rounded-[10px] text-[11px] font-semibold ${internalTypeFilter === option.value ? 'bg-[var(--nim-primary)] text-[var(--nim-bg)]' : 'bg-[var(--nim-bg-tertiary)]'}`}>{items.filter(i => i.type === option.value).length}</span>
+                <span className={`count py-0.5 px-1.5 rounded-[10px] text-[11px] font-semibold ${internalTypeFilter === option.value ? 'bg-[var(--nim-primary)] text-[var(--nim-bg)]' : 'bg-[var(--nim-bg-tertiary)]'}`}>{items.filter(i => i.primaryType === option.value).length}</span>
               )}
             </button>
           ))}
@@ -1480,10 +1486,10 @@ export function TrackerTable({
                 }`}
                 data-testid="tracker-table-row"
                 data-item-id={item.id}
-                data-item-title={item.title}
+                data-item-title={item.fields.title as string}
                 onClick={(e) => handleRowClick(item, index, e)}
                 onDoubleClick={() => {
-                  if (item.module) {
+                  if (item.system.documentPath) {
                     openItemInEditor(item);
                   }
                 }}
@@ -1523,7 +1529,8 @@ export function TrackerTable({
           <ContextSubmenu label="Set Status" icon="swap_horiz">
             {(() => {
               const tracker = activeTypeFilter !== 'all' ? globalRegistry.get(activeTypeFilter) : null;
-              const statusField = tracker?.fields.find(f => f.name === 'status');
+              const statusFieldName = activeTypeFilter !== 'all' ? resolveRoleFieldName(activeTypeFilter, 'workflowStatus') : 'status';
+              const statusField = tracker?.fields.find(f => f.name === statusFieldName);
               const rawOptions: Array<string | { value: string; label: string }> = statusField?.options || [
                 { value: 'to-do', label: 'To Do' },
                 { value: 'in-progress', label: 'In Progress' },
@@ -1542,7 +1549,7 @@ export function TrackerTable({
                   >
                     <span
                       className="w-2 h-2 rounded-full shrink-0"
-                      style={{ backgroundColor: getStatusColor(val as TrackerItemStatus, activeTypeFilter !== 'all' ? activeTypeFilter : undefined) }}
+                      style={{ backgroundColor: getStatusColor(val as string, activeTypeFilter !== 'all' ? activeTypeFilter : undefined) }}
                     />
                     {label}
                   </button>
@@ -1561,7 +1568,7 @@ export function TrackerTable({
               >
                 <span
                   className="w-2 h-2 rounded-full shrink-0"
-                  style={{ backgroundColor: getPriorityColor(p as TrackerItemPriority) }}
+                  style={{ backgroundColor: getPriorityColor(p as string) }}
                 />
                 {p.charAt(0).toUpperCase() + p.slice(1)}
               </button>

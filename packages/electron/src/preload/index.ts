@@ -779,6 +779,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
   },
 
+  // Tracker Schema (main-process authority)
+  trackerSchema: {
+    getAll: () => ipcRenderer.invoke('tracker-schema:get-all') as Promise<any[]>,
+    get: (type: string) => ipcRenderer.invoke('tracker-schema:get', type) as Promise<any | null>,
+    getRoleField: (type: string, role: string) => ipcRenderer.invoke('tracker-schema:get-role-field', type, role) as Promise<string | null>,
+    getFieldByRole: (type: string, role: string) => ipcRenderer.invoke('tracker-schema:get-field-by-role', type, role) as Promise<any | null>,
+    onChanged: (callback: (schemas: any[]) => void) => {
+      const handler = (_event: any, schemas: any[]) => callback(schemas);
+      ipcRenderer.on('tracker-schema:changed', handler);
+      return () => ipcRenderer.removeListener('tracker-schema:changed', handler);
+    },
+  },
+
   // Document Sync (collaborative editing)
   documentSync: {
     open: (workspacePath: string, documentId: string, title?: string) =>

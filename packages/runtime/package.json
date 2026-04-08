@@ -73,6 +73,22 @@
       "import": "./dist/plugins/TrackerPlugin/documentHeader/index.js",
       "types": "./dist/plugins/TrackerPlugin/documentHeader/index.d.ts"
     },
+    "./plugins/TrackerPlugin/documentHeader/frontmatterUtils": {
+      "import": "./dist/plugins/TrackerPlugin/documentHeader/frontmatterUtils.js",
+      "types": "./dist/plugins/TrackerPlugin/documentHeader/frontmatterUtils.d.ts"
+    },
+    "./plugins/TrackerPlugin/trackerRecordAccessors": {
+      "import": "./dist/plugins/TrackerPlugin/trackerRecordAccessors.js",
+      "types": "./dist/plugins/TrackerPlugin/trackerRecordAccessors.d.ts"
+    },
+    "./plugins/TrackerPlugin/trackerDataAtoms": {
+      "import": "./dist/plugins/TrackerPlugin/trackerDataAtoms.js",
+      "types": "./dist/plugins/TrackerPlugin/trackerDataAtoms.d.ts"
+    },
+    "./core/TrackerRecord": {
+      "import": "./dist/core/TrackerRecord.js",
+      "types": "./dist/core/TrackerRecord.d.ts"
+    },
     "./plugins/shared/fixedTabHeader": {
       "import": "./dist/plugins/shared/fixedTabHeader/index.js",
       "types": "./dist/plugins/shared/fixedTabHeader/index.d.ts"
@@ -128,6 +144,10 @@
     "./electron/claudeCodeEnvironment": {
       "import": "./dist/electron/claudeCodeEnvironment.js",
       "types": "./dist/electron/claudeCodeEnvironment.d.ts"
+    },
+    "./plugins/TrackerPlugin/models/TrackerDataModel": {
+      "import": "./dist/plugins/TrackerPlugin/models/TrackerDataModel.js",
+      "types": "./dist/plugins/TrackerPlugin/models/TrackerDataModel.d.ts"
     },
     "./plugins/TrackerPlugin/models": {
       "import": "./dist/plugins/TrackerPlugin/models/index.js",

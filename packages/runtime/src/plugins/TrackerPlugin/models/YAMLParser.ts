@@ -3,7 +3,7 @@
  */
 
 import yaml from 'js-yaml';
-import type { TrackerDataModel, FieldDefinition, FieldOption, TrackerSyncPolicy, TrackerSyncMode } from './TrackerDataModel';
+import type { TrackerDataModel, FieldDefinition, FieldOption, TrackerSyncPolicy, TrackerSyncMode, TrackerSchemaRole } from './TrackerDataModel';
 
 /**
  * Parse a YAML string into a TrackerDataModel
@@ -112,6 +112,23 @@ export function parseTrackerYAML(yamlString: string): TrackerDataModel {
       filterable: data.tableView.filterable !== false,
       exportable: data.tableView.exportable !== false,
     };
+  }
+
+  // Parse roles
+  if (data.roles && typeof data.roles === 'object') {
+    const validRoles: TrackerSchemaRole[] = [
+      'title', 'workflowStatus', 'priority', 'assignee', 'reporter',
+      'tags', 'startDate', 'dueDate', 'progress',
+    ];
+    const roles: Partial<Record<TrackerSchemaRole, string>> = {};
+    for (const [key, value] of Object.entries(data.roles)) {
+      if (validRoles.includes(key as TrackerSchemaRole) && typeof value === 'string') {
+        roles[key as TrackerSchemaRole] = value;
+      }
+    }
+    if (Object.keys(roles).length > 0) {
+      model.roles = roles;
+    }
   }
 
   // Parse sync policy

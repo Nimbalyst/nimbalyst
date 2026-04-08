@@ -102,14 +102,11 @@ async function generateTestKey(): Promise<CryptoKey> {
 
 function makePayload(overrides: Partial<TrackerItemPayload> & { itemId: string }): TrackerItemPayload {
   return {
-    type: 'bug',
-    title: 'Test bug',
-    status: 'open',
-    priority: 'high',
-    labels: [],
-    linkedSessions: [],
+    primaryType: 'bug',
+    archived: false,
+    system: {},
+    fields: { title: 'Test bug', status: 'open', priority: 'high' },
     comments: [],
-    customFields: {},
     fieldUpdatedAt: {},
     ...overrides,
   };
@@ -363,7 +360,7 @@ describe('TrackerSyncProvider encryption', () => {
       itemId: 'enc-bug-1',
       issueNumber: 123,
       issueKey: 'NIM-123',
-      title: 'Secret bug title',
+      fields: { title: 'Secret bug title', status: 'open', priority: 'high' },
     });
 
     await provider.upsertItem(payload);
@@ -389,7 +386,7 @@ describe('TrackerSyncProvider encryption', () => {
     // Encrypt a payload manually to simulate server response
     const payload = makePayload({
       itemId: 'dec-bug-1',
-      title: 'Decrypted title',
+      fields: { title: 'Decrypted title', status: 'open', priority: 'high' },
     });
     const plaintext = new TextEncoder().encode(JSON.stringify(payload));
     const iv = webcrypto.getRandomValues(new Uint8Array(12));
@@ -423,7 +420,7 @@ describe('TrackerSyncProvider encryption', () => {
 
     expect(upsertedItems).toHaveLength(1);
     expect(upsertedItems[0].itemId).toBe('dec-bug-1');
-    expect(upsertedItems[0].title).toBe('Decrypted title');
+    expect(upsertedItems[0].fields.title).toBe('Decrypted title');
   });
 
   it('should apply server-assigned issue identity from sync metadata', async () => {
@@ -434,7 +431,7 @@ describe('TrackerSyncProvider encryption', () => {
 
     const payload = makePayload({
       itemId: 'dec-bug-2',
-      title: 'Assigned key item',
+      fields: { title: 'Assigned key item', status: 'open', priority: 'high' },
     });
     const plaintext = new TextEncoder().encode(JSON.stringify(payload));
     const iv = webcrypto.getRandomValues(new Uint8Array(12));
@@ -479,7 +476,7 @@ describe('TrackerSyncProvider offline queue', () => {
     const { provider, getWs } = await createTestProvider();
 
     // Upsert before connecting -- should queue
-    const payload = makePayload({ itemId: 'offline-1', title: 'Offline item' });
+    const payload = makePayload({ itemId: 'offline-1', fields: { title: 'Offline item', status: 'open', priority: 'high' } });
     await provider.upsertItem(payload);
 
     // Connect
@@ -574,7 +571,7 @@ describe('TrackerSyncProvider broadcast handling', () => {
     await vi.advanceTimersByTimeAsync(0);
 
     // Simulate broadcast from another user
-    const payload = makePayload({ itemId: 'broadcast-1', title: 'From user2' });
+    const payload = makePayload({ itemId: 'broadcast-1', fields: { title: 'From user2', status: 'open', priority: 'high' } });
     const plaintext = new TextEncoder().encode(JSON.stringify(payload));
     const iv = webcrypto.getRandomValues(new Uint8Array(12));
     const ciphertext = await webcrypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext);
@@ -595,7 +592,7 @@ describe('TrackerSyncProvider broadcast handling', () => {
     await flushAsync();
 
     expect(upsertedItems).toHaveLength(1);
-    expect(upsertedItems[0].title).toBe('From user2');
+    expect(upsertedItems[0].fields.title).toBe('From user2');
   });
 
   it('should call onItemDeleted for delete broadcasts', async () => {
@@ -705,8 +702,7 @@ describe('TrackerSyncProvider LWW merge on receive', () => {
     // Upsert locally (puts in local cache)
     const localPayload = makePayload({
       itemId: 'merge-item',
-      title: 'Local title',
-      status: 'in-progress',
+      fields: { title: 'Local title', status: 'in-progress' },
       fieldUpdatedAt: {
         title: now - 100, // older
         status: now,       // newer
@@ -717,8 +713,7 @@ describe('TrackerSyncProvider LWW merge on receive', () => {
     // Simulate broadcast with conflicting data
     const remotePayload = makePayload({
       itemId: 'merge-item',
-      title: 'Remote title',
-      status: 'done',
+      fields: { title: 'Remote title', status: 'done' },
       fieldUpdatedAt: {
         title: now,        // newer -> wins
         status: now - 500, // older
@@ -745,8 +740,8 @@ describe('TrackerSyncProvider LWW merge on receive', () => {
 
     // The merged result should take title from remote (newer) and status from local (newer)
     const mergedItem = upsertedItems[upsertedItems.length - 1];
-    expect(mergedItem.title).toBe('Remote title');     // remote won
-    expect(mergedItem.status).toBe('in-progress');     // local won
+    expect(mergedItem.fields.title).toBe('Remote title');     // remote won
+    expect(mergedItem.fields.status).toBe('in-progress');     // local won
   });
 });
 
@@ -772,8 +767,8 @@ describe('TrackerSyncProvider batch operations', () => {
     await vi.advanceTimersByTimeAsync(0);
 
     await provider.batchUpsertItems([
-      makePayload({ itemId: 'batch-1', title: 'First' }),
-      makePayload({ itemId: 'batch-2', title: 'Second' }),
+      makePayload({ itemId: 'batch-1', fields: { title: 'First', status: 'open', priority: 'high' } }),
+      makePayload({ itemId: 'batch-2', fields: { title: 'Second', status: 'open', priority: 'high' } }),
     ]);
 
     const batchMsg = ws.sentMessages.find(m => m.type === 'trackerBatchUpsert');

@@ -1,7 +1,9 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
-import type { TrackerItem, TrackerIdentity } from '@nimbalyst/runtime';
+import type { TrackerIdentity } from '@nimbalyst/runtime';
+import type { TrackerRecord } from '@nimbalyst/runtime/core/TrackerRecord';
+import { getRecordTitle, getRecordPriority, getFieldByRole } from '@nimbalyst/runtime/plugins/TrackerPlugin/trackerRecordAccessors';
 import {
   TrackerTable,
   SortColumn as TrackerSortColumn,
@@ -131,15 +133,15 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
         const itemsMap = store.get(trackerItemsMapAtom);
         const trackerItem = itemsMap.get(trackerItemId);
 
-        if (trackerItem?.module) {
+        if (trackerItem?.system?.documentPath) {
           // File-backed item: link via file path and pre-fill draft with @file reference
           await window.electronAPI.invoke('tracker:link-session', {
-            trackerId: `file:${trackerItem.module}`,
+            trackerId: `file:${trackerItem.system.documentPath}`,
             sessionId: result.id,
           });
           // Pre-fill draft input with file reference so the agent can read it
           await window.electronAPI.invoke('ai:saveDraftInput', result.id,
-            `implement @${trackerItem.module}`, workspacePath);
+            `implement @${trackerItem.system.documentPath}`, workspacePath);
         } else {
           // Native DB item: link by ID
           await window.electronAPI.invoke('tracker:link-session', {
@@ -147,8 +149,9 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
             sessionId: result.id,
           });
           // Pre-fill draft with item title
+          const title = trackerItem ? getRecordTitle(trackerItem) : trackerItemId;
           await window.electronAPI.invoke('ai:saveDraftInput', result.id,
-            `implement tracker item: ${trackerItem?.title || trackerItemId}`, workspacePath);
+            `implement tracker item: ${title}`, workspacePath);
         }
 
         // Refresh session list to pick up the new session, then navigate
@@ -174,40 +177,48 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
     let items = showArchived ? archivedItems : activeItems;
 
     if (activeFilters.includes('mine') && currentIdentity) {
-      items = items.filter(item => {
+      items = items.filter(record => {
+        const authorIdentity = record.system.authorIdentity;
+        const assignee = getFieldByRole(record, 'assignee') as string | undefined;
         // Match by email (strongest)
-        if (currentIdentity.email && item.authorIdentity?.email) {
-          if (currentIdentity.email === item.authorIdentity.email) return true;
+        if (currentIdentity.email && authorIdentity?.email) {
+          if (currentIdentity.email === authorIdentity.email) return true;
         }
-        // Match assignee email
-        if (currentIdentity.email && item.assigneeEmail) {
-          if (currentIdentity.email === item.assigneeEmail) return true;
+        // Match assignee field (resolved via role -- could be email, name, or ID)
+        if (currentIdentity.email && assignee) {
+          if (currentIdentity.email === assignee) return true;
+        }
+        if (currentIdentity.displayName && assignee) {
+          if (currentIdentity.displayName === assignee) return true;
         }
         // Fall back to git email
-        if (currentIdentity.gitEmail && item.authorIdentity?.gitEmail) {
-          if (currentIdentity.gitEmail === item.authorIdentity.gitEmail) return true;
+        if (currentIdentity.gitEmail && authorIdentity?.gitEmail) {
+          if (currentIdentity.gitEmail === authorIdentity.gitEmail) return true;
         }
         // Fall back to git name
-        if (currentIdentity.gitName && item.authorIdentity?.gitName) {
-          if (currentIdentity.gitName === item.authorIdentity.gitName) return true;
-        }
-        // Legacy: match owner field
-        if (currentIdentity.displayName && item.owner) {
-          if (currentIdentity.displayName === item.owner) return true;
+        if (currentIdentity.gitName && authorIdentity?.gitName) {
+          if (currentIdentity.gitName === authorIdentity.gitName) return true;
         }
         // In single-user context, items with no author are assumed mine
-        if (!item.authorIdentity && !item.owner) return true;
+        if (!authorIdentity && !assignee) return true;
         return false;
       });
     }
 
     if (activeFilters.includes('high-priority')) {
-      items = items.filter(item => item.priority === 'critical' || item.priority === 'high');
+      items = items.filter(record => {
+        const priority = getRecordPriority(record);
+        return priority === 'critical' || priority === 'high';
+      });
     }
 
     if (activeFilters.includes('recently-updated')) {
       items = [...items]
-        .sort((a, b) => b.lastIndexed.getTime() - a.lastIndexed.getTime())
+        .sort((a, b) => {
+          const aTime = a.system.lastIndexed ? new Date(a.system.lastIndexed).getTime() : 0;
+          const bTime = b.system.lastIndexed ? new Date(b.system.lastIndexed).getTime() : 0;
+          return bTime - aTime;
+        })
         .slice(0, 50);
     }
 
@@ -293,7 +304,8 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
       const random = Math.random().toString(36).substring(2, 8);
       const id = `${prefix}_${timestamp}${random}`;
 
-      const statusField = tracker?.fields.find(f => f.name === 'status');
+      const statusFieldName = tracker?.roles?.workflowStatus ?? 'status';
+      const statusField = tracker?.fields.find(f => f.name === statusFieldName);
       const defaultStatus = (statusField?.default as string) || 'to-do';
       const syncMode = tracker?.sync?.mode || 'local';
 

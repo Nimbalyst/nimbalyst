@@ -72,6 +72,22 @@ export interface TableViewConfig {
  */
 export type TrackerSyncMode = 'local' | 'shared' | 'hybrid';
 
+/**
+ * Semantic roles that map product concepts to schema-defined field names.
+ * A role answers "which field in this schema represents X?" so the product
+ * can find e.g. the workflow status field without assuming it's called "status".
+ */
+export type TrackerSchemaRole =
+  | 'title'
+  | 'workflowStatus'
+  | 'priority'
+  | 'assignee'
+  | 'reporter'
+  | 'tags'
+  | 'startDate'
+  | 'dueDate'
+  | 'progress';
+
 export interface TrackerSyncPolicy {
   /** How items sync: local (never), shared (always), hybrid (per-item choice) */
   mode: TrackerSyncMode;
@@ -98,21 +114,12 @@ export interface TrackerDataModel {
   creatable?: boolean;
   /** Whether this type can be used as a primary type. Defaults to true. */
   primaryCapable?: boolean;
-}
-
-/**
- * Runtime tracker item instance
- */
-export interface TrackerItem {
-  id: string;
-  type: string;
-  data: Record<string, any>;
-  workspace: string;
-  documentPath?: string;
-  lineNumber?: number;
-  created: string;
-  updated: string;
-  lastIndexed?: string;
+  /**
+   * Maps semantic roles to field names in this schema.
+   * Allows the product to find e.g. "which field is the workflow status?"
+   * without hardcoding field names like "status".
+   */
+  roles?: Partial<Record<TrackerSchemaRole, string>>;
 }
 
 /**
@@ -131,11 +138,38 @@ export interface ValidationResult {
  */
 export class TrackerDataModelRegistry {
   private models: Map<string, TrackerDataModel> = new Map();
+  /** Track which types are built-in (survive workspace switches) vs workspace-specific */
+  private builtinTypes: Set<string> = new Set();
   private listeners: Set<() => void> = new Set();
 
-  register(model: TrackerDataModel): void {
+  register(model: TrackerDataModel, builtin = false): void {
     this.models.set(model.type, model);
+    if (builtin) this.builtinTypes.add(model.type);
     this.listeners.forEach(fn => fn());
+  }
+
+  /** Remove a specific type from the registry. Cannot remove built-in types. */
+  unregister(type: string): boolean {
+    if (this.builtinTypes.has(type)) return false;
+    const removed = this.models.delete(type);
+    if (removed) this.listeners.forEach(fn => fn());
+    return removed;
+  }
+
+  /**
+   * Remove all workspace-specific (non-builtin) schemas.
+   * Call this on workspace switch to prevent schemas from workspace A
+   * leaking into workspace B.
+   */
+  clearWorkspaceSchemas(): void {
+    let changed = false;
+    for (const type of this.models.keys()) {
+      if (!this.builtinTypes.has(type)) {
+        this.models.delete(type);
+        changed = true;
+      }
+    }
+    if (changed) this.listeners.forEach(fn => fn());
   }
 
   /** Subscribe to registry changes. Returns an unsubscribe function. */
@@ -248,56 +282,39 @@ export class TrackerDataModelRegistry {
 export const globalRegistry = new TrackerDataModelRegistry();
 
 /**
- * Base fields shared by all tracker item types.
- * Types only need to define their unique fields on top of these.
+ * Get the field name that fulfills a given role in a tracker data model.
+ * Returns undefined if the model doesn't declare that role.
  */
-export const BASE_TRACKER_FIELDS: FieldDefinition[] = [
-  { name: 'title', type: 'string', required: true, displayInline: true },
-  {
-    name: 'status',
-    type: 'select',
-    default: 'to-do',
-    options: [
-      { value: 'to-do', label: 'To Do', icon: 'circle' },
-      { value: 'in-progress', label: 'In Progress', icon: 'motion_photos_on' },
-      { value: 'done', label: 'Done', icon: 'check_circle' },
-    ],
-  },
-  {
-    name: 'priority',
-    type: 'select',
-    options: [
-      { value: 'low', label: 'Low' },
-      { value: 'medium', label: 'Medium' },
-      { value: 'high', label: 'High' },
-      { value: 'critical', label: 'Critical' },
-    ],
-  },
-  { name: 'owner', type: 'user' },
-  { name: 'assigneeEmail', type: 'user' },
-  { name: 'reporterEmail', type: 'user' },
-  { name: 'description', type: 'text' },
-  { name: 'tags', type: 'array', itemType: 'string', displayInline: false },
-  { name: 'created', type: 'datetime', displayInline: false, readOnly: true },
-  { name: 'updated', type: 'datetime', displayInline: false, readOnly: true },
-];
+export function getRoleField(model: TrackerDataModel, role: TrackerSchemaRole): string | undefined {
+  return model.roles?.[role];
+}
+
+/**
+ * Look up the FieldDefinition for a role in a given tracker type.
+ * Returns undefined if the type doesn't exist, doesn't declare the role,
+ * or the role's field name doesn't match any field definition.
+ */
+export function getFieldByRole(
+  registry: TrackerDataModelRegistry,
+  type: string,
+  role: TrackerSchemaRole
+): FieldDefinition | undefined {
+  const model = registry.get(type);
+  if (!model) return undefined;
+  const fieldName = getRoleField(model, role);
+  if (!fieldName) return undefined;
+  return model.fields.find(f => f.name === fieldName);
+}
 
 /**
  * Resolve the available fields for an item with multiple type tags.
- * Returns the union of all tag types' fields, with base fields first.
- * First type tag wins for duplicate field names (primary type takes precedence).
+ * Returns the union of all tag types' fields. Primary type (first tag) takes
+ * precedence for duplicate field names.
  */
 export function resolveFields(typeTags: string[]): FieldDefinition[] {
   const seen = new Set<string>();
   const fields: FieldDefinition[] = [];
 
-  // Base fields always come first
-  for (const field of BASE_TRACKER_FIELDS) {
-    seen.add(field.name);
-    fields.push(field);
-  }
-
-  // Then add type-specific fields from each tag
   for (const tag of typeTags) {
     const model = globalRegistry.get(tag);
     if (!model) continue;

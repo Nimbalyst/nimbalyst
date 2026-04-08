@@ -19,22 +19,8 @@ import { dialogRef } from '../contexts/DialogContext';
 import { DIALOG_IDS } from '../dialogs';
 import type { AgentCommandPaletteData } from '../dialogs';
 
-const PLAN_STATUS_KEYS = new Set([
-  'planId',
-  'title',
-  'status',
-  'state',
-  'planType',
-  'priority',
-  'owner',
-  'stakeholders',
-  'tags',
-  'created',
-  'updated',
-  'dueDate',
-  'startDate',
-  'progress',
-]);
+// Tracker field updates now go through the generic trackerStatus frontmatter format.
+// No hardcoded plan-specific field list needed.
 
 function mergeFrontmatterData(
   existing: FrontmatterData | undefined,
@@ -792,29 +778,9 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
           const currentContent = editorRegistry.getContent(filePath);
           const { data: existingData } = parseFrontmatter(currentContent);
 
+          // All tracker updates go to top-level frontmatter fields (trackerStatus holds only type).
+          // The generic model treats all fields equally -- no special routing for plan/decision fields.
           const normalizedUpdates: Record<string, unknown> = { ...updates };
-          const planStatusUpdate: Record<string, unknown> = {};
-
-          for (const key of Object.keys(normalizedUpdates)) {
-            if (PLAN_STATUS_KEYS.has(key)) {
-              planStatusUpdate[key] = normalizedUpdates[key];
-              delete normalizedUpdates[key];
-            }
-          }
-
-          if (Object.keys(planStatusUpdate).length > 0) {
-            const existingPlanStatus = existingData?.planStatus;
-            const existingPlanStatusObject =
-              existingPlanStatus && typeof existingPlanStatus === 'object' && !Array.isArray(existingPlanStatus)
-                ? (existingPlanStatus as FrontmatterData)
-                : {};
-
-            normalizedUpdates.planStatus = mergeFrontmatterData(
-              existingPlanStatusObject,
-              planStatusUpdate as Partial<FrontmatterData>,
-            );
-          }
-
           const mergedData = mergeFrontmatterData(existingData ?? {}, normalizedUpdates as Partial<FrontmatterData>);
 
           const frontmatterMatch = currentContent.match(/^---\n([\s\S]*?)\n---\n?/);

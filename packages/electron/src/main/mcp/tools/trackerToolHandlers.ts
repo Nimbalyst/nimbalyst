@@ -263,6 +263,19 @@ export const trackerToolSchemas = [
           type: "number",
           description: "Maximum number of items to return (default: 50)",
         },
+        where: {
+          type: "array",
+          description: "Field-level filters for querying on any schema-defined field. Each entry is { field, op, value }. Supported ops: '=', '!=', 'contains', 'in'.",
+          items: {
+            type: "object",
+            properties: {
+              field: { type: "string", description: "Field name in the tracker data (e.g., 'severity', 'component')" },
+              op: { type: "string", description: "Operator: '=', '!=', 'contains', 'in'" },
+              value: { description: "Value to compare against" },
+            },
+            required: ["field", "op", "value"],
+          },
+        },
       },
     },
   },
@@ -358,6 +371,10 @@ export const trackerToolSchemas = [
           items: { type: "string" },
           description: "Additional type tags beyond the primary type (e.g., ['feature', 'task'] for an item that is both)",
         },
+        fields: {
+          type: "object",
+          description: "Generic field bag for setting any schema-defined field. Values here override fixed arguments above. Use this for custom fields or when you want to set fields by their schema name.",
+        },
       },
       required: ["type", "title"],
     },
@@ -440,6 +457,15 @@ export const trackerToolSchemas = [
           items: { type: "string" },
           description: "Set type tags (replaces existing type tags). Primary type is always included.",
         },
+        fields: {
+          type: "object",
+          description: "Generic field bag for updating any schema-defined field. Values here override fixed arguments above.",
+        },
+        unsetFields: {
+          type: "array",
+          items: { type: "string" },
+          description: "Field names to remove from the item. Use this to clear custom fields.",
+        },
       },
       required: ["id"],
     },
@@ -520,12 +546,6 @@ export async function handleTrackerList(
       conditions.push(`(archived = FALSE OR archived IS NULL)`);
     }
 
-    // Filter by owner (stored in JSONB data field)
-    if (args.owner) {
-      conditions.push(`data->>'owner' = $${paramIdx++}`);
-      params.push(args.owner);
-    }
-
     // Filter by primary type
     if (args.type) {
       conditions.push(`type = $${paramIdx++}`);
@@ -538,16 +558,65 @@ export async function handleTrackerList(
       params.push(args.typeTag);
     }
 
-    // Filter by status (stored in JSONB data field)
+    // Resolve role-based field names for filters.
+    // When a type is specified, use the schema to find the actual field name.
+    // When no type is specified, fall back to conventional names.
+    const resolveFieldForFilter = (role: string, fallback: string): string => {
+      if (args.type) {
+        const { getTrackerRoleField } = require('../../services/TrackerSchemaService');
+        return getTrackerRoleField(args.type, role) ?? fallback;
+      }
+      return fallback;
+    };
+
+    // Filter by owner/assignee (resolved via schema role)
+    if (args.owner) {
+      const ownerField = resolveFieldForFilter('assignee', 'owner');
+      conditions.push(`data->>'${ownerField}' = $${paramIdx++}`);
+      params.push(args.owner);
+    }
+
+    // Filter by status (resolved via schema role)
     if (args.status) {
-      conditions.push(`data->>'status' = $${paramIdx++}`);
+      const statusField = resolveFieldForFilter('workflowStatus', 'status');
+      conditions.push(`data->>'${statusField}' = $${paramIdx++}`);
       params.push(args.status);
     }
 
-    // Filter by priority (stored in JSONB data field)
+    // Filter by priority (resolved via schema role)
     if (args.priority) {
-      conditions.push(`data->>'priority' = $${paramIdx++}`);
+      const priorityField = resolveFieldForFilter('priority', 'priority');
+      conditions.push(`data->>'${priorityField}' = $${paramIdx++}`);
       params.push(args.priority);
+    }
+
+    // Generic field-level where filters
+    if (args.where && Array.isArray(args.where)) {
+      for (const clause of args.where) {
+        if (!clause.field || !clause.op) continue;
+        const fieldPath = `data->>'${clause.field.replace(/'/g, "''")}'`;
+        switch (clause.op) {
+          case '=':
+            conditions.push(`${fieldPath} = $${paramIdx++}`);
+            params.push(String(clause.value));
+            break;
+          case '!=':
+            conditions.push(`(${fieldPath} IS NULL OR ${fieldPath} != $${paramIdx++})`);
+            params.push(String(clause.value));
+            break;
+          case 'contains':
+            conditions.push(`${fieldPath} ILIKE $${paramIdx++}`);
+            params.push(`%${clause.value}%`);
+            break;
+          case 'in':
+            if (Array.isArray(clause.value) && clause.value.length > 0) {
+              const placeholders = clause.value.map(() => `$${paramIdx++}`).join(', ');
+              conditions.push(`${fieldPath} IN (${placeholders})`);
+              params.push(...clause.value.map(String));
+            }
+            break;
+        }
+      }
     }
 
     // Search title and description
@@ -822,26 +891,40 @@ export async function handleTrackerCreate(
     const syncStatus = getInitialTrackerSyncStatus(syncPolicy);
 
     const id = `${args.type}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    // Resolve field names via schema roles so that fixed MCP args
+    // (title, status, priority, etc.) are placed at the correct field name
+    // for the target schema. E.g., a schema with roles: { title: 'name' }
+    // will store args.title in data.name.
+    const { getTrackerRoleField } = await import('../../services/TrackerSchemaService');
+    const rf = (role: string, fallback: string) => getTrackerRoleField(args.type, role as any) ?? fallback;
+
     const data: Record<string, any> = {
-      title: args.title,
-      status: args.status || "to-do",
-      priority: args.priority || "medium",
+      [rf('title', 'title')]: args.title,
+      [rf('workflowStatus', 'status')]: args.status || "to-do",
+      [rf('priority', 'priority')]: args.priority || "medium",
       created: new Date().toISOString().split("T")[0],
       authorIdentity,
-      createdByAgent: true, // Items created via MCP tools are agent-created
+      createdByAgent: true,
     };
-    if (args.tags?.length) data.tags = args.tags;
+    if (args.tags?.length) data[rf('tags', 'tags')] = args.tags;
     if (args.description) data.description = args.description;
-    if (args.owner) data.owner = args.owner;
-    if (args.dueDate) data.dueDate = args.dueDate;
-    if (args.progress !== undefined) data.progress = args.progress;
-    if (args.assigneeEmail) data.assigneeEmail = args.assigneeEmail;
-    if (args.reporterEmail) data.reporterEmail = args.reporterEmail;
-    // Keep deprecated fields for backward compat
-    if (args.assigneeId) data.assigneeId = args.assigneeId;
-    if (args.reporterId) data.reporterId = args.reporterId;
+    if (args.owner) data[rf('assignee', 'owner')] = args.owner;
+    if (args.dueDate) data[rf('dueDate', 'dueDate')] = args.dueDate;
+    if (args.progress !== undefined) data[rf('progress', 'progress')] = args.progress;
+    if (args.assigneeEmail) data[rf('assignee', 'assigneeEmail')] = args.assigneeEmail;
+    if (args.reporterEmail) data[rf('reporter', 'reporterEmail')] = args.reporterEmail;
     if (args.labels?.length) data.labels = args.labels;
     if (args.linkedCommitSha) data.linkedCommitSha = args.linkedCommitSha;
+
+    // Merge generic fields bag (overrides role-resolved args above)
+    if (args.fields && typeof args.fields === 'object') {
+      for (const [key, value] of Object.entries(args.fields)) {
+        if (value !== undefined) {
+          data[key] = value;
+        }
+      }
+    }
 
     // Record creation activity
     appendActivity(data, authorIdentity, 'created');
@@ -973,33 +1056,70 @@ export async function handleTrackerUpdate(
     // getCurrentIdentity imported statically at top of file
     data.lastModifiedBy = getCurrentIdentity(workspacePath);
 
-    // Capture before-state for changed fields
+    // Resolve role-based field names for the item's type
+    const { getTrackerRoleField } = await import('../../services/TrackerSchemaService');
+    const rf = (role: string, fallback: string) => getTrackerRoleField(row.type, role as any) ?? fallback;
+
+    // Map fixed MCP args to role-resolved field names, then merge into data
+    const roleMap: Array<[string, string, string]> = [
+      // [argName, role, fallbackFieldName]
+      ['title', 'title', 'title'],
+      ['status', 'workflowStatus', 'status'],
+      ['priority', 'priority', 'priority'],
+      ['tags', 'tags', 'tags'],
+      ['owner', 'assignee', 'owner'],
+      ['dueDate', 'dueDate', 'dueDate'],
+      ['progress', 'progress', 'progress'],
+      ['assigneeEmail', 'assignee', 'assigneeEmail'],
+      ['reporterEmail', 'reporter', 'reporterEmail'],
+    ];
+
     const changes: Record<string, { from: any; to: any }> = {};
-    const trackableFields = ['title', 'status', 'priority', 'tags', 'owner', 'dueDate', 'progress', 'description', 'archived'] as const;
-    for (const field of trackableFields) {
-      if (args[field] !== undefined) {
-        const oldVal = field === 'archived' ? (row.archived ?? false) : data[field];
-        changes[field] = { from: oldVal, to: args[field] };
+
+    for (const [argName, role, fallback] of roleMap) {
+      if (args[argName] !== undefined) {
+        const fieldName = rf(role, fallback);
+        const oldVal = data[fieldName];
+        changes[fieldName] = { from: oldVal, to: args[argName] };
+        data[fieldName] = args[argName];
       }
     }
 
-    // Apply updates to data JSONB
-    if (args.title !== undefined) data.title = args.title;
-    if (args.status !== undefined) data.status = args.status;
-    if (args.priority !== undefined) data.priority = args.priority;
-    if (args.tags !== undefined) data.tags = args.tags;
-    if (args.description !== undefined)
+    // Non-role fields (system metadata)
+    if (args.description !== undefined) {
+      changes.description = { from: data.description, to: args.description };
       data.description = args.description;
-    if (args.owner !== undefined) data.owner = args.owner;
-    if (args.dueDate !== undefined) data.dueDate = args.dueDate;
-    if (args.progress !== undefined) data.progress = args.progress;
-    if (args.assigneeEmail !== undefined) data.assigneeEmail = args.assigneeEmail;
-    if (args.reporterEmail !== undefined) data.reporterEmail = args.reporterEmail;
-    // Keep deprecated fields for backward compat
-    if (args.assigneeId !== undefined) data.assigneeId = args.assigneeId;
-    if (args.reporterId !== undefined) data.reporterId = args.reporterId;
-    if (args.labels !== undefined) data.labels = args.labels;
-    if (args.linkedCommitSha !== undefined) data.linkedCommitSha = args.linkedCommitSha;
+    }
+    if (args.labels !== undefined) { data.labels = args.labels; }
+    if (args.linkedCommitSha !== undefined) { data.linkedCommitSha = args.linkedCommitSha; }
+
+    // Archived is a top-level DB column, not a JSONB field
+    if (args.archived !== undefined) {
+      changes.archived = { from: row.archived ?? false, to: args.archived };
+    }
+
+    // Merge generic fields bag (overrides role-resolved args above)
+    if (args.fields && typeof args.fields === 'object') {
+      for (const [key, value] of Object.entries(args.fields)) {
+        if (value !== undefined) {
+          const oldVal = data[key];
+          if (oldVal !== value) {
+            changes[key] = { from: oldVal, to: value };
+          }
+          data[key] = value;
+        }
+      }
+    }
+
+    // Remove fields specified in unsetFields
+    if (args.unsetFields && Array.isArray(args.unsetFields)) {
+      for (const key of args.unsetFields) {
+        if (data[key] !== undefined) {
+          changes[key] = { from: data[key], to: undefined };
+          delete data[key];
+        }
+      }
+    }
 
     // Record activity for each changed field
     const modifierIdentity = getCurrentIdentity(workspacePath);

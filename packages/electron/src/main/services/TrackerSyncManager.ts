@@ -523,9 +523,9 @@ async function hydrateTrackerItem(
   // Status events can go to all windows (they include workspace context)
   sendToAllWindows('tracker-sync:item-upserted', {
     itemId: payload.itemId,
-    type: payload.type,
-    title: payload.title,
-    status: payload.status,
+    type: payload.primaryType,
+    title: payload.fields.title,
+    status: payload.fields.status,
   });
 }
 

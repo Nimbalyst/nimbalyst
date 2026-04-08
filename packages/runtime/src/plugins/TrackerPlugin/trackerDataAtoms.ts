@@ -1,28 +1,28 @@
 /**
  * Tracker Data Atoms
  *
- * Cross-platform Jotai atoms that hold tracker item data.
+ * Cross-platform Jotai atoms that hold tracker record data.
  * Platform host adapters (Electron IPC listener, mobile adapter)
  * populate these atoms. TrackerTable reads from them reactively.
  *
- * This replaces the (window as any).documentService polling pattern
- * with reactive atom-based data flow that works on any platform.
+ * Uses the canonical TrackerRecord type. Legacy TrackerItem consumers
+ * can use the compat converters from TrackerRecord.ts.
  */
 
 import { atom } from 'jotai';
 import { atomFamily } from 'jotai/utils';
-import type { TrackerItem, TrackerItemType } from '../../core/DocumentService';
+import type { TrackerRecord } from '../../core/TrackerRecord';
 
 // ============================================================
 // Primary Data Store
 // ============================================================
 
 /**
- * All tracker items keyed by ID.
+ * All tracker records keyed by ID.
  * This is the single source of truth for tracker item data.
  * Host adapters populate this atom; UI components read from it.
  */
-export const trackerItemsMapAtom = atom<Map<string, TrackerItem>>(new Map());
+export const trackerItemsMapAtom = atom<Map<string, TrackerRecord>>(new Map());
 
 /**
  * Whether the initial data load has completed.
@@ -35,61 +35,61 @@ export const trackerDataLoadedAtom = atom(false);
 // ============================================================
 
 /**
- * All tracker items as a flat array.
+ * All tracker records as a flat array.
  */
 export const trackerItemsArrayAtom = atom((get) => {
   return Array.from(get(trackerItemsMapAtom).values());
 });
 
-/** Check if an item matches a type filter (primary type or any type tag) */
-function itemMatchesType(item: TrackerItem, type: string): boolean {
-  if (item.type === type) return true;
-  return item.typeTags?.includes(type) ?? false;
+/** Check if a record matches a type filter (primary type or any type tag) */
+function recordMatchesType(record: TrackerRecord, type: string): boolean {
+  if (record.primaryType === type) return true;
+  return record.typeTags.includes(type);
 }
 
 /**
- * Tracker items filtered by type (excludes archived).
- * Returns all non-archived items when type is 'all'.
+ * Tracker records filtered by type (excludes archived).
+ * Returns all non-archived records when type is 'all'.
  * Matches on primary type OR any type tag.
  */
-export const trackerItemsByTypeAtom = atomFamily((type: TrackerItemType | 'all') =>
+export const trackerItemsByTypeAtom = atomFamily((type: string | 'all') =>
   atom((get) => {
     const map = get(trackerItemsMapAtom);
     const all = Array.from(map.values());
-    const active = all.filter(item => !item.archived);
+    const active = all.filter(record => !record.archived);
     if (type === 'all') return active;
-    return active.filter(item => itemMatchesType(item, type));
+    return active.filter(record => recordMatchesType(record, type));
   })
 );
 
 /**
- * Archived tracker items, optionally filtered by type.
+ * Archived tracker records, optionally filtered by type.
  * Matches on primary type OR any type tag.
  */
-export const archivedTrackerItemsAtom = atomFamily((type: TrackerItemType | 'all') =>
+export const archivedTrackerItemsAtom = atomFamily((type: string | 'all') =>
   atom((get) => {
     const map = get(trackerItemsMapAtom);
     const all = Array.from(map.values());
-    const archived = all.filter(item => item.archived);
+    const archived = all.filter(record => record.archived);
     if (type === 'all') return archived;
-    return archived.filter(item => itemMatchesType(item, type));
+    return archived.filter(record => recordMatchesType(record, type));
   })
 );
 
 /**
- * A single tracker item by ID.
- * Only notifies subscribers when that specific item changes, not when
- * other items in the map change. Use this in detail/edit components
- * so they don't re-render on unrelated item updates.
+ * A single tracker record by ID.
+ * Only notifies subscribers when that specific record changes, not when
+ * other records in the map change. Use this in detail/edit components
+ * so they don't re-render on unrelated record updates.
  */
 export const trackerItemByIdAtom = atomFamily((id: string) =>
   atom((get) => get(trackerItemsMapAtom).get(id) ?? null)
 );
 
 /**
- * Count of non-archived items per type.
+ * Count of non-archived records per type.
  */
-export const trackerItemCountByTypeAtom = atomFamily((type: TrackerItemType) =>
+export const trackerItemCountByTypeAtom = atomFamily((type: string) =>
   atom((get) => {
     return get(trackerItemsByTypeAtom(type)).length;
   })
@@ -100,17 +100,17 @@ export const trackerItemCountByTypeAtom = atomFamily((type: TrackerItemType) =>
 // ============================================================
 
 /**
- * Upsert a single tracker item.
- * If the item already exists (by ID), it is replaced.
+ * Upsert a single tracker record.
+ * If the record already exists (by ID), it is replaced.
  */
-export const upsertTrackerItemAtom = atom(null, (get, set, item: TrackerItem) => {
+export const upsertTrackerItemAtom = atom(null, (get, set, record: TrackerRecord) => {
   const map = new Map(get(trackerItemsMapAtom));
-  map.set(item.id, item);
+  map.set(record.id, record);
   set(trackerItemsMapAtom, map);
 });
 
 /**
- * Remove a single tracker item by ID.
+ * Remove a single tracker record by ID.
  */
 export const removeTrackerItemAtom = atom(null, (get, set, id: string) => {
   const map = new Map(get(trackerItemsMapAtom));
@@ -120,13 +120,13 @@ export const removeTrackerItemAtom = atom(null, (get, set, id: string) => {
 });
 
 /**
- * Replace all tracker items at once (bulk load).
+ * Replace all tracker records at once (bulk load).
  * Used for initial load and full refresh.
  */
-export const replaceAllTrackerItemsAtom = atom(null, (_get, set, items: TrackerItem[]) => {
-  const map = new Map<string, TrackerItem>();
-  for (const item of items) {
-    map.set(item.id, item);
+export const replaceAllTrackerItemsAtom = atom(null, (_get, set, records: TrackerRecord[]) => {
+  const map = new Map<string, TrackerRecord>();
+  for (const record of records) {
+    map.set(record.id, record);
   }
   set(trackerItemsMapAtom, map);
   set(trackerDataLoadedAtom, true);

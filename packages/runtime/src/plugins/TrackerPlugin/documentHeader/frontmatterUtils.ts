@@ -6,26 +6,6 @@ import jsyaml from 'js-yaml';
 import { globalRegistry } from '../models/TrackerDataModel';
 import { parseDate, formatLocalDateOnly } from '../models/dateUtils';
 
-/**
- * Format an automation schedule object into a human-readable string.
- * Handles interval, daily, and weekly schedule types.
- */
-function formatAutomationSchedule(schedule: any): string {
-  if (!schedule || typeof schedule !== 'object') return schedule ?? '';
-  switch (schedule.type) {
-    case 'interval':
-      return `Every ${schedule.intervalMinutes} min`;
-    case 'daily':
-      return `Daily at ${schedule.time ?? ''}`;
-    case 'weekly': {
-      const days = (schedule.days as string[]) ?? [];
-      return `${days.map((d: string) => d.charAt(0).toUpperCase() + d.slice(1)).join(', ')} at ${schedule.time ?? ''}`;
-    }
-    default:
-      return String(schedule.type ?? schedule);
-  }
-}
-
 export interface TrackerFrontmatter {
   type: string; // Tracker type (plan, decision, bug, etc.)
   data: Record<string, any>; // All tracker field data
@@ -80,12 +60,11 @@ export function extractFrontmatter(content: string): Record<string, any> | null 
 }
 
 /**
- * Detect tracker type and data from frontmatter
+ * Detect tracker type and data from frontmatter.
  *
- * Supports multiple frontmatter formats:
- * - planStatus: { ... } -> type: 'plan'
- * - decisionStatus: { ... } -> type: 'decision'
- * - trackerStatus: { type: 'bug', ... } -> type: 'bug'
+ * Checks generic `trackerStatus` first (the canonical format), then falls
+ * back to legacy per-type keys (`planStatus`, `decisionStatus`, `automationStatus`)
+ * for backward compatibility with existing files.
  */
 export function detectTrackerFromFrontmatter(content: string): TrackerFrontmatter | null {
   const frontmatter = extractFrontmatter(content);
@@ -93,45 +72,11 @@ export function detectTrackerFromFrontmatter(content: string): TrackerFrontmatte
     return null;
   }
 
-  // Check for planStatus
-  if (frontmatter.planStatus && typeof frontmatter.planStatus === 'object') {
-    return {
-      type: 'plan',
-      data: resolveFieldData('plan', frontmatter.planStatus as Record<string, any>),
-    };
-  }
-
-  // Check for decisionStatus
-  if (frontmatter.decisionStatus && typeof frontmatter.decisionStatus === 'object') {
-    return {
-      type: 'decision',
-      data: resolveFieldData('decision', frontmatter.decisionStatus as Record<string, any>),
-    };
-  }
-
-  // Check for automationStatus
-  if (frontmatter.automationStatus && typeof frontmatter.automationStatus === 'object') {
-    const auto = frontmatter.automationStatus as Record<string, any>;
-    const status = auto.enabled
-      ? (auto.lastRunStatus === 'error' ? 'failing' : 'active')
-      : (auto.runCount > 0 ? 'paused' : 'new');
-    return {
-      type: 'automation',
-      data: resolveFieldData('automation', {
-        title: auto.title,
-        status,
-        schedule: formatAutomationSchedule(auto.schedule),
-        lastRun: auto.lastRun,
-        runCount: auto.runCount ?? 0,
-      }),
-    };
-  }
-
-  // Check for generic trackerStatus with type field
+  // Check for trackerStatus with type field (canonical format)
   if (frontmatter.trackerStatus && typeof frontmatter.trackerStatus === 'object') {
     const trackerData = frontmatter.trackerStatus as Record<string, any>;
     if (trackerData.type) {
-      // Top-level fields are canonical. Embedded trackerStatus fields are backward-compat fallback.
+      // Top-level fields are canonical. trackerStatus holds only `type`.
       const { trackerStatus: _, ...topLevelFields } = frontmatter;
       const merged = { ...trackerData, ...topLevelFields };
       return {
@@ -182,75 +127,31 @@ export function updateTrackerInFrontmatter(
 ): string {
   const frontmatter = extractFrontmatter(content) || {};
 
-  // Determine the frontmatter key based on tracker type
-  let frontmatterKey = 'trackerStatus';
-  if (trackerType === 'plan') {
-    frontmatterKey = 'planStatus';
-  } else if (trackerType === 'decision') {
-    frontmatterKey = 'decisionStatus';
-  } else if (trackerType === 'automation') {
-    frontmatterKey = 'automationStatus';
-  }
+  // Always use trackerStatus (canonical format).
+  // trackerStatus holds only `type`. All other fields go at the top level.
+  const existingTracker = (frontmatter.trackerStatus || {}) as Record<string, any>;
 
-  const existingData = (frontmatter[frontmatterKey] || {}) as Record<string, any>;
-
-  // For generic trackerStatus, fields that already exist at the top level of the
-  // frontmatter should be written back there (not inside trackerStatus). This keeps
-  // them in sync with tools like Astro that read top-level frontmatter.
   const topLevelUpdates: Record<string, any> = {};
-  const trackerUpdates: Record<string, any> = {};
+  const trackerStatusData: Record<string, any> = { type: existingTracker.type || trackerType };
 
-  if (frontmatterKey === 'trackerStatus') {
-    // trackerStatus only holds `type`. All other fields go at the top level.
-    // This keeps frontmatter compatible with external tools (Astro, Hugo, etc.)
-    // and eliminates sync issues between embedded and top-level fields.
-    for (const [key, value] of Object.entries(updates)) {
-      if (key === 'type') {
-        trackerUpdates[key] = value;
-      } else {
-        topLevelUpdates[key] = value;
-      }
+  for (const [key, value] of Object.entries(updates)) {
+    if (key === 'type') {
+      trackerStatusData.type = value;
+    } else {
+      topLevelUpdates[key] = value;
     }
-  } else {
-    // For plan/decision, all updates go into the status block (legacy behavior)
-    Object.assign(trackerUpdates, updates);
   }
-
-  // Preserve existing trackerStatus but strip out any fields that are now top-level
-  const cleanedTrackerData: Record<string, any> = { type: existingData.type || trackerUpdates.type };
-  if (trackerUpdates.type) cleanedTrackerData.type = trackerUpdates.type;
 
   const now = formatLocalDateOnly(new Date());
-
-  if (frontmatterKey === 'trackerStatus') {
-    // Set updated at top level; set created if not already present
-    if (!frontmatter.created && !topLevelUpdates.created) {
-      topLevelUpdates.created = now;
-    }
-    topLevelUpdates.updated = now;
-
-    return updateFrontmatter(content, {
-      ...topLevelUpdates,
-      [frontmatterKey]: cleanedTrackerData,
-    });
-  } else {
-    // plan/decision: timestamps live inside the status block
-    const mergedData: Record<string, any> = {
-      ...existingData,
-      ...trackerUpdates,
-      updated: now,
-    };
-    if (!existingData.created && !trackerUpdates.created) {
-      mergedData.created = now;
-      // Also reset updated — it predates created and would cause an inverted display
-      mergedData.updated = now;
-    }
-
-    return updateFrontmatter(content, {
-      ...topLevelUpdates,
-      [frontmatterKey]: mergedData,
-    });
+  if (!frontmatter.created && !topLevelUpdates.created) {
+    topLevelUpdates.created = now;
   }
+  topLevelUpdates.updated = now;
+
+  return updateFrontmatter(content, {
+    ...topLevelUpdates,
+    trackerStatus: trackerStatusData,
+  });
 }
 
 /**

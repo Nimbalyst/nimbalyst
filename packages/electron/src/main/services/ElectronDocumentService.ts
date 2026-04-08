@@ -1376,67 +1376,43 @@ export class ElectronDocumentService implements DocumentService {
       return { item: null, skipped: false, error: 'No valid frontmatter found' };
     }
 
-    // Resolve tracker-specific frontmatter (planStatus, decisionStatus, etc.)
+    // Resolve tracker frontmatter: check trackerStatus (canonical format)
     let trackerData: Record<string, any> | null = null;
     let trackerType = 'plan'; // default
 
-    const typeKeys = ['plan', 'decision', 'bug', 'task', 'idea', 'automation'];
-    for (const type of typeKeys) {
-      const specificKey = `${type}Status`;
-      if (frontmatter[specificKey] && typeof frontmatter[specificKey] === 'object') {
-        trackerData = frontmatter[specificKey] as Record<string, any>;
-        trackerType = type;
-        break;
-      }
-    }
-
-    // Also check generic trackerStatus
-    if (!trackerData && frontmatter.trackerStatus && typeof frontmatter.trackerStatus === 'object') {
-      trackerData = frontmatter.trackerStatus as Record<string, any>;
-      trackerType = (trackerData.type as string) || 'plan';
+    if (frontmatter.trackerStatus && typeof frontmatter.trackerStatus === 'object') {
+      const ts = frontmatter.trackerStatus as Record<string, any>;
+      trackerType = (ts.type as string) || 'plan';
+      // Top-level fields are canonical, trackerStatus holds only type
+      const { trackerStatus: _, ...topLevel } = frontmatter;
+      trackerData = { ...ts, ...topLevel };
     }
 
     if (!trackerData) {
-      return { item: null, skipped: false, error: 'No tracker frontmatter found (expected planStatus, decisionStatus, etc.)' };
+      return { item: null, skipped: false, error: 'No tracker frontmatter found (expected trackerStatus with type field)' };
     }
 
     // Extract markdown body (everything after frontmatter)
     const bodyMatch = fileContent.match(/^---\s*\n[\s\S]*?\n---\s*\n([\s\S]*)$/);
     const markdownBody = bodyMatch ? bodyMatch[1].trim() : '';
 
-    // Build item metadata
+    // Build title from frontmatter or file name
     const title = (trackerData.title as string)
       || (frontmatter.title as string)
       || relativePath.split('/').pop()?.replace(/\.md$/, '') || 'Untitled';
-    const status = ((trackerData.status as string) || 'to-do').toLowerCase();
-    const priority = ((trackerData.priority as string) || 'medium').toLowerCase();
-    const owner = (trackerData.owner as string) || undefined;
-    const tags = (trackerData.tags as string[]) || (frontmatter.tags as string[]) || undefined;
-    const progress = trackerData.progress as number | undefined;
-    const dueDate = (trackerData.dueDate as string) || undefined;
 
     // Generate stable ID from file path
     const prefix = trackerType.substring(0, 3);
     const hash = crypto.createHash('md5').update(relativePath).digest('hex').substring(0, 10);
     const id = `${prefix}_imp_${hash}`;
 
-    // Build JSONB data
-    const data: Record<string, any> = {
-      title,
-      status,
-      priority,
-    };
-    if (trackerData.description) data.description = trackerData.description;
-    if (owner) data.owner = owner;
-    if (tags && tags.length > 0) data.tags = tags;
-    if (progress !== undefined) data.progress = progress;
-    if (dueDate) data.dueDate = dueDate;
-    if (trackerData.created) data.created = trackerData.created;
-
-    // Collect custom fields
-    const builtinFields = new Set(['title', 'status', 'priority', 'owner', 'tags', 'progress', 'dueDate', 'created', 'updated', 'planId', 'planType', 'type', 'description', 'startDate', 'stakeholders', 'agentSessions']);
+    // Build JSONB data: ALL frontmatter fields go into the data bag generically.
+    // No privileged field vocabulary -- the schema determines which fields matter.
+    const systemKeys = new Set(['type', 'trackerStatus']);
+    const data: Record<string, any> = { title };
     for (const [key, value] of Object.entries(trackerData)) {
-      if (!builtinFields.has(key) && value !== undefined && value !== null) {
+      if (systemKeys.has(key)) continue;
+      if (value !== undefined && value !== null) {
         data[key] = value;
       }
     }

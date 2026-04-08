@@ -816,11 +816,14 @@ function TrackerPlugin(): JSX.Element | null {
 
   // Group fields for layout
   const fields = model?.fields || [];
-  const titleField = fields.find(f => f.name === 'title');
-  const statusField = fields.find(f => f.name === 'status');
-  const priorityField = fields.find(f => f.name === 'priority');
+  const titleFieldName = model?.roles?.title ?? 'title';
+  const statusFieldName = model?.roles?.workflowStatus ?? 'status';
+  const priorityFieldName = model?.roles?.priority ?? 'priority';
+  const titleField = fields.find(f => f.name === titleFieldName);
+  const statusField = fields.find(f => f.name === statusFieldName);
+  const priorityField = fields.find(f => f.name === priorityFieldName);
   const otherFields = fields.filter(f =>
-    f.name !== 'title' && f.name !== 'status' && f.name !== 'priority'
+    f.name !== titleFieldName && f.name !== statusFieldName && f.name !== priorityFieldName
   );
 
   return (
@@ -954,9 +957,9 @@ export { TrackerDocumentHeader, shouldRenderTrackerHeader } from './documentHead
 
 // Export data models
 export { ModelLoader, loadBuiltinTrackers } from './models/ModelLoader';
-export type { TrackerDataModel, FieldDefinition, TrackerSyncPolicy, TrackerSyncMode } from './models/TrackerDataModel';
+export type { TrackerDataModel, FieldDefinition, TrackerSyncPolicy, TrackerSyncMode, TrackerSchemaRole } from './models/TrackerDataModel';
 export { parseTrackerYAML } from './models/YAMLParser';
-export { globalRegistry } from './models/TrackerDataModel';
+export { globalRegistry, getRoleField, getFieldByRole } from './models/TrackerDataModel';
 
 // Export components
 export { StatusBar } from './components/StatusBar';

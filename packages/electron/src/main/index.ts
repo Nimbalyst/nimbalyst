@@ -110,6 +110,7 @@ import { registerFeatureUsageHandlers } from "./ipc/FeatureUsageHandlers.ts";
 import { FeatureUsageService, FEATURES } from "./services/FeatureUsageService.ts";
 import { shutdownStytchAuth, handleAuthCallback } from './services/StytchAuthService';
 import { registerTrackerSyncHandlers, initializeTrackerSync } from './services/TrackerSyncManager';
+import { initTrackerSchemaService, updateTrackerSchemaWorkspace } from './services/TrackerSchemaService';
 import { registerTeamHandlers, autoMatchTeamForWorkspace } from './services/TeamService';
 import { registerOrgKeyHandlers } from './services/OrgKeyService';
 import { registerDocumentSyncHandlers } from './ipc/DocumentSyncHandlers';
@@ -1076,6 +1077,7 @@ app.whenReady().then(async () => {
     registerExportHandlers();
     registerShareHandlers();
     registerTrackerSyncHandlers();
+    initTrackerSchemaService(); // Register IPC handlers + load built-in schemas
     registerTeamHandlers();
     registerOrgKeyHandlers();
     registerDocumentSyncHandlers();
@@ -1569,6 +1571,7 @@ app.whenReady().then(async () => {
             // inherit synchronous git/process work on the startup tick.
             void autoMatchTeamForWorkspace(workspacePath).catch(() => {});
             void initializeTrackerSync(workspacePath).catch(() => {});
+            updateTrackerSchemaWorkspace(workspacePath);
         }, 0);
 
         window.once('ready-to-show', () => {

@@ -73,8 +73,8 @@ export function formatDateTimeDisplay(value: any): { display: string; title: str
   return { display, title };
 }
 
-/** Fields that should always render as user pickers regardless of declared type */
-const USER_FIELD_NAMES = new Set(['owner', 'assigneeEmail', 'reporterEmail']);
+// User field rendering is now driven by the schema's field type declaration (type: 'user')
+// rather than a hardcoded name list.
 
 export const TrackerFieldEditor: React.FC<TrackerFieldEditorProps> = ({
   field,
@@ -85,8 +85,8 @@ export const TrackerFieldEditor: React.FC<TrackerFieldEditorProps> = ({
 }) => {
   const fieldId = `field-${field.name}`;
   const label = formatFieldLabel(field.name);
-  // Override field type for known user fields (ModelLoader may declare them as 'string')
-  const effectiveType = USER_FIELD_NAMES.has(field.name) ? 'user' : field.type;
+  // Field type is authoritative from the schema definition
+  const effectiveType = field.type;
 
   const wrapperClasses = layout === 'horizontal'
     ? "flex flex-row items-center gap-2 min-w-[120px]"

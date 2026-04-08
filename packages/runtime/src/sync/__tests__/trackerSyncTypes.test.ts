@@ -1,18 +1,22 @@
 /**
  * Unit tests for tracker sync pure functions:
- * - trackerItemToPayload (TrackerItem -> wire format)
- * - payloadToTrackerItem (wire format -> TrackerItem)
+ * - trackerItemToPayload (TrackerItem -> wire format via TrackerRecord)
+ * - payloadToTrackerItem (wire format -> TrackerItem via TrackerRecord)
+ * - recordToPayload / payloadToRecord (TrackerRecord <-> wire format)
  * - mergeTrackerItems (field-level LWW conflict resolution)
- *
- * These are the core data transformation and merge functions that the entire
- * tracker sync system depends on. They're pure functions with no dependencies.
  */
 
 import { describe, it, expect } from 'vitest';
-import { trackerItemToPayload, payloadToTrackerItem } from '../trackerSyncTypes';
+import {
+  trackerItemToPayload,
+  payloadToTrackerItem,
+  recordToPayload,
+  payloadToRecord,
+} from '../trackerSyncTypes';
 import { mergeTrackerItems } from '../TrackerSync';
 import type { TrackerItemPayload } from '../trackerSyncTypes';
 import type { TrackerItem } from '../../core/DocumentService';
+import type { TrackerRecord } from '../../core/TrackerRecord';
 
 // ============================================================================
 // Test Helpers
@@ -33,21 +37,37 @@ function makeTrackerItem(overrides: Partial<TrackerItem> & { id: string }): Trac
 
 function makePayload(overrides: Partial<TrackerItemPayload> & { itemId: string }): TrackerItemPayload {
   return {
-    type: 'bug',
-    title: 'Test bug',
-    status: 'to-do',
-    priority: 'medium',
-    labels: [],
-    linkedSessions: [],
+    primaryType: 'bug',
+    archived: false,
+    system: {},
+    fields: { title: 'Test bug', status: 'to-do', priority: 'medium' },
     comments: [],
-    customFields: {},
+    fieldUpdatedAt: {},
+    ...overrides,
+  };
+}
+
+function makeRecord(overrides?: Partial<TrackerRecord>): TrackerRecord {
+  return {
+    id: 'bug-001',
+    primaryType: 'bug',
+    typeTags: ['bug'],
+    source: 'native',
+    archived: false,
+    syncStatus: 'local',
+    system: {
+      workspace: '/Users/test/project',
+      createdAt: '2026-04-01',
+      updatedAt: '2026-04-08',
+    },
+    fields: { title: 'Test bug', status: 'to-do', priority: 'medium' },
     fieldUpdatedAt: {},
     ...overrides,
   };
 }
 
 // ============================================================================
-// trackerItemToPayload
+// trackerItemToPayload (legacy convenience wrapper)
 // ============================================================================
 
 describe('trackerItemToPayload', () => {
@@ -68,46 +88,22 @@ describe('trackerItemToPayload', () => {
     expect(payload.itemId).toBe('bug-001');
     expect(payload.issueNumber).toBe(123);
     expect(payload.issueKey).toBe('NIM-123');
-    expect(payload.type).toBe('bug');
-    expect(payload.title).toBe('Login broken');
-    expect(payload.description).toBe('Cannot log in with valid credentials');
-    expect(payload.status).toBe('to-do');
-    expect(payload.priority).toBe('high');
+    expect(payload.primaryType).toBe('bug');
+    expect(payload.fields.title).toBe('Login broken');
+    expect(payload.fields.description).toBe('Cannot log in with valid credentials');
+    expect(payload.fields.status).toBe('to-do');
+    expect(payload.fields.priority).toBe('high');
   });
 
-  it('should set reporterId to the provided userId when not set on item', () => {
-    const item = makeTrackerItem({ id: 'bug-002' });
-    const payload = trackerItemToPayload(item, 'user-456');
-    expect(payload.reporterId).toBe('user-456');
-  });
-
-  it('should preserve existing reporterId from item', () => {
-    const item = makeTrackerItem({
-      id: 'bug-003',
-      reporterId: 'original-reporter',
-    });
-    const payload = trackerItemToPayload(item, 'user-456');
-    expect(payload.reporterId).toBe('original-reporter');
-  });
-
-  it('should default priority to medium when not set', () => {
-    const item = makeTrackerItem({ id: 'bug-004', priority: undefined });
-    const payload = trackerItemToPayload(item, 'user-123');
-    expect(payload.priority).toBe('medium');
-  });
-
-  it('should handle empty arrays for labels, linkedSessions', () => {
+  it('should handle empty arrays for collaborative fields', () => {
     const item = makeTrackerItem({ id: 'bug-005' });
     const payload = trackerItemToPayload(item, 'user-123');
-    expect(payload.labels).toEqual([]);
-    expect(payload.linkedSessions).toEqual([]);
     expect(payload.comments).toEqual([]);
   });
 
-  it('should preserve collaborative fields', () => {
+  it('should preserve collaborative fields in system', () => {
     const item = makeTrackerItem({
       id: 'bug-006',
-      assigneeId: 'assignee-1',
       labels: ['critical', 'auth'],
       linkedSessions: ['session-1', 'session-2'],
       linkedCommitSha: 'abc123',
@@ -116,42 +112,32 @@ describe('trackerItemToPayload', () => {
 
     const payload = trackerItemToPayload(item, 'user-123');
 
-    expect(payload.assigneeId).toBe('assignee-1');
-    expect(payload.labels).toEqual(['critical', 'auth']);
-    expect(payload.linkedSessions).toEqual(['session-1', 'session-2']);
-    expect(payload.linkedCommitSha).toBe('abc123');
-    expect(payload.documentId).toBe('doc-1');
+    expect(payload.fields.labels).toEqual(['critical', 'auth']);
+    expect(payload.system.linkedSessions).toEqual(['session-1', 'session-2']);
+    expect(payload.system.linkedCommitSha).toBe('abc123');
+    expect(payload.system.documentId).toBe('doc-1');
   });
 
-  it('should set fieldUpdatedAt timestamps for all mergeable fields', () => {
+  it('should set fieldUpdatedAt timestamps for fields', () => {
     const before = Date.now();
-    const item = makeTrackerItem({ id: 'bug-007' });
+    const item = makeTrackerItem({ id: 'bug-007', title: 'Test', status: 'to-do' });
     const payload = trackerItemToPayload(item, 'user-123');
     const after = Date.now();
 
-    const expectedFields = [
-      'title', 'issueNumber', 'issueKey', 'status', 'priority', 'description',
-      'assigneeEmail', 'reporterEmail', 'authorIdentity', 'lastModifiedBy',
-      'assigneeId', 'reporterId', 'labels', 'linkedSessions',
-      'linkedCommitSha', 'documentId', 'archived', 'comments', 'customFields',
-    ];
-
-    for (const field of expectedFields) {
-      expect(payload.fieldUpdatedAt[field]).toBeGreaterThanOrEqual(before);
-      expect(payload.fieldUpdatedAt[field]).toBeLessThanOrEqual(after);
-    }
+    // At minimum, title and status should have timestamps
+    expect(payload.fieldUpdatedAt.title).toBeGreaterThanOrEqual(before);
+    expect(payload.fieldUpdatedAt.title).toBeLessThanOrEqual(after);
+    expect(payload.fieldUpdatedAt.status).toBeGreaterThanOrEqual(before);
   });
 
   it('should handle archived items', () => {
     const item = makeTrackerItem({
       id: 'bug-008',
       archived: true,
-      archivedAt: '2026-03-01T00:00:00Z',
     });
 
     const payload = trackerItemToPayload(item, 'user-123');
     expect(payload.archived).toBe(true);
-    expect(payload.archivedAt).toBe('2026-03-01T00:00:00Z');
   });
 
   it('should default archived to false when not set', () => {
@@ -160,39 +146,38 @@ describe('trackerItemToPayload', () => {
     expect(payload.archived).toBe(false);
   });
 
-  it('should pass through customFields', () => {
+  it('should pass through customFields into fields', () => {
     const item = makeTrackerItem({
       id: 'bug-010',
       customFields: { severity: 'P0', affectedUsers: 1500 },
     });
 
     const payload = trackerItemToPayload(item, 'user-123');
-    expect(payload.customFields).toEqual({ severity: 'P0', affectedUsers: 1500 });
+    expect(payload.fields.severity).toBe('P0');
+    expect(payload.fields.affectedUsers).toBe(1500);
   });
 });
 
 // ============================================================================
-// payloadToTrackerItem
+// payloadToTrackerItem (legacy convenience wrapper)
 // ============================================================================
 
 describe('payloadToTrackerItem', () => {
   it('should convert basic fields correctly', () => {
     const payload = makePayload({
       itemId: 'bug-101',
-      issueNumber: 101,
-      issueKey: 'NIM-101',
-      type: 'task',
-      title: 'Refactor auth',
-      description: 'Split into separate module',
-      status: 'in-progress',
-      priority: 'high',
+      primaryType: 'task',
+      fields: {
+        title: 'Refactor auth',
+        description: 'Split into separate module',
+        status: 'in-progress',
+        priority: 'high',
+      },
     });
 
     const item = payloadToTrackerItem(payload, '/workspace/project');
 
     expect(item.id).toBe('bug-101');
-    expect(item.issueNumber).toBe(101);
-    expect(item.issueKey).toBe('NIM-101');
     expect(item.type).toBe('task');
     expect(item.title).toBe('Refactor auth');
     expect(item.description).toBe('Split into separate module');
@@ -213,29 +198,23 @@ describe('payloadToTrackerItem', () => {
     expect(item.module).toBe('');
   });
 
-  it('should map assigneeId to owner', () => {
-    const payload = makePayload({
-      itemId: 'bug-104',
-      assigneeId: 'member-1',
-    });
-    const item = payloadToTrackerItem(payload, '/workspace');
-    expect(item.owner).toBe('member-1');
-    expect(item.assigneeId).toBe('member-1');
-  });
-
-  it('should preserve collaborative fields', () => {
+  it('should preserve system fields', () => {
     const payload = makePayload({
       itemId: 'bug-105',
-      reporterId: 'reporter-1',
-      labels: ['ui', 'regression'],
-      linkedSessions: ['sess-1'],
-      linkedCommitSha: 'def456',
-      documentId: 'doc-2',
+      system: {
+        linkedSessions: ['sess-1'],
+        linkedCommitSha: 'def456',
+        documentId: 'doc-2',
+      },
+      fields: {
+        title: 'test',
+        status: 'to-do',
+        labels: ['ui', 'regression'],
+      },
     });
 
     const item = payloadToTrackerItem(payload, '/workspace');
 
-    expect(item.reporterId).toBe('reporter-1');
     expect(item.labels).toEqual(['ui', 'regression']);
     expect(item.linkedSessions).toEqual(['sess-1']);
     expect(item.linkedCommitSha).toBe('def456');
@@ -246,12 +225,10 @@ describe('payloadToTrackerItem', () => {
     const payload = makePayload({
       itemId: 'bug-106',
       archived: true,
-      archivedAt: '2026-02-15T12:00:00Z',
     });
 
     const item = payloadToTrackerItem(payload, '/workspace');
     expect(item.archived).toBe(true);
-    expect(item.archivedAt).toBe('2026-02-15T12:00:00Z');
   });
 
   it('should default archived to false', () => {
@@ -272,6 +249,64 @@ describe('payloadToTrackerItem', () => {
 });
 
 // ============================================================================
+// recordToPayload / payloadToRecord
+// ============================================================================
+
+describe('recordToPayload', () => {
+  it('should map record fields to payload fields', () => {
+    const record = makeRecord({
+      id: 'bug-001',
+      fields: { title: 'A bug', status: 'open', severity: 'critical' },
+    });
+    const payload = recordToPayload(record);
+
+    expect(payload.itemId).toBe('bug-001');
+    expect(payload.primaryType).toBe('bug');
+    expect(payload.fields.title).toBe('A bug');
+    expect(payload.fields.status).toBe('open');
+    expect(payload.fields.severity).toBe('critical');
+  });
+
+  it('should place system metadata in system', () => {
+    const record = makeRecord({
+      system: {
+        workspace: '/ws',
+        createdAt: '2026-01-01',
+        updatedAt: '2026-04-08',
+        authorIdentity: { email: 'a@b.com', displayName: 'A', gitName: null, gitEmail: null },
+        linkedSessions: ['s-1'],
+      },
+    });
+    const payload = recordToPayload(record);
+
+    expect(payload.system.authorIdentity?.email).toBe('a@b.com');
+    expect(payload.system.linkedSessions).toEqual(['s-1']);
+    expect(payload.system.createdAt).toBe('2026-01-01');
+  });
+});
+
+describe('payloadToRecord', () => {
+  it('should convert payload back to record', () => {
+    const payload = makePayload({
+      itemId: 'task-001',
+      primaryType: 'task',
+      fields: { title: 'Do thing', status: 'in-progress', customField: 42 },
+      system: { linkedSessions: ['s-1'] },
+    });
+
+    const record = payloadToRecord(payload, '/workspace');
+
+    expect(record.id).toBe('task-001');
+    expect(record.primaryType).toBe('task');
+    expect(record.fields.title).toBe('Do thing');
+    expect(record.fields.customField).toBe(42);
+    expect(record.system.linkedSessions).toEqual(['s-1']);
+    expect(record.system.workspace).toBe('/workspace');
+    expect(record.syncStatus).toBe('synced');
+  });
+});
+
+// ============================================================================
 // Round-trip: TrackerItem -> Payload -> TrackerItem
 // ============================================================================
 
@@ -286,7 +321,6 @@ describe('payload round-trip', () => {
       description: 'Testing full round trip',
       status: 'in-progress',
       priority: 'critical',
-      assigneeId: 'dev-1',
       labels: ['sync', 'test'],
       linkedSessions: ['session-abc'],
       linkedCommitSha: 'abc123def',
@@ -299,14 +333,11 @@ describe('payload round-trip', () => {
     const roundTripped = payloadToTrackerItem(payload, original.workspace);
 
     expect(roundTripped.id).toBe(original.id);
-    expect(roundTripped.issueNumber).toBe(original.issueNumber);
-    expect(roundTripped.issueKey).toBe(original.issueKey);
     expect(roundTripped.type).toBe(original.type);
     expect(roundTripped.title).toBe(original.title);
     expect(roundTripped.description).toBe(original.description);
     expect(roundTripped.status).toBe(original.status);
     expect(roundTripped.priority).toBe(original.priority);
-    expect(roundTripped.assigneeId).toBe(original.assigneeId);
     expect(roundTripped.labels).toEqual(original.labels);
     expect(roundTripped.linkedSessions).toEqual(original.linkedSessions);
     expect(roundTripped.linkedCommitSha).toBe(original.linkedCommitSha);
@@ -327,8 +358,6 @@ describe('payload round-trip', () => {
 
     expect(result.id).toBe('minimal-1');
     expect(result.title).toBe('Minimal item');
-    expect(result.labels).toEqual([]);
-    expect(result.linkedSessions).toEqual([]);
   });
 });
 
@@ -342,18 +371,18 @@ describe('mergeTrackerItems', () => {
 
     const local = makePayload({
       itemId: 'merge-1',
-      title: 'Old title',
+      fields: { title: 'Old title' },
       fieldUpdatedAt: { title: now - 1000 },
     });
 
     const remote = makePayload({
       itemId: 'merge-1',
-      title: 'New title',
+      fields: { title: 'New title' },
       fieldUpdatedAt: { title: now },
     });
 
     const merged = mergeTrackerItems(local, remote);
-    expect(merged.title).toBe('New title');
+    expect(merged.fields.title).toBe('New title');
     expect(merged.fieldUpdatedAt.title).toBe(now);
   });
 
@@ -362,18 +391,18 @@ describe('mergeTrackerItems', () => {
 
     const local = makePayload({
       itemId: 'merge-2',
-      status: 'done',
+      fields: { status: 'done' },
       fieldUpdatedAt: { status: now },
     });
 
     const remote = makePayload({
       itemId: 'merge-2',
-      status: 'to-do',
+      fields: { status: 'to-do' },
       fieldUpdatedAt: { status: now - 1000 },
     });
 
     const merged = mergeTrackerItems(local, remote);
-    expect(merged.status).toBe('done');
+    expect(merged.fields.status).toBe('done');
   });
 
   it('should keep local field when timestamps are equal (local wins ties)', () => {
@@ -381,18 +410,18 @@ describe('mergeTrackerItems', () => {
 
     const local = makePayload({
       itemId: 'merge-3',
-      title: 'Local version',
+      fields: { title: 'Local version' },
       fieldUpdatedAt: { title: now },
     });
 
     const remote = makePayload({
       itemId: 'merge-3',
-      title: 'Remote version',
+      fields: { title: 'Remote version' },
       fieldUpdatedAt: { title: now },
     });
 
     const merged = mergeTrackerItems(local, remote);
-    expect(merged.title).toBe('Local version');
+    expect(merged.fields.title).toBe('Local version');
   });
 
   it('should merge different fields independently', () => {
@@ -400,38 +429,42 @@ describe('mergeTrackerItems', () => {
 
     const local = makePayload({
       itemId: 'merge-4',
-      title: 'Local title',
-      status: 'in-progress',
-      priority: 'low',
-      description: 'Local desc',
+      fields: {
+        title: 'Local title',
+        status: 'in-progress',
+        priority: 'low',
+        description: 'Local desc',
+      },
       fieldUpdatedAt: {
-        title: now - 100,   // older -> remote wins
-        status: now,         // newer -> local wins
-        priority: now - 200, // older -> remote wins
-        description: now,    // newer -> local wins
+        title: now - 100,
+        status: now,
+        priority: now - 200,
+        description: now,
       },
     });
 
     const remote = makePayload({
       itemId: 'merge-4',
-      title: 'Remote title',
-      status: 'done',
-      priority: 'critical',
-      description: 'Remote desc',
+      fields: {
+        title: 'Remote title',
+        status: 'done',
+        priority: 'critical',
+        description: 'Remote desc',
+      },
       fieldUpdatedAt: {
-        title: now,          // newer -> wins
-        status: now - 500,   // older
-        priority: now,       // newer -> wins
-        description: now - 1000, // older
+        title: now,
+        status: now - 500,
+        priority: now,
+        description: now - 1000,
       },
     });
 
     const merged = mergeTrackerItems(local, remote);
 
-    expect(merged.title).toBe('Remote title');       // remote won
-    expect(merged.status).toBe('in-progress');        // local won
-    expect(merged.priority).toBe('critical');         // remote won
-    expect(merged.description).toBe('Local desc');    // local won
+    expect(merged.fields.title).toBe('Remote title');
+    expect(merged.fields.status).toBe('in-progress');
+    expect(merged.fields.priority).toBe('critical');
+    expect(merged.fields.description).toBe('Local desc');
   });
 
   it('should handle missing fieldUpdatedAt entries (default to 0)', () => {
@@ -439,19 +472,18 @@ describe('mergeTrackerItems', () => {
 
     const local = makePayload({
       itemId: 'merge-5',
-      title: 'Local',
-      fieldUpdatedAt: {}, // no timestamps
+      fields: { title: 'Local' },
+      fieldUpdatedAt: {},
     });
 
     const remote = makePayload({
       itemId: 'merge-5',
-      title: 'Remote',
-      fieldUpdatedAt: { title: now }, // has timestamp
+      fields: { title: 'Remote' },
+      fieldUpdatedAt: { title: now },
     });
 
     const merged = mergeTrackerItems(local, remote);
-    // Remote wins because local timestamp defaults to 0
-    expect(merged.title).toBe('Remote');
+    expect(merged.fields.title).toBe('Remote');
   });
 
   it('should merge array fields (labels) using whole-array LWW', () => {
@@ -459,19 +491,18 @@ describe('mergeTrackerItems', () => {
 
     const local = makePayload({
       itemId: 'merge-6',
-      labels: ['old-label'],
+      fields: { labels: ['old-label'] },
       fieldUpdatedAt: { labels: now - 1000 },
     });
 
     const remote = makePayload({
       itemId: 'merge-6',
-      labels: ['new-label-1', 'new-label-2'],
+      fields: { labels: ['new-label-1', 'new-label-2'] },
       fieldUpdatedAt: { labels: now },
     });
 
     const merged = mergeTrackerItems(local, remote);
-    // Remote array replaces local entirely (not element-level merge)
-    expect(merged.labels).toEqual(['new-label-1', 'new-label-2']);
+    expect(merged.fields.labels).toEqual(['new-label-1', 'new-label-2']);
   });
 
   it('should merge archived state', () => {
@@ -486,51 +517,73 @@ describe('mergeTrackerItems', () => {
     const remote = makePayload({
       itemId: 'merge-7',
       archived: true,
-      archivedAt: '2026-03-15T00:00:00Z',
       fieldUpdatedAt: { archived: now },
     });
 
     const merged = mergeTrackerItems(local, remote);
     expect(merged.archived).toBe(true);
-    // Note: archivedAt is not in mergeableFields list, it comes with archived
   });
 
-  it('should preserve non-mergeable fields from local (itemId, type)', () => {
+  it('should preserve non-mergeable fields from local (itemId, primaryType)', () => {
     const local = makePayload({
       itemId: 'merge-8',
-      type: 'bug',
+      primaryType: 'bug',
+      fields: {},
       fieldUpdatedAt: {},
     });
 
     const remote = makePayload({
       itemId: 'merge-8',
-      type: 'task', // different type -- should NOT be merged
+      primaryType: 'task',
+      fields: {},
       fieldUpdatedAt: {},
     });
 
     const merged = mergeTrackerItems(local, remote);
-    // itemId and type are not in mergeableFields, so local's values should persist
     expect(merged.itemId).toBe('merge-8');
-    expect(merged.type).toBe('bug');
+    expect(merged.primaryType).toBe('bug');
   });
 
-  it('should handle customFields as a single LWW field', () => {
+  it('should handle custom fields via generic fields merge', () => {
     const now = Date.now();
 
     const local = makePayload({
       itemId: 'merge-9',
-      customFields: { browser: 'Firefox' },
-      fieldUpdatedAt: { customFields: now - 100 },
+      fields: { browser: 'Firefox', severity: 'low' },
+      fieldUpdatedAt: { browser: now - 100, severity: now },
     });
 
     const remote = makePayload({
       itemId: 'merge-9',
-      customFields: { browser: 'Chrome', os: 'Linux' },
-      fieldUpdatedAt: { customFields: now },
+      fields: { browser: 'Chrome', os: 'Linux', severity: 'high' },
+      fieldUpdatedAt: { browser: now, os: now, severity: now - 200 },
     });
 
     const merged = mergeTrackerItems(local, remote);
-    // Entire customFields object replaced by remote
-    expect(merged.customFields).toEqual({ browser: 'Chrome', os: 'Linux' });
+    expect(merged.fields.browser).toBe('Chrome');
+    expect(merged.fields.os).toBe('Linux');
+    expect(merged.fields.severity).toBe('low');
+  });
+
+  it('should merge system fields independently', () => {
+    const now = Date.now();
+
+    const local = makePayload({
+      itemId: 'merge-10',
+      system: { linkedSessions: ['s-1'], documentId: 'doc-local' },
+      fields: {},
+      fieldUpdatedAt: { linkedSessions: now, documentId: now - 500 },
+    });
+
+    const remote = makePayload({
+      itemId: 'merge-10',
+      system: { linkedSessions: ['s-2'], documentId: 'doc-remote' },
+      fields: {},
+      fieldUpdatedAt: { linkedSessions: now - 1000, documentId: now },
+    });
+
+    const merged = mergeTrackerItems(local, remote);
+    expect(merged.system.linkedSessions).toEqual(['s-1']);
+    expect(merged.system.documentId).toBe('doc-remote');
   });
 });

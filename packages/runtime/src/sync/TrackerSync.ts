@@ -91,39 +91,64 @@ async function decryptPayload(
 
 /**
  * Merge two versions of the same tracker item using per-field Last-Write-Wins.
- * For each field, the version with the more recent `fieldUpdatedAt` timestamp wins.
- * For array fields (labels, linkedSessions, comments), entire array LWW is used
- * (not element-level merge).
+ * For each field key, the version with the more recent `fieldUpdatedAt` timestamp wins.
+ * This is fully generic -- it merges all keys in `fields` and `system` without
+ * hardcoding field names.
  */
 export function mergeTrackerItems(
   local: TrackerItemPayload,
   remote: TrackerItemPayload
 ): TrackerItemPayload {
-  const merged: TrackerItemPayload = { ...local };
+  const mergedFields: Record<string, unknown> = { ...local.fields };
+  const mergedSystem = { ...local.system };
   const mergedTimestamps: Record<string, number> = { ...local.fieldUpdatedAt };
 
-  const mergeableFields: (keyof TrackerItemPayload)[] = [
-    'title', 'description', 'status', 'priority',
-    'issueNumber', 'issueKey',
-    'assigneeEmail', 'reporterEmail', 'authorIdentity', 'lastModifiedBy',
-    'assigneeId', 'reporterId', 'labels', 'linkedSessions',
-    'linkedCommitSha', 'documentId', 'comments', 'customFields',
-    'archived', 'archivedAt',
-  ];
-
-  for (const field of mergeableFields) {
-    const localTs = local.fieldUpdatedAt[field] ?? 0;
-    const remoteTs = remote.fieldUpdatedAt[field] ?? 0;
-
+  // Merge user-defined fields
+  const allFieldKeys = new Set([
+    ...Object.keys(local.fields),
+    ...Object.keys(remote.fields),
+  ]);
+  for (const key of allFieldKeys) {
+    const localTs = local.fieldUpdatedAt[key] ?? 0;
+    const remoteTs = remote.fieldUpdatedAt[key] ?? 0;
     if (remoteTs > localTs) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (merged as any)[field] = remote[field];
-      mergedTimestamps[field] = remoteTs;
+      mergedFields[key] = remote.fields[key];
+      mergedTimestamps[key] = remoteTs;
     }
-    // If equal timestamps, local wins (arbitrary but deterministic)
   }
 
-  merged.fieldUpdatedAt = mergedTimestamps;
+  // Merge system fields
+  const systemKeys = [
+    'authorIdentity', 'lastModifiedBy', 'createdByAgent',
+    'linkedSessions', 'linkedCommitSha', 'documentId',
+    'createdAt', 'updatedAt',
+  ] as const;
+  for (const key of systemKeys) {
+    const localTs = local.fieldUpdatedAt[key] ?? 0;
+    const remoteTs = remote.fieldUpdatedAt[key] ?? 0;
+    if (remoteTs > localTs) {
+      (mergedSystem as any)[key] = (remote.system as any)[key];
+      mergedTimestamps[key] = remoteTs;
+    }
+  }
+
+  // Merge top-level routing fields
+  const routingKeys = ['issueNumber', 'issueKey', 'archived', 'comments'] as const;
+  const merged: TrackerItemPayload = {
+    ...local,
+    fields: mergedFields,
+    system: mergedSystem,
+    fieldUpdatedAt: mergedTimestamps,
+  };
+  for (const key of routingKeys) {
+    const localTs = local.fieldUpdatedAt[key] ?? 0;
+    const remoteTs = remote.fieldUpdatedAt[key] ?? 0;
+    if (remoteTs > localTs) {
+      (merged as any)[key] = (remote as any)[key];
+      mergedTimestamps[key] = remoteTs;
+    }
+  }
+
   return merged;
 }
 

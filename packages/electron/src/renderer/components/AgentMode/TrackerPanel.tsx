@@ -146,16 +146,16 @@ const TrackerItemRow: React.FC<TrackerItemRowProps> = React.memo(({ itemId, onNa
 
   if (!item) return null;
 
-  const color = TYPE_COLORS[item.type] || '#6b7280';
-  const icon = TYPE_ICONS[item.type] || 'label';
-  const title = item.title || 'Untitled';
-  const status = item.status;
+  const color = TYPE_COLORS[item.primaryType] || '#6b7280';
+  const icon = TYPE_ICONS[item.primaryType] || 'label';
+  const title = (item.fields.title as string) || 'Untitled';
+  const status = item.fields.status as string;
 
   return (
     <button
       className="tracker-item-row w-full flex items-center gap-2 px-2 py-1.5 rounded bg-transparent border-none cursor-pointer text-left hover:bg-[var(--nim-bg-hover)] transition-colors"
       onClick={handleClick}
-      title={`${item.type}: ${title}`}
+      title={`${item.primaryType}: ${title}`}
       data-testid="tracker-item-row"
     >
       <MaterialSymbol

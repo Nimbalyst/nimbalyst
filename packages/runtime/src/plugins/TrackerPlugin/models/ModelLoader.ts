@@ -85,6 +85,15 @@ const builtinTrackers: TrackerDataModel[] = [
       },
     ],
     inlineTemplate: '{icon} {title} {status} {priority}',
+    roles: {
+      title: 'title',
+      workflowStatus: 'status',
+      priority: 'priority',
+      assignee: 'owner',
+      tags: 'tags',
+      progress: 'progress',
+      startDate: 'startDate',
+    },
   },
   {
     type: 'decision',
@@ -138,6 +147,13 @@ const builtinTrackers: TrackerDataModel[] = [
       },
     ],
     inlineTemplate: '{icon} {title} {status}',
+    roles: {
+      title: 'title',
+      workflowStatus: 'status',
+      priority: 'priority',
+      assignee: 'owner',
+      tags: 'tags',
+    },
   },
   {
     type: 'bug',
@@ -176,6 +192,12 @@ const builtinTrackers: TrackerDataModel[] = [
       { name: 'description', type: 'text' },
     ],
     inlineTemplate: '{icon} {title} {status} {priority}',
+    roles: {
+      title: 'title',
+      workflowStatus: 'status',
+      priority: 'priority',
+      assignee: 'owner',
+    },
   },
   {
     type: 'task',
@@ -214,6 +236,12 @@ const builtinTrackers: TrackerDataModel[] = [
       { name: 'description', type: 'text' },
     ],
     inlineTemplate: '{icon} {title} {status} {owner}',
+    roles: {
+      title: 'title',
+      workflowStatus: 'status',
+      priority: 'priority',
+      assignee: 'owner',
+    },
   },
   {
     type: 'idea',
@@ -240,6 +268,10 @@ const builtinTrackers: TrackerDataModel[] = [
       },
     ],
     inlineTemplate: '{icon} {title} {status}',
+    roles: {
+      title: 'title',
+      workflowStatus: 'status',
+    },
   },
   {
     type: 'feature',
@@ -280,6 +312,12 @@ const builtinTrackers: TrackerDataModel[] = [
       { name: 'releaseNotes', type: 'text' },
     ],
     inlineTemplate: '{icon} {title} {status} {releaseVersion}',
+    roles: {
+      title: 'title',
+      workflowStatus: 'status',
+      priority: 'priority',
+      assignee: 'owner',
+    },
   },
   {
     type: 'automation',
@@ -322,6 +360,11 @@ const builtinTrackers: TrackerDataModel[] = [
         ],
       },
     ],
+    roles: {
+      title: 'title',
+      workflowStatus: 'status',
+      tags: 'tags',
+    },
   },
 ];
 
@@ -333,7 +376,7 @@ export function loadBuiltinTrackers(): void {
 
   for (const model of builtinTrackers) {
     try {
-      globalRegistry.register(model);
+      globalRegistry.register(model, true);
       // console.log(`[TrackerPlugin] Loaded built-in tracker: ${model.type}`);
     } catch (error) {
       console.error(`[TrackerPlugin] Failed to load built-in tracker '${model.type}':`, error);

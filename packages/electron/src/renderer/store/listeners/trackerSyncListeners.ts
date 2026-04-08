@@ -27,18 +27,19 @@ import {
   removeTrackerItemAtom,
   trackerDataLoadedAtom,
 } from '@nimbalyst/runtime';
-import type { TrackerItem, TrackerItemChangeEvent, TrackerItemType, TrackerItemStatus, TrackerItemPriority } from '@nimbalyst/runtime';
+import type { TrackerItem, TrackerItemChangeEvent, TrackerItemType } from '@nimbalyst/runtime';
 import {
   globalRegistry,
   convertFullDocumentToTrackerItems,
 } from '@nimbalyst/runtime/plugins/TrackerPlugin';
+import { trackerItemToRecord, type TrackerRecord } from '@nimbalyst/runtime/core/TrackerRecord';
 
 /**
  * Load full-document tracker items from frontmatter metadata.
  * These are items like plans, decisions, blog posts where the entire
  * document IS the tracker item (identified by frontmatter, not inline syntax).
  */
-async function loadFrontmatterTrackerItems(): Promise<TrackerItem[]> {
+async function loadFrontmatterTrackerItems(): Promise<TrackerRecord[]> {
   try {
     const metadata = await window.electronAPI.invoke('document-service:metadata-list');
     if (!metadata?.length) return [];
@@ -46,17 +47,16 @@ async function loadFrontmatterTrackerItems(): Promise<TrackerItem[]> {
     const trackerTypes = globalRegistry.getAll();
     const fullDocumentTrackers = trackerTypes.filter(t => t.modes.fullDocument);
 
-    let items: TrackerItem[] = [];
+    let records: TrackerRecord[] = [];
     for (const tracker of fullDocumentTrackers) {
       const converted = convertFullDocumentToTrackerItems(metadata, tracker.type as TrackerItemType);
-      items = [...items, ...converted];
+      records = [...records, ...converted];
     }
 
-    // Ensure each frontmatter item has a stable ID (keyed by doc path + type)
-    // so they can be stored in the atom Map without duplicates
-    return items.map(item => ({
-      ...item,
-      id: item.id || `fm:${item.type}:${item.module}`,
+    // Ensure each frontmatter record has a stable ID (keyed by doc path + type)
+    return records.map(record => ({
+      ...record,
+      id: record.id || `fm:${record.primaryType}:${record.system.documentPath}`,
     }));
   } catch (err) {
     console.error('[trackerSyncListeners] Failed to load frontmatter items:', err);
@@ -70,15 +70,16 @@ async function loadFrontmatterTrackerItems(): Promise<TrackerItem[]> {
  */
 async function loadAllTrackerItems(): Promise<void> {
   try {
-    const [pgliteItems, frontmatterItems] = await Promise.all([
+    const [pgliteItems, frontmatterRecords] = await Promise.all([
       window.electronAPI.invoke('document-service:tracker-items-list') as Promise<TrackerItem[]>,
       loadFrontmatterTrackerItems(),
     ]);
 
-    // Merge: PGLite items take priority over frontmatter items (by ID)
-    const allItems = [...(pgliteItems || []), ...frontmatterItems];
-    // console.log('[trackerSyncListeners] Loaded:', pgliteItems?.length || 0, 'PGLite +', frontmatterItems.length, 'frontmatter items =', allItems.length, 'total');
-    store.set(replaceAllTrackerItemsAtom, allItems);
+    // Convert PGLite items (legacy TrackerItem shape) to TrackerRecord
+    const pgliteRecords = (pgliteItems || []).map(trackerItemToRecord);
+    // Merge: PGLite records take priority over frontmatter records (by ID)
+    const allRecords = [...pgliteRecords, ...frontmatterRecords];
+    store.set(replaceAllTrackerItemsAtom, allRecords);
   } catch (err) {
     console.error('[trackerSyncListeners] Failed to load tracker items:', err);
     // Mark as loaded even on error so UI doesn't stay in loading state
@@ -135,15 +136,15 @@ export function initTrackerSyncListeners(): () => void {
         //   updated: change.updated?.length || 0,
         //   removed: change.removed?.length || 0,
         // });
-        // Apply granular updates to the atom map
+        // Apply granular updates to the atom map (convert to TrackerRecord)
         if (change.added?.length) {
           for (const item of change.added) {
-            store.set(upsertTrackerItemAtom, item);
+            store.set(upsertTrackerItemAtom, trackerItemToRecord(item));
           }
         }
         if (change.updated?.length) {
           for (const item of change.updated) {
-            store.set(upsertTrackerItemAtom, item);
+            store.set(upsertTrackerItemAtom, trackerItemToRecord(item));
           }
         }
         if (change.removed?.length) {
