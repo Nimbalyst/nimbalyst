@@ -206,7 +206,7 @@ export class ClaudeCodeRawParser implements IRawMessageParser {
           createdAt: msg.createdAt,
         });
       } else if (parsed.type === 'nimbalyst_tool_use') {
-        const nimbalystDescriptors = this.parseNimbalystToolUse(msg, parsed, context);
+        const nimbalystDescriptors = await this.parseNimbalystToolUse(msg, parsed, context);
         descriptors.push(...nimbalystDescriptors);
       } else if (parsed.type === 'nimbalyst_tool_result') {
         const result = this.parseToolResult({
@@ -368,14 +368,20 @@ export class ClaudeCodeRawParser implements IRawMessageParser {
     };
   }
 
-  private parseNimbalystToolUse(
+  private async parseNimbalystToolUse(
     msg: RawMessage,
     parsed: any,
     context: ParseContext,
-  ): CanonicalEventDescriptor[] {
+  ): Promise<CanonicalEventDescriptor[]> {
     // Deduplicate: the assistant message may already contain a tool_use block
-    // with the same ID that was processed before this nimbalyst_tool_use message
-    if (parsed.id && context.hasToolCall(parsed.id)) return [];
+    // with the same ID that was processed before this nimbalyst_tool_use message.
+    // Check in-memory map first, then fall back to DB lookup (covers the case
+    // where the assistant tool_use was processed in a prior incremental batch).
+    if (parsed.id) {
+      if (context.hasToolCall(parsed.id)) return [];
+      const existing = await context.findByProviderToolCallId(parsed.id);
+      if (existing) return [];
+    }
 
     const toolName = parsed.name ?? 'unknown';
     const args = parsed.input ?? {};

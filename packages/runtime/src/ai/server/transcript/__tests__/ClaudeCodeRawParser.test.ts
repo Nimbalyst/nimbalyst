@@ -363,6 +363,28 @@ describe('ClaudeCodeRawParser', () => {
       });
     });
 
+    it('deduplicates nimbalyst_tool_use via DB fallback when in-memory map misses', async () => {
+      const parser = new ClaudeCodeRawParser();
+      const msg = makeRawMessage({
+        content: JSON.stringify({
+          type: 'nimbalyst_tool_use',
+          id: 'ask-1',
+          name: 'AskUserQuestion',
+          input: { questions: [{ question: 'What?' }] },
+        }),
+      });
+
+      // In-memory map returns false (cross-batch scenario), but DB finds the existing event
+      const ctx = makeContext({
+        hasToolCall: () => false,
+        findByProviderToolCallId: async (id) =>
+          id === 'ask-1' ? { id: 999 } as any : null,
+      });
+      const descriptors = await parser.parseMessage(msg, ctx);
+
+      expect(descriptors).toHaveLength(0); // Deduped via DB lookup
+    });
+
     it('parses nimbalyst_tool_result', async () => {
       const parser = new ClaudeCodeRawParser();
       const msg = makeRawMessage({
