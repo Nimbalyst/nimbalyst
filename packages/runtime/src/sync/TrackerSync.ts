@@ -179,7 +179,6 @@ export class TrackerSyncProvider {
   /** Reconnect state */
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts = 0;
-  private static readonly MAX_RECONNECT_ATTEMPTS = 10;
   private static readonly BASE_RECONNECT_DELAY_MS = 1000;
   private static readonly MAX_RECONNECT_DELAY_MS = 60000;
 
@@ -557,19 +556,17 @@ export class TrackerSyncProvider {
   private scheduleReconnect(): void {
     if (this.destroyed) return;
     if (this.reconnectTimer) return; // already scheduled
-    if (this.reconnectAttempts >= TrackerSyncProvider.MAX_RECONNECT_ATTEMPTS) {
-      console.log('[TrackerSync] Max reconnect attempts reached, giving up');
-      return;
-    }
-
-    // Exponential backoff with jitter: base * 2^attempt + random jitter
+    // Exponential backoff with jitter, capped at MAX_RECONNECT_DELAY_MS.
+    // Never gives up -- sync must survive transient network outages, server
+    // deploys, laptop sleep/wake, etc. The backoff caps at 60s so reconnect
+    // attempts are cheap in the steady state.
     const delay = Math.min(
-      TrackerSyncProvider.BASE_RECONNECT_DELAY_MS * Math.pow(2, this.reconnectAttempts) + Math.random() * 1000,
+      TrackerSyncProvider.BASE_RECONNECT_DELAY_MS * Math.pow(2, Math.min(this.reconnectAttempts, 6)) + Math.random() * 1000,
       TrackerSyncProvider.MAX_RECONNECT_DELAY_MS
     );
     this.reconnectAttempts++;
 
-    console.log(`[TrackerSync] Reconnecting in ${Math.round(delay)}ms (attempt ${this.reconnectAttempts}/${TrackerSyncProvider.MAX_RECONNECT_ATTEMPTS})`);
+    console.log(`[TrackerSync] Reconnecting in ${Math.round(delay)}ms (attempt ${this.reconnectAttempts})`);
 
     this.reconnectTimer = setTimeout(async () => {
       this.reconnectTimer = null;
@@ -580,7 +577,7 @@ export class TrackerSyncProvider {
         console.error('[TrackerSync] Reconnect failed:', err);
         // Keep retrying -- getJwt() fetches fresh tokens, so even auth
         // errors may resolve on the next attempt (e.g., expired JWT that
-        // gets refreshed). Max attempts cap prevents infinite loops.
+        // gets refreshed).
         this.handleDisconnect();
       }
     }, delay);
