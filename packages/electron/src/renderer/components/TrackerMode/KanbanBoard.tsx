@@ -1,9 +1,11 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useFloating, offset, flip, shift, FloatingPortal } from '@floating-ui/react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
-import type { TrackerItem, TrackerItemStatus } from '@nimbalyst/runtime';
+import type { TrackerRecord } from '@nimbalyst/runtime/core/TrackerRecord';
 import type { TrackerItemType } from '@nimbalyst/runtime/plugins/TrackerPlugin';
-import { globalRegistry } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
+import { globalRegistry, getRoleField } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
+import { getRecordTitle, getRecordStatus, getRecordPriority, getStatusOptions } from '@nimbalyst/runtime/plugins/TrackerPlugin/trackerRecordAccessors';
+import { trackerItemToRecord } from '@nimbalyst/runtime/core/TrackerRecord';
 
 interface KanbanBoardProps {
   filterType: TrackerItemType | 'all';
@@ -14,7 +16,7 @@ interface KanbanBoardProps {
   /** Currently selected item ID for card highlighting */
   selectedItemId?: string | null;
   /** Override items instead of loading from documentService (used for filtered views) */
-  overrideItems?: TrackerItem[];
+  overrideItems?: TrackerRecord[];
   /** Callback for bulk/single archive action */
   onArchiveItems?: (itemIds: string[], archive: boolean) => void;
   /** Callback for bulk/single delete action */
@@ -52,22 +54,17 @@ const TYPE_COLORS: Record<string, string> = {
  * Starts with model-defined statuses, then appends any extra statuses
  * found in the actual items so nothing silently disappears.
  */
-function getStatusColumns(filterType: TrackerItemType | 'all', items: TrackerItem[]): { value: string; label: string }[] {
-  // Collect model-defined columns (from all relevant types when 'all')
+function getStatusColumns(filterType: TrackerItemType | 'all', items: TrackerRecord[]): { value: string; label: string }[] {
+  // Collect model-defined columns using the workflowStatus role
   const modelColumns: { value: string; label: string }[] = [];
   const seen = new Set<string>();
 
   if (filterType !== 'all') {
-    const model = globalRegistry.get(filterType);
-    if (model) {
-      const statusField = model.fields.find(f => f.name === 'status');
-      if (statusField?.options) {
-        for (const o of statusField.options) {
-          if (!seen.has(o.value)) {
-            seen.add(o.value);
-            modelColumns.push({ value: o.value, label: o.label });
-          }
-        }
+    const options = getStatusOptions(filterType);
+    for (const o of options) {
+      if (!seen.has(o.value)) {
+        seen.add(o.value);
+        modelColumns.push({ value: o.value, label: o.label });
       }
     }
   }
@@ -85,14 +82,11 @@ function getStatusColumns(filterType: TrackerItemType | 'all', items: TrackerIte
     }
   }
 
-  // Now scan actual items for statuses not covered by the model.
-  // This prevents items from silently disappearing when their status
-  // doesn't match the model (e.g. multi-type items, status set by agents).
-  for (const item of items) {
-    const status = (item.status || 'to-do').toLowerCase();
+  // Scan actual items for statuses not covered by the model.
+  for (const record of items) {
+    const status = (getRecordStatus(record) || 'to-do').toLowerCase();
     if (!seen.has(status)) {
       seen.add(status);
-      // Title-case the status value for display
       const label = status.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
       modelColumns.push({ value: status, label });
     }
@@ -111,8 +105,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onArchiveItems,
   onDeleteItems,
 }) => {
-  const [items, setItems] = useState<TrackerItem[]>([]);
-  const [fullDocItems, setFullDocItems] = useState<TrackerItem[]>([]);
+  const [items, setItems] = useState<TrackerRecord[]>([]);
+  const [fullDocItems, setFullDocItems] = useState<TrackerRecord[]>([]);
 
   // Load items from documentService (skipped when overrideItems is provided)
   useEffect(() => {
@@ -131,13 +125,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
         const filtered = filterType === 'all'
           ? inlineItems
-          : inlineItems.filter((i: TrackerItem) => i.type === filterType);
-        setItems(filtered);
+          : inlineItems.filter((i: any) => i.type === filterType);
+        // Convert legacy TrackerItem from documentService to TrackerRecord
+        setItems(filtered.map((i: any) => trackerItemToRecord(i)));
 
         // Full document items from metadata
         if (documentService.listDocumentMetadata) {
           const metadata = await documentService.listDocumentMetadata();
-          const docItems: TrackerItem[] = [];
+          const docRecords: TrackerRecord[] = [];
 
           for (const doc of metadata) {
             if (!doc.frontmatter) continue;
@@ -153,21 +148,33 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
               if (filterType !== 'all' && tracker.type !== filterType) continue;
 
-              docItems.push({
+              // Build a TrackerRecord directly instead of a legacy TrackerItem
+              docRecords.push({
                 id: block.planId || block.id || doc.id,
-                type: tracker.type as TrackerItemType,
-                title: block.title || doc.path.split('/').pop()?.replace(/\.\w+$/, '') || 'Untitled',
-                status: (doc.frontmatter.status || block.status || 'to-do') as TrackerItemStatus,
-                priority: block.priority || 'medium',
-                module: doc.path,
-                workspace: doc.workspace || '',
-                tags: block.tags || [],
-                lastIndexed: doc.lastIndexed || new Date(),
+                primaryType: tracker.type,
+                typeTags: [tracker.type],
+                source: 'frontmatter',
+                archived: false,
+                syncStatus: 'local',
+                system: {
+                  workspace: doc.workspace || '',
+                  documentPath: doc.path,
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                  lastIndexed: (doc.lastIndexed || new Date()).toISOString(),
+                },
+                fields: {
+                  title: block.title || doc.path.split('/').pop()?.replace(/\.\w+$/, '') || 'Untitled',
+                  status: doc.frontmatter.status || block.status || 'to-do',
+                  priority: block.priority || 'medium',
+                  tags: block.tags || [],
+                },
+                fieldUpdatedAt: {},
               });
             }
           }
 
-          if (mounted) setFullDocItems(docItems);
+          if (mounted) setFullDocItems(docRecords);
         }
       } catch (error) {
         console.error('[KanbanBoard] Failed to load items:', error);
@@ -198,33 +205,33 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     if (!searchQuery) return source;
     const q = searchQuery.toLowerCase();
     return source.filter(
-      item =>
-        item.issueKey?.toLowerCase().includes(q) ||
-        String(item.issueNumber ?? '').includes(q) ||
-        item.title.toLowerCase().includes(q) ||
-        item.module?.toLowerCase().includes(q)
+      record =>
+        record.issueKey?.toLowerCase().includes(q) ||
+        String(record.issueNumber ?? '').includes(q) ||
+        getRecordTitle(record).toLowerCase().includes(q) ||
+        record.system.documentPath?.toLowerCase().includes(q)
     );
   }, [items, fullDocItems, searchQuery, overrideItems]);
 
   // Drag-and-drop state
   const [dragItemId, setDragItemId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
-  const dragItemRef = useRef<TrackerItem | null>(null);
+  const dragItemRef = useRef<TrackerRecord | null>(null);
 
   /** Update an item's status via the appropriate API based on its source */
-  const updateItemStatus = useCallback(async (item: TrackerItem, newStatus: string) => {
+  const updateItemStatus = useCallback(async (record: TrackerRecord, newStatus: string) => {
     try {
-      if (item.source === 'frontmatter' || item.source === 'import' || item.source === 'inline') {
+      if (record.source === 'frontmatter' || record.source === 'import' || record.source === 'inline') {
         // File-backed items: update in source file
         await window.electronAPI.documentService.updateTrackerItemInFile({
-          itemId: item.id,
+          itemId: record.id,
           updates: { status: newStatus },
         });
-      } else if (!item.module || item.source === 'native') {
-        const tracker = globalRegistry.get(item.type);
+      } else if (!record.system.documentPath || record.source === 'native') {
+        const tracker = globalRegistry.get(record.primaryType);
         const syncMode = tracker?.sync?.mode || 'local';
         await window.electronAPI.documentService.updateTrackerItem({
-          itemId: item.id,
+          itemId: record.id,
           updates: { status: newStatus },
           syncMode,
         });
@@ -234,7 +241,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     }
   }, []);
 
-  const handleDragStart = useCallback((e: React.DragEvent, item: TrackerItem) => {
+  const handleDragStart = useCallback((e: React.DragEvent, item: TrackerRecord) => {
     setDragItemId(item.id);
     dragItemRef.current = item;
     e.dataTransfer.effectAllowed = 'move';
@@ -265,7 +272,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     if (!item) return;
 
     // No-op if dropped on the same column
-    const currentStatus = (item.status || 'to-do').toLowerCase();
+    const currentStatus = (getRecordStatus(item) || 'to-do').toLowerCase();
     if (currentStatus === targetStatus) return;
 
     updateItemStatus(item, targetStatus);
@@ -280,7 +287,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   // Multi-select state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [contextAnchor, setContextAnchor] = useState<DOMRect | null>(null);
-  const allItemsRef = useRef<TrackerItem[]>([]);
+  const allItemsRef = useRef<TrackerRecord[]>([]);
+  const lastClickedIdRef = useRef<string | null>(null);
 
   // Floating context menu
   const { refs: contextRefs, floatingStyles: contextFloatingStyles } = useFloating({
@@ -296,26 +304,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   // Keep ref in sync
   useEffect(() => { allItemsRef.current = allItems; }, [allItems]);
 
-  const handleCardSelect = useCallback((e: React.MouseEvent, item: TrackerItem) => {
-    e.stopPropagation();
-    if (e.metaKey || e.ctrlKey) {
-      // Toggle individual
-      setSelectedIds(prev => {
-        const next = new Set(prev);
-        if (next.has(item.id)) next.delete(item.id);
-        else next.add(item.id);
-        return next;
-      });
-    } else {
-      // Replace selection and open detail
-      setSelectedIds(new Set([item.id]));
-      if (onItemSelect && item.id) {
-        onItemSelect(item.id);
-      }
-    }
-  }, [onItemSelect]);
-
-  const handleCardContextMenu = useCallback((e: React.MouseEvent, item: TrackerItem) => {
+  const handleCardContextMenu = useCallback((e: React.MouseEvent, item: TrackerRecord) => {
     e.preventDefault();
     e.stopPropagation();
     // If right-clicking an unselected item, select just that item
@@ -371,8 +360,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             itemId: item.id,
             updates: { priority: newPriority },
           });
-        } else if (!item.module || item.source === 'native') {
-          const tracker = globalRegistry.get(item.type);
+        } else if (!item.system.documentPath || item.source === 'native') {
+          const tracker = globalRegistry.get(item.primaryType);
           const syncMode = tracker?.sync?.mode || 'local';
           await window.electronAPI.documentService.updateTrackerItem({
             itemId: item.id,
@@ -389,13 +378,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const columns = useMemo(() => getStatusColumns(filterType, allItems), [filterType, allItems]);
 
   const itemsByStatus = useMemo(() => {
-    const grouped: Record<string, TrackerItem[]> = {};
+    const grouped: Record<string, TrackerRecord[]> = {};
     for (const col of columns) {
       grouped[col.value] = [];
     }
 
     for (const item of allItems) {
-      const status = (item.status || 'to-do').toLowerCase();
+      const status = (getRecordStatus(item) || 'to-do').toLowerCase();
       if (grouped[status]) {
         grouped[status].push(item);
       } else {
@@ -408,6 +397,60 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     }
     return grouped;
   }, [allItems, columns]);
+
+  // Flat ordered list of item IDs (column by column) for shift-range selection
+  const flatItemIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const col of columns) {
+      const colItems = itemsByStatus[col.value] || [];
+      for (const item of colItems) {
+        ids.push(item.id);
+      }
+    }
+    return ids;
+  }, [columns, itemsByStatus]);
+
+  const handleCardSelect = useCallback((e: React.MouseEvent, item: TrackerRecord) => {
+    e.stopPropagation();
+    if (e.shiftKey && lastClickedIdRef.current) {
+      // Range select between anchor and target
+      const anchorIdx = flatItemIds.indexOf(lastClickedIdRef.current);
+      const targetIdx = flatItemIds.indexOf(item.id);
+      if (anchorIdx !== -1 && targetIdx !== -1) {
+        const start = Math.min(anchorIdx, targetIdx);
+        const end = Math.max(anchorIdx, targetIdx);
+        const rangeIds = flatItemIds.slice(start, end + 1);
+        if (e.metaKey || e.ctrlKey) {
+          // Add range to existing selection
+          setSelectedIds(prev => {
+            const next = new Set(prev);
+            for (const id of rangeIds) next.add(id);
+            return next;
+          });
+        } else {
+          // Replace with range
+          setSelectedIds(new Set(rangeIds));
+        }
+      }
+      // Don't update anchor on shift-click
+    } else if (e.metaKey || e.ctrlKey) {
+      // Toggle individual
+      lastClickedIdRef.current = item.id;
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        if (next.has(item.id)) next.delete(item.id);
+        else next.add(item.id);
+        return next;
+      });
+    } else {
+      // Replace selection and open detail
+      lastClickedIdRef.current = item.id;
+      setSelectedIds(new Set([item.id]));
+      if (onItemSelect && item.id) {
+        onItemSelect(item.id);
+      }
+    }
+  }, [onItemSelect, flatItemIds]);
 
   if (allItems.length === 0) {
     return (
@@ -473,7 +516,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                     {/* Priority dot */}
                     <span
                       className="w-2 h-2 rounded-full mt-1.5 shrink-0"
-                      style={{ backgroundColor: PRIORITY_COLORS[item.priority || 'medium'] || '#6b7280' }}
+                      style={{ backgroundColor: PRIORITY_COLORS[getRecordPriority(item) || 'medium'] || '#6b7280' }}
                     />
                     <div className="flex-1 min-w-0">
                       {item.issueKey && (
@@ -482,22 +525,22 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                         </div>
                       )}
                       <div className="text-sm text-nim leading-snug line-clamp-2">
-                        {item.title}
+                        {getRecordTitle(item)}
                       </div>
                       <div className="flex items-center gap-1.5 mt-1.5">
                         {/* Type badge */}
                         <span
                           className="text-[10px] font-medium px-1.5 py-0.5 rounded"
                           style={{
-                            color: TYPE_COLORS[item.type] || '#6b7280',
-                            backgroundColor: `${TYPE_COLORS[item.type] || '#6b7280'}20`,
+                            color: TYPE_COLORS[item.primaryType] || '#6b7280',
+                            backgroundColor: `${TYPE_COLORS[item.primaryType] || '#6b7280'}20`,
                           }}
                         >
-                          {item.type}
+                          {item.primaryType}
                         </span>
                         {/* Secondary type tags */}
-                        {(item.typeTags ?? [])
-                          .filter(tag => tag !== item.type)
+                        {item.typeTags
+                          .filter(tag => tag !== item.primaryType)
                           .map(tag => (
                             <span
                               key={tag}
@@ -512,17 +555,17 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                             </span>
                           ))}
                         {/* Priority label */}
-                        {item.priority && item.priority !== 'medium' && (
+                        {(() => { const p = getRecordPriority(item); return p && p !== 'medium' ? (
                           <span
                             className="text-[10px] font-medium px-1.5 py-0.5 rounded"
                             style={{
-                              color: PRIORITY_COLORS[item.priority] || '#6b7280',
-                              backgroundColor: `${PRIORITY_COLORS[item.priority] || '#6b7280'}20`,
+                              color: PRIORITY_COLORS[p] || '#6b7280',
+                              backgroundColor: `${PRIORITY_COLORS[p] || '#6b7280'}20`,
                             }}
                           >
-                            {item.priority}
+                            {p}
                           </span>
-                        )}
+                        ) : null; })()}
                       </div>
                     </div>
                   </div>
