@@ -1427,7 +1427,7 @@ export class ElectronDocumentService implements DocumentService {
         content, archived, source, source_ref
       ) VALUES ($1, $2, $3, $4, '', NULL, NOW(), NOW(), NOW(), 'local', $5, FALSE, 'frontmatter', $6)
       ON CONFLICT (id) DO UPDATE SET
-        data = $3, content = $5, source = 'frontmatter', source_ref = $6, updated = NOW()`,
+        data = tracker_items.data || $3, content = $5, source = 'frontmatter', source_ref = $6, updated = NOW()`,
       [id, trackerType, JSON.stringify(data), this.workspacePath, contentJson, relativePath]
     );
 
@@ -1790,12 +1790,15 @@ export class ElectronDocumentService implements DocumentService {
         // On UPDATE: only set archived=true if the file explicitly says so.
         // Never reset archived to false from re-indexing -- the DB is the authority
         // for archive state when the file doesn't have an archived prop.
+        // On conflict: merge file-derived fields INTO existing JSONB (preserves
+        // system metadata like authorIdentity, createdByAgent, linkedSessions,
+        // activity, comments that the indexer doesn't know about).
         const result = await database.query(
           `INSERT INTO tracker_items (
             id, type, data, workspace, document_path, line_number, created, updated, last_indexed, archived, archived_at
           ) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW(), $7, $8, $9)
           ON CONFLICT (id) DO UPDATE SET
-            type = $2, data = $3, workspace = $4, document_path = $5, line_number = $6, updated = NOW(), last_indexed = $7,
+            type = $2, data = tracker_items.data || $3, workspace = $4, document_path = $5, line_number = $6, updated = NOW(), last_indexed = $7,
             archived = CASE WHEN $8 = TRUE THEN TRUE ELSE tracker_items.archived END,
             archived_at = CASE WHEN $8 = TRUE THEN $9 ELSE tracker_items.archived_at END`,
           [
