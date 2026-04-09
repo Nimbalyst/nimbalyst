@@ -1635,6 +1635,16 @@ export async function createApplicationMenu() {
                         shell.openExternal('https://docs.nimbalyst.com/');
                     }
                 },
+                {
+                    label: 'Install Chrome Extension',
+                    click: async () => {
+                        AnalyticsService.getInstance().sendEvent('help_accessed', {
+                            helpType: 'chrome_extension',
+                            context: 'menu',
+                        });
+                        shell.openExternal('https://chromewebstore.google.com/detail/nimbalyst-web-clipper/fdbmklnnkalihoblphakoebgmieljkbb');
+                    }
+                },
                 // Extension SDK Documentation - only show when Extension Development Kit is enabled
                 ...(isExtensionDevToolsEnabled() ? [{
                     label: 'Extension SDK Documentation',
@@ -1751,6 +1761,16 @@ export async function createApplicationMenu() {
                             context: 'menu',
                         });
                         shell.openExternal('https://docs.nimbalyst.com/');
+                    }
+                },
+                {
+                    label: 'Install Chrome Extension',
+                    click: async () => {
+                        AnalyticsService.getInstance().sendEvent('help_accessed', {
+                            helpType: 'chrome_extension',
+                            context: 'menu',
+                        });
+                        shell.openExternal('https://chromewebstore.google.com/detail/nimbalyst-web-clipper/fdbmklnnkalihoblphakoebgmieljkbb');
                     }
                 },
                 // Extension SDK Documentation - only show when Extension Development Kit is enabled
