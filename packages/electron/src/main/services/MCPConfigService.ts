@@ -5,6 +5,12 @@ import { watch, FSWatcher } from 'fs';
 import { MCPConfig, MCPServerConfig, MCPServerEnv } from '@nimbalyst/runtime/types/MCPServerConfig';
 import { logger } from '../utils/logger';
 import { getEnhancedPath } from './CLIManager';
+import {
+  buildMcpRemoteArgs,
+  checkMcpRemoteAuthStatus,
+  extractMcpRemoteConfig,
+  usesNativeRemoteOAuth,
+} from './MCPRemoteOAuth';
 
 /**
  * Service for managing MCP server configurations.
@@ -701,21 +707,12 @@ export class MCPConfigService {
    * Headers are passed as --header arguments to mcp-remote.
    */
   private convertHttpToStdio(serverConfig: MCPServerConfig): MCPServerConfig {
-    if (serverConfig.type !== 'http' || !serverConfig.url) {
+    const remoteConfig = extractMcpRemoteConfig(serverConfig);
+    if (serverConfig.type !== 'http' || !remoteConfig) {
       return serverConfig;
     }
 
-    // Build args for mcp-remote
-    const args = ['mcp-remote', serverConfig.url];
-
-    // Add custom headers if provided
-    // Note: No spaces around ':' to work around Cursor/Claude Desktop bug with args escaping
-    // Format: --header "Authorization:${ENV_VAR}" or --header "Authorization:Bearer token"
-    if (serverConfig.headers) {
-      for (const [key, value] of Object.entries(serverConfig.headers)) {
-        args.push('--header', `${key}:${value}`);
-      }
-    }
+    const args = buildMcpRemoteArgs(remoteConfig);
 
     // Convert HTTP config to stdio with mcp-remote
     // Using bundled mcp-remote from node_modules (managed as a package.json dependency)
@@ -726,6 +723,26 @@ export class MCPConfigService {
       env: serverConfig.env,
       disabled: serverConfig.disabled
     };
+  }
+
+  isOAuthServer(serverConfig: MCPServerConfig): boolean {
+    if (usesNativeRemoteOAuth(serverConfig)) {
+      return true;
+    }
+    const remoteConfig = extractMcpRemoteConfig(serverConfig);
+    return remoteConfig?.requiresOAuth === true;
+  }
+
+  async isOAuthAuthorized(serverConfig: MCPServerConfig): Promise<boolean> {
+    if (usesNativeRemoteOAuth(serverConfig)) {
+      return true;
+    }
+    const remoteConfig = extractMcpRemoteConfig(serverConfig);
+    if (!remoteConfig || !remoteConfig.requiresOAuth) {
+      return true;
+    }
+    const status = await checkMcpRemoteAuthStatus(serverConfig);
+    return status.authorized;
   }
 
   /**
@@ -739,7 +756,7 @@ export class MCPConfigService {
       : 'stdio';
 
     if (transportType === 'stdio') {
-      const { url: _url, headers: _headers, ...rest } = serverConfig;
+      const { url: _url, headers: _headers, oauth: _oauth, ...rest } = serverConfig;
       return {
         ...rest,
         type: transportType,
@@ -849,6 +866,63 @@ export class MCPConfigService {
         throw new Error(`Invalid MCP config for server "${serverName}": env must be an object`);
       }
 
+      if (serverConfig.oauth !== undefined) {
+        if (!serverConfig.oauth || typeof serverConfig.oauth !== 'object' || Array.isArray(serverConfig.oauth)) {
+          throw new Error(`Invalid MCP config for server "${serverName}": oauth must be an object`);
+        }
+
+        if (serverConfig.oauth.callbackPort !== undefined) {
+          if (!Number.isInteger(serverConfig.oauth.callbackPort) || serverConfig.oauth.callbackPort <= 0) {
+            throw new Error(`Invalid MCP config for server "${serverName}": oauth.callbackPort must be a positive integer`);
+          }
+        }
+
+        if (serverConfig.oauth.host !== undefined && typeof serverConfig.oauth.host !== 'string') {
+          throw new Error(`Invalid MCP config for server "${serverName}": oauth.host must be a string`);
+        }
+
+        if (serverConfig.oauth.resource !== undefined && typeof serverConfig.oauth.resource !== 'string') {
+          throw new Error(`Invalid MCP config for server "${serverName}": oauth.resource must be a string`);
+        }
+
+        if (serverConfig.oauth.authTimeoutSeconds !== undefined) {
+          if (!Number.isInteger(serverConfig.oauth.authTimeoutSeconds) || serverConfig.oauth.authTimeoutSeconds <= 0) {
+            throw new Error(`Invalid MCP config for server "${serverName}": oauth.authTimeoutSeconds must be a positive integer`);
+          }
+        }
+
+        if (
+          serverConfig.oauth.transportStrategy !== undefined &&
+          !['http-first', 'sse-first', 'http-only', 'sse-only'].includes(serverConfig.oauth.transportStrategy)
+        ) {
+          throw new Error(`Invalid MCP config for server "${serverName}": oauth.transportStrategy must be one of http-first, sse-first, http-only, or sse-only`);
+        }
+
+        if (
+          serverConfig.oauth.staticClientInfo !== undefined &&
+          (typeof serverConfig.oauth.staticClientInfo !== 'object' ||
+            Array.isArray(serverConfig.oauth.staticClientInfo))
+        ) {
+          throw new Error(`Invalid MCP config for server "${serverName}": oauth.staticClientInfo must be an object`);
+        }
+
+        if (serverConfig.oauth.clientId !== undefined && typeof serverConfig.oauth.clientId !== 'string') {
+          throw new Error(`Invalid MCP config for server "${serverName}": oauth.clientId must be a string`);
+        }
+
+        if (serverConfig.oauth.clientSecret !== undefined && typeof serverConfig.oauth.clientSecret !== 'string') {
+          throw new Error(`Invalid MCP config for server "${serverName}": oauth.clientSecret must be a string`);
+        }
+
+        if (
+          serverConfig.oauth.staticClientMetadata !== undefined &&
+          (typeof serverConfig.oauth.staticClientMetadata !== 'object' ||
+            Array.isArray(serverConfig.oauth.staticClientMetadata))
+        ) {
+          throw new Error(`Invalid MCP config for server "${serverName}": oauth.staticClientMetadata must be an object`);
+        }
+      }
+
       if (serverConfig.enabledForProviders !== undefined) {
         if (!Array.isArray(serverConfig.enabledForProviders)) {
           throw new Error(`Invalid MCP config for server "${serverName}": enabledForProviders must be an array`);
@@ -903,7 +977,18 @@ export class MCPConfigService {
       };
       this.validateConfig(tempConfig);
 
+      if (!usesNativeRemoteOAuth(config) && this.isOAuthServer(config) && !(await this.isOAuthAuthorized(config))) {
+        return {
+          success: false,
+          error: 'OAuth authorization required. Use the Authorize button before testing this server.'
+        };
+      }
+
       const transportType = config.type || 'stdio';
+
+      if (usesNativeRemoteOAuth(config)) {
+        return await this.testHTTPConnection(config, transportType === 'sse' ? 'sse' : 'http');
+      }
 
       // For HTTP transport, convert to mcp-remote wrapper and test as stdio
       // This ensures we test with OAuth tokens managed by mcp-remote
@@ -960,6 +1045,12 @@ export class MCPConfigService {
       if (response.status === 401 || response.status === 403) {
         const errorText = await response.text().catch(() => response.statusText);
         logger.mcp.error(`${transportLabel} authentication failed: ${response.status} ${errorText}`);
+        if (usesNativeRemoteOAuth(config)) {
+          return {
+            success: false,
+            error: `Authentication required (${response.status}). This server uses native MCP OAuth, so authorize it from a Claude or Codex session instead of this test.`
+          };
+        }
         return {
           success: false,
           error: `Authentication failed (${response.status}). Check your API key.`

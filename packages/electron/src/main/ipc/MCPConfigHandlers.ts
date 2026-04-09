@@ -1,19 +1,17 @@
-import { BrowserWindow, shell } from 'electron';
-import { safeHandle, safeOn } from '../utils/ipcRegistry';
-import { MCPConfigService, TestProgressCallback, getCommandNotFoundHelp } from '../services/MCPConfigService';
-import { getEnhancedPath } from '../services/CLIManager';
-import { MCPConfig } from '@nimbalyst/runtime/types/MCPServerConfig';
+import { BrowserWindow } from 'electron';
+import { safeHandle } from '../utils/ipcRegistry';
+import { MCPConfigService, TestProgressCallback } from '../services/MCPConfigService';
+import { MCPConfig, MCPServerConfig } from '@nimbalyst/runtime/types/MCPServerConfig';
 import { logger } from '../utils/logger';
-import { spawn } from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as crypto from 'crypto';
-import * as os from 'os';
+import {
+  checkMcpRemoteAuthStatus,
+  revokeMcpRemoteOAuth,
+  triggerMcpRemoteOAuth,
+} from '../services/MCPRemoteOAuth';
 
 const mcpConfigService = new MCPConfigService();
 
 export function registerMCPConfigHandlers() {
-  // Read user-scope MCP configuration
   safeHandle('mcp-config:read-user', async () => {
     try {
       return await mcpConfigService.readUserMCPConfig();
@@ -23,7 +21,6 @@ export function registerMCPConfigHandlers() {
     }
   });
 
-  // Write user-scope MCP configuration
   safeHandle('mcp-config:write-user', async (_event, config: MCPConfig) => {
     try {
       await mcpConfigService.writeUserMCPConfig(config);
@@ -35,7 +32,6 @@ export function registerMCPConfigHandlers() {
     }
   });
 
-  // Read workspace-scope MCP configuration
   safeHandle('mcp-config:read-workspace', async (_event, workspacePath: string) => {
     if (!workspacePath) {
       throw new Error('workspacePath is required');
@@ -49,7 +45,6 @@ export function registerMCPConfigHandlers() {
     }
   });
 
-  // Write workspace-scope MCP configuration
   safeHandle('mcp-config:write-workspace', async (_event, workspacePath: string, config: MCPConfig) => {
     if (!workspacePath) {
       throw new Error('workspacePath is required');
@@ -65,7 +60,6 @@ export function registerMCPConfigHandlers() {
     }
   });
 
-  // Get merged configuration (User + Workspace)
   safeHandle('mcp-config:get-merged', async (_event, workspacePath?: string) => {
     try {
       return await mcpConfigService.getMergedConfig(workspacePath);
@@ -75,7 +69,6 @@ export function registerMCPConfigHandlers() {
     }
   });
 
-  // Validate configuration
   safeHandle('mcp-config:validate', async (_event, config: MCPConfig) => {
     try {
       mcpConfigService.validateConfig(config);
@@ -86,10 +79,7 @@ export function registerMCPConfigHandlers() {
     }
   });
 
-  // Get config file paths
-  safeHandle('mcp-config:get-user-path', () => {
-    return mcpConfigService.getUserConfigPath();
-  });
+  safeHandle('mcp-config:get-user-path', () => mcpConfigService.getUserConfigPath());
 
   safeHandle('mcp-config:get-workspace-path', (_event, workspacePath: string) => {
     if (!workspacePath) {
@@ -98,20 +88,15 @@ export function registerMCPConfigHandlers() {
     return mcpConfigService.getWorkspaceConfigPath(workspacePath);
   });
 
-  // Test MCP server connection with progress updates
-  safeHandle('mcp-config:test-server', async (event, config: any) => {
+  safeHandle('mcp-config:test-server', async (event, config: MCPServerConfig) => {
     try {
-      // Get the window that sent this request to send progress updates
       const window = BrowserWindow.fromWebContents(event.sender);
-
       const onProgress: TestProgressCallback = (status, message) => {
         if (window && !window.isDestroyed()) {
           window.webContents.send('mcp-config:test-progress', { status, message });
         }
       };
-
-      const result = await mcpConfigService.testServerConnection(config, onProgress);
-      return result;
+      return await mcpConfigService.testServerConnection(config, onProgress);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       logger.main.error('[MCP] Failed to test server:', error);
@@ -119,11 +104,9 @@ export function registerMCPConfigHandlers() {
     }
   });
 
-  // Check OAuth authorization status for mcp-remote servers
-  safeHandle('mcp-config:check-oauth-status', async (_event, serverUrl: string) => {
+  safeHandle('mcp-config:check-oauth-status', async (_event, serverConfigOrUrl: MCPServerConfig | string) => {
     try {
-      const status = await checkMcpRemoteAuthStatus(serverUrl);
-      return status;
+      return await checkMcpRemoteAuthStatus(serverConfigOrUrl);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       logger.main.error('[MCP] Failed to check OAuth status:', error);
@@ -131,11 +114,9 @@ export function registerMCPConfigHandlers() {
     }
   });
 
-  // Trigger OAuth authorization for mcp-remote servers
-  safeHandle('mcp-config:trigger-oauth', async (_event, serverUrl: string) => {
+  safeHandle('mcp-config:trigger-oauth', async (_event, serverConfigOrUrl: MCPServerConfig | string) => {
     try {
-      const result = await triggerMcpRemoteOAuth(serverUrl);
-      return result;
+      return await triggerMcpRemoteOAuth(serverConfigOrUrl);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       logger.main.error('[MCP] Failed to trigger OAuth:', error);
@@ -143,400 +124,13 @@ export function registerMCPConfigHandlers() {
     }
   });
 
-  // Revoke OAuth authorization (clear tokens)
-  safeHandle('mcp-config:revoke-oauth', async (_event, serverUrl: string) => {
+  safeHandle('mcp-config:revoke-oauth', async (_event, serverConfigOrUrl: MCPServerConfig | string) => {
     try {
-      const result = await revokeMcpRemoteOAuth(serverUrl);
-      return result;
+      return await revokeMcpRemoteOAuth(serverConfigOrUrl);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       logger.main.error('[MCP] Failed to revoke OAuth:', error);
       return { success: false, error: message };
     }
   });
-}
-
-/**
- * Get the mcp-remote auth directory path
- */
-function getMcpAuthDir(): string {
-  return process.env.MCP_REMOTE_CONFIG_DIR || path.join(os.homedir(), '.mcp-auth');
-}
-
-/**
- * Generate hashes that mcp-remote might use for token file naming
- * mcp-remote uses MD5 hash of the server URL
- */
-function getServerHashes(serverUrl: string): string[] {
-  // mcp-remote uses MD5 hash of the server URL
-  const md5Hash = crypto.createHash('md5').update(serverUrl).digest('hex');
-  // Also try SHA256 in case different versions use different hashes
-  const sha256Hash = crypto.createHash('sha256').update(serverUrl).digest('hex').substring(0, 32);
-  return [md5Hash, sha256Hash];
-}
-
-/**
- * Check if OAuth tokens exist for a given server URL
- * mcp-remote stores tokens in versioned directories like ~/.mcp-auth/mcp-remote-0.1.36/
- */
-async function checkMcpRemoteAuthStatus(serverUrl: string): Promise<{ authorized: boolean; tokenPath?: string }> {
-  const startTime = Date.now();
-  const authDir = getMcpAuthDir();
-  const serverHashes = getServerHashes(serverUrl);
-
-  try {
-    // First, find all mcp-remote version directories
-    const readdirStart = Date.now();
-    const entries = await fs.promises.readdir(authDir, { withFileTypes: true });
-    const readdirDuration = Date.now() - readdirStart;
-    if (readdirDuration > 500) {
-      logger.main.warn(`[MCP] checkMcpRemoteAuthStatus: initial readdir took ${readdirDuration}ms (>500ms threshold)`);
-    }
-
-    const versionDirs = entries
-      .filter(e => e.isDirectory() && e.name.startsWith('mcp-remote-'))
-      .map(e => e.name)
-      .sort()
-      .reverse(); // Check newest versions first
-
-    // Search in each version directory
-    for (const versionDir of versionDirs) {
-      const versionPath = path.join(authDir, versionDir);
-      try {
-        const files = await fs.promises.readdir(versionPath);
-        for (const file of files) {
-          // Check if this file matches any of our hashes and is a token file
-          if (file.endsWith('_tokens.json')) {
-            const fileHash = file.replace('_tokens.json', '');
-            if (serverHashes.includes(fileHash)) {
-              const tokenPath = path.join(versionPath, file);
-              try {
-                const content = await fs.promises.readFile(tokenPath, 'utf-8');
-                const tokens = JSON.parse(content);
-                if (tokens.access_token || tokens.accessToken) {
-                  const totalDuration = Date.now() - startTime;
-                  if (totalDuration > 1000) {
-                    logger.main.warn(`[MCP] checkMcpRemoteAuthStatus: found token but took ${totalDuration}ms total (>1s threshold)`);
-                  }
-                  logger.main.info('[MCP] Found OAuth tokens at:', tokenPath);
-                  return { authorized: true, tokenPath };
-                }
-              } catch {
-                // Invalid JSON, continue
-              }
-            }
-          }
-        }
-      } catch {
-        // Can't read version directory, continue
-      }
-    }
-
-    // Also check root auth dir for older formats
-    for (const hash of serverHashes) {
-      const possibleFiles = [
-        path.join(authDir, `${hash}_tokens.json`),
-        path.join(authDir, `${hash}.json`),
-      ];
-      for (const tokenPath of possibleFiles) {
-        try {
-          const content = await fs.promises.readFile(tokenPath, 'utf-8');
-          const tokens = JSON.parse(content);
-          if (tokens.access_token || tokens.accessToken) {
-            const totalDuration = Date.now() - startTime;
-            if (totalDuration > 1000) {
-              logger.main.warn(`[MCP] checkMcpRemoteAuthStatus: found token (legacy) but took ${totalDuration}ms total (>1s threshold)`);
-            }
-            return { authorized: true, tokenPath };
-          }
-        } catch {
-          // File doesn't exist or isn't readable
-        }
-      }
-    }
-  } catch {
-    // Auth directory doesn't exist
-  }
-
-  const totalDuration = Date.now() - startTime;
-  if (totalDuration > 1000) {
-    logger.main.warn(`[MCP] checkMcpRemoteAuthStatus: no token found, took ${totalDuration}ms total (>1s threshold)`);
-  }
-  return { authorized: false };
-}
-
-/**
- * Trigger OAuth flow for mcp-remote
- * This spawns mcp-remote which will open a browser for OAuth
- */
-async function triggerMcpRemoteOAuth(serverUrl: string): Promise<{ success: boolean; error?: string; isStalePortError?: boolean }> {
-  return new Promise((resolve) => {
-    logger.main.info('[MCP] Triggering OAuth for:', serverUrl);
-
-    // On Windows, use npx.cmd with shell:true to avoid PowerShell execution policy issues
-    const npxCommand = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-
-    // Spawn npx - use shell on Windows for .cmd files to execute properly
-    // Use enhanced PATH for GUI apps (they don't inherit shell PATH on macOS/Windows)
-    const child = spawn(npxCommand, ['-y', 'mcp-remote', serverUrl], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, PATH: getEnhancedPath() },
-      shell: process.platform === 'win32'
-    });
-
-    let stdout = '';
-    let stderr = '';
-    let resolved = false;
-
-    const cleanup = () => {
-      if (!resolved) {
-        resolved = true;
-        child.kill();
-      }
-    };
-
-    // Set a timeout - OAuth should complete within 60 seconds
-    const timeout = setTimeout(() => {
-      cleanup();
-      resolve({ success: false, error: 'OAuth flow timed out. Please try again.' });
-    }, 60000);
-
-    child.stdout?.on('data', (data) => {
-      stdout += data.toString();
-      logger.main.debug('[MCP OAuth] stdout:', data.toString());
-
-      // Look for success indicators in the output
-      if (stdout.includes('authorized') || stdout.includes('success') || stdout.includes('token')) {
-        clearTimeout(timeout);
-        cleanup();
-        resolve({ success: true });
-      }
-    });
-
-    child.stderr?.on('data', (data) => {
-      stderr += data.toString();
-      logger.main.debug('[MCP OAuth] stderr:', data.toString());
-    });
-
-    child.on('error', (error) => {
-      clearTimeout(timeout);
-      cleanup();
-      // Check if this is a "command not found" error (ENOENT)
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        const help = getCommandNotFoundHelp(npxCommand);
-        resolve({ success: false, error: help.message });
-      } else {
-        resolve({ success: false, error: error.message });
-      }
-    });
-
-    child.on('close', (code) => {
-      clearTimeout(timeout);
-      if (!resolved) {
-        resolved = true;
-        // Check if tokens were created (success even if process exited)
-        checkMcpRemoteAuthStatus(serverUrl).then((status) => {
-          if (status.authorized) {
-            resolve({ success: true });
-          } else if (code === 0) {
-            resolve({ success: true });
-          } else {
-            // Check if this is an EADDRINUSE error (stale lock file from previous session)
-            // This happens when mcp-remote's lock file contains a port that's now in use
-            if (stderr.includes('EADDRINUSE') || stderr.includes('address already in use')) {
-              logger.main.warn('[MCP OAuth] EADDRINUSE detected - likely stale lock file');
-              resolve({
-                success: false,
-                error: 'Port conflict: Another process is using the OAuth callback port. This usually happens when a previous session did not clean up properly.',
-                isStalePortError: true
-              });
-            // Check if this is a "command not found" error from the shell
-            // Windows: "'xyz' is not recognized as an internal or external command"
-            // Unix: "command not found" or "not found"
-            } else {
-              const notFoundMatch = stderr.match(/'([^']+)' is not recognized|(\S+): (?:command )?not found/i);
-              if (notFoundMatch) {
-                const cmdName = notFoundMatch[1] || notFoundMatch[2];
-                const help = getCommandNotFoundHelp(cmdName);
-                resolve({ success: false, error: help.message });
-              } else {
-                resolve({ success: false, error: stderr || `Process exited with code ${code}` });
-              }
-            }
-          }
-        });
-      }
-    });
-
-    // Write to stdin to trigger the process, then close it
-    // mcp-remote expects to run as a stdio server, so we need to send something
-    try {
-      if (child.stdin) {
-        child.stdin.write('{"jsonrpc":"2.0","method":"initialize","params":{},"id":1}\n');
-      } else {
-        logger.main.warn('[MCP OAuth] stdin not available for writing');
-      }
-    } catch (error) {
-      logger.main.warn('[MCP OAuth] Failed to write to stdin:', error);
-    }
-
-    // Give it a moment to start the OAuth flow, then check status periodically
-    const checkInterval = setInterval(async () => {
-      if (resolved) {
-        clearInterval(checkInterval);
-        return;
-      }
-      const status = await checkMcpRemoteAuthStatus(serverUrl);
-      if (status.authorized) {
-        clearInterval(checkInterval);
-        clearTimeout(timeout);
-        cleanup();
-        resolve({ success: true });
-      }
-    }, 2000);
-  });
-}
-
-/**
- * Try to kill a stale mcp-remote process that might be holding a port
- * Reads the lock file to get the PID and attempts to kill it
- * Works cross-platform (macOS, Linux, Windows)
- */
-async function tryKillStaleProcess(lockFilePath: string): Promise<boolean> {
-  try {
-    const content = await fs.promises.readFile(lockFilePath, 'utf-8');
-    const lock = JSON.parse(content);
-    if (lock.pid && typeof lock.pid === 'number') {
-      logger.main.info('[MCP] Found stale lock with PID:', lock.pid);
-
-      if (process.platform === 'win32') {
-        // Windows: use taskkill command
-        // process.kill() on Windows doesn't support signal 0 for checking
-        const { execSync } = require('child_process');
-        try {
-          // /F = force, /PID = process ID
-          execSync(`taskkill /F /PID ${lock.pid}`, { stdio: 'ignore' });
-          logger.main.info('[MCP] Killed stale mcp-remote process on Windows:', lock.pid);
-          await new Promise(resolve => setTimeout(resolve, 500));
-          return true;
-        } catch {
-          // Process doesn't exist or can't be killed - that's fine, continue with cleanup
-          logger.main.info('[MCP] Process not found or already dead on Windows');
-          return true;
-        }
-      } else {
-        // macOS/Linux: use process.kill with signals
-        try {
-          // Check if process is still running
-          process.kill(lock.pid, 0); // Signal 0 just checks if process exists
-          // Process exists, try to kill it
-          logger.main.info('[MCP] Killing stale mcp-remote process:', lock.pid);
-          process.kill(lock.pid, 'SIGTERM');
-          // Give it a moment to die
-          await new Promise(resolve => setTimeout(resolve, 500));
-          return true;
-        } catch (killError: unknown) {
-          // ESRCH means process doesn't exist (already dead) - that's fine
-          if (killError && typeof killError === 'object' && 'code' in killError && killError.code === 'ESRCH') {
-            logger.main.info('[MCP] Process already dead, just cleaning up lock file');
-            return true;
-          }
-          // EPERM means we don't have permission - can't kill it
-          logger.main.warn('[MCP] Cannot kill process:', killError);
-          return false;
-        }
-      }
-    }
-  } catch {
-    // Lock file doesn't exist or can't be read
-  }
-  return false;
-}
-
-/**
- * Revoke OAuth authorization by deleting token files
- * Also attempts to kill any stale processes holding ports
- */
-async function revokeMcpRemoteOAuth(serverUrl: string): Promise<{ success: boolean; error?: string }> {
-  const authDir = getMcpAuthDir();
-  const serverHashes = getServerHashes(serverUrl);
-
-  try {
-    // Find all mcp-remote version directories
-    const entries = await fs.promises.readdir(authDir, { withFileTypes: true });
-    const versionDirs = entries
-      .filter(e => e.isDirectory() && e.name.startsWith('mcp-remote-'))
-      .map(e => e.name);
-
-    // First pass: try to kill any stale processes from lock files
-    for (const versionDir of versionDirs) {
-      const versionPath = path.join(authDir, versionDir);
-      try {
-        for (const hash of serverHashes) {
-          const lockFilePath = path.join(versionPath, `${hash}_lock.json`);
-          await tryKillStaleProcess(lockFilePath);
-        }
-      } catch {
-        // Can't read version directory, continue
-      }
-    }
-
-    // Also check root auth dir for lock files
-    for (const hash of serverHashes) {
-      const lockFilePath = path.join(authDir, `${hash}_lock.json`);
-      await tryKillStaleProcess(lockFilePath);
-    }
-
-    // Second pass: delete all auth files
-    for (const versionDir of versionDirs) {
-      const versionPath = path.join(authDir, versionDir);
-      try {
-        const files = await fs.promises.readdir(versionPath);
-        for (const file of files) {
-          // Check if this file matches any of our hashes
-          for (const hash of serverHashes) {
-            if (file.startsWith(hash)) {
-              const filePath = path.join(versionPath, file);
-              try {
-                await fs.promises.unlink(filePath);
-                logger.main.info('[MCP] Deleted auth file:', filePath);
-              } catch (err) {
-                logger.main.warn('[MCP] Failed to delete:', filePath, err);
-              }
-            }
-          }
-        }
-      } catch {
-        // Can't read version directory, continue
-      }
-    }
-
-    // Also check root auth dir for older formats
-    for (const hash of serverHashes) {
-      const possibleFiles = [
-        path.join(authDir, `${hash}_tokens.json`),
-        path.join(authDir, `${hash}.json`),
-        path.join(authDir, `${hash}_client_info.json`),
-        path.join(authDir, `${hash}_code_verifier.txt`),
-        path.join(authDir, `${hash}_lock.json`),
-      ];
-      for (const filePath of possibleFiles) {
-        try {
-          await fs.promises.unlink(filePath);
-          logger.main.info('[MCP] Deleted auth file:', filePath);
-        } catch {
-          // File doesn't exist, that's fine
-        }
-      }
-    }
-
-    return { success: true };
-  } catch (error: unknown) {
-    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
-      // Auth directory doesn't exist, nothing to revoke
-      return { success: true };
-    }
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return { success: false, error: message };
-  }
 }

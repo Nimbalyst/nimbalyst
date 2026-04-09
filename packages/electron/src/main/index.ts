@@ -1123,6 +1123,11 @@ app.whenReady().then(async () => {
         const enabledServers: Record<string, any> = {};
         for (const [name, config] of Object.entries(allServers)) {
             if (isMCPServerEnabledForProvider(config as MCPServerConfig, MCP_PROVIDER_IDS.CLAUDE_AGENT)) {
+                const isAuthorized = await mcpConfigService.isOAuthAuthorized(config as MCPServerConfig);
+                if (!isAuthorized) {
+                    logger.mcp.info(`[MCP] Skipping unauthorized OAuth server for Claude Agent: ${name}`);
+                    continue;
+                }
                 enabledServers[name] = mcpConfigService.processServerConfigForRuntime(config as any);
             }
         }
@@ -1139,6 +1144,11 @@ app.whenReady().then(async () => {
         const enabledServers: Record<string, any> = {};
         for (const [name, config] of Object.entries(allServers)) {
             if (isMCPServerEnabledForProvider(config as MCPServerConfig, MCP_PROVIDER_IDS.CODEX)) {
+                const isAuthorized = await mcpConfigService.isOAuthAuthorized(config as MCPServerConfig);
+                if (!isAuthorized) {
+                    logger.mcp.info(`[MCP] Skipping unauthorized OAuth server for Codex: ${name}`);
+                    continue;
+                }
                 enabledServers[name] = mcpConfigService.processServerConfigForRuntime(config as any);
             }
         }

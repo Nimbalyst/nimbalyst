@@ -12,6 +12,17 @@ interface MCPServerConfig {
   url?: string;
   type?: 'stdio' | 'sse' | 'http';
   headers?: Record<string, string>;
+  oauth?: {
+    callbackPort?: number;
+    host?: string;
+    resource?: string;
+    transportStrategy?: 'http-first' | 'sse-first' | 'http-only' | 'sse-only';
+    authTimeoutSeconds?: number;
+    staticClientInfo?: Record<string, string>;
+    clientId?: string;
+    clientSecret?: string;
+    staticClientMetadata?: Record<string, string | number | boolean | null>;
+  };
   env?: Record<string, string>;
   disabled?: boolean;
   enabledForProviders?: string[];
@@ -84,6 +95,7 @@ const TEMPLATE_ICON_CONFIG: Record<string, IconConfig> = {
   atlassian: { type: 'simple-icons', slug: 'atlassian' },
   notion: { type: 'simple-icons', slug: 'notion' },
   asana: { type: 'simple-icons', slug: 'asana' },
+  slack: { type: 'simple-icons', slug: 'slack' },
   zapier: { type: 'simple-icons', slug: 'zapier' },
   aws: { type: 'url', url: 'https://cdn.jsdelivr.net/npm/simple-icons/icons/amazonwebservices.svg' },
   stripe: { type: 'simple-icons', slug: 'stripe' },
@@ -178,6 +190,7 @@ const TEMPLATE_CATEGORIES: Record<string, TemplateCategory> = {
   linear: 'productivity',
   asana: 'productivity',
   atlassian: 'productivity',
+  slack: 'productivity',
   notion: 'productivity',
   zapier: 'automation',
   'sequential-thinking': 'ai',
@@ -204,6 +217,15 @@ const CATEGORY_LABELS: Record<TemplateCategory, string> = {
 };
 
 const CATEGORY_ORDER: TemplateCategory[] = ['development', 'productivity', 'automation', 'ai', 'commerce', 'data', 'search', 'files'];
+
+const KNOWN_OAUTH_HOSTS = new Set([
+  'mcp.linear.app',
+  'mcp.atlassian.com',
+  'mcp.notion.com',
+  'mcp.asana.com',
+  'mcp.sentry.dev',
+  'mcp.slack.com',
+]);
 
 // Help text for common env vars
 const ENV_VAR_HELP: Record<string, { label: string; help: string; link?: string }> = {
@@ -286,7 +308,8 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     authType: 'oauth',
     config: {
       command: 'npx',
-      args: ['-y', 'mcp-remote', 'https://mcp.linear.app/mcp']
+      args: ['-y', 'mcp-remote', 'https://mcp.linear.app/mcp'],
+      oauth: {}
     }
   },
   {
@@ -365,7 +388,8 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     authType: 'oauth',
     config: {
       command: 'npx',
-      args: ['-y', 'mcp-remote', 'https://mcp.atlassian.com/v1/sse']
+      args: ['-y', 'mcp-remote', 'https://mcp.atlassian.com/v1/sse'],
+      oauth: {}
     }
   },
   {
@@ -376,7 +400,8 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     authType: 'oauth',
     config: {
       command: 'npx',
-      args: ['-y', 'mcp-remote', 'https://mcp.notion.com/mcp']
+      args: ['-y', 'mcp-remote', 'https://mcp.notion.com/mcp'],
+      oauth: {}
     }
   },
   {
@@ -387,7 +412,23 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     authType: 'oauth',
     config: {
       command: 'npx',
-      args: ['-y', 'mcp-remote', 'https://mcp.asana.com/sse']
+      args: ['-y', 'mcp-remote', 'https://mcp.asana.com/sse'],
+      oauth: {}
+    }
+  },
+  {
+    id: 'slack',
+    name: 'Slack',
+    description: 'Workspace conversations and channel context',
+    docsUrl: 'https://docs.slack.dev/ai/slack-mcp-server/connect-to-claude/',
+    authType: 'oauth',
+    config: {
+      type: 'http',
+      url: 'https://mcp.slack.com/mcp',
+      oauth: {
+        callbackPort: 3118,
+        clientId: '1601185624273.8899143856786'
+      }
     }
   },
   {
@@ -410,7 +451,8 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
     authType: 'oauth',
     config: {
       type: 'http',
-      url: 'https://mcp.sentry.dev/mcp'
+      url: 'https://mcp.sentry.dev/mcp',
+      oauth: {}
     }
   },
   {
@@ -631,6 +673,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
   const [formArgs, setFormArgs] = useState<string[]>([]);
   const [formEnv, setFormEnv] = useState<Array<{ key: string; value: string }>>([]);
   const [formHeaders, setFormHeaders] = useState<Array<{ key: string; value: string }>>([]);
+  const [formOAuth, setFormOAuth] = useState<MCPServerConfig['oauth']>();
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState<string>('');
   const [testHelpUrl, setTestHelpUrl] = useState<string | null>(null);
@@ -780,6 +823,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
     setFormHeaders(
       Object.entries(server.headers || {}).map(([key, value]) => ({ key, value }))
     );
+    setFormOAuth(server.oauth);
 
     // Check OAuth status for mcp-remote servers and HTTP transport
     if (isOAuthServer(server)) {
@@ -793,6 +837,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
     setViewState('template-selection');
     setSelectedServer(null);
     setSelectedTemplate(null);
+    setFormOAuth(undefined);
     setSaveStatus('idle');
     setTestStatus('idle');
     setTestMessage('');
@@ -826,6 +871,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
           value: value.startsWith('${') ? '' : value
         }))
       );
+      setFormOAuth(template.config.oauth);
 
       if (template.authType === 'oauth') {
         checkOAuthStatus(template.config);
@@ -841,6 +887,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
       setFormArgs([]);
       setFormEnv([]);
       setFormHeaders([]);
+      setFormOAuth(undefined);
       setOauthStatus('unknown');
     }
   };
@@ -854,6 +901,22 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
     setViewState('list');
     setSelectedTemplate(null);
   };
+
+  const getCurrentOAuthConfig = () => formOAuth;
+
+  const getCurrentOAuthServerConfig = (): MCPServerConfig => ({
+    type: formType,
+    url: formUrl || undefined,
+    command: formCommand || undefined,
+    args: formArgs,
+    oauth: getCurrentOAuthConfig(),
+  });
+
+  const usesNativeOAuth = (config: MCPServerConfig): boolean =>
+    Boolean((config.type === 'http' || config.type === 'sse') && (config.oauth?.clientId || config.oauth?.clientSecret));
+
+  const usesMcpRemoteOAuth = (config: MCPServerConfig): boolean =>
+    isOAuthServer(config) && !usesNativeOAuth(config);
 
   /**
    * Extract the server URL from mcp-remote args or http config
@@ -878,21 +941,40 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
    * Check if this is an OAuth server (uses mcp-remote or http transport)
    */
   const isOAuthServer = (config: MCPServerConfig): boolean => {
+    if (config.oauth) {
+      return true;
+    }
+
     // HTTP transport - check if it uses API key auth via headers (Bearer token)
     // If it has an Authorization header with a template variable, it uses API key, not OAuth
-    if (config.type === 'http') {
+    if (config.type === 'http' || config.type === 'sse') {
       const authHeader = config.headers?.Authorization || config.headers?.authorization;
       if (authHeader && (authHeader.includes('${') || authHeader.startsWith('Bearer '))) {
         // Has API key in headers, not OAuth
         return false;
       }
-      // HTTP without API key headers = OAuth
-      return true;
+      try {
+        return config.url ? KNOWN_OAUTH_HOSTS.has(new URL(config.url).hostname) : false;
+      } catch {
+        return false;
+      }
     }
 
     // stdio with mcp-remote explicitly
-    return config.command === 'npx' &&
-           Boolean(config.args?.some(arg => arg === 'mcp-remote' || arg.includes('mcp-remote')));
+    if (config.command === 'npx' &&
+        Boolean(config.args?.some(arg => arg === 'mcp-remote' || arg.includes('mcp-remote')))) {
+      const serverUrl = getOAuthServerUrl(config);
+      if (!serverUrl) {
+        return false;
+      }
+      try {
+        return KNOWN_OAUTH_HOSTS.has(new URL(serverUrl).hostname);
+      } catch {
+        return false;
+      }
+    }
+
+    return false;
   };
 
   /**
@@ -900,6 +982,11 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
    */
   const checkServerOAuthStatus = async (serverName: string, config: MCPServerConfig) => {
     if (!isOAuthServer(config)) {
+      return;
+    }
+
+    if (usesNativeOAuth(config)) {
+      setServerOAuthStatuses(prev => ({ ...prev, [serverName]: 'unknown' }));
       return;
     }
 
@@ -912,7 +999,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
     setServerOAuthStatuses(prev => ({ ...prev, [serverName]: 'checking' }));
     const ipcStart = performance.now();
     try {
-      const result = await window.electronAPI.invoke('mcp-config:check-oauth-status', serverUrl);
+      const result = await window.electronAPI.invoke('mcp-config:check-oauth-status', config);
       const ipcDuration = performance.now() - ipcStart;
       if (ipcDuration > 1000) {
         console.warn(`[MCPServersPanel] IPC call for "${serverName}" OAuth check took ${ipcDuration.toFixed(0)}ms (>1s threshold)`);
@@ -932,6 +1019,11 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
    * Check OAuth authorization status
    */
   const checkOAuthStatus = async (config: MCPServerConfig) => {
+    if (usesNativeOAuth(config)) {
+      setOauthStatus('unknown');
+      return;
+    }
+
     const serverUrl = getOAuthServerUrl(config);
     if (!serverUrl) {
       setOauthStatus('unknown');
@@ -940,7 +1032,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
 
     setOauthStatus('checking');
     try {
-      const result = await window.electronAPI.invoke('mcp-config:check-oauth-status', serverUrl);
+      const result = await window.electronAPI.invoke('mcp-config:check-oauth-status', config);
       setOauthStatus(result.authorized ? 'authorized' : 'not-authorized');
     } catch (error) {
       console.error('Failed to check OAuth status:', error);
@@ -952,13 +1044,14 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
    * Trigger OAuth authorization flow
    */
   const handleAuthorize = async () => {
-    // Build config from current form state
-    const config: MCPServerConfig = {
-      type: formType,
-      url: formUrl,
-      command: formCommand,
-      args: formArgs
-    };
+    const config = getCurrentOAuthServerConfig();
+
+    if (usesNativeOAuth(config)) {
+      setOauthStatus('unknown');
+      setTestStatus('error');
+      setTestMessage('This server uses native MCP OAuth. Start a Claude or Codex session and authorize it there instead of using this button.');
+      return;
+    }
 
     const serverUrl = getOAuthServerUrl(config);
     if (!serverUrl) return;
@@ -966,7 +1059,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
     setOauthAction('authorizing');
     setIsStalePortError(false);
     try {
-      const result = await window.electronAPI.invoke('mcp-config:trigger-oauth', serverUrl);
+      const result = await window.electronAPI.invoke('mcp-config:trigger-oauth', config);
       if (result.success) {
         setOauthStatus('authorized');
         setTestStatus('idle');
@@ -1011,13 +1104,14 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
    * Revoke OAuth authorization
    */
   const handleRevoke = async () => {
-    // Build config from current form state
-    const config: MCPServerConfig = {
-      type: formType,
-      url: formUrl,
-      command: formCommand,
-      args: formArgs
-    };
+    const config = getCurrentOAuthServerConfig();
+
+    if (usesNativeOAuth(config)) {
+      setOauthStatus('unknown');
+      setTestStatus('error');
+      setTestMessage('Native MCP OAuth tokens are managed by the MCP client. Remove the server from Claude or Codex if you need to re-authorize it.');
+      return;
+    }
 
     const serverUrl = getOAuthServerUrl(config);
     if (!serverUrl) return;
@@ -1028,7 +1122,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
 
     setOauthAction('revoking');
     try {
-      const result = await window.electronAPI.invoke('mcp-config:revoke-oauth', serverUrl);
+      const result = await window.electronAPI.invoke('mcp-config:revoke-oauth', config);
       if (result.success) {
         setOauthStatus('not-authorized');
         setTestMessage('Authorization revoked successfully');
@@ -1053,13 +1147,14 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
    * Used when EADDRINUSE error occurs due to stale lock files
    */
   const handleClearAuthCacheAndRetry = async () => {
-    // Build config from current form state
-    const config: MCPServerConfig = {
-      type: formType,
-      url: formUrl,
-      command: formCommand,
-      args: formArgs
-    };
+    const config = getCurrentOAuthServerConfig();
+
+    if (usesNativeOAuth(config)) {
+      setOauthStatus('unknown');
+      setTestStatus('error');
+      setTestMessage('This server uses native MCP OAuth. The auth cache tools only apply to mcp-remote-based servers.');
+      return;
+    }
 
     const serverUrl = getOAuthServerUrl(config);
     if (!serverUrl) return;
@@ -1068,7 +1163,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
     setIsStalePortError(false);
     try {
       // First, revoke/clear any existing auth files (including lock files)
-      await window.electronAPI.invoke('mcp-config:revoke-oauth', serverUrl);
+      await window.electronAPI.invoke('mcp-config:revoke-oauth', config);
       setTestMessage('Auth cache cleared. Retrying authorization...');
       setTestStatus('idle');
 
@@ -1076,7 +1171,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
       await new Promise(resolve => setTimeout(resolve, 500));
 
       // Then trigger OAuth again
-      const result = await window.electronAPI.invoke('mcp-config:trigger-oauth', serverUrl);
+      const result = await window.electronAPI.invoke('mcp-config:trigger-oauth', config);
       if (result.success) {
         setOauthStatus('authorized');
         setTestStatus('idle');
@@ -1147,6 +1242,10 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
         delete serverConfig.env;
       }
 
+      if (formOAuth) {
+        serverConfig.oauth = formOAuth;
+      }
+
       const config: MCPConfig = scope === 'workspace' && workspacePath
         ? await window.electronAPI.invoke('mcp-config:read-workspace', workspacePath)
         : await window.electronAPI.invoke('mcp-config:read-user');
@@ -1154,6 +1253,9 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
       // Preserve provider settings from existing config (managed by handleProviderToggle, not the form)
       const existingName = selectedServer?.name || formName.trim();
       const existingServerConfig = config.mcpServers[existingName];
+      if (!serverConfig.oauth && (existingServerConfig?.oauth || selectedTemplate?.config.oauth)) {
+        serverConfig.oauth = existingServerConfig?.oauth || selectedTemplate?.config.oauth;
+      }
       if (existingServerConfig?.enabledForProviders !== undefined) {
         serverConfig.enabledForProviders = existingServerConfig.enabledForProviders;
       }
@@ -1394,6 +1496,12 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
       return;
     }
 
+    if (usesNativeOAuth(getCurrentOAuthServerConfig())) {
+      setTestStatus('error');
+      setTestMessage('Connection testing is not available for native MCP OAuth servers. Open a Claude or Codex session and use the server there to authorize it.');
+      return;
+    }
+
     setTestStatus('testing');
     setTestMessage('Starting...');
 
@@ -1409,6 +1517,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
     try {
       const testConfig: MCPServerConfig = {
         type: formType,
+        oauth: getCurrentOAuthConfig(),
         env: Object.fromEntries(
           formEnv.filter(({ key }) => key.trim()).map(({ key, value }) => [key.trim(), value])
         )
@@ -1665,10 +1774,12 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
 
   // Server Configuration Form
   const renderServerConfig = () => {
-    const isFromTemplate = Boolean(selectedTemplate);
     const requiredEnvVars = getRequiredEnvVars();
     const isOAuth = selectedTemplate?.authType === 'oauth';
     const isNewConfig = !selectedServer;
+    const currentConfig = getCurrentOAuthServerConfig();
+    const isNativeOAuthConfig = usesNativeOAuth(currentConfig);
+    const isMcpRemoteOAuthConfig = usesMcpRemoteOAuth(currentConfig);
 
     return (
       <div className="mcp-server-form p-6" role="form" aria-label="MCP Server Configuration">
@@ -1728,20 +1839,26 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
           <div className="mcp-oauth-section p-4 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded-md mb-4" role="group" aria-label="OAuth Authorization">
             <div className="mcp-oauth-status flex items-center gap-3 mb-3">
               <span className="mcp-oauth-label text-sm font-medium text-[var(--nim-text)]">Authorization:</span>
-              {oauthStatus === 'checking' && (
+              {isNativeOAuthConfig && (
+                <span className="mcp-oauth-badge unknown inline-flex items-center px-3 py-1 rounded-xl text-xs font-medium bg-[rgba(149,165,166,0.15)] text-[#95a5a6]" role="status">
+                  Managed by Claude/Codex
+                </span>
+              )}
+              {!isNativeOAuthConfig && oauthStatus === 'checking' && (
                 <span className="mcp-oauth-badge checking inline-flex items-center px-3 py-1 rounded-xl text-xs font-medium bg-[rgba(52,152,219,0.15)] text-[#3498db]" role="status" aria-live="polite">Checking...</span>
               )}
-              {oauthStatus === 'authorized' && (
+              {!isNativeOAuthConfig && oauthStatus === 'authorized' && (
                 <span className="mcp-oauth-badge authorized inline-flex items-center px-3 py-1 rounded-xl text-xs font-medium bg-[rgba(39,174,96,0.15)] text-[#27ae60]" role="status" aria-live="polite">Authorized</span>
               )}
-              {oauthStatus === 'not-authorized' && (
+              {!isNativeOAuthConfig && oauthStatus === 'not-authorized' && (
                 <span className="mcp-oauth-badge not-authorized inline-flex items-center px-3 py-1 rounded-xl text-xs font-medium bg-[rgba(243,156,18,0.15)] text-[#f39c12]" role="status" aria-live="polite">Not authorized</span>
               )}
-              {oauthStatus === 'unknown' && (
+              {!isNativeOAuthConfig && oauthStatus === 'unknown' && (
                 <span className="mcp-oauth-badge unknown inline-flex items-center px-3 py-1 rounded-xl text-xs font-medium bg-[rgba(149,165,166,0.15)] text-[#95a5a6]" role="status">Unknown</span>
               )}
             </div>
-            <div className="mcp-oauth-actions flex gap-2 mb-2">
+            {isMcpRemoteOAuthConfig && (
+              <div className="mcp-oauth-actions flex gap-2 mb-2">
               {oauthStatus !== 'authorized' && (
                 <button
                   onClick={handleAuthorize}
@@ -1764,13 +1881,16 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
                   {oauthAction === 'revoking' ? 'Revoking...' : 'Revoke'}
                 </button>
               )}
-            </div>
+              </div>
+            )}
             <div className="mcp-oauth-hint text-xs text-[var(--nim-text-faint)] leading-snug" role="note">
-              {oauthStatus === 'authorized'
+              {isNativeOAuthConfig
+                ? 'This server uses native MCP OAuth. Start a Claude or Codex session and let the client open the browser authorization flow.'
+                : oauthStatus === 'authorized'
                 ? 'You are authorized to use this server.'
                 : 'Click Authorize to open a browser window and log in.'}
             </div>
-            {testStatus === 'error' && testMessage && (
+            {!isNativeOAuthConfig && testStatus === 'error' && testMessage && (
               <div className="mcp-oauth-error mt-3 p-3 bg-[color-mix(in_srgb,var(--nim-error)_10%,transparent)] border border-[color-mix(in_srgb,var(--nim-error)_30%,transparent)] rounded-md text-[var(--nim-error)] text-[0.8125rem] leading-snug" role="alert" aria-live="assertive">
                 {testMessage}
                 {isStalePortError && (
@@ -1845,7 +1965,7 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
         )}
 
         {/* Test Connection Button (visible for templates, outside Advanced section) */}
-        {isFromTemplate && (
+        {selectedTemplate && !isNativeOAuthConfig && (
           <div className="mcp-form-group mb-6">
             <label className="block mb-2 font-medium text-sm text-[var(--nim-text)]">Test Connection</label>
             <div className="mcp-test-standalone flex flex-col gap-2">
@@ -1883,8 +2003,18 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
           </div>
         )}
 
+        {selectedTemplate && isNativeOAuthConfig && (
+          <div className="mcp-form-group mb-6">
+            <label className="block mb-2 font-medium text-sm text-[var(--nim-text)]">Next Step</label>
+            <div className="p-4 rounded-md border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] text-sm text-[var(--nim-text)] leading-snug">
+              This settings panel only saves the server configuration.
+              Open a Claude or Codex session and use this server there to trigger browser authorization.
+            </div>
+          </div>
+        )}
+
         {/* Advanced Configuration (collapsed for templates) */}
-        {isFromTemplate ? (
+        {selectedTemplate ? (
           <details className="mcp-advanced-section mt-6 border border-[var(--nim-border)] rounded-lg overflow-hidden [&[open]>summary::after]:rotate-45">
             <summary className="p-4 cursor-pointer flex items-center justify-between font-medium text-sm bg-[var(--nim-bg-secondary)] text-[var(--nim-text)] list-none [&::-webkit-details-marker]:hidden after:content-[''] after:w-1.5 after:h-1.5 after:border-r-2 after:border-b-2 after:border-[var(--nim-text-faint)] after:-rotate-45 after:transition-transform after:duration-200">
               Advanced Configuration
@@ -1939,6 +2069,9 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
   // Advanced form fields (shared between template and custom config)
   const renderAdvancedFields = (readonly: boolean) => {
     const isExistingServer = Boolean(selectedServer);
+    const currentConfig = getCurrentOAuthServerConfig();
+    const isNativeOAuthConfig = usesNativeOAuth(currentConfig);
+    const isMcpRemoteOAuthConfig = usesMcpRemoteOAuth(currentConfig);
 
     return (
       <>
@@ -2049,19 +2182,26 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
                 className={`mcp-command-input flex-1 px-3 py-2 border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] text-sm ${readonly ? 'opacity-60 cursor-not-allowed' : ''}`}
                 disabled={readonly}
               />
-              <button
-                onClick={handleTestConnection}
-                disabled={testStatus === 'testing' || !formUrl.trim()}
-                className={`mcp-test-button px-4 py-2 border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] text-sm cursor-pointer whitespace-nowrap min-w-[100px] disabled:opacity-50 disabled:cursor-not-allowed ${testStatus === 'testing' ? 'bg-[var(--nim-bg-secondary)] text-[var(--nim-text-muted)]' : ''} ${testStatus === 'success' ? 'bg-[#27ae60] text-white border-[#27ae60]' : ''}`}
-                aria-label="Test server connection"
-                aria-busy={testStatus === 'testing'}
-              >
-                {testStatus === 'testing' ? 'Testing...' :
-                 testStatus === 'success' ? 'Connected' : 'Test'}
-              </button>
-              {testStatus === 'error' && <span className="mcp-test-failed-label text-[#e74c3c] font-medium text-sm ml-2">Failed</span>}
+              {!isNativeOAuthConfig && (
+                <button
+                  onClick={handleTestConnection}
+                  disabled={testStatus === 'testing' || !formUrl.trim()}
+                  className={`mcp-test-button px-4 py-2 border border-[var(--nim-border)] rounded bg-[var(--nim-bg)] text-[var(--nim-text)] text-sm cursor-pointer whitespace-nowrap min-w-[100px] disabled:opacity-50 disabled:cursor-not-allowed ${testStatus === 'testing' ? 'bg-[var(--nim-bg-secondary)] text-[var(--nim-text-muted)]' : ''} ${testStatus === 'success' ? 'bg-[#27ae60] text-white border-[#27ae60]' : ''}`}
+                  aria-label="Test server connection"
+                  aria-busy={testStatus === 'testing'}
+                >
+                  {testStatus === 'testing' ? 'Testing...' :
+                   testStatus === 'success' ? 'Connected' : 'Test'}
+                </button>
+              )}
+              {!isNativeOAuthConfig && testStatus === 'error' && <span className="mcp-test-failed-label text-[#e74c3c] font-medium text-sm ml-2">Failed</span>}
             </div>
-            {testMessage && (
+            {isNativeOAuthConfig && (
+              <div className="mt-2 text-xs text-[var(--nim-text-faint)] leading-snug">
+                Connection testing is disabled for native MCP OAuth servers. Save the config, then open a Claude or Codex session and use the server there to authorize it.
+              </div>
+            )}
+            {!isNativeOAuthConfig && testMessage && (
               <div
                 className={`mcp-test-message mt-2 p-2 rounded text-sm flex items-center gap-2 ${testStatus === 'testing' ? 'bg-[rgba(52,152,219,0.1)] text-[var(--nim-text-muted)] border border-[rgba(52,152,219,0.3)]' : ''} ${testStatus === 'success' ? 'bg-[rgba(39,174,96,0.1)] text-[#27ae60] border border-[rgba(39,174,96,0.3)]' : ''} ${testStatus === 'error' ? 'bg-[rgba(231,76,60,0.1)] text-[#e74c3c] border border-[rgba(231,76,60,0.3)]' : ''}`}
                 role={testStatus === 'error' ? 'alert' : 'status'}
@@ -2142,26 +2282,30 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
         )}
 
         {/* OAuth section for existing mcp-remote servers and HTTP transport */}
-        {isExistingServer && (formType === 'http' || (formCommand === 'npx' && formArgs.some(arg => arg === 'mcp-remote' || arg.includes('mcp-remote')))) && (
+        {isExistingServer && isOAuthServer(currentConfig) && (
           <div className="mcp-form-group mb-6">
             <label className="block mb-2 font-medium text-sm text-[var(--nim-text)]">OAuth Authorization</label>
             <div className="mcp-oauth-section p-4 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded-md">
               <div className="mcp-oauth-status flex items-center gap-3 mb-3">
                 <span className="mcp-oauth-label text-sm font-medium text-[var(--nim-text)]">Status:</span>
-                {oauthStatus === 'checking' && (
+                {isNativeOAuthConfig && (
+                  <span className="mcp-oauth-badge unknown inline-flex items-center px-3 py-1 rounded-xl text-xs font-medium bg-[rgba(149,165,166,0.15)] text-[#95a5a6]">Managed by Claude/Codex</span>
+                )}
+                {!isNativeOAuthConfig && oauthStatus === 'checking' && (
                   <span className="mcp-oauth-badge checking inline-flex items-center px-3 py-1 rounded-xl text-xs font-medium bg-[rgba(52,152,219,0.15)] text-[#3498db]">Checking...</span>
                 )}
-                {oauthStatus === 'authorized' && (
+                {!isNativeOAuthConfig && oauthStatus === 'authorized' && (
                   <span className="mcp-oauth-badge authorized inline-flex items-center px-3 py-1 rounded-xl text-xs font-medium bg-[rgba(39,174,96,0.15)] text-[#27ae60]">Authorized</span>
                 )}
-                {oauthStatus === 'not-authorized' && (
+                {!isNativeOAuthConfig && oauthStatus === 'not-authorized' && (
                   <span className="mcp-oauth-badge not-authorized inline-flex items-center px-3 py-1 rounded-xl text-xs font-medium bg-[rgba(243,156,18,0.15)] text-[#f39c12]">Not authorized</span>
                 )}
-                {oauthStatus === 'unknown' && (
+                {!isNativeOAuthConfig && oauthStatus === 'unknown' && (
                   <span className="mcp-oauth-badge unknown inline-flex items-center px-3 py-1 rounded-xl text-xs font-medium bg-[rgba(149,165,166,0.15)] text-[#95a5a6]">Unknown</span>
                 )}
               </div>
-              <div className="mcp-oauth-actions flex gap-2">
+              {isMcpRemoteOAuthConfig && (
+                <div className="mcp-oauth-actions flex gap-2">
                 {oauthStatus !== 'authorized' && (
                   <button
                     onClick={handleAuthorize}
@@ -2180,7 +2324,13 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
                     {oauthAction === 'revoking' ? 'Revoking...' : 'Revoke'}
                   </button>
                 )}
-              </div>
+                </div>
+              )}
+              {isNativeOAuthConfig && (
+                <div className="text-xs text-[var(--nim-text-faint)] leading-snug mt-2">
+                  Native MCP OAuth is completed by Claude or Codex when the server is first used.
+                </div>
+              )}
             </div>
           </div>
         )}

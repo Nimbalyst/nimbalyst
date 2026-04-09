@@ -669,6 +669,24 @@ describe('OpenAICodexProvider', () => {
         type: 'http',
         url: 'https://mcp.customer.io/alternate',
       },
+      slack_oauth: {
+        type: 'http',
+        url: 'https://mcp.slack.com/mcp',
+        headers: {
+          'X-Tenant': 'workspace-1',
+        },
+        oauth: {
+          callbackPort: 3118,
+          clientId: 'slack-client-id',
+          clientSecret: 'slack-client-secret',
+          resource: 'https://slack.com',
+          transportStrategy: 'http-only',
+          authTimeoutSeconds: 60,
+          staticClientMetadata: {
+            scope: 'channels:history chat:write',
+          },
+        },
+      },
     }));
 
     const runStreamed = vi.fn(async () => ({
@@ -731,6 +749,7 @@ describe('OpenAICodexProvider', () => {
         'custom_http',
         'Customer_io',
         'Customer_io_2',
+        'slack_oauth',
       ])
     );
 
@@ -763,6 +782,27 @@ describe('OpenAICodexProvider', () => {
     });
     expect(mcpServers.Customer_io_2).toEqual({
       url: 'https://mcp.customer.io/alternate',
+    });
+    expect(mcpServers.slack_oauth).toEqual({
+      command: 'npx',
+      args: [
+        '-y',
+        'mcp-remote',
+        'https://mcp.slack.com/mcp',
+        '3118',
+        '--transport',
+        'http-only',
+        '--resource',
+        'https://slack.com',
+        '--auth-timeout',
+        '60',
+        '--header',
+        'X-Tenant:workspace-1',
+        '--static-oauth-client-metadata',
+        '{"scope":"channels:history chat:write"}',
+        '--static-oauth-client-info',
+        '{"client_id":"slack-client-id","client_secret":"slack-client-secret"}',
+      ],
     });
   });
 

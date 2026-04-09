@@ -14,6 +14,49 @@ export interface MCPServerEnv {
 }
 
 /**
+ * Optional OAuth settings for remote MCP servers.
+ *
+ * These map to mcp-remote flags so Nimbalyst can support servers that:
+ * - require OAuth instead of API keys
+ * - require a fixed callback port
+ * - require pre-registered/static OAuth client information
+ */
+export interface MCPServerOAuthConfig {
+  /** Fixed local callback port for OAuth redirects. */
+  callbackPort?: number;
+
+  /** Hostname to register in the OAuth callback URL (defaults to localhost). */
+  host?: string;
+
+  /** Resource parameter passed during OAuth authorization, when required by the server. */
+  resource?: string;
+
+  /** Transport preference for mcp-remote when talking to the remote server. */
+  transportStrategy?: 'http-first' | 'sse-first' | 'http-only' | 'sse-only';
+
+  /** OAuth callback timeout in seconds. */
+  authTimeoutSeconds?: number;
+
+  /**
+   * Static OAuth client information for servers that do not support dynamic client registration.
+   * Example: { client_id: 'abc', client_secret: 'def' }
+   */
+  staticClientInfo?: Record<string, string>;
+
+  /** Native MCP OAuth client ID for clients that support remote OAuth directly. */
+  clientId?: string;
+
+  /** Optional native MCP OAuth client secret for pre-registered confidential clients. */
+  clientSecret?: string;
+
+  /**
+   * Static OAuth client metadata for servers that require explicit metadata/scopes.
+   * Example: { scope: 'channels:history channels:read' }
+   */
+  staticClientMetadata?: Record<string, string | number | boolean | null>;
+}
+
+/**
  * Configuration for a single MCP server.
  * Supports stdio (local executable), SSE (legacy remote), and HTTP (modern remote) transports.
  */
@@ -37,6 +80,9 @@ export interface MCPServerConfig {
 
   /** Custom HTTP headers for remote transport (http only) */
   headers?: Record<string, string>;
+
+  /** Optional OAuth settings for remote MCP servers. */
+  oauth?: MCPServerOAuthConfig;
 
   /** Environment variables to set (supports ${VAR} and ${VAR:-default} syntax) */
   env?: MCPServerEnv;
