@@ -116,6 +116,14 @@ export class TeamSyncProvider {
   /** Local cache of decrypted doc index entries */
   private localEntries: Map<string, DocIndexEntry> = new Map();
 
+  /**
+   * Pending doc index messages queued while disconnected.
+   * Unlike DocumentSync (which queues CRDT updates), TeamSync was silently
+   * dropping doc index mutations when offline. This queue ensures register,
+   * update, and remove operations survive reconnection.
+   */
+  private pendingDocIndexMessages: TeamClientMessage[] = [];
+
   constructor(config: TeamSyncConfig) {
     this.config = config;
   }
@@ -180,6 +188,7 @@ export class TeamSyncProvider {
     this.disconnect();
     this.teamState = null;
     this.localEntries.clear();
+    this.pendingDocIndexMessages = [];
   }
 
   getStatus(): TeamSyncStatus {
@@ -314,6 +323,9 @@ export class TeamSyncProvider {
     if (documents.length > 0) {
       this.config.onDocumentsLoaded?.(documents);
     }
+
+    // Replay any doc index mutations that were queued while disconnected
+    this.replayPendingDocIndexMessages();
   }
 
   private handleMemberAdded(msg: TeamMemberAddedMessage): void {
@@ -437,6 +449,32 @@ export class TeamSyncProvider {
   private send(message: TeamClientMessage): void {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
+    } else if (this.isDocIndexMessage(message)) {
+      // Queue doc index mutations so they survive disconnection.
+      // Collapse duplicate register/update for the same documentId.
+      const docId = 'documentId' in message ? message.documentId : undefined;
+      if (docId) {
+        this.pendingDocIndexMessages = this.pendingDocIndexMessages.filter(m =>
+          !('documentId' in m) || m.documentId !== docId || m.type !== message.type
+        );
+      }
+      this.pendingDocIndexMessages.push(message);
+      console.warn(`[TeamSync] Queued offline ${message.type} (${this.pendingDocIndexMessages.length} pending)`);
+    }
+    // Non-doc-index messages (teamSync, identity key ops) are intentionally
+    // not queued -- they are re-sent on reconnect via the normal handshake.
+  }
+
+  private isDocIndexMessage(msg: TeamClientMessage): boolean {
+    return msg.type === 'docIndexRegister' || msg.type === 'docIndexUpdate' || msg.type === 'docIndexRemove';
+  }
+
+  private replayPendingDocIndexMessages(): void {
+    if (this.pendingDocIndexMessages.length === 0) return;
+    const messages = this.pendingDocIndexMessages.splice(0);
+    console.log(`[TeamSync] Replaying ${messages.length} pending doc index messages`);
+    for (const msg of messages) {
+      this.send(msg);
     }
   }
 

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAtomValue } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { InputModal } from '../InputModal';
+import { WorkspaceSummaryHeader } from '../WorkspaceSummaryHeader';
 import {
   sharedDocumentsAtom,
   teamSyncStatusAtom,
@@ -20,6 +21,30 @@ import {
   type CollabTreeNode,
 } from './collabTree';
 import { registerDocumentInIndex } from '../../store/atoms/collabDocuments';
+
+// ---------------------------------------------------------------------------
+// TeamSync status indicator -- shown in the header subtitle slot
+// ---------------------------------------------------------------------------
+
+type TeamSyncStatus = 'disconnected' | 'connecting' | 'syncing' | 'connected' | 'error';
+
+const STATUS_CONFIG: Record<TeamSyncStatus, { label: string; dotClass: string }> = {
+  connected:    { label: 'Team synced',   dotClass: 'bg-green-500' },
+  syncing:      { label: 'Syncing...',    dotClass: 'bg-blue-500 animate-pulse' },
+  connecting:   { label: 'Connecting...', dotClass: 'bg-yellow-500 animate-pulse' },
+  disconnected: { label: 'Disconnected',  dotClass: 'bg-gray-500' },
+  error:        { label: 'Sync error',    dotClass: 'bg-red-500' },
+};
+
+const TeamSyncStatusLabel: React.FC<{ status: TeamSyncStatus }> = ({ status }) => {
+  const { label, dotClass } = STATUS_CONFIG[status];
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${dotClass}`} />
+      <span>{label}</span>
+    </span>
+  );
+};
 
 interface CollabSidebarProps {
   workspacePath: string;
@@ -494,21 +519,16 @@ export const CollabSidebar: React.FC<CollabSidebarProps> = ({
       className="collab-sidebar w-full h-full flex flex-col bg-nim-secondary border-r border-nim overflow-hidden"
       data-testid="collab-sidebar"
     >
-      {/* Header */}
-      <div className="px-3 py-2 border-b border-nim">
-        <div className="flex items-center justify-between gap-2">
-          <div className="min-w-0">
-            <h2 className="text-xs font-semibold text-nim-muted uppercase tracking-wider m-0">
-              Shared Documents
-            </h2>
-            <p className="m-0 mt-1 text-[11px] text-nim-faint truncate">
-              {selectedFolderLabel}
-            </p>
-          </div>
-          <div className="flex items-center gap-1">
+      {/* Header -- matches WorkspaceSummaryHeader used by EditorMode */}
+      <WorkspaceSummaryHeader
+        workspacePath={workspacePath}
+        subtitle={<TeamSyncStatusLabel status={teamSyncStatus} />}
+        actionsClassName="gap-1"
+        actions={
+          <>
             <button
               type="button"
-              className="h-7 w-7 rounded-md border border-nim bg-nim hover:bg-nim-tertiary text-nim-muted hover:text-nim"
+              className="workspace-action-button bg-transparent border-none p-1.5 cursor-pointer rounded text-[var(--nim-text-faint)] flex items-center justify-center transition-all duration-200 relative hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
               title="New document"
               onClick={() => {
                 setIsCreateDocumentOpen(true);
@@ -519,7 +539,7 @@ export const CollabSidebar: React.FC<CollabSidebarProps> = ({
             </button>
             <button
               type="button"
-              className="h-7 w-7 rounded-md border border-nim bg-nim hover:bg-nim-tertiary text-nim-muted hover:text-nim"
+              className="workspace-action-button bg-transparent border-none p-1.5 cursor-pointer rounded text-[var(--nim-text-faint)] flex items-center justify-center transition-all duration-200 relative hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
               title="New folder"
               onClick={() => {
                 setIsCreateFolderOpen(true);
@@ -528,9 +548,9 @@ export const CollabSidebar: React.FC<CollabSidebarProps> = ({
             >
               <MaterialSymbol icon="create_new_folder" size={16} />
             </button>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Document tree */}
       <div
