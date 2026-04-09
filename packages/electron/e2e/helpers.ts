@@ -111,6 +111,9 @@ export async function launchElectronApp(options?: {
     ELECTRON_DISABLE_SECURITY_WARNINGS: '1',
     ELECTRON_RENDERER_URL: devServerUrl, // Use dev server for HMR
     PLAYWRIGHT: '1', // Default: skip session restoration
+    // Use a different CDP port so the test Electron doesn't conflict
+    // with a running Nimbalyst instance on the default port (9222)
+    NIMBALYST_CDP_PORT: '9333',
     ...options?.env,
   };
 

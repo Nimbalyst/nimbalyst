@@ -53,6 +53,11 @@ test.beforeAll(async () => {
     'utf8'
   );
   await fs.writeFile(
+    path.join(workspaceDir, 'autosave-accent-test.md'),
+    '# Prueba de Acentos\n\nContenido original.\n',
+    'utf8'
+  );
+  await fs.writeFile(
     path.join(workspaceDir, 'dirty-close-test.md'),
     '# Dirty Close Test\n\nOriginal content.\n',
     'utf8'
@@ -139,6 +144,50 @@ test('autosave clears dirty indicator and saves content', async () => {
 
   // Close the tab to clean up for next test
   await closeTabByFileName(page, 'autosave-test.md');
+});
+
+test('autosave preserves accent and Unicode characters', async () => {
+  const mdPath = path.join(workspaceDir, 'autosave-accent-test.md');
+
+  // Open the markdown file
+  await openFileFromTree(page, 'autosave-accent-test.md');
+
+  // Wait for Lexical editor to load
+  await page.waitForSelector(ACTIVE_EDITOR_SELECTOR, { timeout: TEST_TIMEOUTS.EDITOR_LOAD });
+  await page.waitForTimeout(500);
+
+  // Click in the editor and type accent characters at the end
+  const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
+  await editor.click();
+  await page.keyboard.press('End');
+  await page.keyboard.type('\n\nAño nuevo: á é í ó ú ñ ü');
+
+  // Verify dirty indicator appears
+  const tabElement = getTabByFileName(page, 'autosave-accent-test.md');
+  await expect(tabElement.locator(PLAYWRIGHT_TEST_SELECTORS.tabDirtyIndicator))
+    .toBeVisible({ timeout: 2000 });
+
+  // Wait for autosave (2s interval + 200ms debounce + buffer)
+  await page.waitForTimeout(3500);
+
+  // Verify dirty indicator cleared
+  await expect(tabElement.locator(PLAYWRIGHT_TEST_SELECTORS.tabDirtyIndicator))
+    .toHaveCount(0, { timeout: 1000 });
+
+  // Verify content saved to disk with correct encoding
+  const savedContent = await fs.readFile(mdPath, 'utf-8');
+  expect(savedContent).toContain('Año nuevo');
+  expect(savedContent).toContain('á é í ó ú ñ ü');
+
+  // Verify no mojibake / double-encoding artifacts
+  expect(savedContent).not.toContain('Ã');
+  expect(savedContent).not.toContain('Â');
+
+  // Verify the original Spanish content survived too
+  expect(savedContent).toContain('Prueba de Acentos');
+
+  // Close the tab to clean up for next test
+  await closeTabByFileName(page, 'autosave-accent-test.md');
 });
 
 test('edited content is saved when tab is closed', async () => {
