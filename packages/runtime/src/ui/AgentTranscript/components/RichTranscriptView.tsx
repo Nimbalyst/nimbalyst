@@ -823,6 +823,28 @@ export const RichTranscriptView = React.forwardRef<
     return { restartAfterIndex: -1, restartAtBottom: false };
   }, [messages, appStartTime]);
 
+  // Codex SDK reuses item IDs across session resumes, which can create
+  // duplicate tool_call events with the same providerToolCallId. When
+  // duplicates exist, hide the earlier (superseded) ones so only the
+  // latest version renders (typically the completed one).
+  const supersededToolIndices = useMemo(() => {
+    const indices = new Set<number>();
+    // Map from providerToolCallId -> last seen message index
+    const lastSeenByToolId = new Map<string, number>();
+    for (let i = 0; i < messages.length; i++) {
+      const id = messages[i].toolCall?.providerToolCallId;
+      if (id) {
+        const prev = lastSeenByToolId.get(id);
+        if (prev !== undefined) {
+          // Mark the earlier one as superseded
+          indices.add(prev);
+        }
+        lastSeenByToolId.set(id, i);
+      }
+    }
+    return indices;
+  }, [messages]);
+
   // Find pending (unresolved) ToolPermission widgets and the VList indices where they're actually rendered.
   // Tool messages are hidden (display:none) and rendered inside the next assistant message via toolMessagesBefore,
   // so we need to find the assistant message index for scroll targeting.
@@ -1556,6 +1578,11 @@ export const RichTranscriptView = React.forwardRef<
                   }}
                 >
                   {messages.map((message, index) => {
+                    // Skip tool calls superseded by a later event with the same providerToolCallId
+                    if (supersededToolIndices.has(index)) {
+                      return <div key={`${sessionId}-${index}`} style={{ display: 'none' }} />;
+                    }
+
                     const isUser = message.type === 'user_message';
                     const isTool = isToolLikeMessage(message);
                     const isCollapsed = collapsedMessages.has(index);

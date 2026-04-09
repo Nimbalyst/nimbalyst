@@ -449,6 +449,27 @@ export class TranscriptTransformer {
       }
 
       case 'tool_call_started': {
+        // Codex SDK reuses item IDs (e.g. "item_7") across session resumes,
+        // so check for an existing event with this providerToolCallId before
+        // creating a duplicate. If one exists for the same tool, skip (idempotent).
+        // If one exists for a different tool, it's an ID collision -- create a
+        // new event (the DB allows multiple events with the same providerToolCallId).
+        if (desc.providerToolCallId && !toolEventIds.has(desc.providerToolCallId)) {
+          const existing = await this.transcriptStore.findByProviderToolCallId(desc.providerToolCallId);
+          if (existing) {
+            const existingPayload = existing.payload as Record<string, unknown>;
+            if (existingPayload.toolName === desc.toolName) {
+              // Same tool, same ID -- already created (e.g. batch replay or duplicate)
+              toolEventIds.set(desc.providerToolCallId, existing.id);
+              return null;
+            }
+            // Different tool -- ID collision from Codex session resume.
+            // Fall through to create a new event; the new event will have
+            // the same providerToolCallId but findByProviderToolCallId returns
+            // the most recent one (ORDER BY id DESC), so subsequent completions
+            // will match this new event correctly.
+          }
+        }
         const event = await writer.createToolCall(sessionId, {
           toolName: desc.toolName,
           toolDisplayName: desc.toolDisplayName,
