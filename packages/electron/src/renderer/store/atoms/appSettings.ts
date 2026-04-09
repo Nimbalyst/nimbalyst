@@ -349,6 +349,7 @@ export async function initNotificationSettings(): Promise<NotificationSettings> 
 // ============================================================================
 
 export type ReleaseChannel = 'stable' | 'alpha';
+export type PreferredTerminalShell = 'auto' | 'pwsh' | 'powershell' | 'git-bash' | 'wsl' | 'cmd';
 
 export interface AdvancedSettings {
   releaseChannel: ReleaseChannel;
@@ -375,6 +376,8 @@ export interface AdvancedSettings {
   // Document history settings
   historyMaxAgeDays: number; // Max age in days before snapshots are cleaned up (default: 30)
   historyMaxSnapshots: number; // Max snapshots per file (default: 250)
+  // Preferred terminal shell on Windows. 'auto' follows the detection priority.
+  preferredTerminalShell: PreferredTerminalShell;
 }
 
 /**
@@ -405,6 +408,7 @@ const defaultAdvancedSettings: AdvancedSettings = {
   customPathDirs: '',
   historyMaxAgeDays: 30,
   historyMaxSnapshots: 250,
+  preferredTerminalShell: 'auto',
 };
 
 /**
@@ -473,6 +477,9 @@ function scheduleAdvancedPersist(
           break;
         case 'historyMaxSnapshots':
           await window.electronAPI.invoke('app-settings:set', 'historyMaxSnapshots', settings.historyMaxSnapshots);
+          break;
+        case 'preferredTerminalShell':
+          await window.electronAPI.invoke('app-settings:set', 'preferredTerminalShell', settings.preferredTerminalShell);
           break;
         case 'spellcheckEnabled':
           await window.electronAPI.invoke('spellcheck:set-enabled', settings.spellcheckEnabled);
@@ -662,7 +669,7 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
   }
 
   try {
-    const [channel, analyticsEnabled, extensionDevToolsEnabled, walkthroughState, maxHeapSizeMB, alphaFeatures, enableAllAlphaFeatures, betaFeatures, enableAllBetaFeatures, customPathDirs, spellcheckEnabled, historyMaxAgeDays, historyMaxSnapshots] =
+    const [channel, analyticsEnabled, extensionDevToolsEnabled, walkthroughState, maxHeapSizeMB, alphaFeatures, enableAllAlphaFeatures, betaFeatures, enableAllBetaFeatures, customPathDirs, spellcheckEnabled, historyMaxAgeDays, historyMaxSnapshots, preferredTerminalShell] =
       await Promise.all([
         window.electronAPI.invoke('release-channel:get'),
         window.electronAPI.invoke('analytics:is-enabled'),
@@ -677,6 +684,7 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
         window.electronAPI.invoke('app-settings:get', 'spellcheckEnabled'),
         window.electronAPI.invoke('app-settings:get', 'historyMaxAgeDays'),
         window.electronAPI.invoke('app-settings:get', 'historyMaxSnapshots'),
+        window.electronAPI.invoke('app-settings:get', 'preferredTerminalShell'),
       ]);
 
     // Calculate viewed count (completed + dismissed)
@@ -700,6 +708,7 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
       customPathDirs: customPathDirs ?? '',
       historyMaxAgeDays: historyMaxAgeDays ?? 30,
       historyMaxSnapshots: historyMaxSnapshots ?? 250,
+      preferredTerminalShell: preferredTerminalShell ?? 'auto',
     };
   } catch (error) {
     console.error('[appSettings] Failed to load advanced settings:', error);

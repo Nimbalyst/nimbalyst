@@ -6,6 +6,7 @@
  */
 
 import { getTerminalSessionManager } from '../services/TerminalSessionManager';
+import { ShellDetector } from '../services/ShellDetector';
 import { safeHandle } from '../utils/ipcRegistry';
 import { ulid } from 'ulid';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
@@ -133,6 +134,10 @@ export function registerTerminalHandlers(): void {
       }
     }
   );
+
+  safeHandle('terminal:get-available-shells', async () => {
+    return ShellDetector.getAvailableShells();
+  });
 
   /**
    * Legacy handler for backward compatibility

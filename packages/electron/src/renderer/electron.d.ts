@@ -591,6 +591,14 @@ interface ElectronAPI {
     clearScrollback: (terminalId: string) => Promise<void>;
     destroy: (terminalId: string) => Promise<void>;
     getInfo: (terminalId: string) => Promise<any>;
+    getAvailableShells: () => Promise<Array<{
+      name: string;
+      path: string;
+      args: string[];
+      provider?: string;
+      bootstrapMode?: 'zsh' | 'bash' | 'powershell' | 'none';
+      cwdMode?: 'native' | 'wsl';
+    }>>;
 
     // Events
     onOutput: (callback: (data: { sessionId: string; data: string }) => void) => () => void;

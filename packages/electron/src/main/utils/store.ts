@@ -18,6 +18,7 @@ export type { SessionState, SessionWindow } from '../types';
 
 export type CompletionSoundType = 'chime' | 'bell' | 'pop' | 'alert' | 'none';
 export type ReleaseChannel = 'stable' | 'alpha';
+export type PreferredTerminalShell = 'auto' | 'pwsh' | 'powershell' | 'git-bash' | 'wsl' | 'cmd';
 export type WorkspaceFileTreeFilter = 'all' | 'markdown' | 'known' | 'git-uncommitted' | 'git-worktree' | 'ai-read' | 'ai-written';
 export type TrackerSyncModeSetting = 'local' | 'shared' | 'hybrid';
 export interface TrackerSyncPolicySetting {
@@ -152,6 +153,8 @@ interface AppStoreSchema {
   // Document history settings
   historyMaxAgeDays?: number; // Max age in days before snapshots are cleaned up (default: 30)
   historyMaxSnapshots?: number; // Max snapshots per file (default: 250)
+  // Preferred interactive terminal shell on Windows. 'auto' uses detection priority.
+  preferredTerminalShell?: PreferredTerminalShell;
   // Last known app version (for migrations)
   lastKnownVersion?: string;
   // Extension marketplace install tracking

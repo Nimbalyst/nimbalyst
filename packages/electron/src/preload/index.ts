@@ -1191,6 +1191,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('terminal:destroy', terminalId),
     getInfo: (terminalId: string) =>
       ipcRenderer.invoke('terminal:get-info', terminalId),
+    getAvailableShells: () =>
+      ipcRenderer.invoke('terminal:get-available-shells'),
 
     // Events
     onOutput: (callback: (data: { sessionId: string; data: string }) => void) => {

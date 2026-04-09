@@ -20,6 +20,7 @@ import {
   disableAllDeveloperFeatures,
   type ReleaseChannel,
   type ExternalEditorType,
+  type PreferredTerminalShell,
 } from '../../../store/atoms/appSettings';
 import { ALPHA_FEATURES, areAllAlphaFeaturesEnabled, enableAllAlphaFeatures as enableAllAlphaFeaturesUtil, disableAllAlphaFeatures } from '../../../../shared/alphaFeatures';
 import {
@@ -80,6 +81,13 @@ export function AdvancedPanel() {
   // Current enhanced PATH (fetched from main process)
   const [enhancedPath, setEnhancedPath] = useState<string>('');
   const [showEnhancedPath, setShowEnhancedPath] = useState(false);
+  const [availableTerminalShells, setAvailableTerminalShells] = useState<Array<{
+    name: string;
+    path: string;
+    provider?: string;
+    bootstrapMode?: 'zsh' | 'bash' | 'powershell' | 'none';
+    cwdMode?: 'native' | 'wsl';
+  }>>([]);
 
   // AI debug settings from Jotai atoms
   const [aiDebugSettings] = useAtom(aiDebugSettingsAtom);
@@ -131,6 +139,7 @@ export function AdvancedPanel() {
     spellcheckEnabled,
     historyMaxAgeDays,
     historyMaxSnapshots,
+    preferredTerminalShell,
   } = settings;
   const isDevelopment = import.meta.env.DEV;
   const [showReleaseChannel, setShowReleaseChannel] = useState(false);
@@ -149,6 +158,35 @@ export function AdvancedPanel() {
       window.electronAPI.environment.getEnhancedPath().then(setEnhancedPath);
     }
   }, [customPathDirs, showEnhancedPath]);
+
+  useEffect(() => {
+    if (process.platform !== 'win32') {
+      return;
+    }
+
+    window.electronAPI.terminal.getAvailableShells()
+      .then((shells) => setAvailableTerminalShells(shells ?? []))
+      .catch((error) => {
+        console.error('[AdvancedPanel] Failed to load terminal shells:', error);
+        setAvailableTerminalShells([]);
+      });
+  }, []);
+
+  const terminalShellOptions: Array<{ value: PreferredTerminalShell; label: string }> = [
+    { value: 'auto', label: 'Auto (Recommended)' },
+  ];
+  const seenShellProviders = new Set<PreferredTerminalShell>();
+  for (const shell of availableTerminalShells) {
+    const provider = shell.provider as PreferredTerminalShell | undefined;
+    if (!provider || provider === 'auto' || seenShellProviders.has(provider)) {
+      continue;
+    }
+    seenShellProviders.add(provider);
+    const label = shell.name === provider
+      ? `${shell.name} (${shell.path})`
+      : `${shell.name} [${provider}] (${shell.path})`;
+    terminalShellOptions.push({ value: provider, label });
+  }
 
   const handleTitleClick = (e: React.MouseEvent) => {
     if (e.metaKey || e.ctrlKey) {
@@ -635,6 +673,39 @@ export function AdvancedPanel() {
             { value: 16384, label: '16 GB' },
           ]}
         />
+
+        {process.platform === 'win32' && (
+          <>
+            <DropdownRow
+              value={preferredTerminalShell}
+              onChange={(val) => updateSettings({ preferredTerminalShell: val as PreferredTerminalShell })}
+              name="Preferred Terminal Shell"
+              description="Choose which detected Windows shell new terminals should open with. Auto follows the built-in priority."
+              options={terminalShellOptions}
+            />
+
+            <div className="setting-item py-2">
+              <div className="setting-text flex flex-col gap-0 mb-2">
+                <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Detected Terminal Shells</span>
+                <span className="setting-description text-xs leading-snug text-[var(--nim-text-muted)]">
+                  Current Windows shell discovery results used for terminal selection and restore.
+                </span>
+              </div>
+
+              <div className="select-text p-2 rounded-md text-xs bg-[var(--nim-bg-tertiary)] border border-[var(--nim-border)] text-[var(--nim-text-muted)] font-mono">
+                {availableTerminalShells.length === 0 ? (
+                  <div>No supported terminal shells detected.</div>
+                ) : (
+                  availableTerminalShells.map((shell) => (
+                    <div key={`${shell.provider || shell.name}-${shell.path}`} className="py-0.5 break-all">
+                      {`${shell.provider || shell.name} | ${shell.path} | bootstrap=${shell.bootstrapMode || 'none'} | cwd=${shell.cwdMode || 'native'}`}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </>
+        )}
 
         <DropdownRow
           value={historyMaxAgeDays}

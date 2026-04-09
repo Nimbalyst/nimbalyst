@@ -9,6 +9,7 @@ import { promisify } from 'util';
 import { simpleGit } from 'simple-git';
 import {AnalyticsService} from "./analytics/AnalyticsService.ts";
 import { getAppSetting } from '../utils/store';
+import { getEnhancedWindowsPath } from './WindowsPathResolver';
 
 const execAsync = promisify(exec);
 
@@ -1396,75 +1397,15 @@ export function getEnhancedPath(): string {
     paths.push(path.join(homeDir, '.yarn', 'bin'));
     paths.push(path.join(homeDir, '.config', 'yarn', 'global', 'node_modules', '.bin'));
   } else if (process.platform === 'win32') {
-    // On Windows, GUI apps don't inherit the full user PATH from shell sessions.
-    // Query the actual user PATH from the registry to get the complete PATH.
-    const regQueryStart = Date.now();
-    try {
-      const { execSync } = require('child_process');
-      // Get User PATH from registry
-      const userPathResult = execSync(
-        'reg query "HKCU\\Environment" /v Path',
-        { encoding: 'utf8', timeout: 5000, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] }
-      );
-      const regQueryDuration = Date.now() - regQueryStart;
-      if (regQueryDuration > 1000) {
-        console.warn(`[getEnhancedPath] Windows registry query took ${regQueryDuration}ms (>1s threshold)`);
-      }
-      const userPathMatch = userPathResult.match(/Path\s+REG_(?:EXPAND_)?SZ\s+(.+)/i);
-      if (userPathMatch && userPathMatch[1]) {
-        paths.push(userPathMatch[1].trim());
-      }
-    } catch (e) {
-      const regQueryDuration = Date.now() - regQueryStart;
-      console.warn(`[getEnhancedPath] Windows registry query failed after ${regQueryDuration}ms:`, e);
-      // Registry query failed, fall back to common paths
-    }
-
-    // Also add common paths as fallback (in case registry query misses something)
-    const programFiles = process.env['ProgramFiles'] || 'C:\\Program Files';
-    const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
-
-    paths.push(path.join(programFiles, 'nodejs'));
-    paths.push(path.join(programFilesX86, 'nodejs'));
-    paths.push(path.join(process.env.APPDATA || '', 'npm'));
-    paths.push('C:\\ProgramData\\chocolatey\\bin');
-    paths.push('C:\\tools\\nodejs');
-
-    // User profile paths
-    const userProfile = process.env.USERPROFILE || process.env.HOME;
-    if (userProfile) {
-      paths.push(path.join(userProfile, 'AppData', 'Roaming', 'npm'));
-      paths.push(path.join(userProfile, 'scoop', 'shims'));
-      // uv/uvx default installation path
-      paths.push(path.join(userProfile, '.local', 'bin'));
-      // Bun default installation path
-      paths.push(path.join(userProfile, '.bun', 'bin'));
-      // Deno default installation path
-      paths.push(path.join(userProfile, '.deno', 'bin'));
-      // Volta
-      paths.push(path.join(userProfile, '.volta', 'bin'));
-      // Yarn
-      paths.push(path.join(userProfile, 'AppData', 'Local', 'Yarn', 'bin'));
-    }
-
-    // NVM for Windows
-    const nvmHome = process.env.NVM_HOME;
-    if (nvmHome) {
-      paths.push(nvmHome);
-    }
-    const nvmSymlink = process.env.NVM_SYMLINK;
-    if (nvmSymlink) {
-      paths.push(nvmSymlink);
-    }
-
-    // fnm for Windows
-    if (process.env.FNM_DIR) {
-      paths.push(process.env.FNM_DIR);
-    }
+    const windowsPaths = [
+      ...getVendoredRipgrepDirs(),
+      ...getEnhancedWindowsPath().split(';').map(p => p.trim()).filter(Boolean),
+    ];
+    return [...new Set(windowsPaths)].join(';');
   }
 
   const uniquePaths = [...new Set(paths.filter(Boolean))];
-  const pathString = uniquePaths.join(process.platform === 'win32' ? ';' : ':');
+  const pathString = uniquePaths.join(':');
 
   return pathString;
 }
