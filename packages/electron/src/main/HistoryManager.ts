@@ -505,13 +505,13 @@ export class HistoryManager {
 
       // logger.main.info('[HistoryManager] Created tag:', { filePath, tagId, sessionId, toolUseId });
 
-      // Re-emit file change after pending tag creation so open editors can
-      // re-evaluate diff mode with a guaranteed persisted baseline. The original
-      // disk watcher event may arrive before this tag commit.
+      // Notify open editors that a pending tag was created for this file.
+      // This is a separate event from file-changed-on-disk so editors can
+      // bypass echo suppression and check for the newly created tag.
       const windows = BrowserWindow.getAllWindows();
       for (const window of windows) {
         if (!window.isDestroyed()) {
-          window.webContents.send('file-changed-on-disk', { path: filePath });
+          window.webContents.send('history:pending-tag-created', { path: filePath });
         }
       }
 

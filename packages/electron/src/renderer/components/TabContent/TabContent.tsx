@@ -496,6 +496,9 @@ const TabContentComponent: React.FC<TabContentProps> = ({
   }, [tabsActions, loadContent, createTabEditor, createPlaceholder, removeTabEditor, updateVisibility]);
 
   // Handle file-save IPC event from menu (Cmd+S)
+  // Dispatches a DOM event on the active tab's container element.
+  // TabEditor listens for this event directly, avoiding the stale
+  // saveFunctionsRef registration chain.
   useEffect(() => {
     if (!window.electronAPI) return;
 
@@ -503,6 +506,16 @@ const TabContentComponent: React.FC<TabContentProps> = ({
       const currentActiveTabId = activeTabIdRef.current;
       if (!currentActiveTabId) return;
 
+      // Find the active tab's editor container and dispatch a save event on it.
+      // TabEditor listens for 'nimbalyst-save' on its .multi-editor-instance root div.
+      const instance = tabInstancesRef.current.get(currentActiveTabId);
+      const editorContainer = instance?.element?.querySelector('.multi-editor-instance');
+      if (editorContainer) {
+        editorContainer.dispatchEvent(new CustomEvent('nimbalyst-save', { bubbles: false }));
+        return;
+      }
+
+      // Fallback: use the registered save function (for backward compat)
       const saveFn = saveFunctionsRef.current.get(currentActiveTabId);
       if (saveFn) {
         await saveFn();

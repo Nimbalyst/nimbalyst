@@ -45,7 +45,6 @@ export async function simulateApplyDiff(
   replacements: TextReplacement[]
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    // Use editorRegistry.applyReplacements to properly trigger diff mode
     const result = await page.evaluate(
       async ({ filePath, reps }) => {
         const editorRegistry = (window as any).__editorRegistry;
@@ -54,7 +53,19 @@ export async function simulateApplyDiff(
           throw new Error('EditorRegistry not found on window');
         }
 
-        // Apply replacements using the proper method that triggers diff visualization
+        // Wait for the editor to register with the registry.
+        // AIChatIntegrationPlugin registers asynchronously (deferred via rAF)
+        // so the editor may not be available immediately after opening a file.
+        const maxWait = 3000;
+        const start = Date.now();
+        while (!editorRegistry.has(filePath) && Date.now() - start < maxWait) {
+          await new Promise(r => setTimeout(r, 50));
+        }
+
+        if (!editorRegistry.has(filePath)) {
+          return { success: false, error: `No editor registered for ${filePath} after ${maxWait}ms wait` };
+        }
+
         const result = await editorRegistry.applyReplacements(filePath, reps);
         return result;
       },

@@ -54,6 +54,17 @@ export {
   type TabMetadata,
 } from './atoms/editors';
 
+// Document model atoms (per-file, shared across editor instances)
+export {
+  documentDirtyAtom,
+  documentDiffStateAtom,
+  documentAttachCountAtom,
+  registeredDocumentPathsAtom,
+  dirtyDocumentCountAtom,
+  hasAnyPendingDiffAtom,
+  type DocumentDiffState,
+} from './atoms/documents';
+
 // Git commit proposal types (widget uses tool call data directly, no atoms needed)
 export { type GitCommitProposalData } from './atoms/gitCommitProposals';
 

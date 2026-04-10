@@ -17,6 +17,8 @@ import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { EditorHost, ExtensionStorage } from '@nimbalyst/runtime';
 import { getExtensionLoader, createExtensionStorage, registerEditorAPI, unregisterEditorAPI, hasExtensionEditorAPI } from '@nimbalyst/runtime';
+import { DocumentModelRegistry } from './document-model/DocumentModelRegistry';
+import type { DocumentModelEditorHandle } from './document-model/types';
 
 const LOG_PREFIX = '[HiddenTabManager]';
 const TTL_MS = 30_000; // 30 seconds after last release before cleanup
@@ -32,6 +34,8 @@ interface HiddenEditorInstance {
   refCount: number;
   ttlTimer: ReturnType<typeof setTimeout> | null;
   extensionId: string;
+  /** DocumentModel handle for coordinated save/dirty tracking */
+  documentModelHandle: DocumentModelEditorHandle | null;
 }
 
 class HiddenTabManager {
@@ -185,8 +189,13 @@ class HiddenTabManager {
     this.hiddenContainer!.style.zIndex = '-9999';
     this.hiddenContainer!.appendChild(container);
 
+    // Acquire a DocumentModel handle for coordinated save/dirty tracking
+    const { handle: documentModelHandle } = DocumentModelRegistry.getOrCreate(filePath, {
+      autosaveInterval: 0, // Hidden editors save immediately on dirty (100ms debounce)
+    });
+
     // Create EditorHost
-    const host = this.createEditorHost(filePath, workspacePath, editorInfo.extensionId);
+    const host = this.createEditorHost(filePath, workspacePath, editorInfo.extensionId, documentModelHandle);
 
     // Create React root and mount
     const root = createRoot(container);
@@ -202,6 +211,7 @@ class HiddenTabManager {
       refCount: 1,
       ttlTimer: null,
       extensionId: editorInfo.extensionId,
+      documentModelHandle,
     });
 
     // Wait for the editor API to register, then move offscreen
@@ -231,6 +241,11 @@ class HiddenTabManager {
 
     // Clean up the central editor API registry
     unregisterEditorAPI(filePath);
+
+    // Release DocumentModel handle
+    if (instance.documentModelHandle) {
+      DocumentModelRegistry.release(filePath, instance.documentModelHandle);
+    }
 
     if (instance.ttlTimer) {
       clearTimeout(instance.ttlTimer);
@@ -270,7 +285,7 @@ class HiddenTabManager {
    * Create an EditorHost for a hidden editor.
    * This creates a functional host with file I/O and auto-save support.
    */
-  private createEditorHost(filePath: string, workspacePath: string, extensionId: string): EditorHost {
+  private createEditorHost(filePath: string, workspacePath: string, extensionId: string, documentModelHandle?: DocumentModelEditorHandle | null): EditorHost {
     const fileName = filePath.split('/').pop() || filePath;
     const electronAPI = (window as any).electronAPI;
 
@@ -349,21 +364,32 @@ class HiddenTabManager {
 
       onFileChanged(callback: (newContent: string) => void): () => void {
         fileChangeCallbacks.push(callback);
+        // Also register with DocumentModel handle for coordinated notifications
+        const handleCleanup = documentModelHandle?.onFileChanged((content) => {
+          if (typeof content === 'string') {
+            callback(content);
+          }
+        });
         return () => {
           const index = fileChangeCallbacks.indexOf(callback);
           if (index >= 0) fileChangeCallbacks.splice(index, 1);
+          handleCleanup?.();
         };
       },
 
       setDirty(dirty: boolean): void {
         isDirty = dirty;
+        documentModelHandle?.setDirty(dirty);
         if (dirty) {
           triggerAutoSave();
         }
       },
 
       async saveContent(content: string | ArrayBuffer): Promise<void> {
-        if (typeof content === 'string') {
+        if (documentModelHandle) {
+          // Delegate to DocumentModel for coordinated save
+          await documentModelHandle.saveContent(content);
+        } else if (typeof content === 'string') {
           await electronAPI.saveFile(content, filePath);
         } else {
           throw new Error('Binary content saving not yet implemented for hidden editors');
@@ -373,9 +399,12 @@ class HiddenTabManager {
 
       onSaveRequested(callback: () => void | Promise<void>): () => void {
         saveRequestCallbacks.push(callback);
+        // Also register with DocumentModel handle
+        const handleCleanup = documentModelHandle?.onSaveRequested(callback);
         return () => {
           const index = saveRequestCallbacks.indexOf(callback);
           if (index >= 0) saveRequestCallbacks.splice(index, 1);
+          handleCleanup?.();
         };
       },
 

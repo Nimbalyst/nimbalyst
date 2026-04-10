@@ -14,6 +14,7 @@ import { MarkdownStreamProcessor, getEditorTransformers } from '../../../editor'
 import { $isHeadingNode } from '@lexical/rich-text';
 import { $convertToEnhancedMarkdownString, $convertNodeToEnhancedMarkdownString } from '../../../editor';
 import { editorRegistry } from '../../EditorRegistry';
+import { useDocumentPath } from '../../../DocumentPathContext';
 
 /**
  * Find the node key to insert after based on markdown content search
@@ -129,18 +130,27 @@ function findInsertionPoint(
  */
 export function AIChatIntegrationPlugin(): null {
   const [editor] = useLexicalComposerContext();
+  const { documentPath: contextFilePath } = useDocumentPath();
   const streamProcessorsRef = useRef<Map<string, MarkdownStreamProcessor>>(new Map());
   const streamConfigRef = useRef<Map<string, { startingNodeKey?: string; insertAfter?: string; insertAtEnd?: boolean }>>(new Map());
 
   useEffect(() => {
-    // Get the file path for this editor instance
+    // Get the file path from DocumentPathContext (provided by TabEditor's DocumentPathProvider).
+    // Falls back to walking the DOM for backwards compatibility.
     const rootElement = editor.getRootElement();
-    const editorContainer = rootElement?.closest('.multi-editor-instance');
-    const filePath = editorContainer?.getAttribute('data-file-path');
+    const filePath = contextFilePath
+      || rootElement?.closest('.multi-editor-instance')?.getAttribute('data-file-path')
+      || null;
+
+    // Ensure the window-exposed registry is the same instance we're using.
+    // Module bundling can create duplicate singletons; this ensures the test
+    // harness (which reads window.__editorRegistry) sees our registrations.
+    if (typeof window !== 'undefined') {
+      (window as any).__editorRegistry = editorRegistry;
+    }
 
     if (!filePath) {
-      // editor may be the diff preview
-      // console.error('[AIChatIntegrationPlugin] Cannot register editor - no file path found');
+      // editor may be the diff preview or not yet in the right context
       return;
     }
 
@@ -333,6 +343,7 @@ export function AIChatIntegrationPlugin(): null {
     editorRegistry.register(editorInstance);
 
     // Check if this editor is currently active (data-active="true")
+    const editorContainer = rootElement?.closest('.multi-editor-instance');
     const isActive = editorContainer?.getAttribute('data-active') === 'true';
     if (isActive) {
       // console.log('[AIChatIntegrationPlugin] Registering as active editor:', filePath);
@@ -341,16 +352,13 @@ export function AIChatIntegrationPlugin(): null {
 
     // Cleanup on unmount
     return () => {
-      // console.log('[AIChatIntegrationPlugin] Unregistering editor for:', filePath);
       editorRegistry.unregister(filePath, instanceId);
-      // Clean up any active stream processors
       streamProcessorsRef.current.clear();
       streamConfigRef.current.clear();
-      // Remove event listeners
       rootElement?.removeEventListener('focus', handleFocus, true);
       rootElement?.removeEventListener('click', handleFocus);
     };
-  }, [editor]);
+  }, [editor, contextFilePath]);
 
   return null;
 }

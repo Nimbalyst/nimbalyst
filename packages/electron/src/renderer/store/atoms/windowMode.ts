@@ -13,6 +13,7 @@
 import { atom } from 'jotai';
 import { store } from '@nimbalyst/runtime/store';
 import type { ContentMode } from '../../types/WindowModeTypes';
+import { DocumentModelRegistry } from '../../services/document-model/DocumentModelRegistry';
 
 // Re-export ContentMode for convenience (TODO: rename type to WindowMode)
 export type { ContentMode };
@@ -59,11 +60,23 @@ function schedulePersist(workspacePath: string, mode: ContentMode): void {
 /**
  * Set the window mode.
  * Automatically persists to workspace state (debounced).
+ * Flushes any dirty editors via DocumentModelRegistry on mode switch
+ * to prevent data loss when navigating away from files.
  */
 export const setWindowModeAtom = atom(
   null,
   (get, set, mode: ContentMode) => {
+    const previousMode = get(windowModeAtom);
     set(windowModeAtom, mode);
+
+    // Flush dirty editors on any mode switch.
+    // Files->Agent: persists unsaved editor content before editors are hidden.
+    // Agent->Files: persists any changes made by AI tools before editors reload.
+    if (previousMode !== mode) {
+      DocumentModelRegistry.flushAll().catch((err) => {
+        console.error('[windowMode] Failed to flush dirty editors on mode switch:', err);
+      });
+    }
 
     const workspacePath = get(windowModeWorkspaceAtom);
     if (workspacePath) {

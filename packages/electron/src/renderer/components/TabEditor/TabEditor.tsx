@@ -47,6 +47,8 @@ import { setEditorContext, clearEditorContext } from '../../stores/editorContext
 import { store, editorHasUnacceptedChangesAtom, makeEditorKey } from '@nimbalyst/runtime/store';
 import { UnifiedEditorHeaderBar } from './UnifiedEditorHeaderBar';
 import { usePersonalDocSync } from '../../hooks/usePersonalDocSync';
+import { useDocumentModel } from '../../services/document-model/useDocumentModel';
+import { DocumentModelRegistry } from '../../services/document-model/DocumentModelRegistry';
 
 /** Normalize a file path for comparison: backslashes to forward slashes, strip trailing slashes. */
 function normalizePathForCompare(p: string): string {
@@ -115,6 +117,21 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   // console.log('[TabEditor] render', fileName);
 
   const posthog = usePostHog();
+
+  // Acquire a DocumentModel for this file (shared across all editors of the same file).
+  // The model owns the autosave timer, file-watcher coordination, and diff state.
+  // The handle is this editor's attachment for communicating with the model.
+  const { model: documentModel, handle: documentModelHandle } = useDocumentModel(filePath, {
+    autosaveInterval,
+    autosaveDebounce,
+  });
+
+  // Initialize the model's echo-suppression baseline with the content we already have.
+  // This prevents the first file-watcher event (from our own initial state) from
+  // being treated as an external change.
+  if (documentModel.getLastPersistedContent() === null) {
+    documentModel.setLastPersistedContent(initialContent);
+  }
 
   // Subscribe to custom editor registry changes to re-evaluate file type
   // when extensions finish loading (handles race condition on startup)
@@ -281,7 +298,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   // Refs for stable access in timers/callbacks
   const contentRef = useRef(initialContent);
   const isDirtyRef = useRef(false);
-  const lastChangeTimeRef = useRef<number>(0);
   const getContentFnRef = useRef<(() => string) | null>(null);
   const editorRef = useRef<any>(null);
   const initialContentRef = useRef(initialContent);
@@ -301,6 +317,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const editorHostSaveRequestCallbackRef = useRef<(() => void | Promise<void>) | null>(null); // For EditorHost save request subscription
   const sourceModeChangedCallbackRef = useRef<((isSourceMode: boolean) => void) | null>(null); // For EditorHost source mode subscription
   const themeChangeCallbackRef = useRef<((theme: string) => void) | null>(null); // For EditorHost theme change subscription
+  const documentModelHandleRef = useRef(documentModelHandle); // For EditorHost to access without recreating
+
+  // Keep DocumentModel handle ref in sync (handle acquired synchronously so this is immediately correct)
+  documentModelHandleRef.current = documentModelHandle;
 
   // State for extension-contributed menu items
   const [extensionMenuItems, setExtensionMenuItems] = useState<Array<{ label: string; icon?: string; onClick: () => void }>>([]);
@@ -703,11 +723,13 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       const saveTime = Date.now();
       lastSaveTimeRef.current = saveTime;
       lastSavedContentRef.current = contentToSave;
-      lastSaveTimeRef.current = saveTime;
-      lastSavedContentRef.current = contentToSave;
+
+      // Update DocumentModel echo-suppression baseline BEFORE writing to disk.
+      // The file watcher can fire before saveFile returns, and echo suppression
+      // needs to see the new content as "ours" to avoid unnecessary getPendingTags calls.
+      documentModel?.setLastPersistedContent(contentToSave);
 
       logger.ui.info(`[TabEditor] Saving ${fileName}, saveId=${thisSaveId}, skipDiffCheck=${skipDiffCheck}`);
-      // console.trace('[TabEditor] saveWithHistory called, stack trace:');
 
       // Save to disk with conflict detection
       const result = await window.electronAPI.saveFile(
@@ -720,6 +742,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       // IMMEDIATE: Clear dirty flag as soon as save succeeds
       if (result && result.success) {
         isDirtyRef.current = false;
+        documentModelHandleRef.current?.setDirty(false);
         // Update initialContentRef with current editor content to prevent false dirty flags
         if (getContentFnRef.current) {
           initialContentRef.current = getContentFnRef.current();
@@ -790,22 +813,35 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           }
         }
 
-        // Check if we should clear the pending-review tag after save
-        // ONLY check for user-initiated saves (manual/autosave), NOT AI operations
-        // During AI operations (apply/accept/reject), skipDiffCheck will be true
-        // Only check for Lexical editors (markdown) - Monaco/custom editors don't have getEditorState
-        if (!skipDiffCheck && editorRef.current && pendingAIEditTagRef.current?.tagId && typeof editorRef.current.getEditorState === 'function') {
+        // Check if we should clear pending-review tags after save.
+        // Only for user-initiated saves (skipDiffCheck=false), not AI operations.
+        // Only for Lexical editors that have getEditorState.
+        if (!skipDiffCheck && editorRef.current && typeof editorRef.current.getEditorState === 'function') {
           const hasDiffs = editorRef.current.getEditorState().read(() => {
             return $hasDiffNodes(editorRef.current!);
           });
 
           if (!hasDiffs) {
-            logger.ui.info('[TabEditor] No diffs remaining after user save, clearing pending tag');
-            const { tagId, filePath: tagFilePath } = pendingAIEditTagRef.current!;
-            await window.electronAPI.invoke('history:update-tag-status', tagFilePath, tagId, 'reviewed');
-            setPendingAIEditTag(null);
-          } else {
-            logger.ui.info('[TabEditor] Diffs still present after save, keeping pending tag');
+            // Clear from ref if set
+            if (pendingAIEditTagRef.current?.tagId) {
+              logger.ui.info('[TabEditor] No diffs remaining after user save, clearing pending tag');
+              const { tagId, filePath: tagFilePath } = pendingAIEditTagRef.current;
+              await window.electronAPI.invoke('history:update-tag-status', tagFilePath, tagId, 'reviewed');
+              setPendingAIEditTag(null);
+              documentModel?.clearDiffState();
+            } else if (window.electronAPI?.history) {
+              // Also check database for pending tags (may exist from simulateApplyDiff path
+              // where the tag was created in DB but pendingAIEditTagRef was never set)
+              try {
+                const dbTags = await window.electronAPI.history.getPendingTags(filePath);
+                const unreviewedTags = (dbTags || []).filter((t: any) => t.status !== 'reviewed' && t.status !== 'rejected');
+                for (const tag of unreviewedTags) {
+                  await window.electronAPI.invoke('history:update-tag-status', filePath, tag.id, 'reviewed');
+                }
+              } catch {
+                // Ignore -- best effort cleanup
+              }
+            }
           }
         }
 
@@ -850,89 +886,17 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         $approveDiffs();
       });
       // Clear the pending tag since we've accepted everything
+      documentModel?.clearDiffState();
       const { tagId, filePath: tagFilePath } = pendingAIEditTagRef.current;
       window.electronAPI.invoke('history:update-tag-status', tagFilePath, tagId, 'reviewed');
       setPendingAIEditTag(null);
     }
 
     const currentContent = getContentFnRef.current();
-    await saveWithHistory(currentContent, 'manual', true);
+    // Use skipDiffCheck=false so saveWithHistory checks for leftover diff nodes
+    // and clears pending tags if all diffs have been resolved
+    await saveWithHistory(currentContent, 'manual', false);
   }, [saveWithHistory, fileName]);
-
-  // Autosave timer
-  useEffect(() => {
-    if (autosaveInterval <= 0) return;
-
-    const timer = setInterval(async () => {
-      // Log autosave check
-      // console.log(`[TabEditor] Autosave timer fired for ${fileName}, isDirty=${isDirtyRef.current}, inDiffMode=${!!pendingAIEditTagRef.current}`);
-
-      // Skip if in diff mode - user should approve/reject AI changes first
-      // This prevents false-positive autosaves from WYSIWYG rendering differences
-      // BUT: if the user has manually resolved all diffs (e.g. deleted diff content),
-      // clear diff mode so autosave can resume
-      if (pendingAIEditTagRef.current) {
-        if (editorRef.current && typeof editorRef.current.getEditorState === 'function') {
-          const hasDiffs = editorRef.current.getEditorState().read(() => {
-            return $hasDiffNodes(editorRef.current!);
-          });
-          if (!hasDiffs) {
-            logger.ui.info(`[TabEditor] No diffs remaining in diff mode for ${fileName}, clearing pending tag`);
-            const { tagId, filePath: tagFilePath } = pendingAIEditTagRef.current;
-            window.electronAPI.invoke('history:update-tag-status', tagFilePath, tagId, 'reviewed');
-            setPendingAIEditTag(null);
-            // Fall through to save below
-          } else {
-            return;
-          }
-        } else {
-          return;
-        }
-      }
-
-      // Skip if we're in the process of applying a diff
-      // This catches the window between starting diff application and setting pendingAIEditTagRef
-      if (isApplyingDiffRef.current) {
-        return;
-      }
-
-      // Skip if not dirty
-      if (!isDirtyRef.current) {
-        // console.log(`[TabEditor] Skipping autosave - not dirty`);
-        return;
-      }
-
-      // Skip if not enough time has passed since last change (debounce)
-      if (Date.now() - lastChangeTimeRef.current < autosaveDebounce) {
-        console.log(`[TabEditor] Skipping autosave - debounce not elapsed`);
-        return;
-      }
-
-      // For custom editors using EditorHost: tell them to save
-      if (editorHostSaveRequestCallbackRef.current) {
-        try {
-          logger.ui.info(`[TabEditor] Requesting save from custom editor: ${fileName}`);
-          await editorHostSaveRequestCallbackRef.current();
-        } catch (error) {
-          logger.ui.error(`[TabEditor] Custom editor save request failed for ${filePath}:`, error);
-        }
-        return;
-      }
-
-      // For built-in editors: use getContentFn
-      if (!getContentFnRef.current) return;
-
-      try {
-        const currentContent = getContentFnRef.current();
-        logger.ui.info(`[TabEditor] Auto-saving: ${fileName}`);
-        await saveWithHistory(currentContent, 'auto');
-      } catch (error) {
-        logger.ui.error(`[TabEditor] Autosave failed for ${filePath}:`, error);
-      }
-    }, autosaveInterval);
-
-    return () => clearInterval(timer);
-  }, [autosaveInterval, autosaveDebounce, filePath, fileName, saveWithHistory]);
 
   // Periodic snapshots
   const lastSnapshotContentRef = useRef<string>(initialContent);
@@ -972,468 +936,178 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     return () => clearInterval(timer);
   }, [periodicSnapshotInterval, filePath, fileName]);
 
-
-  // File watching - use ref to ensure we only register once
-  const fileWatcherRegisteredRef = useRef(false);
-  // Track if we're currently processing a file change (prevent duplicate processing)
-  const processingFileChangeRef = useRef(false);
-  // Track if a file change arrived while we were processing (needs re-check after done)
-  const pendingFileChangeRef = useRef(false);
-
+  // ============================================================
+  // DocumentModel integration for built-in editors (Lexical/Monaco)
+  //
+  // Register autosave and file-change callbacks with the DocumentModel handle.
+  // This replaces the old autosave timer and file-watcher IPC listener for
+  // ALL editor types (built-in + custom), providing a single coordination
+  // point for save timing, echo suppression, and diff mode detection.
+  // ============================================================
   useEffect(() => {
-    if (!window.electronAPI) {
-      return;
-    }
+    const handle = documentModelHandleRef.current;
+    if (!handle) return;
 
-    // Only register once per component instance
-    if (fileWatcherRegisteredRef.current) {
-      return;
-    }
+    const cleanups: Array<() => void> = [];
 
-    fileWatcherRegisteredRef.current = true;
+    // --- Autosave: DocumentModel calls onSaveRequested when it's time to save ---
+    // Custom editors wire their own callback via EditorHost.subscribeToSaveRequests.
+    // This handler covers built-in editors (Lexical/Monaco) that use getContentFnRef.
+    // If a custom editor has already registered via EditorHost, skip (checked at call time).
+    cleanups.push(
+      handle.onSaveRequested(() => {
+        // Custom editors handle their own save via EditorHost callback
+        if (editorHostSaveRequestCallbackRef.current) return;
+        // Skip if no content function (editor not ready)
+        if (!getContentFnRef.current) return;
+        // Skip if applying a diff
+        if (isApplyingDiffRef.current) return;
 
-    // Create a stable handler function that we can properly clean up
-    const handleFileChanged = async (data: { path: string }) => {
-      // Only handle changes for this file
-      if (normalizePathForCompare(data.path) !== normalizePathForCompare(filePath)) {
-        return;
-      }
+        // If in diff mode, check if all diffs have been manually resolved.
+        // (User may have deleted all diff content via select-all + backspace.)
+        // If no diff nodes remain, clear the pending tag so autosave can proceed.
+        if (pendingAIEditTagRef.current && editorRef.current && typeof editorRef.current.getEditorState === 'function') {
+          const hasDiffs = editorRef.current.getEditorState().read(() => {
+            return $hasDiffNodes(editorRef.current!);
+          });
+          if (hasDiffs) return; // Still has diffs, skip autosave
+          // All diffs resolved manually -- clear tag and fall through to save
+          logger.ui.info(`[TabEditor] No diffs remaining, clearing pending tag: ${fileName}`);
+          const { tagId, filePath: tagFilePath } = pendingAIEditTagRef.current;
+          window.electronAPI.invoke('history:update-tag-status', tagFilePath, tagId, 'reviewed');
+          setPendingAIEditTag(null);
+          documentModel?.clearDiffState();
+        }
 
-      // If already processing a change or applying a diff, mark as pending and return
-      // We'll re-check for changes after the current processing completes
-      if (processingFileChangeRef.current || isApplyingDiffRef.current) {
-        // console.log('[TabEditor] File change during processing - marking as pending');
-        pendingFileChangeRef.current = true;
-        return;
-      }
-      processingFileChangeRef.current = true;
-      pendingFileChangeRef.current = false; // Clear any pending flag since we're processing now
-      // console.log('[TabEditor] Processing file-changed event for:', data.path);
-      // console.log('[TabEditor] Processing flag set to true');
+        const currentContent = getContentFnRef.current();
+        logger.ui.info(`[TabEditor] DocumentModel autosave: ${fileName}`);
+        saveWithHistory(currentContent, 'auto').catch((err) => {
+          logger.ui.error(`[TabEditor] DocumentModel autosave failed for ${filePath}:`, err);
+        });
+      }),
+    );
 
-      let diffUpdatePromise: Promise<void> | null = null;
-      try {
-        const result = await window.electronAPI.readFileContent(data.path);
-        if (!result || typeof result !== 'object' || !('content' in result)) {
-          processingFileChangeRef.current = false;
+    // --- File changes: DocumentModel calls onFileChanged for non-diff external edits ---
+    // Custom editors receive file changes through EditorHost.subscribeToFileChanges(),
+    // which registers its own onFileChanged callback with the handle. This callback
+    // only handles built-in editors (Lexical/Monaco).
+    cleanups.push(
+      handle.onFileChanged((content) => {
+        if (typeof content !== 'string') return;
+
+        // Custom editors are notified via EditorHost.subscribeToFileChanges (separate subscription).
+        if (isCustom) return;
+
+        // Built-in editors: apply the new content
+        if (editorRef.current) {
+          try {
+            if (isMarkdown) {
+              const transformers = getEditorTransformers();
+              editorRef.current.update(() => {
+                const root = $getRoot();
+                root.clear();
+                $convertFromEnhancedMarkdownString(content, transformers);
+              }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
+            } else if (editorRef.current.setContent) {
+              // Monaco
+              editorRef.current.setContent(content);
+            }
+            setReloadVersion((v) => v + 1);
+          } catch (error) {
+            logger.ui.error(`[TabEditor] Failed to apply DocumentModel file change:`, error);
+          }
+        }
+
+        // Update tracking refs
+        contentRef.current = content;
+        lastSavedContentRef.current = content;
+        initialContentRef.current = content;
+        isDirtyRef.current = false;
+        onDirtyChange?.(false);
+      }),
+    );
+
+    // --- Diff mode: DocumentModel calls onDiffRequested when AI edits detected ---
+    cleanups.push(
+      handle.onDiffRequested((diffState) => {
+        const { tagId, sessionId, oldContent, newContent, createdAt } = diffState;
+        const tagInfo = { tagId, sessionId, filePath };
+
+        // Route through custom editor diff callback if available
+        if (diffRequestCallbackRef.current) {
+          isApplyingDiffRef.current = true;
+          (async () => {
+            try {
+              setPendingAIEditTag(tagInfo);
+              setShowCustomEditorDiffBar(true);
+              fetchDiffSessionInfo(sessionId, createdAt);
+              diffRequestCallbackRef.current!({
+                originalContent: oldContent,
+                modifiedContent: newContent,
+                tagId,
+                sessionId,
+              });
+              contentRef.current = oldContent;
+              initialContentRef.current = oldContent;
+              isDirtyRef.current = false;
+              onDirtyChange?.(false);
+              setReloadVersion((v) => v + 1);
+            } finally {
+              isApplyingDiffRef.current = false;
+            }
+          })();
           return;
         }
 
-        const newContent = result.content || '';
+        // Built-in editors: apply diff mode
+        isApplyingDiffRef.current = true;
+        setPendingAIEditTag(tagInfo);
+        contentRef.current = oldContent;
 
-        // NOTE: We no longer compare against contentRef for markdown files.
-        // With onDirtyChange (no serialization on keystroke), contentRef may be stale.
-        // The lastSavedContentRef comparison below is more reliable - it detects our own saves.
-        // External edits will be processed and editors will decide whether to reload.
-
-        // console.log('[TabEditor] File content differs - will update editor', {
-        //   fileName,
-        //   diskLength: newContent.length,
-        //   editorLength: currentContent.length,
-        //   diskPreview: newContent.substring(0, 100),
-        //   editorPreview: currentContent.substring(0, 100),
-        // });
-
-        // CRITICAL: Check for pending AI edit tags FIRST before other heuristics
-        // We need to process AI edits even if they happen shortly after a save
-        let pendingTags: any[] = [];
-        try {
-          if (window.electronAPI?.history) {
-            const allTags = await window.electronAPI.history.getPendingTags(data.path);
-            // Only consider tags that haven't been reviewed or rejected
-            pendingTags = (allTags || []).filter((tag: any) => tag.status !== 'reviewed' && tag.status !== 'rejected');
-          }
-        } catch (error) {
-          logger.ui.error(`[TabEditor] Failed to check for pending tags:`, error);
-        }
-
-        // If a pending tag exists, we must process diff mode even when disk content
-        // matches lastSavedContentRef (the original watcher event may have arrived
-        // before tag persistence).
-        const hasPendingAIEdit = pendingTags.length > 0;
-
-        // CRITICAL: Check if this is content we just saved
-        // If the disk content matches what we last saved, this is definitely our own save
-        // Don't reload even if the user has typed more since then
-        // BUT: Skip this check whenever pending AI tags exist
-        const contentMatchesLastSave = newContent === lastSavedContentRef.current;
-        // console.log(`[TabEditor] File change for ${fileName}: contentMatchesLastSave=${contentMatchesLastSave}, isCustom=${isCustom}`);
-
-        if (contentMatchesLastSave && !hasPendingAIEdit) {
-          // console.log(`[TabEditor] Skipping file change - content matches last save`);
-          processingFileChangeRef.current = false;
-          return;
-        }
-
-        // If there are unreviewed pending AI edit tags, apply diff mode (skip conflict dialog)
-        // Custom editors only participate when diff mode is enabled and they
-        // have actually subscribed to onDiffRequested.
-        const customEditorSupportsDiff =
-          isCustom &&
-          customEditorSupportsDiffMode &&
-          diffRequestCallbackRef.current !== null;
-        if (pendingTags && pendingTags.length > 0 && (!isCustom || customEditorSupportsDiff)) {
-          // Get the baseline for diff comparison
-          // This will be the latest incremental-approval tag if it exists, otherwise the pre-edit tag
-          const baseline = await window.electronAPI.invoke('history:get-diff-baseline', data.path);
-          const oldContent = baseline ? baseline.content : pendingTags[0].content;
-
-          // console.log('[TabEditor] FILE WATCHER - Applying diff mode:', {
-          //   fileName,
-          //   baselineType: baseline?.tagType,
-          //   oldContentLength: oldContent.length,
-          //   newContentLength: newContent.length,
-          // });
-
-          // Check if we're ALREADY in diff mode for this tag
-          const alreadyInDiffMode = pendingAIEditTagRef.current?.tagId === pendingTags[0].id;
-          console.log(`[TabEditor] Pending tag found. alreadyInDiffMode: ${alreadyInDiffMode}, current tagId: ${pendingAIEditTagRef.current?.tagId}, pending tagId: ${pendingTags[0].id}`);
-
-          const tagInfo = {
-            tagId: pendingTags[0].id,
-            sessionId: pendingTags[0].sessionId,
-            filePath: data.path
-          };
-
-          // Route through EditorHost callback if custom editor has subscribed to diff requests
-          if (diffRequestCallbackRef.current) {
-            // Set isApplyingDiffRef before async work to protect against autosave race
-            isApplyingDiffRef.current = true;
-            diffUpdatePromise = (async () => {
-              try {
-                setPendingAIEditTag(tagInfo);
-                setShowCustomEditorDiffBar(true);
-                // Fetch session info for the diff approval bar
-                fetchDiffSessionInfo(pendingTags[0].sessionId, pendingTags[0].createdAt ? new Date(pendingTags[0].createdAt).getTime() : Date.now());
-                diffRequestCallbackRef.current!({
-                  originalContent: oldContent,
-                  modifiedContent: newContent,
-                  tagId: pendingTags[0].id,
-                  sessionId: pendingTags[0].sessionId,
-                });
-                contentRef.current = oldContent;
-                initialContentRef.current = oldContent;
-                isDirtyRef.current = false;
-                onDirtyChange?.(false);
-                // Signal content changed so document headers re-read
-                setReloadVersion(v => v + 1);
-              } finally {
-                isApplyingDiffRef.current = false;
-              }
-            })();
-          } else if (alreadyInDiffMode) {
-            // CRITICAL: Check if the disk content actually changed
-            // If the new content matches what we're already showing, skip the reload
-            // This prevents flashing when switching tabs or during saves
-            if (newContent === lastSavedContentRef.current) {
-              // console.log('[TabEditor] Diff already showing correct content, skipping reload');
-              processingFileChangeRef.current = false;
-              return;
-            }
-
-            // Already showing diff - reset editor and update with new content
-            console.log(`[TabEditor] Updating existing diff with new content - tagged: ${oldContent.length}, new: ${newContent.length}`);
-
-            contentRef.current = oldContent;
-
-            // Set isApplyingDiffRef before async work for consistency
-            // (pendingAIEditTagRef should already be set, but this is belt-and-suspenders)
-            isApplyingDiffRef.current = true;
-
-            // CRITICAL FIX RC2: Create a promise for the diff update and don't release lock until it completes
-            diffUpdatePromise = (async () => {
-              try {
-                if (isMarkdown) {
-                  // Markdown files: Use Lexical diff nodes
-                  // FIRST: Reset editor to old (tagged) content to clear existing diff nodes
-                  // This is NECESSARY - editor must have oldContent before applyMarkdownReplace can find it
-                  const transformers = getEditorTransformers();
-
-                  if (editorRef.current) {
-                    editorRef.current.update(() => {
-                      const root = $getRoot();
-                      root.clear();
-                      $convertFromEnhancedMarkdownString(oldContent, transformers);
-                    }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
-                  }
-
-                  // THEN: Apply the new diff replacement
-                  // Don't pass oldText - let the command handler extract it from the editor
-                  // This handles normalization differences (tables, spacing, etc.)
-                  const replacements = [{
-                    newText: newContent
-                  }];
-
-                  // Wait a tick for the editor to update
-                  await new Promise(resolve => setTimeout(resolve, 100));
-
-                  // Apply diff (isApplyingDiffRef was set before async work started)
-                  if (editorRef.current) {
-                    editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
-                    console.log(`[TabEditor] Updated diff with new edits`);
-                    // Fetch session info for the diff approval bar (for Lexical)
-                    fetchDiffSessionInfo(tagInfo.sessionId, pendingTags[0].createdAt?.getTime?.() || Date.now());
-                  }
-
-                  // Wait for DOM to fully render with CSS classes
-                  await new Promise(resolve => setTimeout(resolve, 500));
-
-                  // Reset dirty state after diff application - user hasn't made any changes
-                  // This prevents false-positive autosaves from WYSIWYG rendering differences
-                  isDirtyRef.current = false;
-                  onDirtyChange?.(false);
-
-                  // Signal content changed so document headers re-read
-                  setReloadVersion(v => v + 1);
-                } else {
-                  // Code files: Use Monaco's built-in diff editor
-                  if (editorRef.current && editorRef.current.showDiff) {
-                    console.log(`[TabEditor] Showing Monaco diff - old: ${oldContent.length}, new: ${newContent.length}`);
-                    editorRef.current.showDiff(oldContent, newContent);
-                    setShowMonacoDiffBar(true);
-                    // Fetch session info for the diff approval bar
-                    fetchDiffSessionInfo(tagInfo.sessionId, pendingTags[0].createdAt?.getTime?.() || Date.now());
-                    // Signal content changed so document headers re-read
-                    setReloadVersion(v => v + 1);
-                  }
-                }
-              } catch (error) {
-                logger.ui.error(`[TabEditor] Failed to update diff:`, error);
-              } finally {
-                // Clear isApplyingDiffRef whether success or failure
-                isApplyingDiffRef.current = false;
-              }
-            })();
-          } else {
-            // First time showing diff for this tag
-            logger.ui.info(`[TabEditor] AI edit pending for ${fileName}, applying diff mode (skipping conflict dialog)`);
-            console.log(`[TabEditor] AI edit pending - tagged content length: ${oldContent.length}, new content length: ${newContent.length}`);
-
-            contentRef.current = oldContent;
-
-            // CRITICAL: Set isApplyingDiffRef BEFORE starting async work
-            // This prevents autosave from firing during diff application
-            // (pendingAIEditTagRef is set after diff completes, but we need protection during)
-            isApplyingDiffRef.current = true;
-
-            // CRITICAL FIX RC6/RC7: Create a promise for the diff application and ensure proper state sync
-            // Load the old content first, then apply diff
-            diffUpdatePromise = (async () => {
-              try {
-                if (editorRef.current) {
-                  if (isMarkdown) {
-                    // Markdown files: Use Lexical diff nodes
-                    const transformers = getEditorTransformers();
-
-                    console.log(`[TabEditor] Loading old content for first-time diff (length: ${oldContent.length})`);
-
-                    // Load the old (tagged) content - this will be the baseline for diff
-                    editorRef.current.update(() => {
-                      const root = $getRoot();
-                      root.clear();
-                      $convertFromEnhancedMarkdownString(oldContent, transformers);
-                    }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
-
-                    // THEN: Apply the diff replacement to show changes from old to new
-                    // Don't pass oldText - let the command handler extract it from the editor
-                    // This handles normalization differences (tables, spacing, etc.)
-                    const replacements = [{
-                      newText: newContent
-                    }];
-
-                    // Wait longer for the editor to fully process the content load
-                    console.log(`[TabEditor] Waiting for content load to complete...`);
-                    await new Promise(resolve => setTimeout(resolve, 250));
-
-                    // Apply diff (isApplyingDiffRef was set before async work started)
-                    editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
-                    console.log(`[TabEditor] Dispatched APPLY_MARKDOWN_REPLACE_COMMAND`);
-                    // Fetch session info for the diff approval bar (for Lexical)
-                    fetchDiffSessionInfo(tagInfo.sessionId, pendingTags[0].createdAt?.getTime?.() || Date.now());
-
-                    // Wait for content change handler to process
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                  } else {
-                    // Code files: Use Monaco's built-in diff editor
-                    if (editorRef.current.showDiff) {
-                      console.log(`[TabEditor] Showing Monaco diff (first time) - old: ${oldContent.length}, new: ${newContent.length}`);
-                      editorRef.current.showDiff(oldContent, newContent);
-                      setShowMonacoDiffBar(true);
-                      // Fetch session info for the diff approval bar
-                      fetchDiffSessionInfo(tagInfo.sessionId, pendingTags[0].createdAt?.getTime?.() || Date.now());
-                    }
-                  }
-
-                  // CRITICAL FIX RC7: Store tag info ONLY after successful diff application
-                  // This ensures pendingAIEditTagRef is synchronized with actual editor state
-                  setPendingAIEditTag(tagInfo);
-
-                  // Reset dirty state after diff application - user hasn't made any changes
-                  // This prevents false-positive autosaves from WYSIWYG rendering differences
-                  isDirtyRef.current = false;
-                  onDirtyChange?.(false);
-
-                  // Signal content changed so document headers re-read
-                  setReloadVersion(v => v + 1);
-                }
-              } catch (error) {
-                logger.ui.error(`[TabEditor] Failed to apply AI diff:`, error);
-              } finally {
-                // CRITICAL: Clear isApplyingDiffRef whether success or failure
-                // This was set before the async work started to protect against autosave race
-                isApplyingDiffRef.current = false;
-              }
-            })();
-          }
-
-          // Wait for the diff update to complete before releasing the lock
-          if (diffUpdatePromise) {
-            await diffUpdatePromise;
-          }
-
-          // AI edit applied successfully - don't show any dialog, just return
-          return;
-        }
-
-        // Keep a recent-save timestamp for conflict handling below.
-        // Do not suppress external reloads based on time alone; legitimate AI edits
-        // can happen immediately after a save and must still be applied.
-        const timeSinceLastSave = lastSaveTimeRef.current ? Date.now() - lastSaveTimeRef.current : Infinity;
-
-        const applyReload = async () => {
-          // For custom editors using EditorHost: Just notify them of the file change
-          // The custom editor owns its content - it will compare and decide whether to reload
-          if (isCustom && editorHostFileChangeCallbackRef.current) {
-            // Create history snapshot of external change for custom editors too
-            if (window.electronAPI?.history && newContent) {
-              try {
-                await window.electronAPI.history.createSnapshot(
-                    data.path,
-                    newContent,
-                    'external-change',
-                    'File modified externally'
-                );
-              } catch (error) {
-                logger.ui.error(`[TabEditor] Failed to create history snapshot for custom editor:`, error);
-              }
-            }
-
-            try {
-              logger.ui.info(`[TabEditor] Notifying custom editor of file change for ${fileName}`);
-              editorHostFileChangeCallbackRef.current(newContent);
-              // Update lastSavedContent to reflect what's on disk, but don't touch other state
-              // The editor will report its state via callbacks if it actually updates
-              lastSavedContentRef.current = newContent;
-            } catch (error) {
-              logger.ui.error(`[TabEditor] Failed to notify custom editor of file change:`, error);
-            }
-            return;
-          }
-
-          // For built-in editors (markdown/code): Handle normally
-          // Create history snapshot of external change
-          if (window.electronAPI?.history && newContent) {
-            try {
-              await window.electronAPI.history.createSnapshot(
-                  data.path,
-                  newContent,
-                  'external-change',
-                  'File modified externally'
-              );
-            } catch (error) {
-              logger.ui.error(`[TabEditor] Failed to create history snapshot:`, error);
-            }
-          }
-
-          // Update state
-          contentRef.current = newContent;
-          initialContentRef.current = newContent;
-          lastSavedContentRef.current = newContent;
-          isDirtyRef.current = false;
-          onDirtyChange?.(false);
-
-          // Update editor content programmatically
-          // Works for both active and inactive tabs since editor is still mounted
-          if (editorRef.current) {
-            try {
+        (async () => {
+          try {
+            if (editorRef.current) {
               if (isMarkdown) {
-                // Update Lexical editor for markdown files
+                // Lexical: load old content, then apply diff replacement
                 const transformers = getEditorTransformers();
-
                 editorRef.current.update(() => {
                   const root = $getRoot();
                   root.clear();
-                  $convertFromEnhancedMarkdownString(newContent, transformers);
+                  $convertFromEnhancedMarkdownString(oldContent, transformers);
                 }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
-              } else {
-                // Update Monaco editor for code files
-                if (editorRef.current.setContent) {
-                  editorRef.current.setContent(newContent);
-                }
+
+                await new Promise((resolve) => setTimeout(resolve, 250));
+
+                editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, [{ newText: newContent }]);
+                fetchDiffSessionInfo(sessionId, createdAt);
+
+                await new Promise((resolve) => setTimeout(resolve, 100));
+              } else if (editorRef.current.showDiff) {
+                // Monaco: use built-in diff viewer
+                editorRef.current.showDiff(oldContent, newContent);
+                setShowMonacoDiffBar(true);
+                fetchDiffSessionInfo(sessionId, createdAt);
               }
-              // Signal that content was reloaded externally so document headers can re-read
-              setReloadVersion(v => v + 1);
-            } catch (error) {
-              logger.ui.error(`[TabEditor] Failed to update editor content:`, error);
             }
+
+            isDirtyRef.current = false;
+            onDirtyChange?.(false);
+            setReloadVersion((v) => v + 1);
+          } catch (error) {
+            logger.ui.error(`[TabEditor] Failed to apply DocumentModel diff:`, error);
+          } finally {
+            isApplyingDiffRef.current = false;
           }
-        };
+        })();
+      }),
+    );
 
-        // Protect dirty files from being overwritten
-        // BUT: Skip this check if there's a pending AI edit tag - the diff mode handles it
-        // Also skip if this is an echo from our own recent save (within 2s AND content matches)
-        if (isDirtyRef.current && (!pendingTags || pendingTags.length === 0)) {
-          // Check if this is an echo from our own save - need BOTH time AND content match
-          // to avoid false positives where content happens to match for other reasons
-          if (timeSinceLastSave < 2000 && newContent === lastSavedContentRef.current) {
-            // This is our own save coming back - ignore it completely (don't clear dirty)
-            processingFileChangeRef.current = false;
-            return;
-          }
-          // Store the new content and show dialog
-          logger.ui.info(`[TabEditor] FILE WATCHER: Showing conflict dialog for ${fileName}`);
-          setConflictDialogContent(newContent);
-          setShowConflictDialog(true);
-          // Don't reset flag yet - let finally block handle it
-          return;
-        }
-
-        await applyReload();
-      } finally {
-        // CRITICAL FIX RC2: Only release the lock AFTER all async operations complete
-        // This ensures that subsequent file change events don't start processing until we're done
-        if (diffUpdatePromise) {
-          await diffUpdatePromise.catch(err => {
-            logger.ui.error('[TabEditor] Error waiting for diff update:', err);
-          });
-        }
-        processingFileChangeRef.current = false;
-        // console.log('[TabEditor] Finished processing file-changed event - processing flag set to false');
-
-        // If another file change arrived while we were processing, re-process
-        // This ensures we don't miss updates (e.g., second AI edit while processing first)
-        if (pendingFileChangeRef.current) {
-          // console.log('[TabEditor] Re-processing pending file change');
-          pendingFileChangeRef.current = false;
-          // Use setTimeout to avoid deep recursion and allow React to process
-          setTimeout(() => {
-            handleFileChanged(data);
-          }, 0);
-        }
-      }
-    };
-
-    window.electronAPI.on('file-changed-on-disk', handleFileChanged);
-
-    // Cleanup function - CRITICAL: This must remove the exact same function reference
     return () => {
-      window.electronAPI.off('file-changed-on-disk', handleFileChanged);
-      // Reset the ref so it can be re-registered if needed
-      fileWatcherRegisteredRef.current = false;
+      for (const cleanup of cleanups) cleanup();
     };
-    // NOTE: onDirtyChange is NOT in dependencies to prevent re-registering listeners
-    // We call it directly in handleFileChanged which captures the current value
-  }, [filePath, fileName]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filePath, fileName, isMarkdown, isCustom, saveWithHistory]);
+
 
   // Listen for "Clear All Pending" event to exit diff mode when this file's pending tag is cleared
   useEffect(() => {
@@ -1572,6 +1246,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           // Update working copy ref and mark as dirty so autosave will persist
           contentRef.current = newContent;
           isDirtyRef.current = true;
+          documentModelHandleRef.current?.setDirty(true);
 
           // Notify parent that content changed and is dirty
           onDirtyChange?.(true);
@@ -1664,15 +1339,16 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
         // CRITICAL: Mark tag as reviewed BEFORE saving to disk
         // This prevents the file watcher from re-entering diff mode when it detects the save
-        logger.ui.info('[TabEditor] About to call updateTagStatus:', { filePath, tagId, status: 'reviewed' });
         await window.electronAPI.history.updateTagStatus(filePath, tagId, 'reviewed', workspaceId);
         logger.ui.info(`[TabEditor] Successfully marked AI edit tag as reviewed: ${tagId}`);
 
         // Clear the pending tag reference immediately so file watcher won't re-enter diff mode
         setPendingAIEditTag(null);
 
+        // Clear DocumentModel's diff state so it doesn't re-enter diff mode on the save echo
+        documentModel?.clearDiffState();
+
         // Now save current editor state to disk
-        // This preserves all the incremental accept/reject decisions the user made
         if (editorRef.current) {
             const transformers = getEditorTransformers();
 
@@ -1683,8 +1359,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             // Save to disk
             await window.electronAPI.saveFile(currentContent, filePath);
 
-            // Create history snapshot for this incremental save
-            // This ensures history accurately reflects what's on disk after user's decisions
+            // Update DocumentModel's echo-suppression baseline
+            documentModel?.setLastPersistedContent(currentContent);
+
+            // Create history snapshot
             await window.electronAPI.invoke('history:create-snapshot', filePath, currentContent, 'manual', 'Incremental diff acceptance');
 
             // Advance the Codex cache so subsequent AI edits diff against post-review state
@@ -1703,7 +1381,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           if (result && result.success) {
             const finalContent = result.content;
 
-            // Update editor to show final content (no diff)
             if (editorRef.current) {
               const transformers = getEditorTransformers();
 
@@ -2143,19 +1820,32 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       },
 
       // Subscribe to file changes
-      // The actual file watcher is handled by TabEditor's main effect
-      // We just wire up the callback so it gets called when files change
+      // When DocumentModel is available, delegates to the handle for coordinated notifications.
+      // The handle only fires when content actually changed (echo-suppressed, not our own save).
+      // Falls back to ref-based callback wiring when no DocumentModel handle (shouldn't happen in practice).
       subscribeToFileChanges: (callback: (newContent: string) => void): (() => void) => {
         editorHostFileChangeCallbackRef.current = callback;
+        // Also register with DocumentModel handle for coordinated notifications
+        if (documentModelHandleRef.current) {
+          return documentModelHandleRef.current.onFileChanged((content) => {
+            if (typeof content === 'string') {
+              callback(content);
+            }
+          });
+        }
         return () => {
           editorHostFileChangeCallbackRef.current = null;
         };
       },
 
       // Report dirty state change
+      // Delegates to DocumentModel handle when available, which aggregates dirty state
+      // across all editors viewing this file.
       onDirtyChange: (isDirty: boolean) => {
         if (isDirtyRef.current !== isDirty) {
           isDirtyRef.current = isDirty;
+          // Report to DocumentModel for aggregation
+          documentModelHandleRef.current?.setDirty(isDirty);
           // Update tab dirty indicator via DOM (no React state cascade)
           onDirtyChange?.(isDirty);
           // Update macOS window dirty indicator if this is the active tab
@@ -2166,36 +1856,51 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       },
 
       // Save content to disk
+      // Delegates to DocumentModel handle when available, which coordinates saves
+      // across all editors, updates lastPersistedContent, and notifies other editors.
       saveContent: async (content: string | ArrayBuffer): Promise<void> => {
-        // CRITICAL: Update tracking refs BEFORE the await to prevent race conditions
-        // with the file watcher. The file watcher can fire before saveFile returns,
-        // so we need lastSaveTimeRef and lastSavedContentRef set beforehand.
+        if (documentModelHandleRef.current) {
+          // Delegate to DocumentModel for coordinated save
+          await documentModelHandleRef.current.saveContent(content);
+          // Update local tracking refs
+          if (typeof content === 'string') {
+            lastSavedContentRef.current = content;
+          }
+          lastSaveTimeRef.current = Date.now();
+          isDirtyRef.current = false;
+          onDirtyChange?.(false);
+          // Create history snapshot
+          if (window.electronAPI.history && typeof content === 'string') {
+            await window.electronAPI.history.createSnapshot(filePath, content, 'auto-save', 'Auto-save');
+          }
+          return;
+        }
+
+        // Fallback: direct IPC save (should not happen with DocumentModel wired)
         if (typeof content === 'string') {
           lastSavedContentRef.current = content;
         }
         lastSaveTimeRef.current = Date.now();
-
-        // Write to disk
         if (typeof content === 'string') {
           await window.electronAPI.saveFile(content, filePath);
         } else {
-          // TODO: Handle binary content
           throw new Error('Binary content saving not yet implemented');
         }
-
-        // Create history snapshot
         if (window.electronAPI.history && typeof content === 'string') {
           await window.electronAPI.history.createSnapshot(filePath, content, 'auto-save', 'Auto-save');
         }
-
-        // Mark clean
         isDirtyRef.current = false;
         onDirtyChange?.(false);
       },
 
       // Subscribe to save requests from host (autosave timer, manual save)
+      // DocumentModel's autosave timer calls this when it's time to save.
       subscribeToSaveRequests: (callback: () => void): (() => void) => {
         editorHostSaveRequestCallbackRef.current = callback;
+        // Also register with DocumentModel handle for coordinated save requests
+        if (documentModelHandleRef.current) {
+          return documentModelHandleRef.current.onSaveRequested(callback);
+        }
         return () => {
           editorHostSaveRequestCallbackRef.current = null;
         };
@@ -2396,12 +2101,39 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   }, [isCustom, onManualSaveReady, fileName, sourceMode]);
 
   // Note: isActive prop is always true (visibility controlled by parent wrapper)
+  // Save handling: two paths converge here.
+  // 1. Real Cmd+S on macOS: menu accelerator -> IPC 'file-save' -> TabContent dispatches
+  //    'nimbalyst-save' CustomEvent on this container.
+  // 2. Playwright/synthetic Cmd+S: keydown bubbles up to this container's onKeyDown.
+  // Both call handleManualSave via ref to avoid stale closures.
+  const editorContainerRef = useRef<HTMLDivElement>(null);
+  const handleManualSaveRef = useRef(handleManualSave);
+  handleManualSaveRef.current = handleManualSave;
+
+  useEffect(() => {
+    const el = editorContainerRef.current;
+    if (!el) return;
+    const handler = () => { handleManualSaveRef.current(); };
+    el.addEventListener('nimbalyst-save', handler);
+    return () => { el.removeEventListener('nimbalyst-save', handler); };
+  }, []);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+      e.preventDefault();
+      e.stopPropagation();
+      handleManualSaveRef.current();
+    }
+  }, []);
+
   // The parent sets display:none on the wrapper for inactive tabs
   // So we don't use isActive for styling - we're always "active" when visible
   return (
       <div
+          ref={editorContainerRef}
           className="tab-editor multi-editor-instance flex flex-col h-full overflow-hidden relative"
           data-file-path={filePath}
+          onKeyDown={handleKeyDown}
       >
         <UnifiedEditorHeaderBar
           filePath={filePath}
@@ -2417,6 +2149,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           isSourceModeActive={sourceMode}
           onDirtyChange={(isDirty) => {
             isDirtyRef.current = isDirty;
+            documentModelHandleRef.current?.setDirty(isDirty);
             onDirtyChange?.(isDirty);
           }}
           onSwitchToAgentMode={onSwitchToAgentMode}
