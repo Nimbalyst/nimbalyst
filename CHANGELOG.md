@@ -20,6 +20,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.10] - 2026-04-10
+
+
+### Added
+- DocumentModel coordination layer for multi-editor file sync
+- "Install Chrome Extension" option in Help menu
+- Shift-click range selection on tracker kanban board
+
+### Changed
+- Tracker system refactored to be fully schema-driven via TrackerRecord and roles
+- Input placeholders updated to include session mention syntax
+
+### Fixed
+- Codex OAuth no longer opens at session start; requires mcp-remote auth cache before injecting native OAuth remotes
+- Deduplicated Codex tool call events with recycled item IDs
+- Hardened OAuth MCP server flows to prevent unauthorized remote servers from triggering login on startup
+- TeamSync doc index messages now queued while offline instead of silently dropped
+- Tracker authorIdentity preserved when document indexer re-indexes items
+- Windows terminal shell selection made reliable
+- Local images inlined as base64 in shared file links
+- Duplicate AskUserQuestion events in transcript prevented
+- Synthetic assistant messages that echo errors now skipped
+- Extension-sdk alias added to transcript vite configs for CI
+
 ## [0.57.9] - 2026-04-08
 
 
