@@ -55,6 +55,28 @@ describe('MCPRemoteOAuth', () => {
     expect(descriptor).toBeNull();
   });
 
+  it('can check native remote OAuth configs as mcp-remote for Codex', () => {
+    const descriptor = extractMcpRemoteConfig({
+      type: 'http',
+      url: 'https://mcp.slack.com/mcp',
+      oauth: {
+        callbackPort: 3118,
+        clientId: 'client-123',
+        clientSecret: 'secret-456',
+      },
+    }, { useMcpRemoteForNativeOAuth: true });
+
+    expect(descriptor).toEqual(expect.objectContaining({
+      serverUrl: 'https://mcp.slack.com/mcp',
+      callbackPort: 3118,
+      requiresOAuth: true,
+      staticOAuthClientInfo: {
+        client_id: 'client-123',
+        client_secret: 'secret-456',
+      },
+    }));
+  });
+
   it('does not mark bearer-token HTTP servers as OAuth', () => {
     const descriptor = extractMcpRemoteConfig({
       type: 'http',

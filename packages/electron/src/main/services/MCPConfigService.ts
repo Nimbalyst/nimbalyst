@@ -733,15 +733,18 @@ export class MCPConfigService {
     return remoteConfig?.requiresOAuth === true;
   }
 
-  async isOAuthAuthorized(serverConfig: MCPServerConfig): Promise<boolean> {
-    if (usesNativeRemoteOAuth(serverConfig)) {
+  async isOAuthAuthorized(
+    serverConfig: MCPServerConfig,
+    options: { useMcpRemoteForNativeOAuth?: boolean } = {}
+  ): Promise<boolean> {
+    if (usesNativeRemoteOAuth(serverConfig) && !options.useMcpRemoteForNativeOAuth) {
       return true;
     }
-    const remoteConfig = extractMcpRemoteConfig(serverConfig);
+    const remoteConfig = extractMcpRemoteConfig(serverConfig, options);
     if (!remoteConfig || !remoteConfig.requiresOAuth) {
       return true;
     }
-    const status = await checkMcpRemoteAuthStatus(serverConfig);
+    const status = await checkMcpRemoteAuthStatus(serverConfig, options);
     return status.authorized;
   }
 

@@ -1144,7 +1144,9 @@ app.whenReady().then(async () => {
         const enabledServers: Record<string, any> = {};
         for (const [name, config] of Object.entries(allServers)) {
             if (isMCPServerEnabledForProvider(config as MCPServerConfig, MCP_PROVIDER_IDS.CODEX)) {
-                const isAuthorized = await mcpConfigService.isOAuthAuthorized(config as MCPServerConfig);
+                const isAuthorized = await mcpConfigService.isOAuthAuthorized(config as MCPServerConfig, {
+                    useMcpRemoteForNativeOAuth: true,
+                });
                 if (!isAuthorized) {
                     logger.mcp.info(`[MCP] Skipping unauthorized OAuth server for Codex: ${name}`);
                     continue;

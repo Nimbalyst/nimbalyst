@@ -20,6 +20,16 @@ export interface MCPRemoteConfigDescriptor {
   requiresOAuth: boolean;
 }
 
+export interface MCPRemoteConfigOptions {
+  /**
+   * Codex cannot use native remote OAuth client metadata directly, so Nimbalyst
+   * wraps those servers with mcp-remote at runtime. In that provider path, auth
+   * status must be checked against mcp-remote's cache instead of treating the
+   * native OAuth config as provider-managed.
+   */
+  useMcpRemoteForNativeOAuth?: boolean;
+}
+
 const KNOWN_OAUTH_HOSTS = new Set([
   'mcp.linear.app',
   'mcp.atlassian.com',
@@ -41,8 +51,36 @@ export function usesNativeRemoteOAuth(config: MCPServerConfig): boolean {
   return Boolean(config.oauth?.clientId || config.oauth?.clientSecret);
 }
 
-export function extractMcpRemoteConfig(config: MCPServerConfig): MCPRemoteConfigDescriptor | null {
-  if (usesNativeRemoteOAuth(config)) {
+function getStaticOAuthClientInfo(
+  oauthConfig: MCPServerConfig['oauth']
+): Record<string, string> | undefined {
+  if (!oauthConfig) {
+    return undefined;
+  }
+
+  if (oauthConfig.staticClientInfo && Object.keys(oauthConfig.staticClientInfo).length > 0) {
+    return oauthConfig.staticClientInfo;
+  }
+
+  if (!oauthConfig.clientId && !oauthConfig.clientSecret) {
+    return undefined;
+  }
+
+  const clientInfo: Record<string, string> = {};
+  if (oauthConfig.clientId) {
+    clientInfo.client_id = oauthConfig.clientId;
+  }
+  if (oauthConfig.clientSecret) {
+    clientInfo.client_secret = oauthConfig.clientSecret;
+  }
+  return Object.keys(clientInfo).length > 0 ? clientInfo : undefined;
+}
+
+export function extractMcpRemoteConfig(
+  config: MCPServerConfig,
+  options: MCPRemoteConfigOptions = {}
+): MCPRemoteConfigDescriptor | null {
+  if (usesNativeRemoteOAuth(config) && !options.useMcpRemoteForNativeOAuth) {
     return null;
   }
 
@@ -62,7 +100,7 @@ export function extractMcpRemoteConfig(config: MCPServerConfig): MCPRemoteConfig
       authorizeResource: config.oauth?.resource,
       transportStrategy: config.oauth?.transportStrategy,
       authTimeoutSeconds: config.oauth?.authTimeoutSeconds,
-      staticOAuthClientInfo: config.oauth?.staticClientInfo,
+      staticOAuthClientInfo: getStaticOAuthClientInfo(config.oauth),
       staticOAuthClientMetadata: config.oauth?.staticClientMetadata,
       requiresOAuth,
     };
@@ -147,11 +185,12 @@ export function buildMcpRemoteArgs(descriptor: MCPRemoteConfigDescriptor, packag
 }
 
 export async function checkMcpRemoteAuthStatus(
-  configOrUrl: MCPServerConfig | string
+  configOrUrl: MCPServerConfig | string,
+  options: MCPRemoteConfigOptions = {}
 ): Promise<{ authorized: boolean; tokenPath?: string }> {
   const descriptor = typeof configOrUrl === 'string'
     ? { serverUrl: configOrUrl, headers: {}, requiresOAuth: true }
-    : extractMcpRemoteConfig(configOrUrl);
+    : extractMcpRemoteConfig(configOrUrl, options);
 
   if (!descriptor) {
     return { authorized: false };
