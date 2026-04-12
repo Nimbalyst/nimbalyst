@@ -310,6 +310,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const hasInitialContentSyncRef = useRef<boolean>(false);
   const pendingAIEditTagRef = useRef<{tagId: string, sessionId: string, filePath: string} | null>(null);
   const isApplyingDiffRef = useRef<boolean>(false); // Track programmatic diff application
+  const isApplyingExternalContentRef = useRef<boolean>(false); // Guard: programmatic content update from sibling save
   const isClearingDiffTagRef = useRef<boolean>(false); // Guard against pending-cleared reload race
   const editorHostFileChangeCallbackRef = useRef<((newContent: string) => void) | null>(null); // For EditorHost file change subscription
   const diffRequestCallbackRef = useRef<((config: DiffConfig) => void) | null>(null); // For EditorHost diff request subscription
@@ -998,6 +999,11 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         // Custom editors are notified via EditorHost.subscribeToFileChanges (separate subscription).
         if (isCustom) return;
 
+        // Guard: suppress the Lexical onChange -> setDirty(true) that fires
+        // from the programmatic content update below. Without this, the receiving
+        // editor becomes dirty, autosaves, and overwrites the sending editor.
+        isApplyingExternalContentRef.current = true;
+
         // Built-in editors: apply the new content
         if (editorRef.current) {
           try {
@@ -1024,6 +1030,12 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         initialContentRef.current = content;
         isDirtyRef.current = false;
         onDirtyChange?.(false);
+
+        // Clear the guard after Lexical's onChange has settled.
+        // onChange fires as a microtask after the update, so setTimeout(0) is enough.
+        setTimeout(() => {
+          isApplyingExternalContentRef.current = false;
+        }, 0);
       }),
     );
 
@@ -1842,6 +1854,12 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       // Delegates to DocumentModel handle when available, which aggregates dirty state
       // across all editors viewing this file.
       onDirtyChange: (isDirty: boolean) => {
+        // Suppress dirty during programmatic content updates (sibling save sync, diff application).
+        // Lexical's onChange fires after programmatic $getRoot().clear() + $convertFromMarkdown,
+        // which would re-mark the editor dirty, creating a save-overwrite cycle between siblings.
+        if (isDirty && (isApplyingExternalContentRef.current || isApplyingDiffRef.current)) {
+          return;
+        }
         if (isDirtyRef.current !== isDirty) {
           isDirtyRef.current = isDirty;
           // Report to DocumentModel for aggregation
@@ -2148,6 +2166,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           supportsSourceMode={isMarkdown || customEditorSupportsSourceMode}
           isSourceModeActive={sourceMode}
           onDirtyChange={(isDirty) => {
+            if (isDirty && (isApplyingExternalContentRef.current || isApplyingDiffRef.current)) return;
             isDirtyRef.current = isDirty;
             documentModelHandleRef.current?.setDirty(isDirty);
             onDirtyChange?.(isDirty);
