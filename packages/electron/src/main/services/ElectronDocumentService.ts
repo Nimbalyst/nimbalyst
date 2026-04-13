@@ -913,7 +913,7 @@ export class ElectronDocumentService implements DocumentService {
       // console.log(`[DocumentService] listTrackerItems called for workspace: ${this.workspacePath}`);
       // Returns all items including archived - filtering happens in the UI layer
       const result = await database.query<any>(
-        `SELECT * FROM tracker_items WHERE workspace = $1 ORDER BY last_indexed DESC`,
+        `SELECT * FROM tracker_items WHERE workspace = $1 ORDER BY kanban_sort_order ASC NULLS LAST, last_indexed DESC`,
         [this.workspacePath]
       );
       // console.log(`[DocumentService] Query returned ${result.rows.length} tracker items`);
@@ -930,7 +930,7 @@ export class ElectronDocumentService implements DocumentService {
     try {
       // console.log(`[DocumentService] getTrackerItemsByType(${type}) for workspace: ${this.workspacePath}`);
       const result = await database.query<any>(
-        `SELECT * FROM tracker_items WHERE workspace = $1 AND type = $2 ORDER BY last_indexed DESC`,
+        `SELECT * FROM tracker_items WHERE workspace = $1 AND type = $2 ORDER BY kanban_sort_order ASC NULLS LAST, last_indexed DESC`,
         [this.workspacePath, type]
       );
       // console.log(`[DocumentService] Query returned ${result.rows.length} items for type ${type}`);
@@ -1013,6 +1013,23 @@ export class ElectronDocumentService implements DocumentService {
       linkedCommitSha: data.linkedCommitSha || undefined,
       documentId: data.documentId || undefined,
       syncStatus: row.sync_status || 'local',
+      // Pass through extra JSONB data fields (e.g. kanbanSortOrder) so they
+      // survive the TrackerItem -> TrackerRecord conversion via customFields.
+      customFields: (() => {
+        const known = new Set([
+          'title', 'description', 'status', 'priority', 'owner', 'tags',
+          'created', 'updated', 'dueDate', 'assigneeEmail', 'reporterEmail',
+          'authorIdentity', 'lastModifiedBy', 'createdByAgent', 'assigneeId',
+          'reporterId', 'labels', 'linkedSessions', 'linkedCommitSha', 'documentId',
+        ]);
+        const extra: Record<string, any> = {};
+        if (data) {
+          for (const [k, v] of Object.entries(data)) {
+            if (!known.has(k) && v !== undefined) extra[k] = v;
+          }
+        }
+        return Object.keys(extra).length > 0 ? extra : undefined;
+      })(),
     };
   }
 
@@ -1547,10 +1564,28 @@ export class ElectronDocumentService implements DocumentService {
     // getCurrentIdentity imported statically at top of file
     const authorIdentity = getCurrentIdentity(payload.workspace);
 
+    // Assign initial kanbanSortOrder: place new items at the top of their column.
+    // Query the current minimum sort key for this workspace+status so the new item sorts before it.
+    let initialSortOrder = 'a0';
+    try {
+      const minKeyResult = await database.query<any>(
+        `SELECT MIN(kanban_sort_order) as min_key FROM tracker_items WHERE workspace = $1 AND status = $2 AND kanban_sort_order IS NOT NULL`,
+        [payload.workspace, payload.status]
+      );
+      const minKey = minKeyResult.rows[0]?.min_key;
+      if (minKey) {
+        const { generateKeyBetween } = await import('@nimbalyst/runtime/utils/fractionalIndex');
+        initialSortOrder = generateKeyBetween(null, minKey);
+      }
+    } catch (e) {
+      // Non-fatal: fall back to default sort order
+    }
+
     const data: Record<string, any> = {
       title: payload.title,
       status: payload.status,
       priority: payload.priority,
+      kanbanSortOrder: initialSortOrder,
       created: new Date().toISOString().split('T')[0],
       authorIdentity,
       reporterEmail: authorIdentity.email || authorIdentity.gitEmail || undefined,

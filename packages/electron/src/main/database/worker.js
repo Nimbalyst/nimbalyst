@@ -1018,6 +1018,71 @@ class PGLiteWorker {
       // Non-fatal
     }
 
+    // Migration: Add kanban_sort_order generated column for manual card ordering
+    try {
+      const sortOrderCheck = await this.db.query(`
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'tracker_items' AND column_name = 'kanban_sort_order'
+        ) as has_kanban_sort_order
+      `);
+      const { has_kanban_sort_order } = sortOrderCheck.rows[0] || {};
+      if (!has_kanban_sort_order) {
+        console.log('[PGLite Worker] Adding kanban_sort_order column to tracker_items...');
+        await this.db.exec(`
+          ALTER TABLE tracker_items ADD COLUMN kanban_sort_order TEXT
+            GENERATED ALWAYS AS (data->>'kanbanSortOrder') STORED;
+          CREATE INDEX IF NOT EXISTS idx_tracker_kanban_sort
+            ON tracker_items(workspace, status, kanban_sort_order);
+        `);
+      }
+
+      // Backfill: assign sort keys to any items missing them (runs every startup).
+      // Uses row_number to generate ascending keys per workspace, preserving last_indexed order.
+      const missingCount = await this.db.query(`
+        SELECT COUNT(*) as cnt FROM tracker_items WHERE data->>'kanbanSortOrder' IS NULL
+      `);
+      if (missingCount.rows[0]?.cnt > 0) {
+        console.log('[PGLite Worker] Backfilling', missingCount.rows[0].cnt, 'items with kanbanSortOrder...');
+        await this.db.exec(`
+          UPDATE tracker_items SET data = jsonb_set(
+            data,
+            '{kanbanSortOrder}',
+            to_jsonb('a' || lpad(rn::text, 4, '0'))
+          )
+          FROM (
+            SELECT id, row_number() OVER (PARTITION BY workspace ORDER BY last_indexed DESC) - 1 AS rn
+            FROM tracker_items
+            WHERE data->>'kanbanSortOrder' IS NULL
+          ) sub
+          WHERE tracker_items.id = sub.id;
+        `);
+        console.log('[PGLite Worker] Backfill complete');
+      }
+
+      // Fix-up: promote customFields.kanbanSortOrder to top-level data.kanbanSortOrder
+      const nestedCount = await this.db.query(`
+        SELECT COUNT(*) as cnt FROM tracker_items
+        WHERE data->'customFields'->>'kanbanSortOrder' IS NOT NULL
+          AND data->>'kanbanSortOrder' IS NULL
+      `);
+      if (nestedCount.rows[0]?.cnt > 0) {
+        console.log('[PGLite Worker] Promoting', nestedCount.rows[0].cnt, 'nested kanbanSortOrder values...');
+        await this.db.exec(`
+          UPDATE tracker_items SET data = jsonb_set(
+            data - 'customFields',
+            '{kanbanSortOrder}',
+            data->'customFields'->'kanbanSortOrder'
+          )
+          WHERE data->'customFields'->>'kanbanSortOrder' IS NOT NULL
+            AND data->>'kanbanSortOrder' IS NULL;
+        `);
+      }
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to add kanban_sort_order column:', error);
+      // Non-fatal
+    }
+
     // AI Agent Messages table - write-only raw storage for AI interactions
     console.log('[PGLite Worker] Creating ai_agent_messages table...');
     try {

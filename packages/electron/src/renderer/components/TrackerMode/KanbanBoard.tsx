@@ -4,9 +4,63 @@ import { MaterialSymbol } from '@nimbalyst/runtime';
 import type { TrackerRecord } from '@nimbalyst/runtime/core/TrackerRecord';
 import type { TrackerItemType } from '@nimbalyst/runtime/plugins/TrackerPlugin';
 import { globalRegistry, getRoleField } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
-import { getRecordTitle, getRecordStatus, getRecordPriority, getStatusOptions, getFieldByRole } from '@nimbalyst/runtime/plugins/TrackerPlugin/trackerRecordAccessors';
+import { getRecordTitle, getRecordStatus, getRecordPriority, getRecordSortOrder, getStatusOptions, getFieldByRole } from '@nimbalyst/runtime/plugins/TrackerPlugin/trackerRecordAccessors';
 import { trackerItemToRecord } from '@nimbalyst/runtime/core/TrackerRecord';
+import { generateKeyBetween } from '@nimbalyst/runtime/utils/fractionalIndex';
 import { UserAvatar } from '@nimbalyst/runtime/plugins/TrackerPlugin/components/UserAvatar';
+
+// ── Module-level drag-and-drop handler ──────────────────────────────────
+// Registered once on `document`, survives HMR. The component sets the
+// callback ref that the handler invokes on drop.
+type KanbanDropCallback = (targetStatus: string, dropIdx: number) => void;
+type KanbanDragOverCallback = (colStatus: string, dropIdx: number) => void;
+
+let _kanbanDropCb: KanbanDropCallback | null = null;
+let _kanbanDragOverCb: KanbanDragOverCallback | null = null;
+let _kanbanDragLeaveCb: (() => void) | null = null;
+let _listenersAttached = false;
+
+function ensureKanbanDragListeners() {
+  if (_listenersAttached) return;
+  _listenersAttached = true;
+
+  document.addEventListener('dragover', (e: DragEvent) => {
+    const colEl = (e.target as HTMLElement)?.closest?.('.tracker-kanban-column') as HTMLElement | null;
+    if (!colEl) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+
+    const colStatus = colEl.dataset.columnStatus;
+    if (!colStatus) return;
+
+    const container = colEl.querySelector('.kanban-cards-container');
+    if (!container) return;
+    const cards = Array.from(container.querySelectorAll('.tracker-kanban-card'));
+    let idx = cards.length;
+    for (let i = 0; i < cards.length; i++) {
+      const rect = cards[i].getBoundingClientRect();
+      if (e.clientY < rect.top + rect.height / 2) { idx = i; break; }
+    }
+
+    _kanbanDragOverCb?.(colStatus, idx);
+  });
+
+  document.addEventListener('drop', (e: DragEvent) => {
+    if (!(e.target as HTMLElement)?.closest?.('.tracker-kanban-board')) return;
+    e.preventDefault();
+    const colEl = (e.target as HTMLElement)?.closest?.('.tracker-kanban-column') as HTMLElement | null;
+    const colStatus = colEl?.dataset?.columnStatus;
+    // dropIdx is set by the last dragover; read from the component via callback
+    _kanbanDropCb?.(colStatus || '', -1);
+  });
+
+  document.addEventListener('dragleave', (e: DragEvent) => {
+    const colEl = (e.target as HTMLElement)?.closest?.('.tracker-kanban-column');
+    if (colEl && !colEl.contains(e.relatedTarget as Node)) {
+      _kanbanDragLeaveCb?.();
+    }
+  });
+}
 
 interface KanbanBoardProps {
   filterType: TrackerItemType | 'all';
@@ -217,71 +271,101 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   // Drag-and-drop state
   const [dragItemId, setDragItemId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+  const dragOverColumnRef = useRef<string | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const dropIndexRef = useRef<number | null>(null);
   const dragItemRef = useRef<TrackerRecord | null>(null);
 
-  /** Update an item's status via the appropriate API based on its source */
-  const updateItemStatus = useCallback(async (record: TrackerRecord, newStatus: string) => {
+  /** Update item fields via the appropriate API based on its source */
+  const updateItemFields = useCallback(async (record: TrackerRecord, updates: Record<string, unknown>) => {
     try {
-      if (record.source === 'frontmatter' || record.source === 'import' || record.source === 'inline') {
-        // File-backed items: update in source file
-        await window.electronAPI.documentService.updateTrackerItemInFile({
-          itemId: record.id,
-          updates: { status: newStatus },
-        });
-      } else if (!record.system.documentPath || record.source === 'native') {
+      // Separate kanbanSortOrder from other updates -- sort order is always
+      // stored in the DB (not in source files), so it goes through updateTrackerItem.
+      const { kanbanSortOrder, ...otherUpdates } = updates as Record<string, any>;
+
+      // Update source file with non-sort-order fields (status, priority, etc.)
+      if (Object.keys(otherUpdates).length > 0) {
+        if (record.source === 'frontmatter' || record.source === 'import' || record.source === 'inline') {
+          await window.electronAPI.documentService.updateTrackerItemInFile({
+            itemId: record.id,
+            updates: otherUpdates,
+          });
+        } else if (!record.system.documentPath || record.source === 'native') {
+          const tracker = globalRegistry.get(record.primaryType);
+          const syncMode = tracker?.sync?.mode || 'local';
+          await window.electronAPI.documentService.updateTrackerItem({
+            itemId: record.id,
+            updates: otherUpdates,
+            syncMode,
+          });
+        }
+      }
+
+      // Sort order always goes through the DB path
+      if (kanbanSortOrder !== undefined) {
         const tracker = globalRegistry.get(record.primaryType);
         const syncMode = tracker?.sync?.mode || 'local';
         await window.electronAPI.documentService.updateTrackerItem({
           itemId: record.id,
-          updates: { status: newStatus },
+          updates: { kanbanSortOrder },
           syncMode,
         });
       }
     } catch (err) {
-      console.error('[KanbanBoard] Failed to update item status:', err);
+      console.error('[KanbanBoard] Failed to update item:', err);
     }
   }, []);
 
+  /** Convenience wrapper for status-only updates */
+  const updateItemStatus = useCallback(async (record: TrackerRecord, newStatus: string) => {
+    return updateItemFields(record, { status: newStatus });
+  }, [updateItemFields]);
+
   const handleDragStart = useCallback((e: React.DragEvent, item: TrackerRecord) => {
+    // console.log('[KanbanBoard] dragStart:', item.id, getRecordTitle(item));
     setDragItemId(item.id);
     dragItemRef.current = item;
     e.dataTransfer.effectAllowed = 'move';
-    // Set minimal drag data
     e.dataTransfer.setData('text/plain', item.id);
   }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent, columnValue: string) => {
     e.preventDefault();
+    e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
     setDragOverColumn(columnValue);
+
+    // Determine drop index by finding which card the cursor is above/below
+    const cardsContainer = e.currentTarget.querySelector('.kanban-cards-container');
+    if (!cardsContainer) { setDropIndex(null); return; }
+    const cards = Array.from(cardsContainer.querySelectorAll('.tracker-kanban-card'));
+    if (cards.length === 0) { setDropIndex(0); return; }
+
+    const y = e.clientY;
+    let idx = cards.length; // default: after last card
+    for (let i = 0; i < cards.length; i++) {
+      const rect = cards[i].getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      if (y < midY) {
+        idx = i;
+        break;
+      }
+    }
+    dropIndexRef.current = idx;
+    setDropIndex(idx);
   }, []);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
-    // Only clear if leaving the column entirely (not entering a child)
     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
       setDragOverColumn(null);
+      setDropIndex(null);
     }
   }, []);
-
-  const handleDrop = useCallback((e: React.DragEvent, targetStatus: string) => {
-    e.preventDefault();
-    setDragOverColumn(null);
-    setDragItemId(null);
-
-    const item = dragItemRef.current;
-    dragItemRef.current = null;
-    if (!item) return;
-
-    // No-op if dropped on the same column
-    const currentStatus = (getRecordStatus(item) || 'to-do').toLowerCase();
-    if (currentStatus === targetStatus) return;
-
-    updateItemStatus(item, targetStatus);
-  }, [updateItemStatus]);
 
   const handleDragEnd = useCallback(() => {
     setDragItemId(null);
     setDragOverColumn(null);
+    setDropIndex(null);
     dragItemRef.current = null;
   }, []);
 
@@ -376,7 +460,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     }
   }, [selectedIds, closeContextMenu]);
 
+  // Sort mode for kanban columns
+  type KanbanSortMode = 'manual' | 'priority' | 'created' | 'updated';
+  const [sortMode, setSortMode] = useState<KanbanSortMode>('manual');
+
   const columns = useMemo(() => getStatusColumns(filterType, allItems), [filterType, allItems]);
+
+  const PRIORITY_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
   const itemsByStatus = useMemo(() => {
     const grouped: Record<string, TrackerRecord[]> = {};
@@ -389,15 +479,41 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       if (grouped[status]) {
         grouped[status].push(item);
       } else {
-        // Should not happen since getStatusColumns scans items,
-        // but fallback to first column just in case
         const firstCol = columns[0]?.value || 'to-do';
         grouped[firstCol] = grouped[firstCol] || [];
         grouped[firstCol].push(item);
       }
     }
+
+    // Apply sort within each column
+    for (const col of columns) {
+      const items = grouped[col.value];
+      if (!items || items.length <= 1) continue;
+      items.sort((a, b) => {
+        if (sortMode === 'manual') {
+          const aKey = getRecordSortOrder(a) ?? '';
+          const bKey = getRecordSortOrder(b) ?? '';
+          // Use raw string comparison, not localeCompare -- fractional indexing
+          // keys are designed to sort by character code order (0-9, A-Z, a-z).
+          return aKey < bKey ? -1 : aKey > bKey ? 1 : 0;
+        }
+        if (sortMode === 'priority') {
+            const pa = PRIORITY_ORDER[getRecordPriority(a) || 'medium'] ?? 2;
+            const pb = PRIORITY_ORDER[getRecordPriority(b) || 'medium'] ?? 2;
+            return pa - pb;
+          }
+          if (sortMode === 'created') {
+            return new Date(b.system.createdAt).getTime() - new Date(a.system.createdAt).getTime();
+          }
+          if (sortMode === 'updated') {
+            return new Date(b.system.updatedAt).getTime() - new Date(a.system.updatedAt).getTime();
+          }
+          return 0;
+        });
+      }
+
     return grouped;
-  }, [allItems, columns]);
+  }, [allItems, columns, sortMode]);
 
   // Flat ordered list of item IDs (column by column) for shift-range selection
   const flatItemIds = useMemo(() => {
@@ -410,6 +526,47 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     }
     return ids;
   }, [columns, itemsByStatus]);
+
+  // Keep itemsByStatus in a ref so handleDrop doesn't depend on it (avoids stale closures)
+  const itemsByStatusRef = useRef(itemsByStatus);
+  useEffect(() => { itemsByStatusRef.current = itemsByStatus; }, [itemsByStatus]);
+
+  /** Handle drop: supports both cross-column (status change) and within-column reorder */
+  const handleDrop = useCallback((e: React.DragEvent, targetStatus: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const currentDropIndex = dropIndexRef.current;
+    setDragOverColumn(null);
+    setDropIndex(null);
+    dropIndexRef.current = null;
+    setDragItemId(null);
+
+    const item = dragItemRef.current;
+    dragItemRef.current = null;
+    if (!item) {
+      console.log('[KanbanBoard] drop: no item ref');
+      return;
+    }
+
+    const currentStatus = (getRecordStatus(item) || 'to-do').toLowerCase();
+    const targetColItems = (itemsByStatusRef.current[targetStatus] || []).filter(i => i.id !== item.id);
+    const idx = currentDropIndex ?? targetColItems.length;
+
+    // Compute new sort order key between neighbors
+    const prevItem = idx > 0 ? targetColItems[idx - 1] : null;
+    const nextItem = idx < targetColItems.length ? targetColItems[idx] : null;
+    const prevKey = prevItem ? (getRecordSortOrder(prevItem) ?? null) : null;
+    const nextKey = nextItem ? (getRecordSortOrder(nextItem) ?? null) : null;
+    const newSortOrder = generateKeyBetween(prevKey, nextKey);
+
+    console.log('[KanbanBoard] drop:', item.id, 'to', targetStatus, 'at', idx, 'key:', newSortOrder);
+
+    if (currentStatus === targetStatus) {
+      updateItemFields(item, { kanbanSortOrder: newSortOrder });
+    } else {
+      updateItemFields(item, { status: targetStatus, kanbanSortOrder: newSortOrder });
+    }
+  }, [updateItemFields]);
 
   const handleCardSelect = useCallback((e: React.MouseEvent, item: TrackerRecord) => {
     e.stopPropagation();
@@ -453,6 +610,75 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     }
   }, [onItemSelect, flatItemIds]);
 
+  // Register module-level drag-and-drop callbacks.
+  // The listeners on `document` are attached once and survive HMR.
+  // We just update the callbacks they invoke.
+  useEffect(() => {
+    ensureKanbanDragListeners();
+
+    _kanbanDragOverCb = (colStatus: string, idx: number) => {
+      dragOverColumnRef.current = colStatus;
+      dropIndexRef.current = idx;
+      setDragOverColumn(colStatus);
+      setDropIndex(idx);
+    };
+
+    _kanbanDropCb = (_targetStatusFromEvent: string) => {
+      const targetStatus = dragOverColumnRef.current;
+      const currentDropIdx = dropIndexRef.current;
+
+      dragOverColumnRef.current = null;
+      setDragOverColumn(null);
+      setDropIndex(null);
+      dropIndexRef.current = null;
+      setDragItemId(null);
+
+      const item = dragItemRef.current;
+      dragItemRef.current = null;
+      if (!item || !targetStatus) return;
+
+      const currentStatus = (getRecordStatus(item) || 'to-do').toLowerCase();
+      const fullColItems = itemsByStatusRef.current[targetStatus] || [];
+      const targetColItems = fullColItems.filter(i => i.id !== item.id);
+
+      // Adjust drop index: onDragOver computed idx against the full card list
+      // (including the dragged card). After filtering it out, we need to adjust
+      // if the dragged card was positioned before the drop point.
+      let idx = currentDropIdx ?? targetColItems.length;
+      if (currentStatus === targetStatus) {
+        const draggedOrigIdx = fullColItems.findIndex(i => i.id === item.id);
+        if (draggedOrigIdx >= 0 && draggedOrigIdx < idx) {
+          idx--;
+        }
+      }
+      // Clamp to valid range
+      idx = Math.max(0, Math.min(idx, targetColItems.length));
+
+      const prevItem = idx > 0 ? targetColItems[idx - 1] : null;
+      const nextItem = idx < targetColItems.length ? targetColItems[idx] : null;
+      const prevKey = prevItem ? (getRecordSortOrder(prevItem) ?? null) : null;
+      const nextKey = nextItem ? (getRecordSortOrder(nextItem) ?? null) : null;
+      const newSortOrder = generateKeyBetween(prevKey, nextKey);
+
+      if (currentStatus === targetStatus) {
+        updateItemFields(item, { kanbanSortOrder: newSortOrder });
+      } else {
+        updateItemFields(item, { status: targetStatus, kanbanSortOrder: newSortOrder });
+      }
+    };
+
+    _kanbanDragLeaveCb = () => {
+      setDragOverColumn(null);
+      setDropIndex(null);
+    };
+
+    return () => {
+      _kanbanDropCb = null;
+      _kanbanDragOverCb = null;
+      _kanbanDragLeaveCb = null;
+    };
+  });
+
   if (allItems.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-nim-muted">
@@ -465,7 +691,24 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   }
 
   return (
-    <div className="tracker-kanban-board h-full flex flex-col overflow-hidden relative">
+    <div className="tracker-kanban-board h-full flex flex-col overflow-hidden relative" data-testid="tracker-kanban-board">
+      {/* Sort controls */}
+      <div className="flex items-center gap-2 px-3 pt-2 pb-0">
+        <span className="text-[11px] text-nim-faint">Sort:</span>
+        {(['manual', 'priority', 'created', 'updated'] as const).map(mode => (
+          <button
+            key={mode}
+            className={`text-[11px] px-2 py-0.5 rounded cursor-pointer transition-colors ${
+              sortMode === mode
+                ? 'bg-[var(--nim-primary)] text-white'
+                : 'text-nim-muted hover:bg-nim-tertiary'
+            }`}
+            onClick={() => setSortMode(mode)}
+          >
+            {mode.charAt(0).toUpperCase() + mode.slice(1)}
+          </button>
+        ))}
+      </div>
     <div className="flex-1 flex gap-3 p-3 overflow-x-auto overflow-y-hidden min-h-0">
       {columns.map((col) => {
         const colItems = itemsByStatus[col.value] || [];
@@ -474,12 +717,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         return (
           <div
             key={col.value}
+            data-testid={`tracker-kanban-column-${col.value}`}
+            data-column-status={col.value}
             className={`tracker-kanban-column flex flex-col min-w-[260px] max-w-[320px] flex-1 min-h-0 rounded-lg transition-colors bg-nim-secondary ${
               dragOverColumn === col.value ? 'ring-1 ring-[var(--nim-primary)]' : ''
             }`}
-            onDragOver={(e) => handleDragOver(e, col.value)}
-            onDragLeave={handleDragLeave}
-            onDrop={(e) => handleDrop(e, col.value)}
           >
             {/* Column header */}
             <div className="flex items-center gap-2 px-3 py-2 border-b border-nim">
@@ -496,14 +738,20 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             </div>
 
             {/* Column cards */}
-            <div className="flex-1 overflow-y-auto p-1.5 space-y-1.5">
-              {colItems.map((item) => (
+            <div className="kanban-cards-container flex-1 overflow-y-auto p-1.5">
+              {colItems.map((item, cardIndex) => (
+                <React.Fragment key={item.id}>
+                  {/* Drop insertion line */}
+                  {dragOverColumn === col.value && dropIndex === cardIndex && dragItemId !== item.id && (
+                    <div className="h-[2px] bg-[var(--nim-primary)] rounded-full mx-1 my-0.5" />
+                  )}
                 <button
-                  key={item.id}
+                  data-testid="tracker-kanban-card"
+                  data-item-id={item.id}
                   draggable
                   onDragStart={(e) => handleDragStart(e, item)}
                   onDragEnd={handleDragEnd}
-                  className={`tracker-kanban-card w-full text-left p-2.5 rounded-md bg-nim hover:bg-nim-tertiary border transition-colors cursor-grab active:cursor-grabbing ${
+                  className={`tracker-kanban-card w-full text-left p-2.5 rounded-md bg-nim hover:bg-nim-tertiary border transition-colors cursor-grab active:cursor-grabbing mb-1.5 ${
                     dragItemId === item.id ? 'opacity-40' : ''
                   } ${
                     selectedIds.has(item.id) || (selectedItemId && item.id === selectedItemId)
@@ -580,7 +828,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                     </div>
                   </div>
                 </button>
+                </React.Fragment>
               ))}
+              {/* Drop indicator after last card */}
+              {dragOverColumn === col.value && dropIndex === colItems.length && (
+                <div className="h-[2px] bg-[var(--nim-primary)] rounded-full mx-1 my-0.5" />
+              )}
+              {/* Drop zone spacer -- ensures there's always a target area below the last card */}
+              <div className="min-h-[40px]" />
             </div>
           </div>
         );

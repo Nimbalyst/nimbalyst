@@ -96,6 +96,14 @@ export function getRecordPriority(record: TrackerRecord): string {
 }
 
 /**
+ * Get the kanban sort order key for a record.
+ * This is a plain data field, not a schema role.
+ */
+export function getRecordSortOrder(record: TrackerRecord): string | undefined {
+  return record.fields.kanbanSortOrder as string | undefined;
+}
+
+/**
  * Get the FieldDefinition for the field that fulfills a role in a record's type.
  * Falls back to conventional field names when no role is declared.
  */

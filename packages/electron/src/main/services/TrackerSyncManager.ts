@@ -90,7 +90,26 @@ async function uploadTrackerRows(
       linkedSessions: data.linkedSessions,
       linkedCommitSha: data.linkedCommitSha,
       documentId: data.documentId,
-      customFields: data.customFields,
+      // Collect extra JSONB data fields as customFields for the sync payload
+      customFields: (() => {
+        const known = new Set([
+          'title', 'description', 'status', 'priority', 'owner', 'tags',
+          'created', 'updated', 'dueDate', 'authorIdentity', 'lastModifiedBy',
+          'createdByAgent', 'assigneeEmail', 'reporterEmail', 'assigneeId',
+          'reporterId', 'labels', 'linkedSessions', 'linkedCommitSha', 'documentId',
+        ]);
+        const extra: Record<string, any> = {};
+        if (data) {
+          for (const [k, v] of Object.entries(data)) {
+            if (!known.has(k) && v !== undefined) extra[k] = v;
+          }
+        }
+        // Also merge any legacy nested customFields
+        if (data.customFields && typeof data.customFields === 'object') {
+          Object.assign(extra, data.customFields);
+        }
+        return Object.keys(extra).length > 0 ? extra : undefined;
+      })(),
     };
     payloads.push(trackerItemToPayload(item as any, userId));
   }
@@ -434,7 +453,7 @@ async function hydrateTrackerItem(
   const item = payloadToTrackerItem(payload, workspacePath);
 
   // Build JSONB data object with collaborative fields
-  const data = {
+  const data: Record<string, any> = {
     title: item.title,
     description: item.description,
     status: item.status,
@@ -452,8 +471,29 @@ async function hydrateTrackerItem(
     linkedSessions: item.linkedSessions,
     linkedCommitSha: item.linkedCommitSha,
     documentId: item.documentId,
-    customFields: item.customFields,
+    // Spread customFields at the top level so generated columns (e.g. kanban_sort_order)
+    // can read them via data->>'fieldName'. Don't nest under a customFields sub-key.
+    ...(item.customFields || {}),
   };
+
+  // Preserve local-only fields (like kanbanSortOrder) that the server may not have.
+  // Read the existing row's data to carry forward fields that aren't part of the sync payload.
+  try {
+    const existing = await database.query<any>(
+      `SELECT data FROM tracker_items WHERE id = $1`,
+      [item.id]
+    );
+    if (existing.rows.length > 0) {
+      const existingData = typeof existing.rows[0].data === 'string'
+        ? JSON.parse(existing.rows[0].data) : existing.rows[0].data;
+      // Carry forward local-only fields not present in the incoming data
+      if (existingData?.kanbanSortOrder && !data.kanbanSortOrder) {
+        data.kanbanSortOrder = existingData.kanbanSortOrder;
+      }
+    }
+  } catch (_e) {
+    // Non-fatal: item may not exist yet
+  }
 
   const isArchived = item.archived === true;
 

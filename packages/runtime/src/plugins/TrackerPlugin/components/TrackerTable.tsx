@@ -809,6 +809,14 @@ export function TrackerTable({
       let compareValue = 0;
 
       switch (sortColumn) {
+        case 'manual': {
+          const aKey = (a.fields.kanbanSortOrder as string) ?? '';
+          const bKey = (b.fields.kanbanSortOrder as string) ?? '';
+          // Raw string comparison, not localeCompare -- fractional indexing
+          // keys sort by character code order (0-9, A-Z, a-z).
+          compareValue = aKey < bKey ? -1 : aKey > bKey ? 1 : 0;
+          break;
+        }
         case 'type':
           compareValue = a.primaryType.localeCompare(b.primaryType);
           break;
