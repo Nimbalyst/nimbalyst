@@ -4,8 +4,9 @@ import { MaterialSymbol } from '@nimbalyst/runtime';
 import type { TrackerRecord } from '@nimbalyst/runtime/core/TrackerRecord';
 import type { TrackerItemType } from '@nimbalyst/runtime/plugins/TrackerPlugin';
 import { globalRegistry, getRoleField } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
-import { getRecordTitle, getRecordStatus, getRecordPriority, getStatusOptions } from '@nimbalyst/runtime/plugins/TrackerPlugin/trackerRecordAccessors';
+import { getRecordTitle, getRecordStatus, getRecordPriority, getStatusOptions, getFieldByRole } from '@nimbalyst/runtime/plugins/TrackerPlugin/trackerRecordAccessors';
 import { trackerItemToRecord } from '@nimbalyst/runtime/core/TrackerRecord';
+import { UserAvatar } from '@nimbalyst/runtime/plugins/TrackerPlugin/components/UserAvatar';
 
 interface KanbanBoardProps {
   filterType: TrackerItemType | 'all';
@@ -566,6 +567,15 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                             {p}
                           </span>
                         ) : null; })()}
+                        {/* Owner avatar */}
+                        {(() => {
+                          const owner = getFieldByRole(item, 'assignee') as string | undefined;
+                          return owner ? (
+                            <span className="ml-auto">
+                              <UserAvatar identity={owner} size={18} />
+                            </span>
+                          ) : null;
+                        })()}
                       </div>
                     </div>
                   </div>
