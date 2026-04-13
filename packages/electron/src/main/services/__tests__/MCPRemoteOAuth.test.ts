@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as crypto from 'crypto';
 import * as fs from 'fs/promises';
 import * as os from 'os';
@@ -6,6 +6,7 @@ import * as path from 'path';
 import {
   buildMcpRemoteArgs,
   checkMcpRemoteAuthStatus,
+  discoverMcpRemoteOAuthRequirement,
   extractMcpRemoteConfig,
 } from '../MCPRemoteOAuth';
 
@@ -18,6 +19,7 @@ describe('MCPRemoteOAuth', () => {
     } else {
       process.env.MCP_REMOTE_CONFIG_DIR = originalConfigDir;
     }
+    vi.unstubAllGlobals();
   });
 
   it('detects Slack-style remote HTTP configs with explicit OAuth metadata', () => {
@@ -87,6 +89,103 @@ describe('MCPRemoteOAuth', () => {
     });
 
     expect(descriptor?.requiresOAuth).toBe(false);
+  });
+
+  it('does not probe bearer-token HTTP servers for OAuth', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const descriptor = extractMcpRemoteConfig({
+      type: 'http',
+      url: 'https://api.githubcopilot.com/mcp/',
+      headers: {
+        authorization: 'Bearer ${GITHUB_TOKEN}',
+      },
+    });
+
+    await expect(discoverMcpRemoteOAuthRequirement(descriptor!)).resolves.toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('discovers OAuth remotes from protected-resource metadata', async () => {
+    const fetchMock = vi.fn(async (url: string | URL | Request) => {
+      const requestUrl = url.toString();
+      if (requestUrl === 'https://mcp.customer.io/.well-known/oauth-protected-resource/mcp') {
+        return new Response(JSON.stringify({
+          resource: 'https://mcp.customer.io/mcp',
+          authorization_servers: ['https://auth.customer.io'],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const descriptor = extractMcpRemoteConfig({
+      type: 'http',
+      url: 'https://mcp.customer.io/mcp',
+    });
+
+    expect(descriptor?.requiresOAuth).toBe(false);
+    await expect(discoverMcpRemoteOAuthRequirement(descriptor!)).resolves.toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://mcp.customer.io/.well-known/oauth-protected-resource/mcp',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('discovers OAuth remotes from bearer auth challenges', async () => {
+    const fetchMock = vi.fn(async (url: string | URL | Request) => {
+      const requestUrl = url.toString();
+      if (requestUrl === 'https://mcp.challenge.example/mcp') {
+        return new Response('auth required', {
+          status: 401,
+          headers: { 'www-authenticate': 'Bearer resource_metadata="https://mcp.challenge.example/.well-known/oauth-protected-resource/mcp"' },
+        });
+      }
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const descriptor = extractMcpRemoteConfig({
+      type: 'http',
+      url: 'https://mcp.challenge.example/mcp',
+    });
+
+    await expect(discoverMcpRemoteOAuthRequirement(descriptor!)).resolves.toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://mcp.challenge.example/mcp',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('retries discovery after a negative OAuth probe', async () => {
+    let firstProbe = true;
+    const fetchMock = vi.fn(async (url: string | URL | Request) => {
+      const requestUrl = url.toString();
+      if (requestUrl !== 'https://mcp.retry.example/.well-known/oauth-protected-resource/mcp' || firstProbe) {
+        return new Response('not found', { status: 404 });
+      }
+      return new Response(JSON.stringify({
+        resource: 'https://mcp.retry.example/mcp',
+        authorization_servers: ['https://auth.retry.example'],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const descriptor = extractMcpRemoteConfig({
+      type: 'http',
+      url: 'https://mcp.retry.example/mcp',
+    });
+
+    await expect(discoverMcpRemoteOAuthRequirement(descriptor!)).resolves.toBe(false);
+    firstProbe = false;
+    await expect(discoverMcpRemoteOAuthRequirement(descriptor!)).resolves.toBe(true);
   });
 
   it('builds mcp-remote args with static client info and callback port', () => {

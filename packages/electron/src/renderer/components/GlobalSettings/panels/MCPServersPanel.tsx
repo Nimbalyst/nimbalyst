@@ -75,6 +75,13 @@ interface MCPServerTemplate {
   config: MCPServerConfig;
 }
 
+type OAuthStatus = 'unknown' | 'checking' | 'authorized' | 'not-authorized' | 'not-required';
+
+interface OAuthStatusResult {
+  authorized: boolean;
+  requiresOAuth?: boolean;
+}
+
 // Icon configuration for MCP server templates
 // Uses Simple Icons CDN for brand icons, Material Symbols for generic tools
 type IconConfig =
@@ -217,15 +224,6 @@ const CATEGORY_LABELS: Record<TemplateCategory, string> = {
 };
 
 const CATEGORY_ORDER: TemplateCategory[] = ['development', 'productivity', 'automation', 'ai', 'commerce', 'data', 'search', 'files'];
-
-const KNOWN_OAUTH_HOSTS = new Set([
-  'mcp.linear.app',
-  'mcp.atlassian.com',
-  'mcp.notion.com',
-  'mcp.asana.com',
-  'mcp.sentry.dev',
-  'mcp.slack.com',
-]);
 
 // Help text for common env vars
 const ENV_VAR_HELP: Record<string, { label: string; help: string; link?: string }> = {
@@ -680,11 +678,11 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
   const [isStalePortError, setIsStalePortError] = useState(false);
 
   // OAuth state
-  const [oauthStatus, setOauthStatus] = useState<'unknown' | 'checking' | 'authorized' | 'not-authorized'>('unknown');
+  const [oauthStatus, setOauthStatus] = useState<OAuthStatus>('unknown');
   const [oauthAction, setOauthAction] = useState<'idle' | 'authorizing' | 'revoking' | 'clearing-cache'>('idle');
 
   // Track OAuth status for all servers in the list
-  const [serverOAuthStatuses, setServerOAuthStatuses] = useState<Record<string, 'unknown' | 'checking' | 'authorized' | 'not-authorized'>>({});
+  const [serverOAuthStatuses, setServerOAuthStatuses] = useState<Record<string, OAuthStatus>>({});
 
   // Template search
   const [templateSearch, setTemplateSearch] = useState('');
@@ -909,6 +907,11 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
     url: formUrl || undefined,
     command: formCommand || undefined,
     args: formArgs,
+    headers: Object.fromEntries(
+      formHeaders
+        .filter(header => header.key.trim())
+        .map(header => [header.key.trim(), header.value])
+    ),
     oauth: getCurrentOAuthConfig(),
   });
 
@@ -922,8 +925,8 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
    * Extract the server URL from mcp-remote args or http config
    */
   const getOAuthServerUrl = (config: MCPServerConfig): string | null => {
-    // HTTP transport - use the URL directly
-    if (config.type === 'http' && config.url) {
+    // Remote transports use the URL directly
+    if ((config.type === 'http' || config.type === 'sse') && config.url) {
       return config.url;
     }
 
@@ -937,44 +940,55 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
     return null;
   };
 
+  const hasBearerAuthorization = (headers?: Record<string, string>): boolean => {
+    const authorization = headers?.Authorization || headers?.authorization;
+    return Boolean(authorization?.trim().toLowerCase().startsWith('bearer '));
+  };
+
+  const getMcpRemoteHeaders = (args: string[] = []): Record<string, string> => {
+    const headers: Record<string, string> = {};
+    for (let i = 0; i < args.length; i += 1) {
+      if (args[i] !== '--header' || i + 1 >= args.length) {
+        continue;
+      }
+
+      const rawHeader = args[i + 1];
+      const separatorIndex = rawHeader.indexOf(':');
+      if (separatorIndex <= 0) {
+        continue;
+      }
+
+      headers[rawHeader.slice(0, separatorIndex)] = rawHeader.slice(separatorIndex + 1);
+    }
+    return headers;
+  };
+
+  const isMcpRemoteCommand = (config: MCPServerConfig): boolean =>
+    (config.command === 'npx' || config.command === 'npx.cmd')
+    && Boolean(config.args?.some(arg => arg === 'mcp-remote' || arg.startsWith('mcp-remote@')));
+
+  const isRemoteOAuthCandidate = (config: MCPServerConfig): boolean => {
+    if ((config.type === 'http' || config.type === 'sse') && config.url) {
+      return !hasBearerAuthorization(config.headers);
+    }
+
+    if (isMcpRemoteCommand(config)) {
+      return Boolean(getOAuthServerUrl(config)) && !hasBearerAuthorization(getMcpRemoteHeaders(config.args));
+    }
+
+    return false;
+  };
+
   /**
-   * Check if this is an OAuth server (uses mcp-remote or http transport)
+   * Check if this server either declares OAuth or is a remote candidate that
+   * the main process can verify through OAuth protected-resource discovery.
    */
   const isOAuthServer = (config: MCPServerConfig): boolean => {
     if (config.oauth) {
       return true;
     }
 
-    // HTTP transport - check if it uses API key auth via headers (Bearer token)
-    // If it has an Authorization header with a template variable, it uses API key, not OAuth
-    if (config.type === 'http' || config.type === 'sse') {
-      const authHeader = config.headers?.Authorization || config.headers?.authorization;
-      if (authHeader && (authHeader.includes('${') || authHeader.startsWith('Bearer '))) {
-        // Has API key in headers, not OAuth
-        return false;
-      }
-      try {
-        return config.url ? KNOWN_OAUTH_HOSTS.has(new URL(config.url).hostname) : false;
-      } catch {
-        return false;
-      }
-    }
-
-    // stdio with mcp-remote explicitly
-    if (config.command === 'npx' &&
-        Boolean(config.args?.some(arg => arg === 'mcp-remote' || arg.includes('mcp-remote')))) {
-      const serverUrl = getOAuthServerUrl(config);
-      if (!serverUrl) {
-        return false;
-      }
-      try {
-        return KNOWN_OAUTH_HOSTS.has(new URL(serverUrl).hostname);
-      } catch {
-        return false;
-      }
-    }
-
-    return false;
+    return isRemoteOAuthCandidate(config);
   };
 
   /**
@@ -999,14 +1013,16 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
     setServerOAuthStatuses(prev => ({ ...prev, [serverName]: 'checking' }));
     const ipcStart = performance.now();
     try {
-      const result = await window.electronAPI.invoke('mcp-config:check-oauth-status', config);
+      const result = await window.electronAPI.invoke('mcp-config:check-oauth-status', config) as OAuthStatusResult;
       const ipcDuration = performance.now() - ipcStart;
       if (ipcDuration > 1000) {
         console.warn(`[MCPServersPanel] IPC call for "${serverName}" OAuth check took ${ipcDuration.toFixed(0)}ms (>1s threshold)`);
       }
       setServerOAuthStatuses(prev => ({
         ...prev,
-        [serverName]: result.authorized ? 'authorized' : 'not-authorized'
+        [serverName]: result.requiresOAuth === false
+          ? 'not-required'
+          : result.authorized ? 'authorized' : 'not-authorized'
       }));
     } catch (error) {
       const ipcDuration = performance.now() - ipcStart;
@@ -1032,8 +1048,12 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
 
     setOauthStatus('checking');
     try {
-      const result = await window.electronAPI.invoke('mcp-config:check-oauth-status', config);
-      setOauthStatus(result.authorized ? 'authorized' : 'not-authorized');
+      const result = await window.electronAPI.invoke('mcp-config:check-oauth-status', config) as OAuthStatusResult;
+      setOauthStatus(
+        result.requiresOAuth === false
+          ? 'not-required'
+          : result.authorized ? 'authorized' : 'not-authorized'
+      );
     } catch (error) {
       console.error('Failed to check OAuth status:', error);
       setOauthStatus('unknown');
@@ -1853,11 +1873,14 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
               {!isNativeOAuthConfig && oauthStatus === 'not-authorized' && (
                 <span className="mcp-oauth-badge not-authorized inline-flex items-center px-3 py-1 rounded-xl text-xs font-medium bg-[rgba(243,156,18,0.15)] text-[#f39c12]" role="status" aria-live="polite">Not authorized</span>
               )}
+              {!isNativeOAuthConfig && oauthStatus === 'not-required' && (
+                <span className="mcp-oauth-badge not-required inline-flex items-center px-3 py-1 rounded-xl text-xs font-medium bg-[rgba(149,165,166,0.15)] text-[#95a5a6]" role="status" aria-live="polite">Not required</span>
+              )}
               {!isNativeOAuthConfig && oauthStatus === 'unknown' && (
                 <span className="mcp-oauth-badge unknown inline-flex items-center px-3 py-1 rounded-xl text-xs font-medium bg-[rgba(149,165,166,0.15)] text-[#95a5a6]" role="status">Unknown</span>
               )}
             </div>
-            {isMcpRemoteOAuthConfig && (
+            {isMcpRemoteOAuthConfig && oauthStatus !== 'not-required' && (
               <div className="mcp-oauth-actions flex gap-2 mb-2">
               {oauthStatus !== 'authorized' && (
                 <button
@@ -1888,6 +1911,8 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
                 ? 'This server uses native MCP OAuth. Start a Claude or Codex session and let the client open the browser authorization flow.'
                 : oauthStatus === 'authorized'
                 ? 'You are authorized to use this server.'
+                : oauthStatus === 'not-required'
+                ? 'This endpoint did not advertise OAuth. Use headers or environment variables if the server requires another auth method.'
                 : 'Click Authorize to open a browser window and log in.'}
             </div>
             {!isNativeOAuthConfig && testStatus === 'error' && testMessage && (
@@ -2300,11 +2325,14 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
                 {!isNativeOAuthConfig && oauthStatus === 'not-authorized' && (
                   <span className="mcp-oauth-badge not-authorized inline-flex items-center px-3 py-1 rounded-xl text-xs font-medium bg-[rgba(243,156,18,0.15)] text-[#f39c12]">Not authorized</span>
                 )}
+                {!isNativeOAuthConfig && oauthStatus === 'not-required' && (
+                  <span className="mcp-oauth-badge not-required inline-flex items-center px-3 py-1 rounded-xl text-xs font-medium bg-[rgba(149,165,166,0.15)] text-[#95a5a6]">Not required</span>
+                )}
                 {!isNativeOAuthConfig && oauthStatus === 'unknown' && (
                   <span className="mcp-oauth-badge unknown inline-flex items-center px-3 py-1 rounded-xl text-xs font-medium bg-[rgba(149,165,166,0.15)] text-[#95a5a6]">Unknown</span>
                 )}
               </div>
-              {isMcpRemoteOAuthConfig && (
+              {isMcpRemoteOAuthConfig && oauthStatus !== 'not-required' && (
                 <div className="mcp-oauth-actions flex gap-2">
                 {oauthStatus !== 'authorized' && (
                   <button
@@ -2329,6 +2357,11 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
               {isNativeOAuthConfig && (
                 <div className="text-xs text-[var(--nim-text-faint)] leading-snug mt-2">
                   Native MCP OAuth is completed by Claude or Codex when the server is first used.
+                </div>
+              )}
+              {!isNativeOAuthConfig && oauthStatus === 'not-required' && (
+                <div className="text-xs text-[var(--nim-text-faint)] leading-snug mt-2">
+                  This endpoint did not advertise OAuth. Use headers or environment variables if the server requires another auth method.
                 </div>
               )}
             </div>

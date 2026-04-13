@@ -8,6 +8,7 @@ import { getEnhancedPath } from './CLIManager';
 import {
   buildMcpRemoteArgs,
   checkMcpRemoteAuthStatus,
+  discoverMcpRemoteOAuthRequirement,
   extractMcpRemoteConfig,
   usesNativeRemoteOAuth,
 } from './MCPRemoteOAuth';
@@ -741,7 +742,7 @@ export class MCPConfigService {
       return true;
     }
     const remoteConfig = extractMcpRemoteConfig(serverConfig, options);
-    if (!remoteConfig || !remoteConfig.requiresOAuth) {
+    if (!remoteConfig || !(await discoverMcpRemoteOAuthRequirement(remoteConfig))) {
       return true;
     }
     const status = await checkMcpRemoteAuthStatus(serverConfig, options);
@@ -980,7 +981,13 @@ export class MCPConfigService {
       };
       this.validateConfig(tempConfig);
 
-      if (!usesNativeRemoteOAuth(config) && this.isOAuthServer(config) && !(await this.isOAuthAuthorized(config))) {
+      const remoteConfig = extractMcpRemoteConfig(config);
+      if (
+        !usesNativeRemoteOAuth(config)
+        && remoteConfig
+        && await discoverMcpRemoteOAuthRequirement(remoteConfig)
+        && !(await this.isOAuthAuthorized(config))
+      ) {
         return {
           success: false,
           error: 'OAuth authorization required. Use the Authorize button before testing this server.'

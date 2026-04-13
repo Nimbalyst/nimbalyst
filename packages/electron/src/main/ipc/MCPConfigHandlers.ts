@@ -5,6 +5,8 @@ import { MCPConfig, MCPServerConfig } from '@nimbalyst/runtime/types/MCPServerCo
 import { logger } from '../utils/logger';
 import {
   checkMcpRemoteAuthStatus,
+  discoverMcpRemoteOAuthRequirement,
+  extractMcpRemoteConfig,
   revokeMcpRemoteOAuth,
   triggerMcpRemoteOAuth,
 } from '../services/MCPRemoteOAuth';
@@ -106,6 +108,20 @@ export function registerMCPConfigHandlers() {
 
   safeHandle('mcp-config:check-oauth-status', async (_event, serverConfigOrUrl: MCPServerConfig | string) => {
     try {
+      if (typeof serverConfigOrUrl !== 'string') {
+        const remoteConfig = extractMcpRemoteConfig(serverConfigOrUrl);
+        const requiresOAuth = remoteConfig
+          ? await discoverMcpRemoteOAuthRequirement(remoteConfig)
+          : false;
+
+        if (!requiresOAuth) {
+          return { authorized: true, requiresOAuth };
+        }
+
+        const status = await checkMcpRemoteAuthStatus(serverConfigOrUrl);
+        return { ...status, requiresOAuth };
+      }
+
       return await checkMcpRemoteAuthStatus(serverConfigOrUrl);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';

@@ -30,14 +30,8 @@ export interface MCPRemoteConfigOptions {
   useMcpRemoteForNativeOAuth?: boolean;
 }
 
-const KNOWN_OAUTH_HOSTS = new Set([
-  'mcp.linear.app',
-  'mcp.atlassian.com',
-  'mcp.notion.com',
-  'mcp.asana.com',
-  'mcp.sentry.dev',
-  'mcp.slack.com',
-]);
+const OAUTH_DISCOVERY_TIMEOUT_MS = 2500;
+const oauthRequirementCache = new Map<string, Promise<boolean>>();
 
 export function getMcpAuthDir(): string {
   return process.env.MCP_REMOTE_CONFIG_DIR || path.join(os.homedir(), '.mcp-auth');
@@ -90,7 +84,7 @@ export function extractMcpRemoteConfig(
     }
 
     const headers = normalizeHeaders(config.headers);
-    const requiresOAuth = Boolean(config.oauth) || isKnownOAuthRemote(config.url, headers);
+    const requiresOAuth = Boolean(config.oauth);
 
     return {
       serverUrl: config.url,
@@ -129,7 +123,7 @@ export function extractMcpRemoteConfig(
 
   const headers = parseMcpRemoteHeaders(args);
   const parsed = parseMcpRemoteFlags(args);
-  const requiresOAuth = Boolean(config.oauth) || isKnownOAuthRemote(serverUrl, headers);
+  const requiresOAuth = Boolean(config.oauth);
 
   return {
     serverUrl,
@@ -228,6 +222,36 @@ export async function checkMcpRemoteAuthStatus(
 
   logSlowAuthCheck(startTime, false);
   return { authorized: false };
+}
+
+export async function discoverMcpRemoteOAuthRequirement(
+  descriptor: MCPRemoteConfigDescriptor
+): Promise<boolean> {
+  if (descriptor.requiresOAuth) {
+    return true;
+  }
+
+  if (hasBearerAuthorization(descriptor.headers)) {
+    return false;
+  }
+
+  const cacheKey = getOAuthDiscoveryCacheKey(descriptor);
+  let cached = oauthRequirementCache.get(cacheKey);
+  if (!cached) {
+    cached = probeMcpRemoteOAuthRequirement(descriptor)
+      .then((requiresOAuth) => {
+        if (!requiresOAuth) {
+          oauthRequirementCache.delete(cacheKey);
+        }
+        return requiresOAuth;
+      })
+      .catch(() => {
+        oauthRequirementCache.delete(cacheKey);
+        return false;
+      });
+    oauthRequirementCache.set(cacheKey, cached);
+  }
+  return cached;
 }
 
 export async function triggerMcpRemoteOAuth(
@@ -401,19 +425,6 @@ function looksLikeMcpRemoteCommand(command?: string, args?: string[]): boolean {
   return Boolean(args?.some((arg) => arg === 'mcp-remote' || arg.startsWith('mcp-remote@')));
 }
 
-function isKnownOAuthRemote(serverUrl: string, headers: Record<string, string>): boolean {
-  try {
-    const url = new URL(serverUrl);
-    if (!KNOWN_OAUTH_HOSTS.has(url.hostname)) {
-      return false;
-    }
-    const authorization = headers.Authorization || headers.authorization;
-    return !authorization?.startsWith('Bearer ');
-  } catch {
-    return false;
-  }
-}
-
 function normalizeHeaders(headers?: Record<string, string>): Record<string, string> {
   if (!headers) {
     return {};
@@ -425,6 +436,111 @@ function normalizeHeaders(headers?: Record<string, string>): Record<string, stri
     }
   }
   return normalized;
+}
+
+function hasBearerAuthorization(headers: Record<string, string>): boolean {
+  const authorization = headers.Authorization || headers.authorization;
+  return Boolean(authorization?.trim().toLowerCase().startsWith('bearer '));
+}
+
+function getOAuthDiscoveryCacheKey(descriptor: MCPRemoteConfigDescriptor): string {
+  const sortedHeaderKeys = Object.keys(descriptor.headers).sort();
+  return [
+    descriptor.serverUrl,
+    JSON.stringify(descriptor.headers, sortedHeaderKeys),
+  ].join('|');
+}
+
+async function probeMcpRemoteOAuthRequirement(
+  descriptor: MCPRemoteConfigDescriptor
+): Promise<boolean> {
+  const metadataUrls = getOAuthProtectedResourceMetadataUrls(descriptor.serverUrl);
+
+  for (const metadataUrl of metadataUrls) {
+    const response = await fetchWithTimeout(metadataUrl, descriptor.headers);
+    if (!response) {
+      continue;
+    }
+
+    if (isOAuthChallenge(response)) {
+      return true;
+    }
+
+    if (!response.ok) {
+      continue;
+    }
+
+    const metadata = await readJsonObject(response);
+    if (metadata && isOAuthProtectedResourceMetadata(metadata)) {
+      return true;
+    }
+  }
+
+  const serverResponse = await fetchWithTimeout(descriptor.serverUrl, descriptor.headers);
+  return Boolean(serverResponse && isOAuthChallenge(serverResponse));
+}
+
+function getOAuthProtectedResourceMetadataUrls(serverUrl: string): string[] {
+  try {
+    const url = new URL(serverUrl);
+    const urls = new Set<string>();
+    const normalizedPath = url.pathname === '/' ? '' : url.pathname.replace(/\/$/, '');
+    if (normalizedPath) {
+      urls.add(`${url.origin}/.well-known/oauth-protected-resource${normalizedPath}`);
+    }
+    urls.add(`${url.origin}/.well-known/oauth-protected-resource`);
+    return Array.from(urls);
+  } catch {
+    return [];
+  }
+}
+
+async function fetchWithTimeout(
+  url: string,
+  headers: Record<string, string>
+): Promise<Response | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), OAUTH_DISCOVERY_TIMEOUT_MS);
+  try {
+    return await fetch(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        ...headers,
+      },
+      signal: controller.signal,
+    });
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function isOAuthChallenge(response: Response): boolean {
+  const authenticate = response.headers.get('www-authenticate') || '';
+  return response.status === 401 && /\bbearer\b/i.test(authenticate);
+}
+
+async function readJsonObject(response: Response): Promise<Record<string, unknown> | null> {
+  try {
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType && !contentType.toLowerCase().includes('json')) {
+      return null;
+    }
+    const data = await response.json();
+    return data && typeof data === 'object' && !Array.isArray(data)
+      ? data as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function isOAuthProtectedResourceMetadata(metadata: Record<string, unknown>): boolean {
+  return typeof metadata.resource === 'string'
+    || Array.isArray(metadata.authorization_servers)
+    || typeof metadata.authorization_server === 'string';
 }
 
 function parseMcpRemoteHeaders(args: string[]): Record<string, string> {
