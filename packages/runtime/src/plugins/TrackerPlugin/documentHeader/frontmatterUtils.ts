@@ -60,6 +60,19 @@ export function extractFrontmatter(content: string): Record<string, any> | null 
 }
 
 /**
+ * Legacy frontmatter key -> tracker type mapping.
+ * These keys were used before the unified `trackerStatus` format.
+ */
+const LEGACY_KEY_TO_TYPE: Record<string, string> = {
+  planStatus: 'plan',
+  decisionStatus: 'decision',
+  automationStatus: 'automation',
+  bugStatus: 'bug',
+  taskStatus: 'task',
+  ideaStatus: 'idea',
+};
+
+/**
  * Detect tracker type and data from frontmatter.
  *
  * Checks generic `trackerStatus` first (the canonical format), then falls
@@ -82,6 +95,20 @@ export function detectTrackerFromFrontmatter(content: string): TrackerFrontmatte
       return {
         type: trackerData.type as string,
         data: resolveFieldData(trackerData.type as string, merged),
+      };
+    }
+  }
+
+  // Legacy fallback: check for per-type keys (planStatus, decisionStatus, etc.)
+  for (const [legacyKey, trackerType] of Object.entries(LEGACY_KEY_TO_TYPE)) {
+    if (frontmatter[legacyKey] && typeof frontmatter[legacyKey] === 'object') {
+      const legacyData = frontmatter[legacyKey] as Record<string, any>;
+      // Legacy format nests all fields under the key; extract to top level
+      const { [legacyKey]: _, ...otherTopLevel } = frontmatter;
+      const merged = { ...legacyData, ...otherTopLevel, type: trackerType };
+      return {
+        type: trackerType,
+        data: resolveFieldData(trackerType, merged),
       };
     }
   }
@@ -118,7 +145,8 @@ export function updateFrontmatter(
 }
 
 /**
- * Update specific tracker data in frontmatter
+ * Update specific tracker data in frontmatter.
+ * Migrates legacy keys (planStatus, decisionStatus, etc.) to canonical trackerStatus on save.
  */
 export function updateTrackerInFrontmatter(
   content: string,
@@ -127,12 +155,30 @@ export function updateTrackerInFrontmatter(
 ): string {
   const frontmatter = extractFrontmatter(content) || {};
 
+  // Migrate: remove any legacy key, promote its fields to top level
+  let legacyFields: Record<string, any> = {};
+  for (const legacyKey of Object.keys(LEGACY_KEY_TO_TYPE)) {
+    if (frontmatter[legacyKey] && typeof frontmatter[legacyKey] === 'object') {
+      legacyFields = { ...(frontmatter[legacyKey] as Record<string, any>) };
+      delete frontmatter[legacyKey];
+    }
+  }
+
   // Always use trackerStatus (canonical format).
   // trackerStatus holds only `type`. All other fields go at the top level.
   const existingTracker = (frontmatter.trackerStatus || {}) as Record<string, any>;
 
   const topLevelUpdates: Record<string, any> = {};
   const trackerStatusData: Record<string, any> = { type: existingTracker.type || trackerType };
+
+  // Apply legacy fields first (lowest priority), then explicit updates
+  for (const [key, value] of Object.entries(legacyFields)) {
+    if (key === 'type') {
+      // Legacy doesn't have a 'type' field; skip
+    } else {
+      topLevelUpdates[key] = value;
+    }
+  }
 
   for (const [key, value] of Object.entries(updates)) {
     if (key === 'type') {

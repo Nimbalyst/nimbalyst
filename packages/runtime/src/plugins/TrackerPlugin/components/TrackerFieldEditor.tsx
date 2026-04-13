@@ -316,7 +316,7 @@ const TagChipsInput: React.FC<{
             className="text-[var(--nim-text-faint)] hover:text-[var(--nim-text)] ml-0.5"
             onClick={(e) => { e.stopPropagation(); handleRemove(tag); }}
           >
-            <span className="material-symbols-outlined text-[10px]">close</span>
+            <span className="material-symbols-outlined" style={{ fontSize: '10px' }}>close</span>
           </button>
         </span>
       ))}
