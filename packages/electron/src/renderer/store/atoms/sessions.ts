@@ -1639,7 +1639,7 @@ export const reloadSessionDataAtom = atom(
 
         // Final check before updating state - ensure we weren't superseded
         if (!thisReload.aborted) {
-          console.log(`[TRANSCRIPT-DEBUG] reloadSessionDataAtom: setting ${sessionData.messages?.length ?? 0} messages from DB for session ${sessionId}`);
+          // console.log(`[TRANSCRIPT-DEBUG] reloadSessionDataAtom: setting ${sessionData.messages?.length ?? 0} messages from DB for session ${sessionId}`);
           set(sessionStoreAtom(sessionId), sessionData);
           // Note: sessionModeAtom, sessionModelAtom, and sessionArchivedAtom are derived from sessionStoreAtom,
           // so they automatically stay in sync when sessionStoreAtom is updated
