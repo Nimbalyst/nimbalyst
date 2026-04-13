@@ -866,10 +866,11 @@ export const VisualDisplayWidget: React.FC<CustomToolWidgetProps> = ({ message, 
 
     // Try to extract path information from tool arguments for better error context
     const args = tool.arguments as unknown as DisplayArgs | undefined;
-    const pathInfo = args?.items
-      ?.map((item, i) => item.image?.path ? `items[${i}].image.path: "${item.image.path}"` : null)
-      .filter(Boolean)
-      .join(', ');
+    const pathInfo = Array.isArray(args?.items)
+      ? args.items.map((item, i) => item.image?.path ? `items[${i}].image.path: "${item.image.path}"` : null)
+        .filter(Boolean)
+        .join(', ')
+      : null;
 
     // Determine the appropriate error message to display
     let displayErrorMessage: string;
