@@ -51,7 +51,12 @@ export const TrackerMode: React.FC<TrackerModeProps> = ({
   }, [setModeLayout]);
 
   const handleToggleFilter = useCallback((filter: TrackerFilterChip) => {
-    const current = modeLayout.activeFilters;
+    let current = modeLayout.activeFilters;
+
+    // "Mine" and "Unassigned" are mutually exclusive
+    if (filter === 'mine') current = current.filter(f => f !== 'unassigned');
+    if (filter === 'unassigned') current = current.filter(f => f !== 'mine');
+
     const next = current.includes(filter)
       ? current.filter(f => f !== filter)
       : [...current, filter];

@@ -283,7 +283,7 @@ export async function initTrackerPanelLayout(workspacePath: string): Promise<voi
  * Persisted to workspace state so it survives app restarts.
  */
 /** Filter chips that can be toggled independently */
-export type TrackerFilterChip = 'mine' | 'high-priority' | 'recently-updated' | 'archived';
+export type TrackerFilterChip = 'mine' | 'unassigned' | 'high-priority' | 'recently-updated' | 'archived';
 
 /** Per-type column configuration (re-exported from runtime) */
 export type { TypeColumnConfig } from '@nimbalyst/runtime/plugins/TrackerPlugin/components/trackerColumns';

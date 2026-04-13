@@ -210,6 +210,14 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
       });
     }
 
+    // "Unassigned" filter: show items with no assignee
+    if (activeFilters.includes('unassigned')) {
+      items = items.filter(record => {
+        const assignee = getFieldByRole(record, 'assignee') as string | undefined;
+        return !assignee;
+      });
+    }
+
     if (activeFilters.includes('high-priority')) {
       items = items.filter(record => {
         const priority = getRecordPriority(record);

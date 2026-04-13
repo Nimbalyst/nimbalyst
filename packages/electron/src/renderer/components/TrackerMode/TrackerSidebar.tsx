@@ -22,6 +22,7 @@ interface TrackerSidebarProps {
 
 const FILTER_CHIPS: { id: TrackerFilterChip; label: string; icon: string }[] = [
   { id: 'mine', label: 'Mine', icon: 'person' },
+  { id: 'unassigned', label: 'Unassigned', icon: 'person_off' },
   { id: 'high-priority', label: 'High Priority', icon: 'priority_high' },
   { id: 'recently-updated', label: 'Recent', icon: 'schedule' },
   { id: 'archived', label: 'Archived', icon: 'archive' },
