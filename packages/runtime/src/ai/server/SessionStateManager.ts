@@ -139,6 +139,14 @@ export class SessionStateManager extends EventEmitter {
       await this.updateLastActivity(sessionId);
     }
 
+    // After the async DB write, check if the in-memory status was superseded
+    // by a concurrent updateActivity call. If so, skip emitting this stale event.
+    // This prevents a race where rapid waiting->running transitions (e.g. auto-approved
+    // tool permissions) cause a late session:waiting to fire after session:streaming.
+    if (status !== undefined && state.status !== status) {
+      return;
+    }
+
     // Emit appropriate event
     if (status === 'running') {
       this.emitEvent({
