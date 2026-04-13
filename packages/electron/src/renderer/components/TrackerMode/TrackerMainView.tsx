@@ -75,7 +75,12 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
   // Column config for the current type (persisted per-type)
   const columnConfigKey = filterType === 'all' ? 'all' : filterType;
   const columnConfig = useMemo(() => {
-    return modeLayout.typeColumnConfigs[columnConfigKey] ?? getDefaultColumnConfig(columnConfigKey === 'all' ? '' : columnConfigKey);
+    const persisted = modeLayout.typeColumnConfigs[columnConfigKey];
+    // If persisted config is missing or has too few columns (stale), use fresh defaults
+    if (!persisted || persisted.visibleColumns.length < 3) {
+      return getDefaultColumnConfig(columnConfigKey === 'all' ? '' : columnConfigKey);
+    }
+    return persisted;
   }, [modeLayout.typeColumnConfigs, columnConfigKey]);
 
   const handleColumnConfigChange = useCallback((config: TypeColumnConfig) => {

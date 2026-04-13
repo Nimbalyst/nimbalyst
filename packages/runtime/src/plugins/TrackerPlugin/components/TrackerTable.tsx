@@ -706,7 +706,20 @@ export function TrackerTable({
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [customFieldFilters, setCustomFieldFilters] = useState<Record<string, Set<string>>>({});
+  const [showFilterMenu, setShowFilterMenu] = useState(false);
+  const filterMenuRef = useRef<HTMLDivElement>(null);
+  const hasActiveFilters = statusFilter !== 'all' || priorityFilter !== 'all';
   const posthog = usePostHog();
+
+  // Close filter menu on outside click
+  useEffect(() => {
+    if (!showFilterMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (filterMenuRef.current && !filterMenuRef.current.contains(e.target as Node)) setShowFilterMenu(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showFilterMenu]);
 
   // Inline editing state
   const [editingCell, setEditingCell] = useState<{ itemId: string; field: 'status' | 'priority' | 'title' } | null>(null);
@@ -722,7 +735,7 @@ export function TrackerTable({
   // Multi-select state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const lastClickedIndexRef = useRef<number>(-1);
-  const tableRef = useRef<HTMLTableElement>(null);
+  const tableRef = useRef<HTMLDivElement>(null);
 
   // Keyboard focus state (which row has keyboard focus, independent of selection)
   const [focusedIndex, setFocusedIndex] = useState<number>(-1);
@@ -1032,7 +1045,8 @@ export function TrackerTable({
   // Scroll focused row into view
   useEffect(() => {
     if (focusedIndex < 0) return;
-    const row = tableRef.current?.querySelector(`tbody tr:nth-child(${focusedIndex + 1})`);
+    const rows = tableRef.current?.querySelectorAll('[data-testid="tracker-table-row"]');
+    const row = rows?.[focusedIndex];
     if (row) row.scrollIntoView({ block: 'nearest' });
   }, [focusedIndex]);
 
@@ -1292,192 +1306,166 @@ export function TrackerTable({
         </div>
       )}
 
-      <div className="tracker-table-container flex-1 overflow-auto pb-1">
-        <table ref={tableRef} tabIndex={0} className="tracker-table w-full border-collapse text-[13px] outline-none">
-          <thead>
-            <tr>
-              {visibleColumnDefs.map(col => {
-                const sortKey = (col.sortKey || col.id) as SortColumn;
-                const thStyle: React.CSSProperties = {};
-                const configWidth = effectiveColumnConfig.columnWidths[col.id];
-                if (configWidth) {
-                  thStyle.width = configWidth;
-                } else if (col.width !== 'auto') {
-                  thStyle.width = col.width;
-                }
-                if (col.minWidth) thStyle.minWidth = col.minWidth;
-
-                // Special rendering for type column (+ New button)
-                if (col.id === 'type' && onNewItem && activeTypeFilter !== 'all' && globalRegistry.get(activeTypeFilter)?.creatable !== false) {
-                  return (
-                    <th key={col.id} className="tracker-table-header type sticky top-0 bg-[var(--nim-bg-secondary)] py-1 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 select-none" style={thStyle}>
-                      <button
-                        className="tracker-new-button inline-flex items-center gap-0.5 px-1.5 py-px rounded text-[10px] font-semibold border-none cursor-pointer transition-all duration-150 hover:opacity-90"
-                        style={{
-                          backgroundColor: `${getTypeColor(activeTypeFilter as TrackerItemType)}15`,
-                          color: getTypeColor(activeTypeFilter as TrackerItemType),
-                        }}
-                        onClick={(e) => { e.stopPropagation(); onNewItem(activeTypeFilter as TrackerItemType); }}
-                        title={`Create new ${activeTypeFilter}`}
-                      >
-                        <span className="material-symbols-outlined text-xs">add</span>
-                        <span>New</span>
-                      </button>
-                    </th>
-                  );
-                }
-
-                return (
-                  <th
-                    key={col.id}
-                    className={`tracker-table-header ${col.id} ${col.sortable ? 'sortable cursor-pointer hover:bg-[var(--nim-bg-hover)]' : ''} sticky top-0 bg-[var(--nim-bg-secondary)] py-1 px-2 text-left text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-[0.5px] border-b border-[var(--nim-border)] z-10 select-none`}
-                    style={thStyle}
-                    onClick={col.sortable ? () => handleColumnClick(sortKey) : undefined}
-                  >
-                    <span className="header-content inline-flex items-center gap-1 whitespace-nowrap">
-                      <span>{col.label.toUpperCase()}</span>
-                      {col.sortable && getSortIndicator(sortKey)}
-                    </span>
-                  </th>
-                );
-              })}
-              {/* Display options button in last header cell */}
-              {onColumnConfigChange && (
-                <th className="tracker-table-header sticky top-0 bg-[var(--nim-bg-secondary)] py-1 px-1 border-b border-[var(--nim-border)] z-10 w-[28px]">
-                  <button
-                    className="inline-flex items-center justify-center w-5 h-5 rounded hover:bg-[var(--nim-bg-hover)] text-[var(--nim-text-faint)] hover:text-[var(--nim-text)] transition-colors"
-                    onClick={() => setShowDisplayOptions(!showDisplayOptions)}
-                    title="Display options"
-                  >
-                    <span className="material-symbols-outlined text-sm">tune</span>
-                  </button>
-                </th>
+      {/* Toolbar: filter + display options + count */}
+      {items.length > 0 && (
+        <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-[var(--nim-border)] bg-[var(--nim-bg)]">
+          {/* Filter button */}
+          <div className="relative" ref={filterMenuRef}>
+            <button
+              className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded border transition-colors ${
+                showFilterMenu || hasActiveFilters
+                  ? 'bg-[var(--nim-bg-tertiary)] border-[var(--nim-primary)] text-[var(--nim-primary)]'
+                  : 'bg-[var(--nim-bg-secondary)] border-[var(--nim-border)] text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] hover:border-[var(--nim-text-faint)]'
+              }`}
+              onClick={() => setShowFilterMenu(!showFilterMenu)}
+            >
+              <span className="material-symbols-outlined text-xs">filter_list</span>
+              Filter
+              {hasActiveFilters && (
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--nim-primary)]" />
               )}
-            </tr>
-            {/* Only show filter row when there are items to filter */}
-            {items.length > 0 && (
-              <tr className="filter-row">
-                {visibleColumnDefs.map(col => (
-                  <th key={col.id} className="tracker-table-header filter-cell py-1 px-2 bg-[var(--nim-bg)]">
-                    {col.id === 'title' && !hasExternalSearch && (
-                      <input
-                        type="text"
-                        className="filter-input w-full py-1 px-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] text-xs focus:outline-none focus:border-[var(--nim-primary)]"
-                        placeholder="Search..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                      />
-                    )}
-                    {col.id === 'status' && (
-                      <select
-                        className="filter-select w-full py-1 px-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] text-xs focus:outline-none focus:border-[var(--nim-primary)]"
-                        value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value)}
-                      >
-                        {statusOptions.map(option => (
-                          <option key={option.value} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
-                    )}
-                    {col.id === 'priority' && (
-                      <select
-                        className="filter-select w-full py-1 px-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] text-xs focus:outline-none focus:border-[var(--nim-primary)]"
-                        value={priorityFilter}
-                        onChange={(e) => setPriorityFilter(e.target.value)}
-                      >
-                        {priorityOptions.map(option => (
-                          <option key={option.value} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
-                    )}
-                    {!col.builtin && extraColumnValues[col.id] && (
-                      <MultiSelectFilter
-                        values={extraColumnValues[col.id]}
-                        selected={customFieldFilters[col.id] || new Set()}
-                        onChange={(selected) => setCustomFieldFilters(prev => ({ ...prev, [col.id]: selected }))}
-                      />
-                    )}
-                  </th>
+            </button>
+            {showFilterMenu && (
+              <div className="absolute left-0 top-full mt-1 w-[200px] bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded-md shadow-lg z-50 py-1 text-[12px]">
+                {/* Status section */}
+                <div className="px-2 py-1 text-[10px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-wider">Status</div>
+                {statusOptions.map(option => (
+                  <button
+                    key={option.value}
+                    className={`w-full text-left px-3 py-1 hover:bg-[var(--nim-bg-hover)] flex items-center gap-2 ${
+                      statusFilter === option.value ? 'text-[var(--nim-primary)]' : 'text-[var(--nim-text)]'
+                    }`}
+                    onClick={() => { setStatusFilter(option.value === statusFilter ? 'all' : option.value); }}
+                  >
+                    {statusFilter === option.value && <span className="material-symbols-outlined text-xs">check</span>}
+                    <span className={statusFilter === option.value ? '' : 'ml-[18px]'}>{option.label}</span>
+                  </button>
                 ))}
-                {onColumnConfigChange && <th className="tracker-table-header filter-cell py-1 px-1 bg-[var(--nim-bg)]"></th>}
-              </tr>
-            )}
-          </thead>
-          <tbody>
-          {sortedItems.length === 0 ? (
-            <tr>
-              <td colSpan={visibleColumnDefs.length + (onColumnConfigChange ? 1 : 0)} className="tracker-table-empty-cell !p-0 !border-none">
-                {loading ? (
-                  // Still loading - show loading indicator instead of empty state
-                  <div className="tracker-table-loading flex items-center justify-center gap-3 py-6 px-6 text-[var(--nim-text-muted)]">
-                    <div className="w-5 h-5 border-2 border-[var(--nim-border)] border-t-[var(--nim-primary)] rounded-full animate-spin"></div>
-                    <span className="text-sm">Loading...</span>
-                  </div>
-                ) : activeTypeFilter !== 'all' ? (
-                  // Type-specific educational empty state - horizontal layout
-                  (() => {
-                    const typeInfo = getTypeDescription(activeTypeFilter as TrackerItemType);
-                    const typeColor = getTypeColor(activeTypeFilter as TrackerItemType);
-                    const typeIcon = getTypeIcon(activeTypeFilter as TrackerItemType);
-                    return (
-                      <div className="tracker-table-empty flex items-center gap-4 py-4 px-6">
-                        {/* Icon */}
-                        <div
-                          className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                          style={{ backgroundColor: `${typeColor}12` }}
-                        >
-                          <span
-                            className="material-symbols-outlined text-lg"
-                            style={{ color: typeColor }}
-                          >
-                            {typeIcon}
-                          </span>
-                        </div>
-
-                        {/* Description and hints */}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-[var(--nim-text-muted)] m-0">
-                            {typeInfo.description}
-                          </p>
-                          <p className="text-xs text-[var(--nim-text-faint)] m-0 mt-1">
-                            {activeTypeFilter === 'plan' ? (
-                              <>Use <code className="px-1 py-0.5 bg-[var(--nim-bg-secondary)] rounded text-[10px]">/plan</code> in chat to create a new plan</>
-                            ) : (
-                              <>Type <code className="px-1 py-0.5 bg-[var(--nim-bg-secondary)] rounded text-[10px]">#{activeTypeFilter}</code> in markdown or use <code className="px-1 py-0.5 bg-[var(--nim-bg-secondary)] rounded text-[10px]">/track {activeTypeFilter}</code> in chat</>
-                            )}
-                          </p>
-                        </div>
-
-                        {/* New button - hidden for non-creatable types */}
-                        {onNewItem && globalRegistry.get(activeTypeFilter)?.creatable !== false && (
-                          <button
-                            className="shrink-0 px-3 py-1.5 rounded-md text-xs font-medium text-white border-none cursor-pointer transition-all duration-150 hover:opacity-90"
-                            style={{ backgroundColor: typeColor }}
-                            onClick={() => onNewItem(activeTypeFilter as TrackerItemType)}
-                          >
-                            <span className="flex items-center gap-1">
-                              <span className="material-symbols-outlined text-sm">add</span>
-                              New {activeTypeFilter.charAt(0).toUpperCase() + activeTypeFilter.slice(1)}
-                            </span>
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })()
-                ) : (
-                  // Generic empty state for "all" filter
-                  <div className="tracker-table-empty flex items-center justify-center gap-2 py-4 px-6">
-                    <p className="text-sm text-[var(--nim-text-muted)] m-0">No tracker items found</p>
-                    <p className="text-xs text-[var(--nim-text-faint)] m-0">Create items using #bug, #task, #plan, or #idea in any markdown file</p>
-                  </div>
+                <div className="border-t border-[var(--nim-border)] my-1" />
+                {/* Priority section */}
+                <div className="px-2 py-1 text-[10px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-wider">Priority</div>
+                {priorityOptions.map(option => (
+                  <button
+                    key={option.value}
+                    className={`w-full text-left px-3 py-1 hover:bg-[var(--nim-bg-hover)] flex items-center gap-2 ${
+                      priorityFilter === option.value ? 'text-[var(--nim-primary)]' : 'text-[var(--nim-text)]'
+                    }`}
+                    onClick={() => { setPriorityFilter(option.value === priorityFilter ? 'all' : option.value); }}
+                  >
+                    {priorityFilter === option.value && <span className="material-symbols-outlined text-xs">check</span>}
+                    <span className={priorityFilter === option.value ? '' : 'ml-[18px]'}>{option.label}</span>
+                  </button>
+                ))}
+                {hasActiveFilters && (
+                  <>
+                    <div className="border-t border-[var(--nim-border)] my-1" />
+                    <button
+                      className="w-full text-left px-3 py-1 text-[var(--nim-text-faint)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]"
+                      onClick={() => { setStatusFilter('all'); setPriorityFilter('all'); setShowFilterMenu(false); }}
+                    >
+                      Clear all filters
+                    </button>
+                  </>
                 )}
-              </td>
-            </tr>
-          ) : (
-            sortedItems.map((item, index) => (
-              <tr
+              </div>
+            )}
+          </div>
+
+          {/* Active filter chips */}
+          {statusFilter !== 'all' && (
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)]">
+              {statusFilter.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+              <button className="hover:text-[var(--nim-text)]" onClick={() => setStatusFilter('all')}><span className="material-symbols-outlined" style={{ fontSize: '11px' }}>close</span></button>
+            </span>
+          )}
+          {priorityFilter !== 'all' && (
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)]">
+              {priorityFilter.charAt(0).toUpperCase() + priorityFilter.slice(1)}
+              <button className="hover:text-[var(--nim-text)]" onClick={() => setPriorityFilter('all')}><span className="material-symbols-outlined" style={{ fontSize: '11px' }}>close</span></button>
+            </span>
+          )}
+
+          <div className="flex-1" />
+
+          {/* Display options */}
+          {onColumnConfigChange && (
+            <button
+              className="inline-flex items-center justify-center w-6 h-6 rounded hover:bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-faint)] hover:text-[var(--nim-text)] transition-colors"
+              onClick={() => setShowDisplayOptions(!showDisplayOptions)}
+              title="Display options"
+            >
+              <span className="material-symbols-outlined text-sm">tune</span>
+            </button>
+          )}
+
+          <span className="text-[11px] text-[var(--nim-text-faint)]">{sortedItems.length} item{sortedItems.length !== 1 ? 's' : ''}</span>
+        </div>
+      )}
+
+      {/* List */}
+      <div ref={tableRef} tabIndex={0} className="tracker-table-container tracker-table flex-1 overflow-auto pb-1 outline-none">
+        {sortedItems.length === 0 ? (
+          <div>
+            {loading ? (
+              <div className="tracker-table-loading flex items-center justify-center gap-3 py-6 px-6 text-[var(--nim-text-muted)]">
+                <div className="w-5 h-5 border-2 border-[var(--nim-border)] border-t-[var(--nim-primary)] rounded-full animate-spin"></div>
+                <span className="text-sm">Loading...</span>
+              </div>
+            ) : activeTypeFilter !== 'all' ? (
+              (() => {
+                const typeInfo = getTypeDescription(activeTypeFilter as TrackerItemType);
+                const typeColor = getTypeColor(activeTypeFilter as TrackerItemType);
+                const typeIcon = getTypeIcon(activeTypeFilter as TrackerItemType);
+                return (
+                  <div className="tracker-table-empty flex items-center gap-4 py-4 px-6">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${typeColor}12` }}>
+                      <span className="material-symbols-outlined text-lg" style={{ color: typeColor }}>{typeIcon}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-[var(--nim-text-muted)] m-0">{typeInfo.description}</p>
+                      <p className="text-xs text-[var(--nim-text-faint)] m-0 mt-1">
+                        {activeTypeFilter === 'plan' ? (
+                          <>Use <code className="px-1 py-0.5 bg-[var(--nim-bg-secondary)] rounded text-[10px]">/plan</code> in chat to create a new plan</>
+                        ) : (
+                          <>Type <code className="px-1 py-0.5 bg-[var(--nim-bg-secondary)] rounded text-[10px]">#{activeTypeFilter}</code> in markdown or use <code className="px-1 py-0.5 bg-[var(--nim-bg-secondary)] rounded text-[10px]">/track {activeTypeFilter}</code> in chat</>
+                        )}
+                      </p>
+                    </div>
+                    {onNewItem && globalRegistry.get(activeTypeFilter)?.creatable !== false && (
+                      <button
+                        className="shrink-0 px-3 py-1.5 rounded-md text-xs font-medium text-white border-none cursor-pointer transition-all duration-150 hover:opacity-90"
+                        style={{ backgroundColor: typeColor }}
+                        onClick={() => onNewItem(activeTypeFilter as TrackerItemType)}
+                      >
+                        <span className="flex items-center gap-1">
+                          <span className="material-symbols-outlined text-sm">add</span>
+                          New {activeTypeFilter.charAt(0).toUpperCase() + activeTypeFilter.slice(1)}
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                );
+              })()
+            ) : (
+              <div className="tracker-table-empty flex items-center justify-center gap-2 py-4 px-6">
+                <p className="text-sm text-[var(--nim-text-muted)] m-0">No tracker items found</p>
+                <p className="text-xs text-[var(--nim-text-faint)] m-0">Create items using #bug, #task, #plan, or #idea in any markdown file</p>
+              </div>
+            )}
+          </div>
+        ) : (
+          sortedItems.map((item, index) => {
+            const title = getRecordTitle(item);
+            const status = getRecordStatus(item);
+            const priority = getRecordPriority(item);
+            const statusColor = getStatusColor(status, item.primaryType);
+            const lastIndexed = item.system.lastIndexed ? new Date(item.system.lastIndexed) : new Date(0);
+            const editable = isItemEditable(item);
+
+            return (
+              <div
                 key={item.id || index}
-                className={`tracker-table-row border-b border-[var(--nim-border)] cursor-pointer transition-colors duration-100 hover:bg-[var(--nim-bg-secondary)] select-none ${
+                className={`tracker-table-row flex items-center gap-3 px-3 py-[7px] border-b border-[var(--nim-border)] cursor-pointer transition-colors duration-100 hover:bg-[var(--nim-bg-secondary)] select-none ${
                   selectedIds.has(item.id) ? 'bg-[var(--nim-bg-secondary)]' : ''
                 } ${
                   selectedItemId && item.id === selectedItemId ? 'bg-[var(--nim-bg-secondary)]' : ''
@@ -1488,27 +1476,58 @@ export function TrackerTable({
                 data-item-id={item.id}
                 data-item-title={item.fields.title as string}
                 onClick={(e) => handleRowClick(item, index, e)}
-                onDoubleClick={() => {
-                  if (item.system.documentPath) {
-                    openItemInEditor(item);
-                  }
-                }}
+                onDoubleClick={() => { if (item.system.documentPath) openItemInEditor(item); }}
                 onContextMenu={(e) => handleContextMenu(e, item, index)}
               >
-                {visibleColumnDefs.map(col => {
-                  const value = getCellValue(item, col.id);
-                  return (
-                    <td key={col.id} className={`tracker-table-cell ${col.id} p-[5px] text-[var(--nim-text)] align-middle`}>
-                      {renderCell(col, item, value, editingCell, isItemEditable, setEditingCell, editingTitle, setEditingTitle, titleInputRef, handleFieldUpdate)}
-                    </td>
-                  );
-                })}
-                {onColumnConfigChange && <td className="tracker-table-cell p-[5px] w-[28px]"></td>}
-              </tr>
-            ))
-          )}
-          </tbody>
-        </table>
+                {/* Type icon - fixed width for alignment */}
+                <span className="shrink-0 w-5 flex items-center justify-center" style={{ color: getTypeColor(item.primaryType), opacity: 0.7 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: '16px', fontVariationSettings: "'wght' 300" }}>{getTypeIcon(item.primaryType)}</span>
+                </span>
+
+                {/* Title (takes remaining space) */}
+                <div className="tracker-table-cell title flex-1 min-w-0">
+                  {editingCell?.itemId === item.id && editingCell?.field === 'title' ? (
+                    <input
+                      ref={titleInputRef}
+                      type="text"
+                      value={editingTitle}
+                      onChange={(e) => setEditingTitle(e.target.value)}
+                      onBlur={() => {
+                        if (editingTitle.trim() && editingTitle !== (item.fields.title as string)) handleFieldUpdate(item, 'title', editingTitle.trim());
+                        else setEditingCell(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { if (editingTitle.trim() && editingTitle !== title) handleFieldUpdate(item, 'title', editingTitle.trim()); else setEditingCell(null); }
+                        else if (e.key === 'Escape') setEditingCell(null);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-full bg-[var(--nim-bg-secondary)] border border-[var(--nim-primary)] rounded px-1 py-0.5 text-[13px] text-[var(--nim-text)] font-medium outline-none"
+                    />
+                  ) : (
+                    <div className="flex items-baseline gap-2 min-w-0">
+                      {item.issueKey && (
+                        <span className="shrink-0 text-[10px] font-mono font-medium uppercase tracking-[0.08em] text-[var(--nim-text-faint)]">{item.issueKey}</span>
+                      )}
+                      <span className="text-[13px] font-medium text-[var(--nim-text)] truncate">{title}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right-side metadata: render visible columns (except type/title which are already shown) */}
+                <div className="flex items-center gap-2 shrink-0">
+                  {visibleColumnDefs.filter(col => col.id !== 'type' && col.id !== 'title').map(col => {
+                    const value = getCellValue(item, col.id);
+                    return (
+                      <div key={col.id} className={`tracker-table-cell ${col.id}`}>
+                        {renderCell(col, item, value, editingCell, isItemEditable, setEditingCell, editingTitle, setEditingTitle, titleInputRef, handleFieldUpdate)}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* Context menu */}
