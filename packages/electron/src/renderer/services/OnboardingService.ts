@@ -499,7 +499,7 @@ Where \`[type]\` is one of: \`bug\`, \`task\`, \`idea\`, or \`decision\`
 
 ## Related Commands
 
-- \`/plan [description]\` - Create a feature plan (see .claude/commands/plan.md)
+- \`/design [description]\` - Create a feature plan (see .claude/commands/design.md)
 
 ## Best Practices
 
@@ -654,7 +654,7 @@ to-do → in-progress → done
 
 ## Related Commands
 
-- \`/plan [description]\` - Create a feature plan (see .claude/commands/plan.md)
+- \`/design [description]\` - Create a feature plan (see .claude/commands/design.md)
 - \`/track-idea [description]\` - Track an idea (see .claude/commands/track-idea.md)
 
 ## Best Practices
@@ -810,7 +810,7 @@ rejected (if decided not to implement)
 
 ## Related Commands
 
-- \`/plan [description]\` - Create a feature plan (see .claude/commands/plan.md)
+- \`/design [description]\` - Create a feature plan (see .claude/commands/design.md)
 - \`/track-bug [description]\` - Track a bug (see .claude/commands/track-bug.md)
 
 ## Best Practices
@@ -892,7 +892,7 @@ Plans in Nimbalyst are markdown documents with YAML frontmatter that track featu
 
 When creating your own plans:
 
-1. **Use the /plan command**: Type \`/plan [your feature description]\` in the AI chat to create a new plan with Claude Agent
+1. **Use the /design command**: Type \`/design [your feature description]\` in the AI chat to create a new plan with Claude Agent
 2. **Choose descriptive filenames**: Use kebab-case names that clearly describe the plan
 3. **Keep frontmatter updated**: Update status, progress, and updated timestamp as work progresses
 4. **Write clear goals**: Start with clear, measurable objectives
@@ -900,7 +900,7 @@ When creating your own plans:
 
 ## Next Steps
 
-- Create your first real plan using \`/plan [description]\`
+- Create your first real plan using \`/design [description]\`
 - View all plans in the plan view (accessible from the View menu)
 - Update this example plan's status as you learn the system
 - Explore the tracking system with \`/track [type] [description]\`

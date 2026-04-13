@@ -17,7 +17,7 @@
       "enabledByDefault": true,
       "commands": [
         {
-          "name": "plan",
+          "name": "design",
           "description": "Create a structured plan document"
         },
         {
