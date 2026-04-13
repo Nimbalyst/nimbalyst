@@ -710,54 +710,38 @@ describe('ToolCallMatcher', () => {
     });
 
     it('selects a clear winner across candidate sessions', async () => {
-      mockGetMultiSessionEvents.mockResolvedValue([
-        {
-          id: 1,
-          sessionId: 'session-1',
-          sequence: 1,
-          createdAt: new Date(baseTime),
-          eventType: 'tool_call',
-          searchableText: null,
-          payload: {
-            toolName: 'file_change',
-            toolDisplayName: 'file_change',
-            status: 'completed',
-            description: null,
-            arguments: { changes: [{ path: '/workspace/src/a.ts', kind: 'update' }] },
-            targetFilePath: null,
-            mcpServer: null,
-            mcpTool: null,
+      // Mock database.query for getRawToolCallWindowsMultiSession
+      // which queries ai_agent_messages directly
+      (database.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        rows: [
+          {
+            session_id: 'session-1',
+            id: 1,
+            content: JSON.stringify({
+              type: 'item.completed',
+              item: {
+                type: 'file_change',
+                id: 'item-fc-1',
+                changes: [{ path: '/workspace/src/a.ts', kind: 'update' }],
+              },
+            }),
+            created_at_ms: baseTime,
           },
-          parentEventId: null,
-          searchable: false,
-          subagentId: null,
-          provider: 'openai-codex',
-          providerToolCallId: 'item-fc-1',
-        },
-        {
-          id: 2,
-          sessionId: 'session-2',
-          sequence: 1,
-          createdAt: new Date(baseTime + 50),
-          eventType: 'tool_call',
-          searchableText: null,
-          payload: {
-            toolName: 'command_execution',
-            toolDisplayName: 'Bash',
-            status: 'completed',
-            description: null,
-            arguments: { command: 'echo test >> a.ts' },
-            targetFilePath: null,
-            mcpServer: null,
-            mcpTool: null,
+          {
+            session_id: 'session-2',
+            id: 2,
+            content: JSON.stringify({
+              type: 'item.completed',
+              item: {
+                type: 'command_execution',
+                id: 'item-bash-2',
+                command: 'echo test >> a.ts',
+              },
+            }),
+            created_at_ms: baseTime + 50,
           },
-          parentEventId: null,
-          searchable: false,
-          subagentId: null,
-          provider: 'openai-codex',
-          providerToolCallId: 'item-bash-2',
-        },
-      ]);
+        ],
+      });
 
       const result = await toolCallMatcher.matchWorkspaceFileEdit({
         workspacePath: '/workspace',
@@ -772,54 +756,36 @@ describe('ToolCallMatcher', () => {
     });
 
     it('returns no winner when top candidate scores are tied', async () => {
-      mockGetMultiSessionEvents.mockResolvedValue([
-        {
-          id: 11,
-          sessionId: 'session-a',
-          sequence: 1,
-          createdAt: new Date(baseTime),
-          eventType: 'tool_call',
-          searchableText: null,
-          payload: {
-            toolName: 'file_change',
-            toolDisplayName: 'file_change',
-            status: 'completed',
-            description: null,
-            arguments: { changes: [{ path: '/workspace/src/shared.ts', kind: 'update' }] },
-            targetFilePath: null,
-            mcpServer: null,
-            mcpTool: null,
+      (database.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        rows: [
+          {
+            session_id: 'session-a',
+            id: 11,
+            content: JSON.stringify({
+              type: 'item.completed',
+              item: {
+                type: 'file_change',
+                id: 'item-a',
+                changes: [{ path: '/workspace/src/shared.ts', kind: 'update' }],
+              },
+            }),
+            created_at_ms: baseTime,
           },
-          parentEventId: null,
-          searchable: false,
-          subagentId: null,
-          provider: 'openai-codex',
-          providerToolCallId: 'item-a',
-        },
-        {
-          id: 12,
-          sessionId: 'session-b',
-          sequence: 1,
-          createdAt: new Date(baseTime),
-          eventType: 'tool_call',
-          searchableText: null,
-          payload: {
-            toolName: 'file_change',
-            toolDisplayName: 'file_change',
-            status: 'completed',
-            description: null,
-            arguments: { changes: [{ path: '/workspace/src/shared.ts', kind: 'update' }] },
-            targetFilePath: null,
-            mcpServer: null,
-            mcpTool: null,
+          {
+            session_id: 'session-b',
+            id: 12,
+            content: JSON.stringify({
+              type: 'item.completed',
+              item: {
+                type: 'file_change',
+                id: 'item-b',
+                changes: [{ path: '/workspace/src/shared.ts', kind: 'update' }],
+              },
+            }),
+            created_at_ms: baseTime,
           },
-          parentEventId: null,
-          searchable: false,
-          subagentId: null,
-          provider: 'openai-codex',
-          providerToolCallId: 'item-b',
-        },
-      ]);
+        ],
+      });
 
       const result = await toolCallMatcher.matchWorkspaceFileEdit({
         workspacePath: '/workspace',

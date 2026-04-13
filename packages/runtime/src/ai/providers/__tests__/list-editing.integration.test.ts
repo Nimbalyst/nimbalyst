@@ -11,12 +11,13 @@ import type { DocumentContext } from '../../server/types';
 
 describe('AI Provider List Editing Integration', () => {
   const apiKey = process.env.OPENAI_API_KEY;
+  const runIntegration = process.env.RUN_OPENAI_INTEGRATION === '1';
 
   afterEach(() => {
     ProviderFactory.destroyAll();
   });
 
-  it.skipIf(!apiKey)('should stream correct content when adding to end of list', async () => {
+  it.skipIf(!apiKey || !runIntegration)('should stream correct content when adding to end of list', async () => {
     const testDocument: DocumentContext = {
       filePath: '/test/list.md',
       fileType: 'markdown',

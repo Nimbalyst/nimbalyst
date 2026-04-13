@@ -246,8 +246,9 @@ describe('createTrackerItem sync status policy', () => {
       sync: { mode: 'shared', scope: 'project' },
     });
 
-    mockQuery.mockResolvedValueOnce({ rows: [] });
-    mockQuery.mockResolvedValueOnce({ rows: [makeTrackerRow({ id: 'bug-local', sync_status: 'local' })] });
+    mockQuery.mockResolvedValueOnce({ rows: [{ min_key: null }] }); // kanbanSortOrder MIN query
+    mockQuery.mockResolvedValueOnce({ rows: [] }); // INSERT
+    mockQuery.mockResolvedValueOnce({ rows: [makeTrackerRow({ id: 'bug-local', sync_status: 'local' })] }); // SELECT
 
     await service.createTrackerItem({
       id: 'bug-local',
@@ -258,7 +259,8 @@ describe('createTrackerItem sync status policy', () => {
       workspace: WORKSPACE,
     });
 
-    expect(mockQuery.mock.calls[0]?.[1]?.[4]).toBe('local');
+    // INSERT query is now the second call (index 1) after kanbanSortOrder
+    expect(mockQuery.mock.calls[1]?.[1]?.[4]).toBe('local');
   });
 
   it('stores pending sync_status for shared policy items', async () => {
@@ -269,8 +271,9 @@ describe('createTrackerItem sync status policy', () => {
       sync: { mode: 'local', scope: 'project' },
     });
 
-    mockQuery.mockResolvedValueOnce({ rows: [] });
-    mockQuery.mockResolvedValueOnce({ rows: [makeTrackerRow({ id: 'bug-shared', sync_status: 'pending' })] });
+    mockQuery.mockResolvedValueOnce({ rows: [{ min_key: null }] }); // kanbanSortOrder MIN query
+    mockQuery.mockResolvedValueOnce({ rows: [] }); // INSERT
+    mockQuery.mockResolvedValueOnce({ rows: [makeTrackerRow({ id: 'bug-shared', sync_status: 'pending' })] }); // SELECT
 
     await service.createTrackerItem({
       id: 'bug-shared',
@@ -281,7 +284,8 @@ describe('createTrackerItem sync status policy', () => {
       workspace: WORKSPACE,
     });
 
-    expect(mockQuery.mock.calls[0]?.[1]?.[4]).toBe('pending');
+    // INSERT query is now the second call (index 1) after kanbanSortOrder
+    expect(mockQuery.mock.calls[1]?.[1]?.[4]).toBe('pending');
   });
 });
 
