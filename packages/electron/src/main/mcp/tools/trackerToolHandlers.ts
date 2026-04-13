@@ -912,7 +912,12 @@ export async function handleTrackerCreate(
     if (args.owner) data[rf('assignee', 'owner')] = args.owner;
     if (args.dueDate) data[rf('dueDate', 'dueDate')] = args.dueDate;
     if (args.progress !== undefined) data[rf('progress', 'progress')] = args.progress;
-    if (args.assigneeEmail) data[rf('assignee', 'assigneeEmail')] = args.assigneeEmail;
+    if (args.assigneeEmail) {
+      // Write to both the assignee role field and the explicit assigneeEmail field
+      // so the "Mine" filter (which checks the assignee role) can find it
+      if (!args.owner) data[rf('assignee', 'owner')] = args.assigneeEmail;
+      data.assigneeEmail = args.assigneeEmail;
+    }
     if (args.reporterEmail) data[rf('reporter', 'reporterEmail')] = args.reporterEmail;
     if (args.labels?.length) data.labels = args.labels;
     if (args.linkedCommitSha) data.linkedCommitSha = args.linkedCommitSha;
@@ -1070,7 +1075,6 @@ export async function handleTrackerUpdate(
       ['owner', 'assignee', 'owner'],
       ['dueDate', 'dueDate', 'dueDate'],
       ['progress', 'progress', 'progress'],
-      ['assigneeEmail', 'assignee', 'assigneeEmail'],
       ['reporterEmail', 'reporter', 'reporterEmail'],
     ];
 
@@ -1082,6 +1086,16 @@ export async function handleTrackerUpdate(
         const oldVal = data[fieldName];
         changes[fieldName] = { from: oldVal, to: args[argName] };
         data[fieldName] = args[argName];
+      }
+    }
+
+    // assigneeEmail: write to both the assignee role field and the explicit field
+    if (args.assigneeEmail !== undefined) {
+      data.assigneeEmail = args.assigneeEmail;
+      if (args.owner === undefined) {
+        const ownerField = rf('assignee', 'owner');
+        changes[ownerField] = { from: data[ownerField], to: args.assigneeEmail };
+        data[ownerField] = args.assigneeEmail;
       }
     }
 

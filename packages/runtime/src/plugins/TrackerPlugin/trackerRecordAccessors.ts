@@ -6,6 +6,7 @@
  */
 
 import type { TrackerRecord } from '../../core/TrackerRecord';
+import type { TrackerIdentity } from '../../core/DocumentService';
 import type { TrackerSchemaRole, FieldDefinition } from './models/TrackerDataModel';
 import { globalRegistry, getRoleField } from './models/TrackerDataModel';
 
@@ -119,4 +120,50 @@ export function getStatusOptions(type: string): Array<{ value: string; label: st
 export function getPriorityOptions(type: string): Array<{ value: string; label: string; icon?: string; color?: string }> {
   const fieldDef = getFieldDefForRole(type, 'priority');
   return fieldDef?.options ?? [];
+}
+
+// ---------------------------------------------------------------------------
+// Identity matching
+// ---------------------------------------------------------------------------
+
+/**
+ * Check whether a string value (owner, assigneeEmail, etc.) matches any
+ * facet of the given identity.  All comparisons are case-insensitive.
+ */
+function matchesIdentity(value: string, identity: TrackerIdentity): boolean {
+  const v = value.toLowerCase();
+  if (identity.email && v === identity.email.toLowerCase()) return true;
+  if (identity.displayName && v === identity.displayName.toLowerCase()) return true;
+  if (identity.gitEmail && v === identity.gitEmail.toLowerCase()) return true;
+  if (identity.gitName && v === identity.gitName.toLowerCase()) return true;
+  return false;
+}
+
+/**
+ * Determine whether a TrackerRecord belongs to the given identity.
+ *
+ * Matches on:
+ *  1. The assignee-role field (defaults to `owner`) -- any identity facet
+ *  2. The `assigneeEmail` field -- any identity facet
+ *  3. The author identity stored in system metadata -- email or git email
+ *
+ * All comparisons are case-insensitive.
+ */
+export function isMyRecord(record: TrackerRecord, identity: TrackerIdentity): boolean {
+  // 1. Assignee role field (resolves to 'owner' by default)
+  const assignee = getFieldByRole(record, 'assignee') as string | undefined;
+  if (assignee && matchesIdentity(assignee, identity)) return true;
+
+  // 2. Explicit assigneeEmail field (used by MCP tools)
+  const assigneeEmail = record.fields.assigneeEmail as string | undefined;
+  if (assigneeEmail && matchesIdentity(assigneeEmail, identity)) return true;
+
+  // 3. Author identity (who created the item)
+  const author = record.system.authorIdentity;
+  if (author?.email && identity.email &&
+      author.email.toLowerCase() === identity.email.toLowerCase()) return true;
+  if (author?.gitEmail && identity.gitEmail &&
+      author.gitEmail.toLowerCase() === identity.gitEmail.toLowerCase()) return true;
+
+  return false;
 }

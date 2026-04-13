@@ -3,7 +3,7 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import type { TrackerIdentity } from '@nimbalyst/runtime';
 import type { TrackerRecord } from '@nimbalyst/runtime/core/TrackerRecord';
-import { getRecordTitle, getRecordPriority, getFieldByRole } from '@nimbalyst/runtime/plugins/TrackerPlugin/trackerRecordAccessors';
+import { getRecordTitle, getRecordPriority, getFieldByRole, isMyRecord } from '@nimbalyst/runtime/plugins/TrackerPlugin/trackerRecordAccessors';
 import {
   TrackerTable,
   SortColumn as TrackerSortColumn,
@@ -182,32 +182,7 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
     let items = showArchived ? archivedItems : activeItems;
 
     if (activeFilters.includes('mine') && currentIdentity) {
-      items = items.filter(record => {
-        const authorIdentity = record.system.authorIdentity;
-        const assignee = getFieldByRole(record, 'assignee') as string | undefined;
-        // Match by email (strongest)
-        if (currentIdentity.email && authorIdentity?.email) {
-          if (currentIdentity.email === authorIdentity.email) return true;
-        }
-        // Match assignee field (resolved via role -- could be email, name, or ID)
-        if (currentIdentity.email && assignee) {
-          if (currentIdentity.email === assignee) return true;
-        }
-        if (currentIdentity.displayName && assignee) {
-          if (currentIdentity.displayName === assignee) return true;
-        }
-        // Fall back to git email
-        if (currentIdentity.gitEmail && authorIdentity?.gitEmail) {
-          if (currentIdentity.gitEmail === authorIdentity.gitEmail) return true;
-        }
-        // Fall back to git name
-        if (currentIdentity.gitName && authorIdentity?.gitName) {
-          if (currentIdentity.gitName === authorIdentity.gitName) return true;
-        }
-        // In single-user context, items with no author are assumed mine
-        if (!authorIdentity && !assignee) return true;
-        return false;
-      });
+      items = items.filter(record => isMyRecord(record, currentIdentity));
     }
 
     // "Unassigned" filter: show items with no assignee

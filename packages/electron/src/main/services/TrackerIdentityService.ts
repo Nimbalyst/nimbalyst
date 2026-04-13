@@ -86,29 +86,29 @@ export function getCurrentIdentity(workspacePath?: string): TrackerIdentity {
  * "My items" = items I authored OR am assigned to.
  */
 export function isMyItem(item: TrackerItem, currentIdentity: TrackerIdentity): boolean {
-  // 1. Email match on author (strongest)
-  if (currentIdentity.email && item.authorIdentity?.email) {
-    if (currentIdentity.email === item.authorIdentity.email) return true;
+  // Helper: case-insensitive match
+  const eq = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+  // 1. Owner field -- check all identity facets (case-insensitive)
+  if (item.owner) {
+    if (currentIdentity.email && eq(item.owner, currentIdentity.email)) return true;
+    if (currentIdentity.displayName && eq(item.owner, currentIdentity.displayName)) return true;
+    if (currentIdentity.gitEmail && eq(item.owner, currentIdentity.gitEmail)) return true;
+    if (currentIdentity.gitName && eq(item.owner, currentIdentity.gitName)) return true;
   }
 
-  // 2. Assignee email match
-  if (currentIdentity.email && item.assigneeEmail) {
-    if (currentIdentity.email === item.assigneeEmail) return true;
+  // 2. Assignee email -- check email identity facets
+  if (item.assigneeEmail) {
+    if (currentIdentity.email && eq(item.assigneeEmail, currentIdentity.email)) return true;
+    if (currentIdentity.gitEmail && eq(item.assigneeEmail, currentIdentity.gitEmail)) return true;
   }
 
-  // 3. Fall back to git email match (pre-login items)
-  if (currentIdentity.gitEmail && item.authorIdentity?.gitEmail) {
-    if (currentIdentity.gitEmail === item.authorIdentity.gitEmail) return true;
+  // 3. Author identity -- email or git email
+  if (item.authorIdentity?.email && currentIdentity.email) {
+    if (eq(item.authorIdentity.email, currentIdentity.email)) return true;
   }
-
-  // 4. Fall back to git name match (no email configured)
-  if (currentIdentity.gitName && item.authorIdentity?.gitName) {
-    if (currentIdentity.gitName === item.authorIdentity.gitName) return true;
-  }
-
-  // 5. Legacy: check old owner field
-  if (currentIdentity.displayName && item.owner) {
-    if (currentIdentity.displayName === item.owner) return true;
+  if (item.authorIdentity?.gitEmail && currentIdentity.gitEmail) {
+    if (eq(item.authorIdentity.gitEmail, currentIdentity.gitEmail)) return true;
   }
 
   return false;
