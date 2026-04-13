@@ -58,6 +58,7 @@ import {
 import { SessionContextMenu } from '../AgenticCoding/SessionContextMenu';
 import { ArchiveWorktreeDialog } from '../AgentMode/ArchiveWorktreeDialog';
 import { useArchiveWorktreeDialog } from '../../hooks/useArchiveWorktreeDialog';
+import { useFloatingMenu, FloatingPortal, virtualElement } from '../../hooks/useFloatingMenu';
 
 // ============================================================
 // Keyboard Navigation Types
@@ -646,9 +647,11 @@ interface SessionKanbanColumnProps {
   onCardClick: (sessionId: string, e: React.MouseEvent) => void;
   onPeekToggle: (sessionId: string) => void;
   onDragStart: (sessionId: string) => string[];
+  onSelectAll: (sessionIds: string[]) => void;
+  onHeaderContextMenu: (e: React.MouseEvent, phase: SessionPhaseKey, sessionIds: string[]) => void;
 }
 
-function SessionKanbanColumn({ phase, label, color, sessions, onSelect, onArchive, onRename, onDrop, isCollapsed, onToggleCollapse, focusedCardId, selectedIds, peekCardId, onCardClick, onPeekToggle, onDragStart: onDragStartProp }: SessionKanbanColumnProps) {
+function SessionKanbanColumn({ phase, label, color, sessions, onSelect, onArchive, onRename, onDrop, isCollapsed, onToggleCollapse, focusedCardId, selectedIds, peekCardId, onCardClick, onPeekToggle, onDragStart: onDragStartProp, onSelectAll, onHeaderContextMenu }: SessionKanbanColumnProps) {
   const [isDragOver, setIsDragOver] = useState(false);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -726,7 +729,18 @@ function SessionKanbanColumn({ phase, label, color, sessions, onSelect, onArchiv
   return (
     <div className="session-kanban-column flex flex-col min-w-[240px] max-w-[300px] flex-1 rounded-lg bg-nim-secondary" data-testid="session-kanban-column" data-phase={phase}>
       {/* Column header */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-nim">
+      <div
+        className="flex items-center gap-2 px-3 py-2 border-b border-nim cursor-pointer hover:bg-[var(--nim-bg-hover)] transition-colors"
+        onClick={(e) => {
+          if (sessions.length > 0) {
+            onSelectAll(sessions.map(s => s.id));
+          }
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onHeaderContextMenu(e, phase, sessions.map(s => s.id));
+        }}
+      >
         <span
           className="w-2 h-2 rounded-full shrink-0"
           style={{ backgroundColor: color }}
@@ -739,7 +753,7 @@ function SessionKanbanColumn({ phase, label, color, sessions, onSelect, onArchiv
         </span>
         <button
           className="text-nim-disabled hover:text-nim-muted transition-colors"
-          onClick={onToggleCollapse}
+          onClick={(e) => { e.stopPropagation(); onToggleCollapse(); }}
           title="Collapse column"
         >
           <MaterialSymbol icon="chevron_left" size={16} />
@@ -805,9 +819,11 @@ interface UnphasedColumnProps {
   onCardClick: (sessionId: string, e: React.MouseEvent) => void;
   onPeekToggle: (sessionId: string) => void;
   onDragStart: (sessionId: string) => string[];
+  onSelectAll: (sessionIds: string[]) => void;
+  onHeaderContextMenu: (e: React.MouseEvent, phase: SessionPhaseKey, sessionIds: string[]) => void;
 }
 
-function UnphasedColumn({ sessions, onSelect, onArchive, onRename, onDropToPhase, onRemovePhase, focusedCardId, selectedIds, peekCardId, onCardClick, onPeekToggle, onDragStart: onDragStartProp }: UnphasedColumnProps) {
+function UnphasedColumn({ sessions, onSelect, onArchive, onRename, onDropToPhase, onRemovePhase, focusedCardId, selectedIds, peekCardId, onCardClick, onPeekToggle, onDragStart: onDragStartProp, onSelectAll, onHeaderContextMenu }: UnphasedColumnProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -890,7 +906,18 @@ function UnphasedColumn({ sessions, onSelect, onArchive, onRename, onDropToPhase
       data-phase="unphased"
     >
       {/* Column header */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-nim">
+      <div
+        className="flex items-center gap-2 px-3 py-2 border-b border-nim cursor-pointer hover:bg-[var(--nim-bg-hover)] transition-colors"
+        onClick={(e) => {
+          if (sessions.length > 0) {
+            onSelectAll(sessions.map(s => s.id));
+          }
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onHeaderContextMenu(e, 'unphased', sessions.map(s => s.id));
+        }}
+      >
         <span
           className="w-2 h-2 rounded-full shrink-0"
           style={{ backgroundColor: '#525252' }}
@@ -903,7 +930,7 @@ function UnphasedColumn({ sessions, onSelect, onArchive, onRename, onDropToPhase
         </span>
         <button
           className="text-nim-faint hover:text-nim transition-colors"
-          onClick={() => setIsExpanded(false)}
+          onClick={(e) => { e.stopPropagation(); setIsExpanded(false); }}
           title="Collapse"
         >
           <MaterialSymbol icon="chevron_left" size={16} />
@@ -1167,6 +1194,142 @@ function SessionKanbanToolbar({ selectedCount, onClearSelection }: { selectedCou
 }
 
 // ============================================================
+// ColumnHeaderContextMenu - context menu for batch column ops
+// ============================================================
+
+interface ColumnHeaderContextMenuProps {
+  phase: SessionPhaseKey;
+  sessionIds: string[];
+  position: { x: number; y: number };
+  onClose: () => void;
+  onSelectAll: (ids: string[]) => void;
+  onArchiveAll: (ids: string[]) => void;
+  onMoveAll: (ids: string[], phase: SessionPhase) => void;
+  onRemovePhase: (ids: string[]) => void;
+}
+
+function ColumnHeaderContextMenu({ phase, sessionIds, position, onClose, onSelectAll, onArchiveAll, onMoveAll, onRemovePhase }: ColumnHeaderContextMenuProps) {
+  const menu = useFloatingMenu({
+    placement: 'right-start',
+    open: true,
+    onOpenChange: (open) => { if (!open) onClose(); },
+  });
+
+  useEffect(() => {
+    menu.refs.setPositionReference(virtualElement(position.x, position.y));
+  }, [position.x, position.y, menu.refs]);
+
+  const menuItemClass = 'flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0';
+  const count = sessionIds.length;
+
+  const [showMoveSubmenu, setShowMoveSubmenu] = useState(false);
+  const [submenuFlipped, setSubmenuFlipped] = useState(false);
+  const submenuParentRef = useRef<HTMLDivElement>(null);
+
+  if (count === 0) {
+    return (
+      <FloatingPortal>
+        <div
+          ref={menu.refs.setFloating}
+          style={menu.floatingStyles}
+          {...menu.getFloatingProps()}
+          className="z-[1000] min-w-[160px] p-1 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
+          onMouseLeave={onClose}
+        >
+          <div className="px-2.5 py-2 text-[0.8125rem] text-[var(--nim-text-faint)] italic">
+            No sessions in column
+          </div>
+        </div>
+      </FloatingPortal>
+    );
+  }
+
+  return (
+    <FloatingPortal>
+      <div
+        ref={menu.refs.setFloating}
+        style={menu.floatingStyles}
+        {...menu.getFloatingProps()}
+        className="z-[1000] min-w-[180px] p-1 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
+        onClick={(e) => e.stopPropagation()}
+        onMouseLeave={onClose}
+      >
+        {/* Select all in column */}
+        <button
+          className={menuItemClass}
+          onClick={(e) => { e.stopPropagation(); onClose(); onSelectAll(sessionIds); }}
+        >
+          <MaterialSymbol icon="select_all" size={14} />
+          Select All ({count})
+        </button>
+
+        <div className="h-px bg-[var(--nim-border)] my-1" />
+
+        {/* Move all to phase submenu */}
+        <div
+          ref={submenuParentRef}
+          className="relative"
+          onMouseEnter={() => {
+            if (submenuParentRef.current) {
+              const rect = submenuParentRef.current.getBoundingClientRect();
+              setSubmenuFlipped(rect.right + 150 > window.innerWidth);
+            }
+            setShowMoveSubmenu(true);
+          }}
+          onMouseLeave={() => setShowMoveSubmenu(false)}
+        >
+          <button
+            className={menuItemClass}
+            onClick={(e) => { e.stopPropagation(); setShowMoveSubmenu(!showMoveSubmenu); }}
+          >
+            <MaterialSymbol icon="drive_file_move" size={14} />
+            <span className="flex-1">Move All to...</span>
+            <MaterialSymbol icon="chevron_right" size={12} />
+          </button>
+          {showMoveSubmenu && (
+            <div className={`absolute top-0 min-w-[140px] p-1 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] z-[1001] ${submenuFlipped ? 'right-full mr-0.5' : 'left-full ml-0.5'}`}>
+              {SESSION_PHASE_COLUMNS.filter(col => col.value !== phase).map((col) => (
+                <button
+                  key={col.value}
+                  className={`flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]`}
+                  onClick={(e) => { e.stopPropagation(); onClose(); onMoveAll(sessionIds, col.value); }}
+                >
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: col.color }} />
+                  {col.label}
+                </button>
+              ))}
+              {phase !== 'unphased' && (
+                <>
+                  <div className="h-px bg-[var(--nim-border)] my-1" />
+                  <button
+                    className={`flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text-faint)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]`}
+                    onClick={(e) => { e.stopPropagation(); onClose(); onRemovePhase(sessionIds); }}
+                  >
+                    <MaterialSymbol icon="close" size={14} />
+                    Remove from board
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="h-px bg-[var(--nim-border)] my-1" />
+
+        {/* Archive all */}
+        <button
+          className="flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-error)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-error)] hover:text-white [&_svg]:shrink-0"
+          onClick={(e) => { e.stopPropagation(); onClose(); onArchiveAll(sessionIds); }}
+        >
+          <MaterialSymbol icon="archive" size={14} />
+          Archive All ({count})
+        </button>
+      </div>
+    </FloatingPortal>
+  );
+}
+
+// ============================================================
 // ArchiveGutter - Right-side drop zone to archive sessions
 // ============================================================
 
@@ -1264,6 +1427,13 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
 
   // Collapsible column state
   const [collapsedColumns, setCollapsedColumns] = useState<Set<SessionPhaseKey>>(new Set());
+
+  // Column header context menu state
+  const [columnContextMenu, setColumnContextMenu] = useState<{
+    phase: SessionPhaseKey;
+    sessionIds: string[];
+    position: { x: number; y: number };
+  } | null>(null);
 
   const toggleCollapse = useCallback((columnKey: SessionPhaseKey) => {
     setCollapsedColumns(prev => {
@@ -1525,6 +1695,32 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
     return [sessionId];
   }, [selectedIds]);
 
+  // Select all sessions in a column
+  const handleSelectAllInColumn = useCallback((sessionIds: string[]) => {
+    setSelectedIds(new Set(sessionIds));
+    if (sessionIds.length > 0) {
+      lastClickedIdRef.current = sessionIds[0];
+      setFocusedCardId(sessionIds[0]);
+    }
+  }, []);
+
+  // Open column header context menu
+  const handleHeaderContextMenu = useCallback((e: React.MouseEvent, phase: SessionPhaseKey, sessionIds: string[]) => {
+    setColumnContextMenu({ phase, sessionIds, position: { x: e.clientX, y: e.clientY } });
+  }, []);
+
+  // Batch move all sessions in a column to a new phase
+  const handleMoveAllToPhase = useCallback((sessionIds: string[], phase: SessionPhase) => {
+    for (const id of sessionIds) {
+      setPhase({ sessionId: id, phase });
+    }
+    posthog?.capture('kanban_column_batch_move', {
+      toPhase: phase,
+      cardCount: sessionIds.length,
+    });
+    setSelectedIds(new Set());
+  }, [setPhase, posthog]);
+
   // Toggle peek for a specific card
   const handlePeekToggle = useCallback((sessionId: string) => {
     const willOpen = peekCardId !== sessionId;
@@ -1771,6 +1967,8 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
             onCardClick={handleCardClick}
             onPeekToggle={handlePeekToggle}
             onDragStart={handleDragStart}
+            onSelectAll={handleSelectAllInColumn}
+            onHeaderContextMenu={handleHeaderContextMenu}
           />
           {SESSION_PHASE_COLUMNS.map(col => (
             <SessionKanbanColumn
@@ -1791,10 +1989,26 @@ export const SessionKanbanBoard: React.FC<SessionKanbanBoardProps> = ({ onSessio
               onCardClick={handleCardClick}
               onPeekToggle={handlePeekToggle}
               onDragStart={handleDragStart}
+              onSelectAll={handleSelectAllInColumn}
+              onHeaderContextMenu={handleHeaderContextMenu}
             />
           ))}
           <ArchiveGutter onArchive={handleArchive} />
         </div>
+      )}
+
+      {/* Column header context menu */}
+      {columnContextMenu && (
+        <ColumnHeaderContextMenu
+          phase={columnContextMenu.phase}
+          sessionIds={columnContextMenu.sessionIds}
+          position={columnContextMenu.position}
+          onClose={() => setColumnContextMenu(null)}
+          onSelectAll={handleSelectAllInColumn}
+          onArchiveAll={handleArchive}
+          onMoveAll={handleMoveAllToPhase}
+          onRemovePhase={handleRemovePhase}
+        />
       )}
 
       {/* Archive worktree confirmation dialog */}
