@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useAtomValue } from 'jotai';
 import {
   MaterialSymbol,
   globalRegistry,
   type TrackerDataModel,
   type TrackerSyncMode,
 } from '@nimbalyst/runtime';
+import { trackerItemCountByTypeAtom } from '@nimbalyst/runtime/plugins/TrackerPlugin';
 
 // ============================================================================
 // Types
@@ -17,25 +19,17 @@ interface TrackerConfigPanelProps {
 interface TrackerTypeConfig {
   model: TrackerDataModel;
   syncMode: TrackerSyncMode;
-  itemCount: number;
 }
-
-// ============================================================================
-// Mock Data (to be replaced with real IPC/atom reads)
-// ============================================================================
-
-// Mock item counts per tracker type
-const MOCK_ITEM_COUNTS: Record<string, number> = {
-  bug: 14,
-  task: 23,
-  plan: 8,
-  decision: 5,
-  idea: 12,
-};
 
 // ============================================================================
 // Sub-components
 // ============================================================================
+
+/** Small component so each row subscribes to its own count atom */
+function TrackerTypeCount({ type }: { type: string }) {
+  const count = useAtomValue(trackerItemCountByTypeAtom(type));
+  return <>{count}</>;
+}
 
 function SyncModeToggle({ mode, onChange }: {
   mode: TrackerSyncMode;
@@ -162,7 +156,7 @@ function AdminView({ trackers, onSyncModeChange }: {
                 <div className="text-[13px] font-medium text-[var(--nim-text)] flex items-center gap-1.5">
                   {tracker.model.displayNamePlural}
                   <span className="px-1.5 py-[1px] rounded bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)] text-[10px] font-semibold">
-                    {tracker.itemCount}
+                    <TrackerTypeCount type={tracker.model.type} />
                   </span>
                 </div>
                 <div className="text-[11px] text-[var(--nim-text-faint)]">
@@ -235,7 +229,7 @@ function MemberView({ trackers }: { trackers: TrackerTypeConfig[] }) {
                   {tracker.model.displayNamePlural}
                 </div>
                 <div className="text-[11px] text-[var(--nim-text-faint)]">
-                  {tracker.itemCount} items synced with team
+                  <TrackerTypeCount type={tracker.model.type} /> items synced with team
                 </div>
               </div>
               <div className="shrink-0">
@@ -269,7 +263,7 @@ function MemberView({ trackers }: { trackers: TrackerTypeConfig[] }) {
                     {tracker.model.displayNamePlural}
                   </div>
                   <div className="text-[11px] text-[var(--nim-text-faint)]">
-                    {tracker.itemCount} items, local only
+                    <TrackerTypeCount type={tracker.model.type} /> items, local only
                   </div>
                 </div>
                 <div className="shrink-0">
@@ -336,7 +330,6 @@ export function TrackerConfigPanel({ workspacePath }: TrackerConfigPanelProps) {
       const configs: TrackerTypeConfig[] = models.map((model) => ({
         model,
         syncMode: savedPolicies[model.type] ?? model.sync?.mode ?? 'local',
-        itemCount: MOCK_ITEM_COUNTS[model.type] ?? 0,
       }));
       setTrackers(configs);
     };
@@ -351,7 +344,6 @@ export function TrackerConfigPanel({ workspacePath }: TrackerConfigPanelProps) {
         return updatedModels.map((model) => ({
           model,
           syncMode: existingModes.get(model.type) ?? model.sync?.mode ?? 'local',
-          itemCount: MOCK_ITEM_COUNTS[model.type] ?? 0,
         }));
       });
     });
