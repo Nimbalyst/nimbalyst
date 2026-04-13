@@ -20,6 +20,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.11] - 2026-04-13
+
+
+### Added
+- Column header click-to-select and right-click context menu in session kanban
+- Drag-to-sort manual card ordering in tracker kanban board
+- "Unassigned" filter for tracker items
+- Owner avatar display on tracker kanban cards
+
+### Changed
+- Renamed /plan extension command to /design
+- Redesigned tracker table as Linear-style list layout
+
+### Fixed
+- Stale session:waiting event no longer overrides running status
+- Account and sync settings page now reflects current working state
+- Remote MCP OAuth no longer prompts on startup
+- VisualDisplayWidget guards against non-array items argument
+- Tracker "Mine" filter now correctly matches authenticated user identity
+- Tracker document header displays for legacy planStatus frontmatter
+- Tracker item counts on settings screen now show real data
+- Sibling editor save-overwrite cycle prevented in DocumentModel
+
+### Removed
+- Dead createTrackerDocument code from OnboardingService
+
 ## [0.57.10] - 2026-04-10
 
 
