@@ -77,8 +77,10 @@ async function loadAllTrackerItems(): Promise<void> {
 
     // Convert PGLite items (legacy TrackerItem shape) to TrackerRecord
     const pgliteRecords = (pgliteItems || []).map(trackerItemToRecord);
-    // Merge: PGLite records take priority over frontmatter records (by ID)
-    const allRecords = [...pgliteRecords, ...frontmatterRecords];
+    // Merge: frontmatter records first, then PGLite records overwrite by ID.
+    // replaceAllTrackerItemsAtom uses Map.set() so last-write-wins -- PGLite
+    // records are richer (have sync status, issue keys, etc.) and take priority.
+    const allRecords = [...frontmatterRecords, ...pgliteRecords];
     store.set(replaceAllTrackerItemsAtom, allRecords);
   } catch (err) {
     console.error('[trackerSyncListeners] Failed to load tracker items:', err);

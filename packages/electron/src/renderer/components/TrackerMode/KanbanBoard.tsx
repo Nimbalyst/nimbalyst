@@ -1,11 +1,10 @@
-import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import React, { useEffect, useMemo, useCallback, useRef, useState } from 'react';
 import { useFloating, offset, flip, shift, FloatingPortal } from '@floating-ui/react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import type { TrackerRecord } from '@nimbalyst/runtime/core/TrackerRecord';
 import type { TrackerItemType } from '@nimbalyst/runtime/plugins/TrackerPlugin';
 import { globalRegistry, getRoleField } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
 import { getRecordTitle, getRecordStatus, getRecordPriority, getRecordSortOrder, getStatusOptions, getFieldByRole } from '@nimbalyst/runtime/plugins/TrackerPlugin/trackerRecordAccessors';
-import { trackerItemToRecord } from '@nimbalyst/runtime/core/TrackerRecord';
 import { generateKeyBetween } from '@nimbalyst/runtime/utils/fractionalIndex';
 import { UserAvatar } from '@nimbalyst/runtime/plugins/TrackerPlugin/components/UserAvatar';
 
@@ -160,103 +159,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onArchiveItems,
   onDeleteItems,
 }) => {
-  const [items, setItems] = useState<TrackerRecord[]>([]);
-  const [fullDocItems, setFullDocItems] = useState<TrackerRecord[]>([]);
-
-  // Load items from documentService (skipped when overrideItems is provided)
-  useEffect(() => {
-    if (overrideItems) return;
-
-    let mounted = true;
-
-    async function loadItems() {
-      const documentService = (window as any).documentService;
-      if (!documentService) return;
-
-      try {
-        // Inline items
-        const inlineItems = await documentService.listTrackerItems();
-        if (!mounted) return;
-
-        const filtered = filterType === 'all'
-          ? inlineItems
-          : inlineItems.filter((i: any) => i.type === filterType);
-        // Convert legacy TrackerItem from documentService to TrackerRecord
-        setItems(filtered.map((i: any) => trackerItemToRecord(i)));
-
-        // Full document items from metadata
-        if (documentService.listDocumentMetadata) {
-          const metadata = await documentService.listDocumentMetadata();
-          const docRecords: TrackerRecord[] = [];
-
-          for (const doc of metadata) {
-            if (!doc.frontmatter) continue;
-
-            // Check for tracker frontmatter
-            const trackerTypes = globalRegistry.getAll();
-            for (const tracker of trackerTypes) {
-              if (!tracker.modes?.fullDocument) continue;
-              const specificKey = `${tracker.type}Status`;
-              const block = doc.frontmatter[specificKey] || doc.frontmatter.trackerStatus;
-              if (!block || typeof block !== 'object') continue;
-              if (doc.frontmatter.trackerStatus && block.type !== tracker.type && !doc.frontmatter[specificKey]) continue;
-
-              if (filterType !== 'all' && tracker.type !== filterType) continue;
-
-              // Build a TrackerRecord directly instead of a legacy TrackerItem
-              docRecords.push({
-                id: block.planId || block.id || doc.id,
-                primaryType: tracker.type,
-                typeTags: [tracker.type],
-                source: 'frontmatter',
-                archived: false,
-                syncStatus: 'local',
-                system: {
-                  workspace: doc.workspace || '',
-                  documentPath: doc.path,
-                  createdAt: new Date().toISOString(),
-                  updatedAt: new Date().toISOString(),
-                  lastIndexed: (doc.lastIndexed || new Date()).toISOString(),
-                },
-                fields: {
-                  title: block.title || doc.path.split('/').pop()?.replace(/\.\w+$/, '') || 'Untitled',
-                  status: doc.frontmatter.status || block.status || 'to-do',
-                  priority: block.priority || 'medium',
-                  tags: block.tags || [],
-                },
-                fieldUpdatedAt: {},
-              });
-            }
-          }
-
-          if (mounted) setFullDocItems(docRecords);
-        }
-      } catch (error) {
-        console.error('[KanbanBoard] Failed to load items:', error);
-      }
-    }
-
-    loadItems();
-
-    // Watch for changes
-    const documentService = (window as any).documentService;
-    const unsubs: (() => void)[] = [];
-    if (documentService?.watchTrackerItems) {
-      unsubs.push(documentService.watchTrackerItems(() => mounted && loadItems()));
-    }
-    if (documentService?.watchDocumentMetadata) {
-      unsubs.push(documentService.watchDocumentMetadata(() => mounted && loadItems()));
-    }
-
-    return () => {
-      mounted = false;
-      unsubs.forEach(fn => fn());
-    };
-  }, [filterType, overrideItems]);
-
+  // Items always come from the caller (TrackerMainView passes atom-sourced items).
+  // KanbanBoard no longer loads its own data -- single source of truth via Jotai atoms.
   const allItems = useMemo(() => {
-    // Use overrideItems when provided (filtered views from sidebar chips)
-    const source = overrideItems ?? [...items, ...fullDocItems];
+    const source = overrideItems ?? [];
     if (!searchQuery) return source;
     const q = searchQuery.toLowerCase();
     return source.filter(
@@ -266,7 +172,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         getRecordTitle(record).toLowerCase().includes(q) ||
         record.system.documentPath?.toLowerCase().includes(q)
     );
-  }, [items, fullDocItems, searchQuery, overrideItems]);
+  }, [searchQuery, overrideItems]);
 
   // Drag-and-drop state
   const [dragItemId, setDragItemId] = useState<string | null>(null);

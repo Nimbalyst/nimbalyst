@@ -409,9 +409,6 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
     return `${parts.join(' ')} ${typeName}`;
   }, [filterType, activeFilters, trackerTypes]);
 
-  // Whether to pass override items (any filter active means we override the default atom)
-  const hasFilters = activeFilters.length > 0;
-
   return (
     <div className="tracker-main-view flex-1 flex flex-col overflow-hidden min-h-0">
       {/* Toolbar */}
@@ -523,7 +520,7 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
               onNewItem={handleNewItem}
               onItemSelect={handleItemSelect}
               selectedItemId={selectedItemId}
-              overrideItems={hasFilters ? filteredItems : undefined}
+              overrideItems={filteredItems}
               onArchiveItems={handleArchiveItems}
               onDeleteItems={handleDeleteItems}
               searchQuery={searchQuery}
@@ -537,7 +534,7 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
               onSwitchToFilesMode={onSwitchToFilesMode}
               onItemSelect={handleItemSelect}
               selectedItemId={selectedItemId}
-              overrideItems={hasFilters ? filteredItems : undefined}
+              overrideItems={filteredItems}
               onArchiveItems={handleArchiveItems}
               onDeleteItems={handleDeleteItems}
             />
