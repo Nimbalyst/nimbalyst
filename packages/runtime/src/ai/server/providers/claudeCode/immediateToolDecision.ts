@@ -21,6 +21,7 @@ interface ResolveImmediateToolDecisionDeps {
     input: any,
     options: { signal: AbortSignal; toolUseID?: string },
   ) => Promise<ToolDecision>;
+  setCurrentMode: (mode: 'planning' | 'agent') => void;
   logSecurity: (message: string, data?: Record<string, unknown>) => void;
 }
 
@@ -46,6 +47,11 @@ export async function resolveImmediateToolDecision(
 
   if (toolName === 'AskUserQuestion') {
     return deps.handleAskUserQuestion(sessionId, input, options, options.toolUseID);
+  }
+
+  if (toolName === 'EnterPlanMode') {
+    deps.setCurrentMode('planning');
+    return null; // Let SDK handle natively
   }
 
   if (toolName === 'ExitPlanMode') {
