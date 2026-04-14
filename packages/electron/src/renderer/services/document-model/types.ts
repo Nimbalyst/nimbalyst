@@ -88,6 +88,13 @@ export interface DocumentModelEditorHandle {
   saveContent(content: string | ArrayBuffer): Promise<void>;
 
   /**
+   * Notify sibling editors that this editor saved content externally
+   * (through a path that bypasses saveContent, like saveWithHistory).
+   * Updates lastPersistedContent and notifies clean siblings.
+   */
+  notifySiblingsSaved(content: string | ArrayBuffer): void;
+
+  /**
    * Subscribe to external content changes (file watcher, other editor saves, collab).
    * NOT called when this editor itself saves (echo suppression).
    */

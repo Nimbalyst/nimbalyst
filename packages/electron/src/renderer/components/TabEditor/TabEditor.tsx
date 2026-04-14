@@ -744,6 +744,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       if (result && result.success) {
         isDirtyRef.current = false;
         documentModelHandleRef.current?.setDirty(false);
+        // Notify clean sibling editors (e.g. same file open in AgentMode)
+        documentModelHandleRef.current?.notifySiblingsSaved(contentToSave);
         // Update initialContentRef with current editor content to prevent false dirty flags
         if (getContentFnRef.current) {
           initialContentRef.current = getContentFnRef.current();
@@ -999,12 +1001,15 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         // Custom editors are notified via EditorHost.subscribeToFileChanges (separate subscription).
         if (isCustom) return;
 
+        // Skip if content is identical to what we already have.
+        // This prevents unnecessary Lexical reloads that destroy cursor position
+        // (e.g. when a sibling saves content we already have).
+        if (content === lastSavedContentRef.current) return;
+
         // Guard: suppress the Lexical onChange -> setDirty(true) that fires
-        // from the programmatic content update below. Without this, the receiving
-        // editor becomes dirty, autosaves, and overwrites the sending editor.
+        // from the programmatic content update below.
         isApplyingExternalContentRef.current = true;
 
-        // Built-in editors: apply the new content
         if (editorRef.current) {
           try {
             if (isMarkdown) {
@@ -1015,7 +1020,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 $convertFromEnhancedMarkdownString(content, transformers);
               }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
             } else if (editorRef.current.setContent) {
-              // Monaco
               editorRef.current.setContent(content);
             }
             setReloadVersion((v) => v + 1);
@@ -1024,15 +1028,12 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           }
         }
 
-        // Update tracking refs
         contentRef.current = content;
         lastSavedContentRef.current = content;
         initialContentRef.current = content;
         isDirtyRef.current = false;
         onDirtyChange?.(false);
 
-        // Clear the guard after Lexical's onChange has settled.
-        // onChange fires as a microtask after the update, so setTimeout(0) is enough.
         setTimeout(() => {
           isApplyingExternalContentRef.current = false;
         }, 0);

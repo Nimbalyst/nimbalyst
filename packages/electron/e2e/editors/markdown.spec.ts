@@ -780,3 +780,46 @@ test('clean editor picks up content saved by sibling editor via DocumentModel', 
 
   await closeTabByFileName(page, 'multi-editor-test.md');
 });
+
+test('autosave does not hijack cursor when editor content is unchanged', async () => {
+  // When the user is actively typing, the autosave cycle should not
+  // reload content or move the cursor. This tests that:
+  // 1. Autosave fires and persists content
+  // 2. The file watcher echo is suppressed (no content reload)
+  // 3. The cursor stays where the user left it
+  const mdPath = path.join(workspaceDir, 'multi-editor-test.md');
+
+  // Reset file
+  await fs.writeFile(mdPath, '# Cursor Test\n\nLine one.\n\nLine two.\n', 'utf8');
+
+  await openFileFromTree(page, 'multi-editor-test.md');
+  await page.waitForSelector(ACTIVE_EDITOR_SELECTOR, { timeout: TEST_TIMEOUTS.EDITOR_LOAD });
+  await page.waitForTimeout(500);
+
+  const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
+  await editor.click();
+  await page.keyboard.press('End');
+
+  // Type first batch
+  await page.keyboard.type('\n\nFirst batch typed');
+  await page.waitForTimeout(200);
+
+  // Wait for autosave to fire
+  await page.waitForTimeout(3000);
+
+  // Now type more -- if cursor was hijacked, this would go to the wrong place
+  await page.keyboard.type(' and more text');
+  await page.waitForTimeout(200);
+
+  // Both batches should be present and contiguous
+  await expect(editor).toContainText('First batch typed and more text');
+
+  // Wait for second autosave
+  await page.waitForTimeout(3000);
+
+  // Verify disk has everything
+  const diskContent = await fs.readFile(mdPath, 'utf-8');
+  expect(diskContent).toContain('First batch typed and more text');
+
+  await closeTabByFileName(page, 'multi-editor-test.md');
+});

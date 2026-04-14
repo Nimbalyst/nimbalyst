@@ -157,6 +157,16 @@ export class DocumentModel {
         await this.saveFromEditor(id, content);
       },
 
+      /**
+       * Notify sibling editors that this editor saved content externally
+       * (i.e. through a path that bypasses handle.saveContent, like saveWithHistory).
+       * Updates lastPersistedContent and notifies clean siblings.
+       */
+      notifySiblingsSaved: (content: string | ArrayBuffer) => {
+        this.lastPersistedContent = content;
+        this.notifyFileChanged(content, id);
+      },
+
       onFileChanged: (callback) => {
         const att = this.attachments.get(id);
         if (!att) return () => {};
