@@ -1277,19 +1277,27 @@ export async function performKeyRotation(
       logger.main.warn('[KeyRotationService] Failure after server writes began (phase:', progress.phase, '). Keeping new key. Manual retry needed.');
     }
 
-    // Best-effort: clear write barrier on failure so rooms aren't permanently frozen
-    try {
-      const { net } = await import('electron');
-      await net.fetch(`${serverUrl}/api/teams/${orgId}/rotation-lock`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${orgJwt}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ locked: false }),
-      });
-    } catch {
-      logger.main.warn('[KeyRotationService] Failed to clear write barrier during error recovery');
+    // Only clear the write barrier if failure happened before server writes began.
+    // If server writes started but fingerprint propagation did NOT succeed,
+    // rooms must stay locked to prevent stale clients writing old-key data
+    // into rooms that may now contain new-key snapshots/items.
+    // Locked rooms require manual retry or recovery to unlock.
+    if (safeToRestoreOldKey) {
+      try {
+        const { net } = await import('electron');
+        await net.fetch(`${serverUrl}/api/teams/${orgId}/rotation-lock`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${orgJwt}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ locked: false }),
+        });
+      } catch {
+        logger.main.warn('[KeyRotationService] Failed to clear write barrier during error recovery');
+      }
+    } else {
+      logger.main.warn('[KeyRotationService] Rooms remain locked (failure after server writes). Manual retry needed to unlock.');
     }
 
     throw err;

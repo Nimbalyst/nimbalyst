@@ -577,16 +577,23 @@ export class TeamRoom implements DurableObject {
         const { userId } = body as { userId: string };
         if (!userId) return this.jsonError('userId required', 400);
 
+        // Close connections BEFORE deleting member data.
+        // If connection closure fails, the member stays in the team
+        // rather than being removed with live connections still open.
+        try {
+          await this.closeUserConnectionsOnRooms(userId);
+        } catch (err) {
+          return this.jsonError(
+            `Cannot remove member: failed to revoke active connections. ${err instanceof Error ? err.message : String(err)}`,
+            503
+          );
+        }
+
         sql.exec(`DELETE FROM member_roles WHERE user_id = ?`, userId);
         sql.exec(`DELETE FROM key_envelopes WHERE target_user_id = ?`, userId);
         sql.exec(`DELETE FROM identity_keys WHERE user_id = ?`, userId);
 
         this.broadcast({ type: 'memberRemoved', userId });
-
-        // Propagate connection closure to all document and tracker rooms.
-        // This prevents the removed member from using existing WebSocket
-        // connections (which may remain valid for up to 1 week with cached JWTs).
-        await this.closeUserConnectionsOnRooms(userId);
 
         return this.jsonOk({ success: true });
       }
@@ -976,7 +983,7 @@ export class TeamRoom implements DurableObject {
       `SELECT document_id FROM document_index`
     ).toArray();
 
-    const promises: Promise<void>[] = [];
+    const promises: Promise<{ roomId: string; ok: boolean; error?: string }>[] = [];
 
     for (const doc of docs) {
       const roomId = `org:${orgId}:doc:${doc.document_id}`;
@@ -985,8 +992,8 @@ export class TeamRoom implements DurableObject {
       const url = `http://internal/sync/${roomId}/internal/close-user-connections`;
       promises.push(
         stub.fetch(new Request(url, { method: 'POST', headers, body: closeBody }))
-          .then(() => {})
-          .catch(err => log.warn('Failed to close doc connections for', doc.document_id, ':', err))
+          .then(() => ({ roomId, ok: true }))
+          .catch(err => ({ roomId, ok: false, error: String(err) }))
       );
     }
 
@@ -998,12 +1005,18 @@ export class TeamRoom implements DurableObject {
       const url = `http://internal/sync/${roomId}/internal/close-user-connections`;
       promises.push(
         stub.fetch(new Request(url, { method: 'POST', headers, body: closeBody }))
-          .then(() => {})
-          .catch(err => log.warn('Failed to close tracker connections:', err))
+          .then(() => ({ roomId, ok: true }))
+          .catch(err => ({ roomId, ok: false, error: String(err) }))
       );
     }
 
-    await Promise.allSettled(promises);
+    const results = await Promise.all(promises);
+    const failures = results.filter(r => !r.ok);
+    if (failures.length > 0) {
+      const failedRooms = failures.map(f => `${f.roomId}: ${f.error}`).join('; ');
+      log.error(`Failed to close connections for user ${userId} in ${failures.length} room(s): ${failedRooms}`);
+      throw new Error(`Connection revocation failed for ${failures.length} room(s). Member removal aborted to prevent stale access.`);
+    }
     log.info(`Propagated connection closure for user ${userId} to ${docs.length} doc room(s) + tracker room`);
   }
 

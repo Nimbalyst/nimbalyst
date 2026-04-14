@@ -160,26 +160,6 @@ export function registerDocumentSyncHandlers(): void {
     };
   });
 
-  // Delete a DocumentRoom's data on the server (used to clear stale old-key data).
-  safeHandle('document-sync:delete-room', async (_event, orgId: string, documentId: string) => {
-    try {
-      const team = await findTeamForWorkspace(''); // orgId is passed directly
-      const orgJwt = await getOrgScopedJwt(orgId);
-      const httpUrl = getSyncHttpUrl();
-      const roomId = `org:${orgId}:doc:${documentId}`;
-      const { net } = await import('electron');
-      const resp = await net.fetch(`${httpUrl}/sync/${roomId}/delete`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${orgJwt}` },
-      });
-      if (!resp.ok) {
-        return { success: false, error: `HTTP ${resp.status}: ${await resp.text()}` };
-      }
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : String(error) };
-    }
-  });
 
   safeHandle('document-sync:set-pending-update', async (_event, payload: {
     workspacePath: string;
