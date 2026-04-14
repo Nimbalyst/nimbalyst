@@ -1625,9 +1625,9 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         onNavigateHistory={enableHistoryNavigation ? handleNavigateHistory : undefined}
         placeholder={
           mode === 'chat'
-            ? "Ask a question. @ for files. / for commands"
+            ? "Ask a question. @ for files, @@ for sessions, / for commands"
             : enableSlashCommands
-              ? "Type your message... (Enter to send, Shift+Enter for new line, @ for files, / for commands)"
+              ? "Type your message... (Enter to send, Shift+Enter for new line, @ for files, @@ for sessions, / for commands)"
               : "Type your message... (Enter to send, Shift+Enter for new line, @ for files, @@ for sessions, / for commands)"
         }
         mode={aiMode}
