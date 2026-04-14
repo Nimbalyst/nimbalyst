@@ -16,7 +16,7 @@ export function createAboutWindow() {
 
     aboutWindow = new BrowserWindow({
         width: 650,
-        height: 650,
+        height: 700,
         resizable: false,
         minimizable: false,
         maximizable: false,
