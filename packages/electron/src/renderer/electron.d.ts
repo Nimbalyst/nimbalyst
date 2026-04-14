@@ -619,6 +619,7 @@ interface ElectronAPI {
         documentId: string;
         title: string;
         orgKeyBase64: string;
+        orgKeyFingerprint?: string;
         serverUrl: string;
         userId: string;
         userName?: string;

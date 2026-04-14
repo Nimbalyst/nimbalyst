@@ -20,6 +20,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.12] - 2026-04-14
+
+
+### Added
+- Configurable issue key prefix per project in tracker settings
+
+### Fixed
+- Session list shift-select range and bulk archive from context menu
+- ExitPlanMode auto-accepted without showing confirmation widget
+- Editor overflow menu clipped by diff header in agent mode
+- Cursor hijacking and sibling editor sync in DocumentModel
+- Full tracker item context now included when launching sessions from tracker
+- Hardened E2EE security boundaries for key rotation, room deletion, and member removal
+- Hardened E2EE key rotation to prevent data loss on member removal
+- Markdown Document roles now include rank property
+- Session input placeholder text updated to include navigation commands
+
 ## [0.57.11] - 2026-04-13
 
 
