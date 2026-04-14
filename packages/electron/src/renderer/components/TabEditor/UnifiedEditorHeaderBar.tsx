@@ -28,6 +28,7 @@ import {
 import { $generateHtmlFromNodes } from '@lexical/html';
 import { copyToClipboard, ProviderIcon } from '@nimbalyst/runtime';
 import { revealFolderAtom, revealFileAtom, openFileRequestAtom, setWindowModeAtom } from '../../store';
+import { useFloatingMenu, FloatingPortal } from '../../hooks/useFloatingMenu';
 import { getDocumentService } from '../../services/RendererDocumentService';
 import { isWorktreePath } from '../../../shared/pathUtils';
 import { CommonFileActions } from '../CommonFileActions';
@@ -168,8 +169,12 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
   // Dropdown states
   const [showAISessions, setShowAISessions] = useState(false);
   const [showTOC, setShowTOC] = useState(false);
-  const [showActionsMenu, setShowActionsMenu] = useState(false);
   const [showDocTypeSubmenu, setShowDocTypeSubmenu] = useState(false);
+
+  // Actions menu - uses floating-ui for portal rendering + viewport overflow protection
+  const actionsMenu = useFloatingMenu({ placement: 'bottom-end' });
+  const showActionsMenu = actionsMenu.isOpen;
+  const setShowActionsMenu = actionsMenu.setIsOpen;
 
   // Dev mode check
   const isDevMode = import.meta.env.DEV;
@@ -187,7 +192,6 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
   // Refs for click-outside handling
   const aiSessionsButtonRef = useRef<HTMLButtonElement>(null);
   const tocButtonRef = useRef<HTMLButtonElement>(null);
-  const actionsButtonRef = useRef<HTMLButtonElement>(null);
 
   // workspaceId is actually the workspace path (naming is misleading but correct)
   const workspacePath = workspaceId;
@@ -508,13 +512,6 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
         setShowTOC(false);
       }
 
-      if (
-        actionsButtonRef.current &&
-        !actionsButtonRef.current.contains(event.target as Node) &&
-        !(event.target as Element).closest('.unified-header-actions-dropdown')
-      ) {
-        setShowActionsMenu(false);
-      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -783,12 +780,13 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
         {/* Actions Menu Button */}
         <div className="unified-header-dropdown-container relative">
           <button
-            ref={actionsButtonRef}
+            ref={actionsMenu.refs.setReference}
             className={`unified-header-button nim-btn-icon w-7 h-7 rounded border-none bg-transparent cursor-pointer flex items-center justify-center transition-all duration-150 text-[var(--nim-text-muted)] hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)] ${
               showActionsMenu ? 'active bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)]' : ''
             }`}
             onClick={() => setShowActionsMenu(!showActionsMenu)}
             title="More actions"
+            {...actionsMenu.getReferenceProps()}
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
               <circle cx="12" cy="12" r="2"/>
@@ -798,7 +796,13 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
           </button>
 
           {showActionsMenu && (
-            <div className="unified-header-actions-dropdown absolute top-[calc(100%+4px)] right-0 min-w-[220px] overflow-visible rounded-md z-[1000] py-1 bg-[var(--nim-bg)] border border-[var(--nim-border)] shadow-[0_4px_12px_rgba(0,0,0,0.3)]">
+            <FloatingPortal>
+            <div
+              ref={actionsMenu.refs.setFloating}
+              style={actionsMenu.floatingStyles}
+              className="unified-header-actions-dropdown min-w-[220px] overflow-visible rounded-md z-[1000] py-1 bg-[var(--nim-bg)] border border-[var(--nim-border)] shadow-[0_4px_12px_rgba(0,0,0,0.3)]"
+              {...actionsMenu.getFloatingProps()}
+            >
               {/* Toggle Source Mode */}
               {supportsSourceMode && onToggleSourceMode && (
                 <button
@@ -1021,6 +1025,7 @@ export const UnifiedEditorHeaderBar: React.FC<UnifiedEditorHeaderBarProps> = ({
                 </>
               )}
             </div>
+            </FloatingPortal>
           )}
         </div>
       </div>
