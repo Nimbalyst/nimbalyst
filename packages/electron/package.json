@@ -356,12 +356,14 @@
         {
           "ext": "md",
           "name": "Markdown Document",
-          "role": "Editor"
+          "role": "Editor",
+          "rank": "Alternate"
         },
         {
           "ext": "markdown",
           "name": "Markdown Document",
-          "role": "Editor"
+          "role": "Editor",
+          "rank": "Alternate"
         }
       ],
       "entitlements": "build/entitlements.mac.plist",
