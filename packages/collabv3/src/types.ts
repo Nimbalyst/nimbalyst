@@ -739,7 +739,8 @@ export type TrackerClientMessage =
   | TrackerSyncRequestMessage
   | TrackerUpsertMessage
   | TrackerDeleteMessage
-  | TrackerBatchUpsertMessage;
+  | TrackerBatchUpsertMessage
+  | TrackerSetConfigMessage;
 
 /** Request tracker items since a sequence number */
 export interface TrackerSyncRequestMessage {
@@ -771,6 +772,13 @@ export interface TrackerBatchUpsertMessage {
   items: { itemId: string; encryptedPayload: string; iv: string; issueNumber?: number; issueKey?: string; orgKeyFingerprint?: string }[];
 }
 
+/** Update tracker configuration (e.g., issue key prefix) */
+export interface TrackerSetConfigMessage {
+  type: 'trackerSetConfig';
+  key: string;
+  value: string;
+}
+
 // ============================================================================
 // TeamTrackerRoom Server → Client Messages
 // ============================================================================
@@ -779,6 +787,7 @@ export type TrackerServerMessage =
   | TrackerSyncResponseMessage
   | TrackerUpsertBroadcastMessage
   | TrackerDeleteBroadcastMessage
+  | TrackerConfigBroadcastMessage
   | TrackerErrorMessage;
 
 /** Response to trackerSync with changelog entries since the requested sequence */
@@ -788,6 +797,18 @@ export interface TrackerSyncResponseMessage {
   deletedItemIds: string[];
   sequence: number;
   hasMore: boolean;
+  config?: TrackerRoomConfig;
+}
+
+/** Broadcast a tracker config change to all connections */
+export interface TrackerConfigBroadcastMessage {
+  type: 'trackerConfigBroadcast';
+  config: TrackerRoomConfig;
+}
+
+/** Tracker room configuration */
+export interface TrackerRoomConfig {
+  issueKeyPrefix: string;
 }
 
 /** Broadcast an upserted tracker item to other connections */

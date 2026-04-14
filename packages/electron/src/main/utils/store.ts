@@ -379,6 +379,9 @@ export interface WorkspaceState {
     updatedAt: number;
   }>;
   trackerSyncPolicies?: Record<string, TrackerSyncModeSetting | TrackerSyncPolicySetting>;
+  // Issue key prefix for tracker items (e.g., "NIM", "APP"). Used for local-only trackers.
+  // For synced trackers, the prefix is stored server-side in TrackerRoom metadata.
+  issueKeyPrefix?: string;
   // Account identity bound to this workspace (personalOrgId).
   // Set once when the workspace is first synced. Different workspaces can use different accounts.
   // Defaults to the primary account if not set.

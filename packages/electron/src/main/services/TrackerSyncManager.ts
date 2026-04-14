@@ -338,6 +338,14 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
           .catch(err => logger.main.error('[TrackerSyncManager] Failed to remove deleted item:', err));
       },
 
+      onConfigChanged: (config) => {
+        // Broadcast config changes to renderer
+        sendToWorkspaceWindows(workspacePath, 'tracker-sync:config-changed', {
+          workspacePath,
+          config,
+        });
+      },
+
       onInitialSyncComplete: async (summary) => {
         if (
           summary.remoteItemCount !== 0 ||
@@ -725,6 +733,20 @@ export function registerTrackerSyncHandlers(): void {
       return { success: true };
     } catch (error) {
       logger.main.error('[TrackerSyncManager] delete-item failed:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  safeHandle('tracker-sync:set-config', async (_event, payload: { workspacePath: string; key: string; value: string }) => {
+    try {
+      const wsState = workspaceStates.get(payload.workspacePath);
+      if (!wsState) {
+        return { success: false, error: 'Tracker sync not connected for workspace' };
+      }
+      wsState.provider.setConfig(payload.key, payload.value);
+      return { success: true };
+    } catch (error) {
+      logger.main.error('[TrackerSyncManager] set-config failed:', error);
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   });

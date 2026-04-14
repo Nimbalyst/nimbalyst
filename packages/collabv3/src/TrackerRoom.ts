@@ -34,7 +34,7 @@ interface ConnectionState {
 // WebSocket tag prefixes for hibernation recovery
 const TAG_USER = 'user:';
 const TAG_ORG = 'org:';
-const ISSUE_KEY_PREFIX = 'NIM';
+const DEFAULT_ISSUE_KEY_PREFIX = 'NIM';
 
 export class TeamTrackerRoom implements DurableObject {
   private state: DurableObjectState;
@@ -179,6 +179,14 @@ export class TeamTrackerRoom implements DurableObject {
     }
   }
 
+  private getIssueKeyPrefix(): string {
+    return this.getMetadataValue('issue_key_prefix') ?? DEFAULT_ISSUE_KEY_PREFIX;
+  }
+
+  private setIssueKeyPrefix(prefix: string): void {
+    this.setMetadataValue('issue_key_prefix', prefix);
+  }
+
   private assignIssueIdentity(
     existing: { issue_number?: number | null; issue_key?: string | null } | undefined,
     incoming?: { issueNumber?: number; issueKey?: string },
@@ -201,9 +209,10 @@ export class TeamTrackerRoom implements DurableObject {
     }
 
     const issueNumber = this.allocateNextIssueNumber();
+    const prefix = this.getIssueKeyPrefix();
     return {
       issueNumber,
-      issueKey: `${ISSUE_KEY_PREFIX}-${issueNumber}`,
+      issueKey: `${prefix}-${issueNumber}`,
     };
   }
 
@@ -313,6 +322,10 @@ export class TeamTrackerRoom implements DurableObject {
 
         case 'trackerBatchUpsert':
           await this.handleTrackerBatchUpsert(ws, connState, message.items);
+          break;
+
+        case 'trackerSetConfig':
+          this.handleTrackerSetConfig(ws, connState, message);
           break;
 
         default:
@@ -429,6 +442,9 @@ export class TeamTrackerRoom implements DurableObject {
       deletedItemIds: Array.from(deletedItemIds),
       sequence: maxSequence,
       hasMore,
+      config: {
+        issueKeyPrefix: this.getIssueKeyPrefix(),
+      },
     };
 
     ws.send(JSON.stringify(response));
@@ -609,6 +625,35 @@ export class TeamTrackerRoom implements DurableObject {
         { issueNumber: item.issueNumber, issueKey: item.issueKey },
         item.orgKeyFingerprint,
       );
+    }
+  }
+
+  /**
+   * Handle tracker config update (e.g., issue key prefix).
+   */
+  private handleTrackerSetConfig(
+    ws: WebSocket,
+    _connState: ConnectionState,
+    message: { type: 'trackerSetConfig'; key: string; value: string },
+  ): void {
+    if (message.key === 'issueKeyPrefix') {
+      const prefix = message.value.toUpperCase();
+      if (!/^[A-Z]{2,5}$/.test(prefix)) {
+        this.sendError(ws, 'invalid_config', 'Issue key prefix must be 2-5 uppercase letters');
+        return;
+      }
+      this.setIssueKeyPrefix(prefix);
+      log.info('Issue key prefix updated to:', prefix);
+
+      // Broadcast the config change to all connections (including sender)
+      const configBroadcast: TrackerServerMessage = {
+        type: 'trackerConfigBroadcast',
+        config: { issueKeyPrefix: prefix },
+      };
+      this.broadcast(configBroadcast);
+      ws.send(JSON.stringify(configBroadcast));
+    } else {
+      this.sendError(ws, 'unknown_config_key', `Unknown config key: ${message.key}`);
     }
   }
 

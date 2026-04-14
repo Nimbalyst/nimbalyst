@@ -44,6 +44,9 @@ export interface TrackerSyncConfig {
   /** Called once after initial sync fully completes. */
   onInitialSyncComplete?: (summary: TrackerInitialSyncSummary) => void | Promise<void>;
 
+  /** Called when tracker room config changes (e.g., issue key prefix) */
+  onConfigChanged?: (config: TrackerRoomConfig) => void;
+
   /**
    * Override the WebSocket URL construction.
    * Useful for integration tests with auth bypass.
@@ -175,13 +178,15 @@ export type TrackerClientMessage =
   | { type: 'trackerSync'; sinceSequence: number }
   | { type: 'trackerUpsert'; itemId: string; encryptedPayload: string; iv: string; issueNumber?: number; issueKey?: string; orgKeyFingerprint?: string }
   | { type: 'trackerDelete'; itemId: string }
-  | { type: 'trackerBatchUpsert'; items: { itemId: string; encryptedPayload: string; iv: string; issueNumber?: number; issueKey?: string; orgKeyFingerprint?: string }[] };
+  | { type: 'trackerBatchUpsert'; items: { itemId: string; encryptedPayload: string; iv: string; issueNumber?: number; issueKey?: string; orgKeyFingerprint?: string }[] }
+  | { type: 'trackerSetConfig'; key: string; value: string };
 
 /** Server -> Client messages */
 export type TrackerServerMessage =
   | TrackerSyncResponseMessage
   | TrackerUpsertBroadcastMessage
   | TrackerDeleteBroadcastMessage
+  | TrackerConfigBroadcastMessage
   | TrackerErrorMessage;
 
 export interface TrackerSyncResponseMessage {
@@ -190,6 +195,17 @@ export interface TrackerSyncResponseMessage {
   deletedItemIds: string[];
   sequence: number;
   hasMore: boolean;
+  config?: TrackerRoomConfig;
+}
+
+export interface TrackerConfigBroadcastMessage {
+  type: 'trackerConfigBroadcast';
+  config: TrackerRoomConfig;
+}
+
+/** Tracker room configuration */
+export interface TrackerRoomConfig {
+  issueKeyPrefix: string;
 }
 
 export interface TrackerUpsertBroadcastMessage {

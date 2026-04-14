@@ -105,6 +105,7 @@ export type {
   TrackerItemPayload,
   TrackerSyncResult,
   TrackerComment,
+  TrackerRoomConfig,
 } from './trackerSyncTypes';
 
 export {

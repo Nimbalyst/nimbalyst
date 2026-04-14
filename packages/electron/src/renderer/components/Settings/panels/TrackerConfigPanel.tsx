@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAtomValue } from 'jotai';
 import {
   MaterialSymbol,
@@ -20,6 +20,8 @@ interface TrackerTypeConfig {
   model: TrackerDataModel;
   syncMode: TrackerSyncMode;
 }
+
+const ISSUE_KEY_PREFIX_REGEX = /^[A-Z]{2,5}$/;
 
 // ============================================================================
 // Sub-components
@@ -110,6 +112,73 @@ function getSyncMetaText(mode: TrackerSyncMode): string {
     case 'local': return 'Only visible to you';
     case 'hybrid': return 'Per-item sharing choice';
   }
+}
+
+// ============================================================================
+// Issue Key Prefix Input
+// ============================================================================
+
+function IssueKeyPrefixInput({ value, onChange }: {
+  value: string;
+  onChange: (prefix: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  const handleBlur = useCallback(() => {
+    const upper = draft.toUpperCase();
+    if (!ISSUE_KEY_PREFIX_REGEX.test(upper)) {
+      setError('Must be 2-5 uppercase letters');
+      return;
+    }
+    setError('');
+    if (upper !== value) {
+      onChange(upper);
+    }
+  }, [draft, value, onChange]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      (e.target as HTMLInputElement).blur();
+    }
+  }, []);
+
+  return (
+    <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+      <h4 className="provider-panel-section-title text-[15px] font-semibold mb-2 text-[var(--nim-text)]">
+        Issue Key Prefix
+      </h4>
+      <p className="text-[13px] leading-relaxed text-[var(--nim-text-muted)] mb-3">
+        New tracker items will use this prefix (e.g., <code className="text-[11px] text-[var(--nim-code-text)] bg-[var(--nim-code-bg)] px-1 py-[1px] rounded">{draft || 'NIM'}-42</code>).
+      </p>
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value.toUpperCase());
+            setError('');
+          }}
+          onBlur={handleBlur}
+          onKeyDown={handleKeyDown}
+          maxLength={5}
+          placeholder="NIM"
+          className="w-24 px-2.5 py-1.5 text-[13px] font-mono bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md text-[var(--nim-text)] outline-none focus:border-[var(--nim-primary)] transition-colors"
+        />
+        <span className="text-[13px] text-[var(--nim-text-faint)]">-123</span>
+      </div>
+      {error && (
+        <p className="text-[11px] text-[var(--nim-error)] mt-1.5">{error}</p>
+      )}
+      <p className="text-[11px] text-[var(--nim-text-faint)] mt-2">
+        Changing the prefix only affects new items. Existing items keep their current keys.
+      </p>
+    </div>
+  );
 }
 
 // ============================================================================
@@ -302,6 +371,8 @@ function MemberView({ trackers }: { trackers: TrackerTypeConfig[] }) {
 export function TrackerConfigPanel({ workspacePath }: TrackerConfigPanelProps) {
   const [trackers, setTrackers] = useState<TrackerTypeConfig[]>([]);
   const [isAdmin, setIsAdmin] = useState(true);
+  const [issueKeyPrefix, setIssueKeyPrefix] = useState('NIM');
+  const [isSyncConnected, setIsSyncConnected] = useState(false);
 
   useEffect(() => {
     // Load saved sync policies from workspace state, then merge with registry
@@ -311,6 +382,9 @@ export function TrackerConfigPanel({ workspacePath }: TrackerConfigPanelProps) {
         try {
           const state = await (window as any).electronAPI.invoke('workspace:get-state', workspacePath);
           savedPolicies = state?.trackerSyncPolicies ?? {};
+          if (state?.issueKeyPrefix) {
+            setIssueKeyPrefix(state.issueKeyPrefix);
+          }
         } catch {
           // Workspace state not available
         }
@@ -324,6 +398,14 @@ export function TrackerConfigPanel({ workspacePath }: TrackerConfigPanelProps) {
         } catch {
           // No team or error
         }
+
+        // Check if tracker sync is connected (for determining where to save prefix)
+        try {
+          const syncStatus = await (window as any).electronAPI.invoke('tracker-sync:get-status', { workspacePath });
+          setIsSyncConnected(syncStatus?.active ?? false);
+        } catch {
+          // Not connected
+        }
       }
 
       const models = globalRegistry.getAll();
@@ -335,6 +417,14 @@ export function TrackerConfigPanel({ workspacePath }: TrackerConfigPanelProps) {
     };
 
     loadPolicies();
+
+    // Listen for config changes from sync
+    const handleConfigChanged = (_event: any, data: { workspacePath: string; config: { issueKeyPrefix: string } }) => {
+      if (data.workspacePath === workspacePath && data.config.issueKeyPrefix) {
+        setIssueKeyPrefix(data.config.issueKeyPrefix);
+      }
+    };
+    (window as any).electronAPI?.on?.('tracker-sync:config-changed', handleConfigChanged);
 
     // Subscribe to registry changes (e.g., custom trackers loaded later)
     const unsubscribe = globalRegistry.onChange(() => {
@@ -348,8 +438,29 @@ export function TrackerConfigPanel({ workspacePath }: TrackerConfigPanelProps) {
       });
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      (window as any).electronAPI?.off?.('tracker-sync:config-changed', handleConfigChanged);
+    };
   }, [workspacePath]);
+
+  const handlePrefixChange = useCallback((prefix: string) => {
+    setIssueKeyPrefix(prefix);
+    if (workspacePath) {
+      // Always persist to workspace settings (used for local-only trackers)
+      (window as any).electronAPI.invoke('workspace:update-state', workspacePath, {
+        issueKeyPrefix: prefix,
+      });
+      // If sync is connected, also send to server
+      if (isSyncConnected) {
+        (window as any).electronAPI.invoke('tracker-sync:set-config', {
+          workspacePath,
+          key: 'issueKeyPrefix',
+          value: prefix,
+        });
+      }
+    }
+  }, [workspacePath, isSyncConnected]);
 
   const handleSyncModeChange = (type: string, mode: TrackerSyncMode) => {
     setTrackers((prev) =>
@@ -379,6 +490,11 @@ export function TrackerConfigPanel({ workspacePath }: TrackerConfigPanelProps) {
             : 'View team-shared tracker types and manage your local trackers.'}
         </p>
       </div>
+
+      <IssueKeyPrefixInput
+        value={issueKeyPrefix}
+        onChange={handlePrefixChange}
+      />
 
       {isAdmin ? (
         <AdminView

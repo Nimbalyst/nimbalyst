@@ -23,7 +23,9 @@ import type {
   TrackerSyncResponseMessage,
   TrackerUpsertBroadcastMessage,
   TrackerDeleteBroadcastMessage,
+  TrackerConfigBroadcastMessage,
   EncryptedTrackerItem,
+  TrackerRoomConfig,
 } from './trackerSyncTypes';
 
 // ============================================================================
@@ -410,6 +412,9 @@ export class TrackerSyncProvider {
         case 'trackerDeleteBroadcast':
           this.handleDeleteBroadcast(message);
           break;
+        case 'trackerConfigBroadcast':
+          this.handleConfigBroadcast(message);
+          break;
         case 'error':
           console.error('[TrackerSync] Server error:', message.code, message.message);
           break;
@@ -469,6 +474,11 @@ export class TrackerSyncProvider {
     if (msg.hasMore) {
       this.requestSync();
       return;
+    }
+
+    // Emit config from sync response (if present)
+    if (msg.config) {
+      this.config.onConfigChanged?.(msg.config);
     }
 
     // Sync complete
@@ -532,6 +542,23 @@ export class TrackerSyncProvider {
     if (msg.sequence > this.lastSequence) {
       this.lastSequence = msg.sequence;
     }
+  }
+
+  private handleConfigBroadcast(msg: TrackerConfigBroadcastMessage): void {
+    console.log('[TrackerSync] Config broadcast received:', msg.config);
+    this.config.onConfigChanged?.(msg.config);
+  }
+
+  // --------------------------------------------------------------------------
+  // Public API: Configuration
+  // --------------------------------------------------------------------------
+
+  /**
+   * Update a tracker room config value (e.g., issue key prefix).
+   * Sends the update to the server, which validates and broadcasts.
+   */
+  setConfig(key: string, value: string): void {
+    this.send({ type: 'trackerSetConfig', key, value });
   }
 
   // --------------------------------------------------------------------------
