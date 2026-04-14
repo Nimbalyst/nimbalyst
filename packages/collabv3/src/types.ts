@@ -617,6 +617,8 @@ export interface DocUpdateMessage {
   encryptedUpdate: string;
   iv: string;
   clientUpdateId?: string;
+  /** Org key fingerprint for epoch enforcement. Server rejects stale-key writes. */
+  orgKeyFingerprint?: string;
 }
 
 /** Send an encrypted compacted state snapshot */
@@ -625,6 +627,8 @@ export interface DocCompactMessage {
   encryptedState: string;
   iv: string;
   replacesUpTo: number;
+  /** Org key fingerprint for epoch enforcement. Server rejects stale-key writes. */
+  orgKeyFingerprint?: string;
 }
 
 /** Send encrypted awareness state (cursor, selection) */
@@ -764,6 +768,8 @@ export interface TrackerUpsertMessage {
 export interface TrackerDeleteMessage {
   type: 'trackerDelete';
   itemId: string;
+  /** Org key fingerprint for epoch enforcement. Server rejects stale-key deletes. */
+  orgKeyFingerprint?: string;
 }
 
 /** Batch create/update encrypted tracker items */

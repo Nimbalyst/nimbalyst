@@ -177,8 +177,18 @@ export class TeamDocumentRoom implements DurableObject {
       return this.handleWebSocketUpgrade(request);
     }
 
+    if (url.pathname.endsWith('/internal/assets') && request.method === 'GET') {
+      return this.handleInternalListAssets();
+    }
+
     if (url.pathname.includes('/internal/assets/')) {
       return this.handleInternalAssetRequest(request, url);
+    }
+
+    // Internal mutation endpoints (called during key rotation, member removal)
+    if (url.pathname.includes('/internal/') && request.method === 'POST') {
+      const body = await request.json() as Record<string, unknown>;
+      return this.handleInternalMutation(url.pathname, body);
     }
 
     if (url.pathname.endsWith('/status')) {
@@ -219,6 +229,48 @@ export class TeamDocumentRoom implements DurableObject {
       default:
         return new Response('Method not allowed', { status: 405 });
     }
+  }
+
+  /**
+   * List all assets for this document. Used during key rotation to enumerate
+   * assets that need re-encryption.
+   */
+  private handleInternalListAssets(): Response {
+    const sql = this.state.storage.sql;
+    const rows = sql.exec<{
+      asset_id: string;
+      r2_key: string;
+      ciphertext_size: number;
+      plaintext_size: number | null;
+      mime_type: string | null;
+      encrypted_metadata: string | null;
+      metadata_iv: string | null;
+      created_by: string;
+      created_at: number;
+      updated_at: number;
+    }>(
+      `SELECT asset_id, r2_key, ciphertext_size, plaintext_size, mime_type,
+              encrypted_metadata, metadata_iv, created_by, created_at, updated_at
+       FROM document_assets
+       ORDER BY created_at ASC`
+    ).toArray();
+
+    const assets = rows.map(row => ({
+      assetId: row.asset_id,
+      r2Key: row.r2_key,
+      ciphertextSize: row.ciphertext_size,
+      plaintextSize: row.plaintext_size,
+      mimeType: row.mime_type,
+      encryptedMetadata: row.encrypted_metadata,
+      metadataIv: row.metadata_iv,
+      createdBy: row.created_by,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+
+    return new Response(JSON.stringify({ assets }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   private handleInternalGetAsset(assetId: string): Response {
@@ -391,12 +443,13 @@ export class TeamDocumentRoom implements DurableObject {
             connState,
             message.encryptedUpdate,
             message.iv,
-            message.clientUpdateId
+            message.clientUpdateId,
+            message.orgKeyFingerprint
           );
           break;
 
         case 'docCompact':
-          await this.handleDocCompact(ws, connState, message.encryptedState, message.iv, message.replacesUpTo);
+          await this.handleDocCompact(ws, connState, message.encryptedState, message.iv, message.replacesUpTo, message.orgKeyFingerprint);
           break;
 
         case 'docAwareness':
@@ -503,6 +556,113 @@ export class TeamDocumentRoom implements DurableObject {
     connState.synced = true;
   }
 
+  // ========================================================================
+  // Internal endpoints (called during key rotation, member removal)
+  // ========================================================================
+
+  private handleInternalMutation(path: string, body: Record<string, unknown>): Response {
+    try {
+      if (path.endsWith('/internal/set-org-key-fingerprint')) {
+        const { fingerprint } = body as { fingerprint: string };
+        if (!fingerprint) {
+          return new Response(JSON.stringify({ error: 'fingerprint required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+        }
+        this.setMetadataValue('current_org_key_fingerprint', fingerprint);
+        log.info('Org key fingerprint updated:', fingerprint.slice(0, 12) + '...');
+        return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+      }
+
+      if (path.endsWith('/internal/set-rotation-lock')) {
+        const { locked } = body as { locked: boolean };
+        if (locked) {
+          this.setMetadataValue('rotation_locked', 'true');
+          log.info('Write barrier enabled (key rotation in progress)');
+        } else {
+          this.state.storage.sql.exec(`DELETE FROM metadata WHERE key = 'rotation_locked'`);
+          log.info('Write barrier removed');
+        }
+        return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+      }
+
+      if (path.endsWith('/internal/close-user-connections')) {
+        const { userId } = body as { userId: string };
+        if (!userId) {
+          return new Response(JSON.stringify({ error: 'userId required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+        }
+        let closed = 0;
+        for (const [ws, state] of this.connections) {
+          if (state.auth.userId === userId) {
+            try {
+              ws.close(4002, 'Removed from team');
+            } catch { /* already closed */ }
+            this.connections.delete(ws);
+            closed++;
+          }
+        }
+        log.info(`Closed ${closed} connection(s) for removed user:`, userId);
+        return new Response(JSON.stringify({ success: true, closed }), { headers: { 'Content-Type': 'application/json' } });
+      }
+
+      // internal/rotation-compact: Upload a re-encrypted snapshot during key rotation.
+      // Bypasses the write barrier (called BY the rotation orchestrator, not a regular client).
+      if (path.endsWith('/internal/rotation-compact')) {
+        const { encryptedState, iv, replacesUpTo } = body as { encryptedState: string; iv: string; replacesUpTo: number };
+        if (!encryptedState || !iv || replacesUpTo == null) {
+          return new Response(JSON.stringify({ error: 'encryptedState, iv, replacesUpTo required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+        }
+        const sql = this.state.storage.sql;
+        const now = Date.now();
+        sql.exec(
+          `INSERT INTO snapshots (encrypted_state, iv, replaces_up_to, created_at) VALUES (?, ?, ?, ?)`,
+          encryptedState, iv, replacesUpTo, now
+        );
+        // Prune old updates below the snapshot
+        const pruneUpTo = replacesUpTo - 50; // COMPACTION_OVERLAP
+        if (pruneUpTo > 0) {
+          sql.exec(`DELETE FROM encrypted_updates WHERE sequence <= ?`, pruneUpTo);
+        }
+        this.setMetadataValue('updated_at', String(now));
+        log.info('Rotation compact applied, replacesUpTo:', replacesUpTo);
+        return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+      }
+
+      return new Response(JSON.stringify({ error: 'Unknown internal endpoint' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.error('Internal mutation error:', msg);
+      return new Response(JSON.stringify({ error: msg }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    }
+  }
+
+  // ========================================================================
+  // Write validation
+  // ========================================================================
+
+  /**
+   * Check if writes are blocked by rotation lock or stale key epoch.
+   * Returns null if write is allowed, or an error message if rejected.
+   */
+  private validateWriteAllowed(orgKeyFingerprint?: string): string | null {
+    const locked = this.getMetadataValue('rotation_locked');
+    if (locked === 'true') {
+      return 'Key rotation in progress -- writes are temporarily frozen';
+    }
+
+    // Check key epoch (if a current fingerprint has been set on this room)
+    const currentFingerprint = this.getMetadataValue('current_org_key_fingerprint');
+    if (currentFingerprint) {
+      if (!orgKeyFingerprint) {
+        return `Key epoch required: room has fingerprint ${currentFingerprint.slice(0, 12)}... but client sent none`;
+      }
+      if (orgKeyFingerprint !== currentFingerprint) {
+        return `Stale key epoch: client sent ${orgKeyFingerprint.slice(0, 12)}..., ` +
+          `current is ${currentFingerprint.slice(0, 12)}...`;
+      }
+    }
+
+    return null;
+  }
+
   /**
    * Handle document update - store encrypted blob and broadcast to other connections.
    */
@@ -511,8 +671,17 @@ export class TeamDocumentRoom implements DurableObject {
     connState: ConnectionState,
     encryptedUpdate: string,
     iv: string,
-    clientUpdateId?: string
+    clientUpdateId?: string,
+    orgKeyFingerprint?: string
   ): Promise<void> {
+    // Validate write is allowed (rotation lock + key epoch)
+    const writeError = this.validateWriteAllowed(orgKeyFingerprint);
+    if (writeError) {
+      log.warn('Write rejected for user', connState.auth.userId, ':', writeError);
+      this.sendError(ws, 'write_rejected', writeError);
+      return;
+    }
+
     const sql = this.state.storage.sql;
 
     // Assign server-side sequence number
@@ -568,8 +737,17 @@ export class TeamDocumentRoom implements DurableObject {
     connState: ConnectionState,
     encryptedState: string,
     iv: string,
-    replacesUpTo: number
+    replacesUpTo: number,
+    orgKeyFingerprint?: string
   ): Promise<void> {
+    // Validate write is allowed (rotation lock + key epoch)
+    const writeError = this.validateWriteAllowed(orgKeyFingerprint);
+    if (writeError) {
+      log.warn('Compaction rejected for user', connState.auth.userId, ':', writeError);
+      this.sendError(ws, 'write_rejected', writeError);
+      return;
+    }
+
     const sql = this.state.storage.sql;
     const now = Date.now();
 
@@ -731,6 +909,18 @@ export class TeamDocumentRoom implements DurableObject {
    */
   private sendError(ws: WebSocket, code: string, message: string): void {
     ws.send(JSON.stringify({ type: 'error', code, message }));
+  }
+
+  /**
+   * Get a single metadata value.
+   */
+  private getMetadataValue(key: string): string | null {
+    const sql = this.state.storage.sql;
+    const row = sql.exec<{ value: string }>(
+      `SELECT value FROM metadata WHERE key = ?`,
+      key
+    ).toArray()[0];
+    return row?.value ?? null;
   }
 
   /**

@@ -357,7 +357,7 @@ export class TrackerSyncProvider {
       return;
     }
 
-    this.send({ type: 'trackerDelete', itemId });
+    this.send({ type: 'trackerDelete', itemId, orgKeyFingerprint: this.config.orgKeyFingerprint });
   }
 
   /**

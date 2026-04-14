@@ -47,6 +47,11 @@ import {
   handleDeleteAllKeyEnvelopes,
   handleSetOrgKeyFingerprint,
   handleGetOrgKeyFingerprint,
+  handleRotationLock,
+  handlePropagateFingerprint,
+  handleTruncateTrackerChangelog,
+  handleRotationCompactDoc,
+  handleRotationBatchUpsertTracker,
 } from './teamKeyEnvelopes';
 import { teamRoomPost, teamRoomGet } from './teamRoomHelpers';
 import { NIMBALYST_ORG_TYPE_KEY, getExplicitOrgType, resolveDiscoveredOrgType, selectPreferredPersonalOrg } from './personalOrg';
@@ -324,6 +329,14 @@ export default {
       }
       log.debug('Auth passed, forwarding to DO');
 
+      // Block direct access to internal DO endpoints via /sync/ path.
+      // Internal endpoints must only be reached through REST API handlers
+      // (which enforce admin role checks) or through DO-to-DO calls.
+      if (url.pathname.includes('/internal/')) {
+        log.warn('Blocked direct /sync/ access to internal endpoint:', url.pathname);
+        return new Response('Forbidden: internal endpoints not accessible via /sync', { status: 403 });
+      }
+
       // Route to appropriate DO
       let stub: DurableObjectStub;
 
@@ -498,6 +511,20 @@ async function handleApiRequest(
     return handleAccountDeletion(auth, env, corsHeaders);
   }
 
+  // GET /api/collab/docs/{documentId}/assets -- List all assets (for key rotation)
+  const docAssetListMatch = url.pathname.match(/^\/api\/collab\/docs\/([^/]+)\/assets$/);
+  if (docAssetListMatch && request.method === 'GET') {
+    const [, documentId] = docAssetListMatch;
+    const roomId = `org:${auth.orgId}:doc:${documentId}`;
+    const doId = env.DOCUMENT_ROOM.idFromName(roomId);
+    const stub = env.DOCUMENT_ROOM.get(doId);
+    const internalUrl = new URL(request.url);
+    internalUrl.pathname = `/sync/${roomId}/internal/assets`;
+    internalUrl.searchParams.set('user_id', auth.userId);
+    internalUrl.searchParams.set('org_id', auth.orgId);
+    return stub.fetch(new Request(internalUrl.toString(), { method: 'GET' }));
+  }
+
   const docAssetMatch = url.pathname.match(/^\/api\/collab\/docs\/([^/]+)\/assets\/([^/]+)$/);
   if (docAssetMatch) {
     const [, documentId, assetId] = docAssetMatch;
@@ -607,6 +634,31 @@ async function handleApiRequest(
     const envelopeMatch = subPath.match(/^\/key-envelopes\/([^/]+)$/);
     if (envelopeMatch && request.method === 'DELETE') {
       return handleDeleteKeyEnvelope(teamOrgId, envelopeMatch[1], auth, env, corsHeaders);
+    }
+
+    // POST /api/teams/{orgId}/rotation-lock - Set/clear write barrier on all rooms (admin, rotation)
+    if (subPath === '/rotation-lock' && request.method === 'POST') {
+      return handleRotationLock(teamOrgId, request, auth, env, corsHeaders);
+    }
+
+    // POST /api/teams/{orgId}/propagate-fingerprint - Set fingerprint on doc/tracker rooms (admin, rotation)
+    if (subPath === '/propagate-fingerprint' && request.method === 'POST') {
+      return handlePropagateFingerprint(teamOrgId, request, auth, env, corsHeaders);
+    }
+
+    // POST /api/teams/{orgId}/truncate-tracker-changelog - Truncate changelog after rotation (admin)
+    if (subPath === '/truncate-tracker-changelog' && request.method === 'POST') {
+      return handleTruncateTrackerChangelog(teamOrgId, request, auth, env, corsHeaders);
+    }
+
+    // POST /api/teams/{orgId}/rotation-compact-doc - Upload re-encrypted doc snapshot (admin, rotation)
+    if (subPath === '/rotation-compact-doc' && request.method === 'POST') {
+      return handleRotationCompactDoc(teamOrgId, request, auth, env, corsHeaders);
+    }
+
+    // POST /api/teams/{orgId}/rotation-batch-upsert-tracker - Upload re-encrypted tracker items (admin, rotation)
+    if (subPath === '/rotation-batch-upsert-tracker' && request.method === 'POST') {
+      return handleRotationBatchUpsertTracker(teamOrgId, request, auth, env, corsHeaders);
     }
 
     // Routes under /api/teams/{orgId}/members/{memberId}

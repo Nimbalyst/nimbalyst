@@ -101,14 +101,6 @@ export class TeamTrackerRoom implements DurableObject {
       sql.exec(`ALTER TABLE tracker_items ADD COLUMN issue_key TEXT`);
     } catch { /* column already exists */ }
 
-    // Migrate: add org_key_fingerprint column for split-brain key detection
-    try {
-      sql.exec(`ALTER TABLE tracker_items ADD COLUMN org_key_fingerprint TEXT`);
-    } catch { /* column already exists */ }
-    try {
-      sql.exec(`ALTER TABLE changelog ADD COLUMN org_key_fingerprint TEXT`);
-    } catch { /* column already exists */ }
-
     sql.exec(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_tracker_items_issue_number ON tracker_items(issue_number)
       WHERE issue_number IS NOT NULL;
@@ -133,6 +125,17 @@ export class TeamTrackerRoom implements DurableObject {
         updated_at INTEGER NOT NULL
       );
     `);
+
+    // Migrate: add org_key_fingerprint column for split-brain key detection.
+    // IMPORTANT: These ALTER TABLE statements must come AFTER the CREATE TABLE
+    // statements above, otherwise they fail on fresh DOs where the tables
+    // don't exist yet.
+    try {
+      sql.exec(`ALTER TABLE tracker_items ADD COLUMN org_key_fingerprint TEXT`);
+    } catch { /* column already exists */ }
+    try {
+      sql.exec(`ALTER TABLE changelog ADD COLUMN org_key_fingerprint TEXT`);
+    } catch { /* column already exists */ }
 
     // Bootstrap TTL alarm for existing trackers without one
     const existingAlarm = await this.state.storage.getAlarm();
@@ -233,6 +236,15 @@ export class TeamTrackerRoom implements DurableObject {
       return this.handleWebSocketUpgrade(request);
     }
 
+    // Internal endpoints (called by other DOs or the main worker during key rotation)
+    if (url.pathname.includes('/internal/')) {
+      if (request.method === 'POST') {
+        const body = await request.json() as Record<string, unknown>;
+        return this.handleInternalMutation(url.pathname, body);
+      }
+      return new Response('Method Not Allowed', { status: 405 });
+    }
+
     if (url.pathname.endsWith('/status')) {
       return this.handleStatusRequest();
     }
@@ -317,7 +329,7 @@ export class TeamTrackerRoom implements DurableObject {
           break;
 
         case 'trackerDelete':
-          await this.handleTrackerDelete(ws, connState, message.itemId);
+          await this.handleTrackerDelete(ws, connState, message.itemId, message.orgKeyFingerprint);
           break;
 
         case 'trackerBatchUpsert':
@@ -451,6 +463,151 @@ export class TeamTrackerRoom implements DurableObject {
     connState.synced = true;
   }
 
+  // ========================================================================
+  // Internal endpoints (called during key rotation, member removal)
+  // ========================================================================
+
+  private handleInternalMutation(path: string, body: Record<string, unknown>): Response {
+    try {
+      if (path.endsWith('/internal/set-org-key-fingerprint')) {
+        const { fingerprint } = body as { fingerprint: string };
+        if (!fingerprint) return this.jsonError('fingerprint required', 400);
+        this.setMetadataValue('current_org_key_fingerprint', fingerprint);
+        log.info('Org key fingerprint updated:', fingerprint.slice(0, 12) + '...');
+        return this.jsonOk({ success: true });
+      }
+
+      if (path.endsWith('/internal/set-rotation-lock')) {
+        const { locked } = body as { locked: boolean };
+        if (locked) {
+          this.setMetadataValue('rotation_locked', 'true');
+          log.info('Write barrier enabled (key rotation in progress)');
+        } else {
+          // Remove the lock
+          this.state.storage.sql.exec(`DELETE FROM metadata WHERE key = 'rotation_locked'`);
+          log.info('Write barrier removed');
+        }
+        return this.jsonOk({ success: true });
+      }
+
+      if (path.endsWith('/internal/truncate-changelog')) {
+        // Truncate old changelog entries encrypted with the old key.
+        // After rotation, all tracker_items have been re-encrypted with the new key.
+        // Old changelog entries are stale and would cause decrypt failures during
+        // delta sync. Truncating forces clients to do a full sync.
+        const sql = this.state.storage.sql;
+        const countBefore = sql.exec<{ count: number }>(
+          `SELECT COUNT(*) as count FROM changelog`
+        ).toArray()[0]?.count ?? 0;
+        sql.exec(`DELETE FROM changelog`);
+        log.info(`Truncated ${countBefore} changelog entries after key rotation`);
+        return this.jsonOk({ success: true, entriesTruncated: countBefore });
+      }
+
+      if (path.endsWith('/internal/close-user-connections')) {
+        const { userId } = body as { userId: string };
+        if (!userId) return this.jsonError('userId required', 400);
+        let closed = 0;
+        for (const [ws, state] of this.connections) {
+          if (state.auth.userId === userId) {
+            try {
+              ws.close(4002, 'Removed from team');
+            } catch { /* already closed */ }
+            this.connections.delete(ws);
+            closed++;
+          }
+        }
+        log.info(`Closed ${closed} connection(s) for removed user:`, userId);
+        return this.jsonOk({ success: true, closed });
+      }
+
+      // internal/rotation-batch-upsert: Upload re-encrypted tracker items during key rotation.
+      // Bypasses the write barrier (called BY the rotation orchestrator, not a regular client).
+      if (path.endsWith('/internal/rotation-batch-upsert')) {
+        const { items } = body as { items: Array<{ itemId: string; encryptedPayload: string; iv: string; issueNumber?: number; issueKey?: string; orgKeyFingerprint?: string }> };
+        if (!items || !Array.isArray(items)) return this.jsonError('items array required', 400);
+        const sql = this.state.storage.sql;
+        const now = Date.now();
+        let upserted = 0;
+        for (const item of items) {
+          const existing = sql.exec<{ version: number }>(
+            `SELECT version FROM tracker_items WHERE item_id = ?`, item.itemId
+          ).toArray()[0];
+          const newVersion = (existing?.version ?? 0) + 1;
+          const issueIdentity = this.assignIssueIdentity(existing as any, { issueNumber: item.issueNumber, issueKey: item.issueKey });
+          if (existing) {
+            sql.exec(
+              `UPDATE tracker_items SET issue_number = ?, issue_key = ?, version = ?, encrypted_payload = ?, iv = ?, org_key_fingerprint = ?, updated_at = ? WHERE item_id = ?`,
+              issueIdentity.issueNumber, issueIdentity.issueKey, newVersion, item.encryptedPayload, item.iv, item.orgKeyFingerprint ?? null, now, item.itemId
+            );
+          } else {
+            sql.exec(
+              `INSERT INTO tracker_items (item_id, issue_number, issue_key, version, encrypted_payload, iv, org_key_fingerprint, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              item.itemId, issueIdentity.issueNumber, issueIdentity.issueKey, newVersion, item.encryptedPayload, item.iv, item.orgKeyFingerprint ?? null, now, now
+            );
+          }
+          sql.exec(
+            `INSERT INTO changelog (item_id, action, encrypted_payload, iv, version, org_key_fingerprint, created_at) VALUES (?, 'upsert', ?, ?, ?, ?, ?)`,
+            item.itemId, item.encryptedPayload, item.iv, newVersion, item.orgKeyFingerprint ?? null, now
+          );
+          upserted++;
+        }
+        this.setMetadataValue('updated_at', String(now));
+        log.info(`Rotation batch upsert: ${upserted} items`);
+        return this.jsonOk({ success: true, upserted });
+      }
+
+      return this.jsonError('Unknown internal endpoint', 404);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.error('Internal mutation error:', msg);
+      return this.jsonError(msg, 500);
+    }
+  }
+
+  private jsonOk(data: unknown): Response {
+    return new Response(JSON.stringify(data), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  private jsonError(message: string, status: number): Response {
+    return new Response(JSON.stringify({ error: message }), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // ========================================================================
+  // Write validation helpers
+  // ========================================================================
+
+  /**
+   * Check if writes are blocked by rotation lock or stale key epoch.
+   * Returns null if write is allowed, or an error message if rejected.
+   */
+  private validateWriteAllowed(orgKeyFingerprint?: string): string | null {
+    // Check rotation lock
+    const locked = this.getMetadataValue('rotation_locked');
+    if (locked === 'true') {
+      return 'Key rotation in progress -- writes are temporarily frozen';
+    }
+
+    // Check key epoch (if a current fingerprint has been set)
+    const currentFingerprint = this.getMetadataValue('current_org_key_fingerprint');
+    if (currentFingerprint) {
+      if (!orgKeyFingerprint) {
+        return `Key epoch required: room has fingerprint ${currentFingerprint.slice(0, 12)}... but client sent none`;
+      }
+      if (orgKeyFingerprint !== currentFingerprint) {
+        return `Stale key epoch: client sent ${orgKeyFingerprint.slice(0, 12)}..., ` +
+          `current is ${currentFingerprint.slice(0, 12)}...`;
+      }
+    }
+
+    return null;
+  }
+
   /**
    * Handle tracker item upsert - store encrypted blob, append to changelog, broadcast.
    * Version conflict: if incoming version <= stored version, reject.
@@ -464,6 +621,14 @@ export class TeamTrackerRoom implements DurableObject {
     incomingIssueIdentity?: { issueNumber?: number; issueKey?: string },
     orgKeyFingerprint?: string,
   ): Promise<void> {
+    // Validate write is allowed (rotation lock + key epoch)
+    const writeError = this.validateWriteAllowed(orgKeyFingerprint);
+    if (writeError) {
+      log.warn('Write rejected for user', connState.auth.userId, ':', writeError);
+      this.sendError(ws, 'write_rejected', writeError);
+      return;
+    }
+
     const sql = this.state.storage.sql;
     const now = Date.now();
 
@@ -567,8 +732,17 @@ export class TeamTrackerRoom implements DurableObject {
   private async handleTrackerDelete(
     ws: WebSocket,
     connState: ConnectionState,
-    itemId: string
+    itemId: string,
+    orgKeyFingerprint?: string
   ): Promise<void> {
+    // Validate write is allowed (rotation lock + key epoch)
+    const writeError = this.validateWriteAllowed(orgKeyFingerprint);
+    if (writeError) {
+      log.warn('Delete rejected for user', connState.auth.userId, ':', writeError);
+      this.sendError(ws, 'write_rejected', writeError);
+      return;
+    }
+
     const sql = this.state.storage.sql;
     const now = Date.now();
 

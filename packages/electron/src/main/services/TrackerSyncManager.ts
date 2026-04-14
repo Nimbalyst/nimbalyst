@@ -21,7 +21,7 @@ import { database } from '../database/PGLiteDatabaseWorker';
 import { getSessionSyncConfig } from '../utils/store';
 import { getStytchUserId, isAuthenticated } from './StytchAuthService';
 import { findTeamForWorkspace, getOrgScopedJwt, autoWrapForNewMembers } from './TeamService';
-import { getOrgKey, getOrgKeyFingerprint, fetchAndUnwrapOrgKey, getOrCreateIdentityKeyPair, uploadIdentityKeyToOrg } from './OrgKeyService';
+import { getOrgKey, getOrgKeyFingerprint, clearOrgKey, fetchAndUnwrapOrgKey, getOrCreateIdentityKeyPair, uploadIdentityKeyToOrg } from './OrgKeyService';
 import { windows as windowMap, windowStates } from '../window/windowState';
 import { removeInlineTrackerItem } from '@nimbalyst/runtime/plugins/TrackerPlugin/documentHeader/frontmatterUtils';
 import type { TrackerSyncStatus, TrackerItemPayload } from '@nimbalyst/runtime/sync';
@@ -294,6 +294,36 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
       }
     }
 
+    // Verify local key fingerprint against server to detect stale keys
+    const localFingerprint = getOrgKeyFingerprint(orgId);
+    if (localFingerprint) {
+      try {
+        const fpJwt = await getOrgScopedJwt(orgId);
+        const { net } = await import('electron');
+        const httpUrl = serverUrl.replace('wss://', 'https://').replace('ws://', 'http://');
+        const fpResp = await net.fetch(`${httpUrl}/api/teams/${orgId}/org-key-fingerprint`, {
+          headers: { 'Authorization': `Bearer ${fpJwt}` },
+        });
+        if (fpResp.ok) {
+          const fpData = await fpResp.json() as { fingerprint: string | null };
+          if (fpData.fingerprint && fpData.fingerprint !== localFingerprint) {
+            logger.main.warn('[TrackerSyncManager] Stale key detected! Local:', localFingerprint.slice(0, 12), 'Server:', fpData.fingerprint.slice(0, 12));
+            clearOrgKey(orgId);
+            const freshJwt = await getOrgScopedJwt(orgId);
+            encryptionKey = await fetchAndUnwrapOrgKey(orgId, freshJwt);
+            if (!encryptionKey) {
+              logger.main.warn('[TrackerSyncManager] Key rotation occurred, unable to fetch new key');
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        logger.main.error('[TrackerSyncManager] Failed to verify key fingerprint:', err);
+        // Fail-closed: do not connect with a potentially stale key
+        return;
+      }
+    }
+
     // Fire-and-forget: wrap org key for any new team members missing envelopes
     autoWrapForNewMembers(orgId).catch(err => {
       logger.main.warn(`[TrackerSyncManager] Auto-wrap for new members of ${projectId} failed:`, err);
@@ -301,13 +331,17 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
 
     const orgKeyFingerprint = getOrgKeyFingerprint(orgId) ?? undefined;
 
+    // After stale key verification, encryptionKey is guaranteed non-null
+    // (we return early if re-fetch fails)
+    const validatedKey = encryptionKey!;
+
     let provider: import('@nimbalyst/runtime/sync').TrackerSyncProvider;
     provider = new TrackerSyncProvider({
       serverUrl,
       orgId,
       projectId,
       userId,
-      encryptionKey,
+      encryptionKey: validatedKey,
       orgKeyFingerprint,
 
       getJwt: async () => {
@@ -369,7 +403,7 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
 
     workspaceStates.set(workspacePath, {
       provider,
-      encryptionKey,
+      encryptionKey: validatedKey,
       projectId,
       status: 'connecting',
     });
@@ -715,6 +749,21 @@ export function registerTrackerSyncHandlers(): void {
   safeHandle('tracker-sync:disconnect', async (_event, payload?: { workspacePath?: string }) => {
     shutdownTrackerSync(payload?.workspacePath);
     return { success: true };
+  });
+
+  /**
+   * Restart tracker sync for a workspace with a fresh encryption key.
+   * Called after org key rotation so the tracker provider uses the new key.
+   */
+  safeHandle('tracker-sync:restart-for-workspace', async (_event, workspacePath: string) => {
+    try {
+      logger.main.info('[TrackerSyncManager] Restarting tracker sync after key rotation for:', workspacePath);
+      await reinitializeTrackerSync(workspacePath);
+      return { success: true };
+    } catch (error) {
+      logger.main.error('[TrackerSyncManager] restart-for-workspace failed:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
   });
 
   safeHandle('tracker-sync:upsert-item', async (_event, payload: { item: import('@nimbalyst/runtime').TrackerItem }) => {

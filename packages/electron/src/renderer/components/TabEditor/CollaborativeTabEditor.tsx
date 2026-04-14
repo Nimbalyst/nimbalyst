@@ -15,7 +15,7 @@
  *   gates the initial MarkdownEditor mount. After that, no more re-renders.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { MarkdownEditor } from '@nimbalyst/runtime';
 import { DocumentSyncProvider } from '@nimbalyst/runtime/sync';
@@ -23,12 +23,14 @@ import { CollabLexicalProvider } from '@nimbalyst/runtime/sync';
 import type { EditorHost, ExtensionStorage } from '@nimbalyst/runtime';
 import type { DocumentSyncStatus } from '@nimbalyst/runtime/sync';
 import type { CollabDocumentConfig } from '../../utils/collabDocumentOpener';
+import { resolveCollabConfigForUri } from '../../utils/collabDocumentOpener';
 import { store, editorDirtyAtom, makeEditorKey } from '@nimbalyst/runtime/store';
 import type { Doc } from 'yjs';
 import type { Provider } from '@lexical/yjs';
 import {
   collabAwarenessAtom,
   collabConnectionStatusAtom,
+  collabKeyRotationEpochAtom,
   hasCollabUnsyncedChanges,
   type RemoteUser,
 } from '../../store/atoms/collabEditor';
@@ -156,16 +158,39 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
   filePath,
   fileName,
   isActive,
-  collabConfig,
+  collabConfig: initialCollabConfig,
   onDirtyChange,
   onGetContentReady,
   onManualSaveReady,
 }) => {
+  const [activeConfig, setActiveConfig] = useState(initialCollabConfig);
   const syncProviderRef = useRef<DocumentSyncProvider | null>(null);
   const collabProviderRef = useRef<CollabLexicalProvider | null>(null);
   const isActiveRef = useRef(isActive);
   const cursorColor = useMemo(() => randomCursorColor(), []);
-  const assetService = useMemo(() => new CollabAssetService(collabConfig), [collabConfig]);
+  const assetService = useMemo(() => new CollabAssetService(activeConfig), [activeConfig]);
+  const keyRotationEpoch = useAtomValue(collabKeyRotationEpochAtom);
+
+  // Re-key: when the rotation epoch changes, re-fetch config with new encryption key
+  useEffect(() => {
+    if (keyRotationEpoch === 0) return; // Initial render, no rotation yet
+
+    console.log('[CollaborativeTabEditor] Key rotation detected (epoch:', keyRotationEpoch, '), re-fetching config...');
+
+    resolveCollabConfigForUri(
+      activeConfig.workspacePath,
+      filePath,
+      activeConfig.documentId,
+      activeConfig.title,
+    ).then((freshConfig) => {
+      if (freshConfig) {
+        console.log('[CollaborativeTabEditor] Got fresh config with new key, recreating providers');
+        setActiveConfig(freshConfig);
+      } else {
+        console.warn('[CollaborativeTabEditor] Failed to get fresh config after key rotation');
+      }
+    });
+  }, [keyRotationEpoch]); // eslint-disable-line react-hooks/exhaustive-deps
   // providerReady flips once from false->true. Using a ref + forceUpdate
   // avoids the render loop from useState. We only need one re-render to
   // mount MarkdownEditor, then never again.
@@ -188,16 +213,17 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
   }, [isActive]);
 
   useEffect(() => {
-    console.log('[CollaborativeTabEditor] Creating providers, initialContent:', !!collabConfig.initialContent);
+    console.log('[CollaborativeTabEditor] Creating providers, initialContent:', !!activeConfig.initialContent);
 
     const syncProvider = new DocumentSyncProvider({
-      serverUrl: collabConfig.serverUrl,
-      getJwt: collabConfig.getJwt,
-      orgId: collabConfig.orgId,
-      documentKey: collabConfig.documentKey,
-      userId: collabConfig.userId,
-      documentId: collabConfig.documentId,
-      createWebSocket: collabConfig.createWebSocket,
+      serverUrl: activeConfig.serverUrl,
+      getJwt: activeConfig.getJwt,
+      orgId: activeConfig.orgId,
+      documentKey: activeConfig.documentKey,
+      orgKeyFingerprint: activeConfig.orgKeyFingerprint,
+      userId: activeConfig.userId,
+      documentId: activeConfig.documentId,
+      createWebSocket: activeConfig.createWebSocket,
       onStatusChange: (status) => {
         console.log('[CollaborativeTabEditor] Status change:', status);
         // Write to Jotai atom -- only CollabStatusBar re-renders
@@ -208,12 +234,12 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
         // Forward to CollabLexicalProvider
         collabProviderRef.current?.handleStatusChange(status);
       },
-      initialPendingUpdateBase64: collabConfig.pendingUpdateBase64,
+      initialPendingUpdateBase64: activeConfig.pendingUpdateBase64,
       onPendingUpdateChange: async (pendingUpdateBase64) => {
         await window.electronAPI.documentSync.setPendingUpdate(
-          collabConfig.workspacePath,
-          collabConfig.orgId,
-          collabConfig.documentId,
+          activeConfig.workspacePath,
+          activeConfig.orgId,
+          activeConfig.documentId,
           pendingUpdateBase64,
         );
       },
@@ -257,7 +283,7 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
       store.set(collabConnectionStatusAtom(filePath), 'disconnected');
       store.set(collabAwarenessAtom(filePath), new Map());
     };
-  }, [collabConfig, filePath]);
+  }, [activeConfig, filePath]);
 
   // Build the provider factory for CollaborationPlugin
   // This function is called by CollaborationPlugin with a doc ID and yjsDocMap.
@@ -281,12 +307,12 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
   // re-renders never cascade through to Lexical/CollaborationPlugin.
   const collaborationMemoConfig = useMemo(() => ({
     providerFactory,
-    shouldBootstrap: !!collabConfig.initialContent,
-    initialContent: collabConfig.initialContent,
-    username: collabConfig.userName || collabConfig.userId,
+    shouldBootstrap: !!activeConfig.initialContent,
+    initialContent: activeConfig.initialContent,
+    username: activeConfig.userName || activeConfig.userId,
     cursorColor,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [providerFactory, collabConfig.initialContent, collabConfig.userName, collabConfig.userId, cursorColor]);
+  }), [providerFactory, activeConfig.initialContent, activeConfig.userName, activeConfig.userId, cursorColor]);
 
   const markdownConfig = useMemo(() => ({
     onUploadAsset: (file: File) => assetService.uploadFile(file),
@@ -324,7 +350,7 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
       // Content loading: return initial content if seeding, otherwise empty.
       // CollaborationPlugin hydrates from Y.Doc when shouldBootstrap is false.
       async loadContent(): Promise<string> {
-        return collabConfig.initialContent || '';
+        return activeConfig.initialContent || '';
       },
 
       async loadBinaryContent(): Promise<ArrayBuffer> {

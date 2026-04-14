@@ -10,6 +10,7 @@ import { atom } from 'jotai';
 import { store } from '@nimbalyst/runtime/store';
 import type { TeamSyncProvider as TeamSyncProviderType } from '@nimbalyst/runtime/sync';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
+import { collabKeyRotationEpochAtom } from './collabEditor';
 
 // ============================================================
 // Types
@@ -333,20 +334,48 @@ export async function initSharedDocuments(workspacePath: string, retryCount = 0)
       },
 
       onOrgKeyRotated: (fingerprint) => {
-        // The org encryption key was rotated by another admin.
-        // Notify the main process to invalidate the local key and re-fetch.
-        console.log('[collabDocuments] Org key rotated, new fingerprint:', fingerprint);
+        // The org encryption key was rotated. ALL providers holding the old
+        // key must be torn down and recreated with the new key.
+        // 1. Tell main process to fetch the new key from envelope
+        // 2. Destroy this TeamSyncProvider (holds old encryptionKey)
+        // 3. Reinitialize from scratch (will get new key from main process)
+        // 4. Tracker sync must also be restarted (separate IPC)
+        console.log('[collabDocuments] Org key rotated, new fingerprint:', fingerprint, '-- tearing down all providers');
         errorNotificationService.showInfo(
           'Team encryption key updated',
-          'The team encryption key was rotated by an admin. Fetching the updated key...',
+          'Reconnecting with the new key...',
           { duration: 5000 }
         );
+
         (window as any).electronAPI.invoke('team:handle-org-key-rotated', orgId, fingerprint)
-          .then((result: { success: boolean; keyRefreshed?: boolean; error?: string }) => {
+          .then(async (result: { success: boolean; keyRefreshed?: boolean; error?: string }) => {
             if (result?.success && result.keyRefreshed) {
+              // Key is refreshed in main process. Now tear down and recreate
+              // all providers so they use the new key.
+              console.log('[collabDocuments] Key refreshed, reinitializing all sync providers...');
+
+              // Destroy current TeamSyncProvider (holds old key)
+              destroyTeamSync();
+
+              // Reinitialize with new key from main process.
+              // Note: activeWorkspacePath was cleared by destroyTeamSync(),
+              // so we use the workspacePath captured in the closure.
+              await initSharedDocuments(workspacePath);
+
+              // Tell main process to restart tracker sync with new key
+              try {
+                (window as any).electronAPI.invoke('tracker-sync:restart-for-workspace', workspacePath);
+              } catch (trackerErr) {
+                console.error('[collabDocuments] Failed to restart tracker sync:', trackerErr);
+              }
+
+              // Bump the key rotation epoch so open CollaborativeTabEditor
+              // tabs re-fetch their encryption key and recreate providers
+              store.set(collabKeyRotationEpochAtom, (prev: number) => prev + 1);
+
               errorNotificationService.showInfo(
                 'Encryption key updated',
-                'Successfully fetched the new team encryption key. Sync resumed.',
+                'All sync providers reconnected with the new key.',
                 { duration: 5000 }
               );
             } else if (result?.success && !result.keyRefreshed) {

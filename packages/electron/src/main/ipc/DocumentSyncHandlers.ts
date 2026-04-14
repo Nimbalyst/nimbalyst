@@ -10,7 +10,7 @@ import { safeHandle } from '../utils/ipcRegistry';
 import { logger } from '../utils/logger';
 import { isAuthenticated, getStytchUserId, getUserEmail, getAuthState, getPersonalSessionJwt, refreshPersonalSession } from '../services/StytchAuthService';
 import { findTeamForWorkspace, getOrgScopedJwt } from '../services/TeamService';
-import { getOrgKey, getOrCreateIdentityKeyPair, uploadIdentityKeyToOrg, fetchAndUnwrapOrgKey } from '../services/OrgKeyService';
+import { getOrgKey, getOrgKeyFingerprint, getOrCreateIdentityKeyPair, uploadIdentityKeyToOrg, fetchAndUnwrapOrgKey, clearOrgKey } from '../services/OrgKeyService';
 import { getSessionSyncConfig, getWorkspaceState, updateWorkspaceState } from '../utils/store';
 import { getPersonalDocSyncConfig, isSyncEnabled } from '../services/SyncManager';
 import { getSyncId } from '../services/DocSyncService';
@@ -34,6 +34,11 @@ function getSyncWsUrl(): string {
   const isDev = process.env.NODE_ENV !== 'production';
   const env = isDev ? config?.environment : undefined;
   return env === 'development' ? DEVELOPMENT_SYNC_URL : PRODUCTION_SYNC_URL;
+}
+
+function getSyncHttpUrl(): string {
+  const wsUrl = getSyncWsUrl();
+  return wsUrl.replace('wss://', 'https://').replace('ws://', 'http://');
 }
 
 /** Build a human-readable display name from Stytch user data. Falls back to email, then userId. */
@@ -91,8 +96,37 @@ export function registerDocumentSyncHandlers(): void {
       }
     }
 
+    // Verify local key fingerprint against server to detect stale keys
+    const localFingerprint = getOrgKeyFingerprint(orgId);
+    if (localFingerprint) {
+      try {
+        const orgJwt = await getOrgScopedJwt(orgId);
+        const { net } = await import('electron');
+        const serverUrl = getSyncHttpUrl();
+        const fpResp = await net.fetch(`${serverUrl}/api/teams/${orgId}/org-key-fingerprint`, {
+          headers: { 'Authorization': `Bearer ${orgJwt}` },
+        });
+        if (fpResp.ok) {
+          const fpData = await fpResp.json() as { fingerprint: string | null };
+          if (fpData.fingerprint && fpData.fingerprint !== localFingerprint) {
+            logger.main.warn('[DocumentSyncHandlers] Stale key detected! Local:', localFingerprint.slice(0, 12), 'Server:', fpData.fingerprint.slice(0, 12));
+            // Clear stale key and re-fetch
+            clearOrgKey(orgId);
+            const freshOrgJwt = await getOrgScopedJwt(orgId);
+            encryptionKey = await fetchAndUnwrapOrgKey(orgId, freshOrgJwt);
+            if (!encryptionKey) {
+              return { success: false, error: 'Key rotation occurred. Unable to fetch new encryption key.' };
+            }
+          }
+        }
+      } catch (err) {
+        logger.main.error('[DocumentSyncHandlers] Failed to verify key fingerprint against server:', err);
+        return { success: false, error: 'Cannot verify encryption key epoch against server. Check your network connection and try again.' };
+      }
+    }
+
     // Export key as raw base64 for renderer to reconstruct
-    const rawBytes = await crypto.subtle.exportKey('raw', encryptionKey);
+    const rawBytes = await crypto.subtle.exportKey('raw', encryptionKey!);
     const orgKeyBase64 = Buffer.from(rawBytes).toString('base64');
 
     const serverUrl = getSyncWsUrl();
@@ -107,6 +141,8 @@ export function registerDocumentSyncHandlers(): void {
       userId,
     });
 
+    const orgKeyFp = getOrgKeyFingerprint(orgId) ?? undefined;
+
     return {
       success: true,
       config: {
@@ -114,6 +150,7 @@ export function registerDocumentSyncHandlers(): void {
         documentId: payload.documentId,
         title: payload.title || payload.documentId,
         orgKeyBase64,
+        orgKeyFingerprint: orgKeyFp,
         serverUrl,
         userId,
         userName: getUserDisplayName(userId),
@@ -121,6 +158,27 @@ export function registerDocumentSyncHandlers(): void {
         pendingUpdateBase64,
       },
     };
+  });
+
+  // Delete a DocumentRoom's data on the server (used to clear stale old-key data).
+  safeHandle('document-sync:delete-room', async (_event, orgId: string, documentId: string) => {
+    try {
+      const team = await findTeamForWorkspace(''); // orgId is passed directly
+      const orgJwt = await getOrgScopedJwt(orgId);
+      const httpUrl = getSyncHttpUrl();
+      const roomId = `org:${orgId}:doc:${documentId}`;
+      const { net } = await import('electron');
+      const resp = await net.fetch(`${httpUrl}/sync/${roomId}/delete`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${orgJwt}` },
+      });
+      if (!resp.ok) {
+        return { success: false, error: `HTTP ${resp.status}: ${await resp.text()}` };
+      }
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
   });
 
   safeHandle('document-sync:set-pending-update', async (_event, payload: {

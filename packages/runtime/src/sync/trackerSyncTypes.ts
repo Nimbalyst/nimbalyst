@@ -177,7 +177,7 @@ export interface TrackerSyncResult {
 export type TrackerClientMessage =
   | { type: 'trackerSync'; sinceSequence: number }
   | { type: 'trackerUpsert'; itemId: string; encryptedPayload: string; iv: string; issueNumber?: number; issueKey?: string; orgKeyFingerprint?: string }
-  | { type: 'trackerDelete'; itemId: string }
+  | { type: 'trackerDelete'; itemId: string; orgKeyFingerprint?: string }
   | { type: 'trackerBatchUpsert'; items: { itemId: string; encryptedPayload: string; iv: string; issueNumber?: number; issueKey?: string; orgKeyFingerprint?: string }[] }
   | { type: 'trackerSetConfig'; key: string; value: string };
 

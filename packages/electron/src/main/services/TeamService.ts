@@ -54,6 +54,7 @@ import {
   getOrgKeyFingerprint,
   clearOrgKey,
 } from './OrgKeyService';
+import { performKeyRotation, cleanupOrphanedDocuments, reEncryptTrackerFromLocal } from './KeyRotationService';
 
 // ============================================================================
 // Server URL Helper
@@ -609,51 +610,39 @@ async function inviteMember(orgId: string, email: string): Promise<void> {
 
 /**
  * Remove a member from a team. Requires explicit orgId.
- * Triggers key rotation: new org key, delete old envelopes, re-wrap for remaining.
+ *
+ * IMPORTANT: Rotation happens BEFORE member removal. If rotation fails,
+ * the member stays in the org (fail closed). This prevents the scenario
+ * where a member is removed but data is still encrypted with the old key
+ * that the removed member had access to.
  */
 async function removeMember(orgId: string, memberId: string): Promise<void> {
-  // Remove from Stytch + D1
+  const orgJwt = await getOrgScopedJwt(orgId);
+  const serverUrl = getCollabServerUrl();
+
+  // Step 1: Rotate key and re-encrypt all data BEFORE removing the member.
+  // If this fails, the member stays -- fail closed, not fail open.
+  // IMPORTANT: Exclude the member being removed from the key distribution list.
+  // Otherwise they receive the new key before deletion completes.
+  const { backupDir } = await performKeyRotation(
+    orgId,
+    `member-removal:${memberId}`,
+    orgJwt,
+    serverUrl,
+    async () => {
+      const { members } = await listMembers(orgId);
+      return { members: members.filter(m => m.memberId !== memberId) };
+    }
+  );
+
+  logger.main.info('[TeamService] Key rotation complete, backup:', backupDir);
+
+  // Step 2: Only remove the member after rotation succeeds.
+  // At this point all data is re-encrypted with the new key that
+  // the removed member never had access to.
   await fetchTeamApi(`/api/teams/${orgId}/members/${memberId}`, 'DELETE', undefined, orgId);
 
-  // Key rotation: generate new org key, re-wrap for remaining members
-  try {
-    const orgJwt = await getOrgScopedJwt(orgId);
-
-    // Delete all existing envelopes (old key)
-    await deleteAllEnvelopes(orgId, orgJwt);
-
-    // Generate new org encryption key
-    await generateAndStoreOrgKey(orgId);
-
-    // Post the new key's fingerprint to the server (triggers orgKeyRotated broadcast)
-    const newFingerprint = getOrgKeyFingerprint(orgId);
-    if (newFingerprint) {
-      try {
-        await fetchTeamApi(`/api/teams/${orgId}/org-key-fingerprint`, 'PUT', { fingerprint: newFingerprint }, orgId);
-        logger.main.info('[TeamService] Posted new org key fingerprint:', newFingerprint);
-      } catch (fpErr) {
-        logger.main.error('[TeamService] Failed to post org key fingerprint:', fpErr);
-      }
-    }
-
-    // Get remaining members and wrap new key for each
-    const { members } = await listMembers(orgId);
-    for (const member of members) {
-      if (member.status === 'pending') continue; // Skip pending invites
-      try {
-        const memberPubKey = await fetchMemberPublicKey(member.memberId, orgJwt);
-        const envelope = await wrapOrgKeyForMember(orgId, memberPubKey);
-        await uploadEnvelope(orgId, member.memberId, envelope, orgJwt);
-      } catch (wrapErr) {
-        // Member may not have uploaded their public key yet
-        logger.main.warn('[TeamService] Could not wrap key for member:', member.memberId, wrapErr);
-      }
-    }
-
-    logger.main.info('[TeamService] Key rotation complete after removing:', memberId);
-  } catch (err) {
-    logger.main.error('[TeamService] Key rotation failed after member removal:', err);
-  }
+  logger.main.info('[TeamService] Member removed after successful rotation:', memberId);
 }
 
 /**
@@ -1197,6 +1186,33 @@ export function registerTeamHandlers(): void {
         }
       }
       return { success: true, keyRefreshed: false };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  safeHandle('team:cleanup-orphaned-documents', async (_event, orgId: string) => {
+    try {
+      const orgJwt = await getOrgScopedJwt(orgId);
+      const serverUrl = getCollabServerUrl();
+      const result = await cleanupOrphanedDocuments(orgId, orgJwt, serverUrl);
+      return { success: true, ...result };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  safeHandle('team:recover-tracker-from-local', async (_event, orgId: string, workspacePath: string) => {
+    try {
+      const orgJwt = await getOrgScopedJwt(orgId);
+      const serverUrl = getCollabServerUrl();
+      const remote = await getNormalizedGitRemote(workspacePath);
+      if (!remote) {
+        return { success: false, error: 'No git remote found for workspace' };
+      }
+      const { database } = await import('../database/PGLiteDatabaseWorker');
+      const result = await reEncryptTrackerFromLocal(orgId, remote, orgJwt, serverUrl, workspacePath, database);
+      return { success: true, ...result };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }

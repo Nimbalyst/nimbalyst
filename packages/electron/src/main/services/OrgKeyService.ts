@@ -49,6 +49,7 @@ function getCollabServerUrl(): string {
 
 const IDENTITY_KEYPAIR_FILE = 'ecdh-identity-keypair.enc';
 const ORG_KEYS_FILE = 'org-encryption-keys.enc';
+const ORG_KEY_HISTORY_FILE = 'org-key-history.enc';
 const TRUST_VERIFICATIONS_FILE = 'trust-verifications.enc';
 
 // ============================================================================
@@ -63,6 +64,17 @@ interface OrgKeyEntry {
 
 let orgKeysCache: Map<string, OrgKeyEntry> = new Map(); // orgId -> key + fingerprint
 let orgKeysCacheLoaded = false;
+
+// Key history: archived keys from previous rotations (append-only, never pruned)
+interface ArchivedOrgKey {
+  rawKeyBase64: string;
+  fingerprint: string;
+  archivedAt: string;   // ISO timestamp
+  reason: string;       // e.g., 'member-removal:userId'
+}
+
+let keyHistoryCache: Map<string, ArchivedOrgKey[]> = new Map(); // orgId -> archived keys
+let keyHistoryCacheLoaded = false;
 
 // Trust verification state (local, per-device)
 interface TrustRecord {
@@ -237,6 +249,114 @@ function storeOrgKeyRaw(orgId: string, rawKeyBase64: string): void {
   saveOrgKeysToDisk();
 }
 
+// ============================================================================
+// Org Key History (Append-Only Archive of Rotated Keys)
+// ============================================================================
+
+function loadKeyHistoryFromDisk(): void {
+  if (keyHistoryCacheLoaded) return;
+  keyHistoryCacheLoaded = true;
+
+  const saved = loadEncrypted(ORG_KEY_HISTORY_FILE);
+  if (saved) {
+    try {
+      const entries: Array<[string, ArchivedOrgKey[]]> = JSON.parse(saved);
+      keyHistoryCache = new Map(entries);
+      const totalKeys = Array.from(keyHistoryCache.values()).reduce((sum, arr) => sum + arr.length, 0);
+      logger.main.info(`[OrgKeyService] Loaded key history: ${totalKeys} archived keys across ${keyHistoryCache.size} orgs`);
+    } catch {
+      keyHistoryCache = new Map();
+    }
+  }
+}
+
+function saveKeyHistoryToDisk(): void {
+  const entries = Array.from(keyHistoryCache.entries());
+  saveEncrypted(ORG_KEY_HISTORY_FILE, JSON.stringify(entries));
+}
+
+/**
+ * Archive the current org key before rotation. Must be called BEFORE
+ * generating a new key, so the old key is preserved in history.
+ * Returns the archived entry, or null if no key was cached for this org.
+ */
+export function archiveCurrentOrgKey(orgId: string, reason: string): ArchivedOrgKey | null {
+  loadOrgKeysFromDisk();
+  loadKeyHistoryFromDisk();
+
+  const current = orgKeysCache.get(orgId);
+  if (!current) {
+    logger.main.warn('[OrgKeyService] No current key to archive for:', orgId);
+    return null;
+  }
+
+  const archived: ArchivedOrgKey = {
+    rawKeyBase64: current.rawKeyBase64,
+    fingerprint: current.fingerprint,
+    archivedAt: new Date().toISOString(),
+    reason,
+  };
+
+  const history = keyHistoryCache.get(orgId) || [];
+  history.push(archived);
+  keyHistoryCache.set(orgId, history);
+  saveKeyHistoryToDisk();
+
+  logger.main.info('[OrgKeyService] Archived org key for:', orgId, 'fingerprint:', current.fingerprint, 'reason:', reason);
+  return archived;
+}
+
+/**
+ * Get the most recently archived key for an org (the one that was active
+ * right before the current key). Used for re-encryption during rotation.
+ */
+export async function getLatestArchivedOrgKey(orgId: string): Promise<{ key: CryptoKey; fingerprint: string } | null> {
+  loadKeyHistoryFromDisk();
+  const history = keyHistoryCache.get(orgId);
+  if (!history || history.length === 0) return null;
+
+  const latest = history[history.length - 1];
+  const keyBytes = base64ToUint8Array(latest.rawKeyBase64);
+  const key = await crypto.subtle.importKey(
+    'raw',
+    keyBytes,
+    { name: 'AES-GCM', length: 256 },
+    true,
+    ['encrypt', 'decrypt']
+  );
+  return { key, fingerprint: latest.fingerprint };
+}
+
+/**
+ * Get an archived key by fingerprint. Useful for decrypting data encrypted
+ * with a specific old key when multiple rotations have occurred.
+ */
+export async function getArchivedOrgKeyByFingerprint(orgId: string, fingerprint: string): Promise<CryptoKey | null> {
+  loadKeyHistoryFromDisk();
+  const history = keyHistoryCache.get(orgId);
+  if (!history) return null;
+
+  const entry = history.find(h => h.fingerprint === fingerprint);
+  if (!entry) return null;
+
+  const keyBytes = base64ToUint8Array(entry.rawKeyBase64);
+  return crypto.subtle.importKey(
+    'raw',
+    keyBytes,
+    { name: 'AES-GCM', length: 256 },
+    true,
+    ['encrypt', 'decrypt']
+  );
+}
+
+/**
+ * Get all archived keys for an org (for diagnostics / manual recovery).
+ */
+export function getArchivedOrgKeys(orgId: string): ArchivedOrgKey[] {
+  loadKeyHistoryFromDisk();
+  return keyHistoryCache.get(orgId) || [];
+}
+
 /**
  * Get an org encryption key as a CryptoKey, or null if not stored.
  */
@@ -270,6 +390,31 @@ export function getOrgKeyFingerprint(orgId: string): string | null {
   loadOrgKeysFromDisk();
   const entry = orgKeysCache.get(orgId);
   return entry?.fingerprint ?? null;
+}
+
+/**
+ * Restore the most recently archived key as the current key.
+ * Used to roll back after a failed key rotation. Removes the archive entry
+ * to prevent confusion about which key is "current".
+ */
+export function restoreArchivedOrgKey(orgId: string): boolean {
+  loadOrgKeysFromDisk();
+  loadKeyHistoryFromDisk();
+
+  const history = keyHistoryCache.get(orgId);
+  if (!history || history.length === 0) {
+    logger.main.warn('[OrgKeyService] No archived keys to restore for:', orgId);
+    return false;
+  }
+
+  const latest = history[history.length - 1];
+  // Restore as current key
+  storeOrgKeyRaw(orgId, latest.rawKeyBase64);
+  // Remove from archive (it's now the current key again)
+  history.pop();
+  saveKeyHistoryToDisk();
+  logger.main.info('[OrgKeyService] Restored archived key as current:', latest.fingerprint, 'for:', orgId);
+  return true;
 }
 
 /**

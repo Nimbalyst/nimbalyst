@@ -582,6 +582,12 @@ export class TeamRoom implements DurableObject {
         sql.exec(`DELETE FROM identity_keys WHERE user_id = ?`, userId);
 
         this.broadcast({ type: 'memberRemoved', userId });
+
+        // Propagate connection closure to all document and tracker rooms.
+        // This prevents the removed member from using existing WebSocket
+        // connections (which may remain valid for up to 1 week with cached JWTs).
+        await this.closeUserConnectionsOnRooms(userId);
+
         return this.jsonOk({ success: true });
       }
 
@@ -838,6 +844,22 @@ export class TeamRoom implements DurableObject {
         });
       }
 
+      // GET /internal/list-document-ids
+      // Returns { documentIds: string[], orgId: string, gitRemoteHash: string | null }
+      if (path.endsWith('/internal/list-document-ids')) {
+        const docs = sql.exec<{ document_id: string }>(
+          `SELECT document_id FROM document_index`
+        ).toArray();
+        const meta = sql.exec<{ org_id: string; git_remote_hash: string | null }>(
+          `SELECT org_id, git_remote_hash FROM team_metadata LIMIT 1`
+        ).toArray()[0];
+        return this.jsonOk({
+          documentIds: docs.map(d => d.document_id),
+          orgId: meta?.org_id ?? null,
+          gitRemoteHash: meta?.git_remote_hash ?? null,
+        });
+      }
+
       return this.jsonError('Unknown internal query endpoint', 404);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -925,6 +947,64 @@ export class TeamRoom implements DurableObject {
     if (this.connections.size === 0) {
       await this.scheduleExpiryAlarm();
     }
+  }
+
+  // ==========================================================================
+  // Cross-DO connection closure (member removal)
+  // ==========================================================================
+
+  /**
+   * Close a removed user's connections on all document and tracker rooms
+   * owned by this org. This prevents the removed member from continuing
+   * to read/write via existing WebSocket connections.
+   */
+  private async closeUserConnectionsOnRooms(userId: string): Promise<void> {
+    const sql = this.state.storage.sql;
+
+    // Get org metadata for room ID construction
+    const meta = sql.exec<{ org_id: string; git_remote_hash: string | null }>(
+      `SELECT org_id, git_remote_hash FROM team_metadata LIMIT 1`
+    ).toArray()[0];
+    if (!meta) return;
+
+    const orgId = meta.org_id;
+    const closeBody = JSON.stringify({ userId });
+    const headers = { 'Content-Type': 'application/json' };
+
+    // Close connections on all document rooms
+    const docs = sql.exec<{ document_id: string }>(
+      `SELECT document_id FROM document_index`
+    ).toArray();
+
+    const promises: Promise<void>[] = [];
+
+    for (const doc of docs) {
+      const roomId = `org:${orgId}:doc:${doc.document_id}`;
+      const doId = this.env.DOCUMENT_ROOM.idFromName(roomId);
+      const stub = this.env.DOCUMENT_ROOM.get(doId);
+      const url = `http://internal/sync/${roomId}/internal/close-user-connections`;
+      promises.push(
+        stub.fetch(new Request(url, { method: 'POST', headers, body: closeBody }))
+          .then(() => {})
+          .catch(err => log.warn('Failed to close doc connections for', doc.document_id, ':', err))
+      );
+    }
+
+    // Close connections on the tracker room (project ID = git remote hash)
+    if (meta.git_remote_hash) {
+      const roomId = `org:${orgId}:tracker:${meta.git_remote_hash}`;
+      const doId = this.env.TRACKER_ROOM.idFromName(roomId);
+      const stub = this.env.TRACKER_ROOM.get(doId);
+      const url = `http://internal/sync/${roomId}/internal/close-user-connections`;
+      promises.push(
+        stub.fetch(new Request(url, { method: 'POST', headers, body: closeBody }))
+          .then(() => {})
+          .catch(err => log.warn('Failed to close tracker connections:', err))
+      );
+    }
+
+    await Promise.allSettled(promises);
+    log.info(`Propagated connection closure for user ${userId} to ${docs.length} doc room(s) + tracker room`);
   }
 
   // ==========================================================================

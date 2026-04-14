@@ -822,6 +822,7 @@ export class DocumentSyncProvider {
         encryptedUpdate: encrypted,
         iv,
         clientUpdateId,
+        orgKeyFingerprint: this.config.orgKeyFingerprint,
       });
       this.scheduleReplayAckTimeout(clientUpdateId);
     } catch (err) {

@@ -33,6 +33,8 @@ export interface CollabDocumentConfig {
   initialContent?: string;
   /** Persisted local updates that still need server acknowledgement. */
   pendingUpdateBase64?: string;
+  /** Org key fingerprint for key epoch enforcement on document writes. */
+  orgKeyFingerprint?: string;
   /**
    * Factory for creating WebSocket connections.
    * When running in Electron, this proxies WebSocket connections through
@@ -317,7 +319,7 @@ export async function resolveCollabConfigForUri(
       return null;
     }
 
-    const { orgId, title: resolvedTitle, orgKeyBase64, serverUrl, userId, userName, userEmail, pendingUpdateBase64 } = result.config;
+    const { orgId, title: resolvedTitle, orgKeyBase64, orgKeyFingerprint, serverUrl, userId, userName, userEmail, pendingUpdateBase64 } = result.config;
     const documentKey = await importOrgKeyFromBase64(orgKeyBase64);
     const hasWsProxy = !!window.electronAPI?.documentSync?.wsConnect;
 
@@ -327,6 +329,7 @@ export async function resolveCollabConfigForUri(
       documentId,
       title: resolvedTitle,
       documentKey,
+      orgKeyFingerprint,
       serverUrl,
       userId,
       userName,

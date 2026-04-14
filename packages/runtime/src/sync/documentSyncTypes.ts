@@ -29,6 +29,10 @@ export interface DocumentSyncConfig {
   /** Document ID (used to construct room ID) */
   documentId: string;
 
+  /** Org key fingerprint for key epoch enforcement. If provided, the server
+   *  rejects writes with a stale fingerprint after key rotation. */
+  orgKeyFingerprint?: string;
+
   /** Called when a remote Yjs update is applied to the Y.Doc */
   onRemoteUpdate?: (origin: string) => void;
 
@@ -163,8 +167,8 @@ export interface AwarenessState {
 /** Client -> Server messages */
 export type DocClientMessage =
   | { type: 'docSyncRequest'; sinceSeq: number }
-  | { type: 'docUpdate'; encryptedUpdate: string; iv: string; clientUpdateId?: string }
-  | { type: 'docCompact'; encryptedState: string; iv: string; replacesUpTo: number }
+  | { type: 'docUpdate'; encryptedUpdate: string; iv: string; clientUpdateId?: string; orgKeyFingerprint?: string }
+  | { type: 'docCompact'; encryptedState: string; iv: string; replacesUpTo: number; orgKeyFingerprint?: string }
   | { type: 'docAwareness'; encryptedState: string; iv: string }
   | { type: 'addKeyEnvelope'; targetUserId: string; wrappedKey: string; iv: string; senderPublicKey: string }
   | { type: 'requestKeyEnvelope' };
