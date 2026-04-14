@@ -36,7 +36,7 @@ import { SoundNotificationService } from '../SoundNotificationService';
 import { notificationService } from '../NotificationService';
 import { TrayManager } from '../../tray/TrayManager';
 import { logger } from '../../utils/logger';
-import { windowStates, findWindowByWorkspace, getWindowId } from '../../window/WindowManager';
+import { windowStates, findWindowByWorkspace, getWindowId, createWindow } from '../../window/WindowManager';
 import { sessionFileTracker } from '../SessionFileTracker';
 import { extractFilePath } from './tools/extractFilePath';
 import { toolCallMatcher, unwrapShellCommand } from '../ToolCallMatcher';
@@ -1277,7 +1277,22 @@ export class AIService {
                 // Only notify the window that owns this session's workspace
                 // This prevents duplicate execution when multiple windows are open
                 if (session.workspacePath) {
-                  const targetWindow = findWindowByWorkspace(session.workspacePath);
+                  let targetWindow = findWindowByWorkspace(session.workspacePath);
+
+                  // If no window is open for this workspace, open it automatically
+                  // so mobile prompts don't silently fail
+                  if ((!targetWindow || targetWindow.isDestroyed()) && fs.existsSync(session.workspacePath)) {
+                    logger.main.info('[AIService] Opening workspace for mobile queued prompt:', session.workspacePath);
+                    const newWindow = createWindow(false, true, session.workspacePath);
+
+                    // Wait for the window to finish loading before processing the prompt
+                    await new Promise<void>((resolve) => {
+                      newWindow.webContents.once('did-finish-load', () => resolve());
+                    });
+
+                    targetWindow = newWindow;
+                  }
+
                   if (targetWindow && !targetWindow.isDestroyed()) {
                     // logger.main.info('[AIService] Notifying window to process queue for workspace:', session.workspacePath);
                     targetWindow.webContents.send('ai:queuedPromptsReceived', {
@@ -1291,7 +1306,7 @@ export class AIService {
                     // logger.main.info('[AIService] Triggering queue processing for mobile prompt');
                     this.processQueuedPrompt(sessionId, session.workspacePath, targetWindow);
                   } else {
-                    logger.main.warn('[AIService] No window found for workspace:', session.workspacePath);
+                    logger.main.warn('[AIService] No window found and workspace path does not exist:', session.workspacePath);
                   }
                 } else {
                   // Sessions MUST have a workspacePath - this indicates a data integrity issue
@@ -1384,17 +1399,31 @@ export class AIService {
               }
             }
 
-            // FAIL if no matching window found - do NOT fall back to windows[0]
+            // If no matching window found, try to open the workspace automatically
             if (!targetWindow || !workspacePath) {
-              logger.main.error('[AIService] No window found for projectId:', request.projectId);
-              if (syncProvider.sendCreateSessionResponse) {
-                syncProvider.sendCreateSessionResponse({
-                  requestId: request.requestId,
-                  success: false,
-                  error: `No open window found for project: ${request.projectId}`
+              // request.projectId should be a workspace path - check if it exists on disk
+              if (fs.existsSync(request.projectId)) {
+                logger.main.info('[AIService] Opening workspace for mobile session creation:', request.projectId);
+                const newWindow = createWindow(false, true, request.projectId);
+
+                // Wait for the window to finish loading
+                await new Promise<void>((resolve) => {
+                  newWindow.webContents.once('did-finish-load', () => resolve());
                 });
+
+                targetWindow = newWindow;
+                workspacePath = request.projectId;
+              } else {
+                logger.main.error('[AIService] No window found and workspace path does not exist for projectId:', request.projectId);
+                if (syncProvider.sendCreateSessionResponse) {
+                  syncProvider.sendCreateSessionResponse({
+                    requestId: request.requestId,
+                    success: false,
+                    error: `Workspace not found on disk: ${request.projectId}`
+                  });
+                }
+                return;
               }
-              return;
             }
 
             // Create the session using the SessionManager

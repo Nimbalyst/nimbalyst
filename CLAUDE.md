@@ -276,6 +276,30 @@ tracker_create({
 
 **Before making a similar decision**, search existing decisions with `tracker_list({ type: "decision", search: "{topic}" })`. Follow prior decisions unless new information invalidates the reasoning -- in which case, log a new decision that supersedes the old one and reference it.
 
+## Bug Tracking
+
+When fixing a bug, **always ensure a tracker bug item exists** before starting the fix. If the user hasn't already pointed you at an existing tracker item, create one immediately using `tracker_create`.
+
+**Workflow:**
+1. **Check for existing bug**: `tracker_list({ type: "bug", search: "{topic}" })` -- if one exists, link to it with `tracker_link_session`
+2. **Create if missing**: If no tracker item exists, create one before writing any fix code
+3. **Keep it updated**: Update the tracker item's status as you progress (`to-do` -> `in-progress` -> `in-review`)
+4. **Link the session**: Always call `tracker_link_session` so the bug and session are cross-referenced
+
+**How to create:**
+
+```
+tracker_create({
+  type: "bug",
+  title: "{concise description of the bug}",
+  priority: "medium",  // or "high"/"critical" based on severity
+  labels: ["{area}"],  // e.g., "ios", "electron", "sync", "ui"
+  description: `## Symptoms\n{what the user sees}\n\n## Expected behavior\n{what should happen}\n\n## Root cause\n{fill in once diagnosed}\n\n## Fix\n{fill in once implemented}`
+})
+```
+
+**As the fix progresses**, update the description with root cause and fix details using `tracker_update`. This creates a durable record of what was wrong and how it was fixed.
+
 ## General Development Guidelines
 
 - **Never use emojis** - Not in commits, code, or documentation unless explicitly requested
