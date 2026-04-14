@@ -930,6 +930,11 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     setLastSelectedId(null);
   }, []);
 
+  // Ref holding the current visual order of session IDs for shift-click range selection.
+  // Updated from flatVirtuosoItems (defined later) so it always matches what the user sees.
+  // Using a ref lets handleSessionClick read current values without being in its dependency array.
+  const visualOrderRef = useRef<string[]>([]);
+
   // Handle session click with multi-select support
   const handleSessionClick = useCallback((sessionId: string, e: React.MouseEvent) => {
     const isMetaKey = e.metaKey || e.ctrlKey;
@@ -957,20 +962,14 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       // Use lastSelectedId, or fall back to activeSessionId as the anchor
       const anchorId = lastSelectedId || activeSessionId;
       if (anchorId) {
-        // Get visual order from grouped items (flattened) - only include regular sessions, not worktree sessions
-        const visualOrderIds = groupKeys.flatMap(key =>
-          groupedItems[key]
-            .filter(item => item.type === 'session')
-            .map(item => (item as { type: 'session'; session: SessionItem }).session.id)
-        );
-
-        const anchorIndex = visualOrderIds.indexOf(anchorId);
-        const currentIndex = visualOrderIds.indexOf(sessionId);
+        const ids = visualOrderRef.current;
+        const anchorIndex = ids.indexOf(anchorId);
+        const currentIndex = ids.indexOf(sessionId);
 
         if (anchorIndex !== -1 && currentIndex !== -1) {
           const start = Math.min(anchorIndex, currentIndex);
           const end = Math.max(anchorIndex, currentIndex);
-          const rangeIds = visualOrderIds.slice(start, end + 1);
+          const rangeIds = ids.slice(start, end + 1);
 
           setSelectedSessionIds(new Set(rangeIds));
           setLastSelectedId(sessionId);
@@ -981,11 +980,16 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         setLastSelectedId(sessionId);
       }
     } else {
-      // Regular click: clear selection and select session
-      clearSelection();
+      // Regular click: clear multi-selection and navigate to session.
+      // Clear selection sets but then re-set lastSelectedId so subsequent
+      // shift-click ranges start from HERE, not from activeSessionId
+      // (which may be far away in the list).
+      setSelectedSessionIds(new Set());
+      setSelectedGroupIds(new Set());
+      setLastSelectedId(sessionId);
       onSessionSelect(sessionId);
     }
-  }, [sessions, lastSelectedId, activeSessionId, sortBy, clearSelection, onSessionSelect]);
+  }, [lastSelectedId, activeSessionId, clearSelection, onSessionSelect]);
 
   // Determine the group key that the currently active session belongs to.
   // Used to auto-include the "focused" group when starting multi-select from empty.
@@ -2197,6 +2201,15 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     return flat;
   }, [groupKeys, groupedItems, collapsedGroups]);
 
+  // Keep visual order ref in sync with the flattened list for shift-click range selection
+  visualOrderRef.current = useMemo(() => {
+    return flatVirtuosoItems
+      .filter((entry): entry is { kind: 'item'; groupKey: string; item: UnifiedListItem } =>
+        entry.kind === 'item' && entry.item.type === 'session'
+      )
+      .map(entry => (entry.item as { type: 'session'; session: SessionItem }).session.id);
+  }, [flatVirtuosoItems]);
+
   // Ref for Virtuoso to support scroll-to-active
   const virtuosoRef = useRef<VirtuosoHandle>(null);
 
@@ -3353,12 +3366,15 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                     isArchived={session.isArchived}
                     isPinned={session.isPinned}
                     isSelected={selectedSessionIds.has(session.id)}
+                    selectedCount={selectedSessionIds.has(session.id) ? selectedSessionIds.size : 1}
                     sortBy={sortBy}
                     onClick={(e) => handleSessionClick(session.id, e)}
                     onDelete={onSessionDelete ? () => handleDeleteSession(session.id) : undefined}
-                    onArchive={item.isWorktreeSession && session.worktreeId
-                      ? () => handleArchiveWorktree(session.worktreeId!)
-                      : () => handleArchiveSession(session.id)}
+                    onArchive={selectedSessionIds.size > 1 && selectedSessionIds.has(session.id)
+                      ? handleBulkArchive
+                      : item.isWorktreeSession && session.worktreeId
+                        ? () => handleArchiveWorktree(session.worktreeId!)
+                        : () => handleArchiveSession(session.id)}
                     onUnarchive={() => handleUnarchiveSession(session.id)}
                     onRename={onSessionRename ? (newName: string) => onSessionRename(session.id, newName) : undefined}
                     onPinToggle={(isPinned) => handleSessionPinToggle(session.id, isPinned)}

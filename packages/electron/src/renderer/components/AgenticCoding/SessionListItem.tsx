@@ -77,6 +77,7 @@ interface SessionListItemProps {
   isArchived?: boolean; // Whether session is archived
   isPinned?: boolean; // Whether session is pinned to the top
   isSelected?: boolean; // Whether session is selected for bulk actions
+  selectedCount?: number; // Number of sessions currently selected (for context menu labels)
   sortBy?: 'updated' | 'created'; // Which timestamp to display based on sort order
   onClick: (e: React.MouseEvent) => void;
   onDelete?: () => void;
@@ -111,6 +112,7 @@ export const SessionListItem = memo<SessionListItemProps>(({
   isArchived = false,
   isPinned = false,
   isSelected = false,
+  selectedCount = 1,
   sortBy = 'updated',
   onClick,
   onDelete,
@@ -520,6 +522,7 @@ export const SessionListItem = memo<SessionListItemProps>(({
           onArchive={onArchive}
           onUnarchive={onUnarchive}
           onDelete={onDelete}
+          selectedCount={selectedCount}
         />
       )}
     </div>
@@ -535,6 +538,7 @@ export const SessionListItem = memo<SessionListItemProps>(({
     prev.isArchived === next.isArchived &&
     prev.isPinned === next.isPinned &&
     prev.isSelected === next.isSelected &&
+    prev.selectedCount === next.selectedCount &&
     prev.sortBy === next.sortBy &&
     prev.provider === next.provider &&
     prev.model === next.model &&
