@@ -3,7 +3,7 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import type { TrackerIdentity } from '@nimbalyst/runtime';
 import type { TrackerRecord } from '@nimbalyst/runtime/core/TrackerRecord';
-import { getRecordTitle, getRecordPriority, getFieldByRole, isMyRecord } from '@nimbalyst/runtime/plugins/TrackerPlugin/trackerRecordAccessors';
+import { getRecordTitle, getRecordPriority, getRecordStatus, getRecordFieldStr, getFieldByRole, isMyRecord } from '@nimbalyst/runtime/plugins/TrackerPlugin/trackerRecordAccessors';
 import {
   TrackerTable,
   SortColumn as TrackerSortColumn,
@@ -139,24 +139,54 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
         const trackerItem = itemsMap.get(trackerItemId);
 
         if (trackerItem?.system?.documentPath) {
-          // File-backed item: link via file path and pre-fill draft with @file reference
+          // File-backed item: link via file path and pre-fill draft with item context
           await window.electronAPI.invoke('tracker:link-session', {
             trackerId: `file:${trackerItem.system.documentPath}`,
             sessionId: result.id,
           });
-          // Pre-fill draft input with file reference so the agent can read it
+          // Build a context-rich prompt with the specific item's details
+          const title = getRecordTitle(trackerItem);
+          const status = getRecordStatus(trackerItem);
+          const priority = getRecordPriority(trackerItem);
+          const description = getRecordFieldStr(trackerItem, 'description');
+          const itemId = trackerItem.issueKey || trackerItemId;
+          const lines: string[] = [];
+          lines.push(`implement tracker item ${itemId}: ${title}`);
+          const meta: string[] = [];
+          if (trackerItem.primaryType) meta.push(`type: ${trackerItem.primaryType}`);
+          if (status) meta.push(`status: ${status}`);
+          if (priority) meta.push(`priority: ${priority}`);
+          if (meta.length > 0) lines.push(meta.join(', '));
+          if (description) lines.push(`\n${description}`);
+          lines.push(`\nSource: @${trackerItem.system.documentPath}`);
+          lines.push(`\nUpdate this tracker item's status when done using tracker_update with id "${itemId}".`);
           await window.electronAPI.invoke('ai:saveDraftInput', result.id,
-            `implement @${trackerItem.system.documentPath}`, workspacePath);
+            lines.join('\n'), workspacePath);
         } else {
           // Native DB item: link by ID
           await window.electronAPI.invoke('tracker:link-session', {
             trackerId: trackerItemId,
             sessionId: result.id,
           });
-          // Pre-fill draft with item title
+          // Pre-fill draft with item context
           const title = trackerItem ? getRecordTitle(trackerItem) : trackerItemId;
+          const itemId = trackerItem?.issueKey || trackerItemId;
+          const lines: string[] = [];
+          lines.push(`implement tracker item ${itemId}: ${title}`);
+          if (trackerItem) {
+            const status = getRecordStatus(trackerItem);
+            const priority = getRecordPriority(trackerItem);
+            const description = getRecordFieldStr(trackerItem, 'description');
+            const meta: string[] = [];
+            if (trackerItem.primaryType) meta.push(`type: ${trackerItem.primaryType}`);
+            if (status) meta.push(`status: ${status}`);
+            if (priority) meta.push(`priority: ${priority}`);
+            if (meta.length > 0) lines.push(meta.join(', '));
+            if (description) lines.push(`\n${description}`);
+          }
+          lines.push(`\nUpdate this tracker item's status when done using tracker_update with id "${itemId}".`);
           await window.electronAPI.invoke('ai:saveDraftInput', result.id,
-            `implement tracker item: ${title}`, workspacePath);
+            lines.join('\n'), workspacePath);
         }
 
         // Refresh session list to pick up the new session, then navigate
