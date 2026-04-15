@@ -14,6 +14,20 @@ interface WatcherEntry {
   git: SimpleGit;
 }
 
+/**
+ * Payload emitted when a new commit is detected on the current branch.
+ * Available to both main-process subscribers (via onCommitDetected) and
+ * renderer windows (via IPC 'git:commit-detected').
+ */
+export interface CommitDetectedEvent {
+  workspacePath: string;
+  commitHash: string;
+  commitMessage: string;
+  committedFiles: string[];
+}
+
+export type CommitDetectedListener = (event: CommitDetectedEvent) => void | Promise<void>;
+
 interface GitDirInfo {
   /** The git directory for this workspace (worktree-specific for worktrees) */
   gitDir: string;
@@ -90,6 +104,25 @@ export class GitRefWatcher {
   // Debounce index changes to avoid rapid fire during staging operations
   private indexDebounceTimers = new Map<string, NodeJS.Timeout>();
   private readonly INDEX_DEBOUNCE_MS = 100;
+
+  // Main-process commit event listeners
+  private commitListeners = new Set<CommitDetectedListener>();
+
+  /**
+   * Subscribe to commit events from the main process.
+   * Use this instead of IPC when you need to react to commits
+   * in a main-process service (e.g., CommitTrackerLinker).
+   */
+  onCommitDetected(listener: CommitDetectedListener): void {
+    this.commitListeners.add(listener);
+  }
+
+  /**
+   * Unsubscribe from commit events.
+   */
+  offCommitDetected(listener: CommitDetectedListener): void {
+    this.commitListeners.delete(listener);
+  }
 
   /**
    * Start watching a workspace for git state changes
@@ -299,13 +332,25 @@ export class GitRefWatcher {
       // Clear git status cache so next query gets fresh data
       clearGitStatusCache(workspacePath);
 
-      // Emit events to update UI
-      this.emitToAllWindows('git:commit-detected', {
+      // Notify main-process listeners (e.g., CommitTrackerLinker)
+      const commitEvent: CommitDetectedEvent = {
         workspacePath,
         commitHash: newCommitHash,
         commitMessage: log.latest.message,
         committedFiles,
-      });
+      };
+      for (const listener of this.commitListeners) {
+        try {
+          Promise.resolve(listener(commitEvent)).catch((err) => {
+            logger.main.error('[GitRefWatcher] Commit listener error:', err);
+          });
+        } catch (err) {
+          logger.main.error('[GitRefWatcher] Commit listener error:', err);
+        }
+      }
+
+      // Emit events to renderer windows for UI updates
+      this.emitToAllWindows('git:commit-detected', commitEvent);
 
       this.emitToAllWindows('git:status-changed', {
         workspacePath,
