@@ -90,27 +90,23 @@ async function uploadTrackerRows(
       linkedSessions: data.linkedSessions,
       linkedCommitSha: data.linkedCommitSha,
       documentId: data.documentId,
-      // Collect extra JSONB data fields as customFields for the sync payload
-      customFields: (() => {
-        const known = new Set([
-          'title', 'description', 'status', 'priority', 'owner', 'tags',
-          'created', 'updated', 'dueDate', 'authorIdentity', 'lastModifiedBy',
-          'createdByAgent', 'assigneeEmail', 'reporterEmail', 'assigneeId',
-          'reporterId', 'labels', 'linkedSessions', 'linkedCommitSha', 'documentId',
-        ]);
-        const extra: Record<string, any> = {};
-        if (data) {
-          for (const [k, v] of Object.entries(data)) {
-            if (!known.has(k) && v !== undefined) extra[k] = v;
-          }
-        }
-        // Also merge any legacy nested customFields
-        if (data.customFields && typeof data.customFields === 'object') {
-          Object.assign(extra, data.customFields);
-        }
-        return Object.keys(extra).length > 0 ? extra : undefined;
-      })(),
+      content: row.content != null ? row.content : undefined,
     };
+    // Pass through all extra JSONB data fields (activity, comments, kanbanSortOrder, etc.)
+    // as customFields so they survive the TrackerItem -> TrackerRecord -> Payload conversion.
+    // Uses the item object's own keys as the exclusion set -- no hardcoded list.
+    const itemKeys = new Set(Object.keys(item));
+    const extra: Record<string, any> = {};
+    if (data) {
+      for (const [k, v] of Object.entries(data)) {
+        if (!itemKeys.has(k) && v !== undefined) extra[k] = v;
+      }
+    }
+    // Also merge any legacy nested customFields
+    if (data.customFields && typeof data.customFields === 'object') {
+      Object.assign(extra, data.customFields);
+    }
+    if (Object.keys(extra).length > 0) (item as any).customFields = extra;
     payloads.push(trackerItemToPayload(item as any, userId));
   }
 
@@ -534,9 +530,42 @@ async function hydrateTrackerItem(
       if (existingData?.kanbanSortOrder && !data.kanbanSortOrder) {
         data.kanbanSortOrder = existingData.kanbanSortOrder;
       }
+
+      // Merge comments (union by ID, keep newer version per comment)
+      const incomingComments = payload.comments ?? [];
+      const localComments = existingData?.comments ?? [];
+      if (incomingComments.length || localComments.length) {
+        const commentMap = new Map<string, any>();
+        for (const c of localComments) commentMap.set(c.id, c);
+        for (const c of incomingComments) {
+          const local = commentMap.get(c.id);
+          if (!local || (c.updatedAt ?? c.createdAt) >= (local.updatedAt ?? local.createdAt)) {
+            commentMap.set(c.id, c);
+          }
+        }
+        data.comments = Array.from(commentMap.values()).sort((a: any, b: any) => a.createdAt - b.createdAt);
+      }
+
+      // Merge activity (union by ID, bounded to 100)
+      const incomingActivity = payload.activity ?? [];
+      const localActivity = existingData?.activity ?? [];
+      if (incomingActivity.length || localActivity.length) {
+        const activityMap = new Map<string, any>();
+        for (const a of localActivity) activityMap.set(a.id, a);
+        for (const a of incomingActivity) activityMap.set(a.id, a);
+        data.activity = Array.from(activityMap.values())
+          .sort((a: any, b: any) => a.timestamp - b.timestamp)
+          .slice(-100);
+      }
+    } else {
+      // No existing row -- use incoming data directly
+      if (payload.comments?.length) data.comments = payload.comments;
+      if (payload.activity?.length) data.activity = payload.activity;
     }
   } catch (_e) {
-    // Non-fatal: item may not exist yet
+    // Non-fatal: item may not exist yet -- use incoming data directly
+    if (payload.comments?.length) data.comments = payload.comments;
+    if (payload.activity?.length) data.activity = payload.activity;
   }
 
   const isArchived = item.archived === true;
@@ -547,16 +576,21 @@ async function hydrateTrackerItem(
   const serverCreated = payload.serverCreatedAt ? new Date(payload.serverCreatedAt) : null;
   const serverUpdated = payload.serverUpdatedAt ? new Date(payload.serverUpdatedAt) : null;
 
+  // Content comes from the payload (Lexical editor state), stored in a separate SQL column
+  const contentJson = payload.content != null ? JSON.stringify(payload.content) : null;
+
   await database.query(
     `INSERT INTO tracker_items (
-      id, issue_number, issue_key, type, data, workspace, document_path, line_number, created, updated, last_indexed, sync_status, archived, archived_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, COALESCE($11, NOW()), COALESCE($12, NOW()), $8, 'synced', $9, $10)
+      id, issue_number, issue_key, type, data, workspace, document_path, line_number, created, updated, last_indexed, sync_status, archived, archived_at, content, source
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, COALESCE($11, NOW()), COALESCE($12, NOW()), $8, 'synced', $9, $10, $13, 'native')
     ON CONFLICT (id) DO UPDATE SET
       issue_number = COALESCE($2, tracker_items.issue_number),
       issue_key = COALESCE($3, tracker_items.issue_key),
       type = $4, data = $5, last_indexed = $8, sync_status = 'synced',
       archived = CASE WHEN $9 = TRUE THEN TRUE ELSE tracker_items.archived END,
-      archived_at = CASE WHEN $9 = TRUE THEN $10 ELSE tracker_items.archived_at END`,
+      archived_at = CASE WHEN $9 = TRUE THEN $10 ELSE tracker_items.archived_at END,
+      content = COALESCE($13, tracker_items.content),
+      source = 'native'`,
     [
       item.id,
       item.issueNumber ?? null,
@@ -570,14 +604,15 @@ async function hydrateTrackerItem(
       isArchived ? (item.archivedAt || new Date().toISOString()) : null,
       serverCreated,
       serverUpdated,
+      contentJson,
     ]
   );
 
   // logger.main.info('[TrackerSyncManager] Hydrated item:', payload.itemId, 'into PGLite. Notifying renderer...');
 
-  // Re-read the item from DB to get authoritative archived state
-  // (sync payloads don't include archived, but the DB may have it from local archiving)
-  let dbItem = item;
+  // Re-read the item from DB to get authoritative state including comments/activity
+  // that were just written to the data JSONB column.
+  let dbItem: any = item;
   try {
     const dbResult = await database.query<any>(
       `SELECT * FROM tracker_items WHERE id = $1`,
@@ -585,11 +620,39 @@ async function hydrateTrackerItem(
     );
     if (dbResult.rows.length > 0) {
       const row = dbResult.rows[0];
-      dbItem = {
-        ...item,
+      const rowData = typeof row.data === 'string' ? JSON.parse(row.data) : row.data || {};
+      const typeTags: string[] = row.type_tags?.length > 0 ? row.type_tags : [row.type];
+      // Build a full TrackerItem from the DB row (same pattern as other rowToTrackerItem functions)
+      const result: any = {
+        id: row.id, issueNumber: row.issue_number ?? undefined, issueKey: row.issue_key ?? undefined,
+        type: row.type, typeTags, title: rowData.title || row.title,
+        description: rowData.description || undefined, status: rowData.status || row.status,
+        priority: rowData.priority || undefined, owner: rowData.owner || undefined,
+        module: row.document_path || undefined, workspace: row.workspace,
+        tags: rowData.tags || undefined, created: rowData.created || row.created || undefined,
+        updated: rowData.updated || row.updated || undefined,
+        lastIndexed: new Date(row.last_indexed), content: row.content != null ? row.content : undefined,
         archived: row.archived ?? false,
         archivedAt: row.archived_at ? new Date(row.archived_at).toISOString() : undefined,
+        source: row.source || (row.document_path ? 'inline' : 'native'),
+        authorIdentity: rowData.authorIdentity || undefined,
+        lastModifiedBy: rowData.lastModifiedBy || undefined,
+        createdByAgent: rowData.createdByAgent || false,
+        assigneeEmail: rowData.assigneeEmail || undefined, reporterEmail: rowData.reporterEmail || undefined,
+        assigneeId: rowData.assigneeId || undefined, reporterId: rowData.reporterId || undefined,
+        labels: rowData.labels || undefined, linkedSessions: rowData.linkedSessions || undefined,
+        linkedCommitSha: rowData.linkedCommitSha || undefined, documentId: rowData.documentId || undefined,
+        syncStatus: row.sync_status || 'local',
+        fieldUpdatedAt: rowData._fieldUpdatedAt || undefined,
       };
+      // Include extra data fields as customFields (comments, activity, etc.)
+      const resultKeys = new Set(Object.keys(result));
+      const extra: Record<string, any> = {};
+      for (const [k, v] of Object.entries(rowData)) {
+        if (v !== undefined && !resultKeys.has(k)) extra[k] = v;
+      }
+      if (Object.keys(extra).length > 0) result.customFields = extra;
+      dbItem = result;
     }
   } catch {
     // Fall back to sync item if DB read fails

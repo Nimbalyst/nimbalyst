@@ -124,7 +124,7 @@ function rowToTrackerItem(row: any): any {
   const typeTags: string[] = row.type_tags && row.type_tags.length > 0
     ? row.type_tags
     : [row.type];
-  return {
+  const result: any = {
     id: row.id,
     issueNumber: row.issue_number ?? undefined,
     issueKey: row.issue_key ?? undefined,
@@ -143,7 +143,7 @@ function rowToTrackerItem(row: any): any {
     updated: data.updated || row.updated || undefined,
     dueDate: data.dueDate || undefined,
     lastIndexed: new Date(row.last_indexed),
-    content: row.content || undefined,
+    content: row.content != null ? row.content : undefined,
     archived: row.archived ?? false,
     archivedAt: row.archived_at ? new Date(row.archived_at).toISOString() : undefined,
     source: row.source || (row.document_path ? 'inline' : 'native'),
@@ -162,7 +162,18 @@ function rowToTrackerItem(row: any): any {
     linkedCommitSha: data.linkedCommitSha || undefined,
     documentId: data.documentId || undefined,
     syncStatus: row.sync_status || 'local',
+    fieldUpdatedAt: data._fieldUpdatedAt || undefined,
   };
+  // Pass through all extra JSONB data fields (activity, comments, kanbanSortOrder, etc.)
+  // as customFields so they survive the TrackerItem -> TrackerRecord conversion.
+  // Uses the result object's own keys as the "known" set -- no hardcoded list.
+  const resultKeys = new Set(Object.keys(result));
+  const extra: Record<string, any> = {};
+  for (const [k, v] of Object.entries(data)) {
+    if (v !== undefined && !resultKeys.has(k)) extra[k] = v;
+  }
+  if (Object.keys(extra).length > 0) result.customFields = extra;
+  return result;
 }
 
 /**
@@ -1540,6 +1551,11 @@ export async function handleTrackerAddComment(
     data.lastModifiedBy = authorIdentity;
     appendActivity(data, authorIdentity, 'commented');
 
+    // Stamp field-level LWW timestamp for sync conflict resolution
+    const fieldUpdatedAt = data._fieldUpdatedAt || {};
+    fieldUpdatedAt.comments = Date.now();
+    data._fieldUpdatedAt = fieldUpdatedAt;
+
     await db.query(
       `UPDATE tracker_items SET data = $1, updated = NOW() WHERE id = $2`,
       [JSON.stringify(data), row.id]
@@ -1547,6 +1563,25 @@ export async function handleTrackerAddComment(
 
     // Notify renderer
     await notifyTrackerItemUpdated(workspacePath, row.id);
+
+    // Trigger sync
+    try {
+      if (workspacePath) {
+        const syncPolicy = getEffectiveTrackerSyncPolicy(workspacePath, row.type);
+        if (shouldSyncTrackerPolicy(syncPolicy)) {
+          if (isTrackerSyncActive(workspacePath)) {
+            const refreshed = await db.query<any>(`SELECT * FROM tracker_items WHERE id = $1`, [row.id]);
+            if (refreshed.rows.length > 0) {
+              await syncTrackerItem(rowToTrackerItem(refreshed.rows[0]));
+            }
+          } else {
+            await db.query(`UPDATE tracker_items SET sync_status = 'pending' WHERE id = $1`, [row.id]);
+          }
+        }
+      }
+    } catch (syncErr) {
+      console.error('[MCP Server] tracker_add_comment sync failed:', syncErr);
+    }
 
     return {
       content: [

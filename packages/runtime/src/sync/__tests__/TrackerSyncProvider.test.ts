@@ -107,6 +107,7 @@ function makePayload(overrides: Partial<TrackerItemPayload> & { itemId: string }
     system: {},
     fields: { title: 'Test bug', status: 'open', priority: 'high' },
     comments: [],
+    activity: [],
     fieldUpdatedAt: {},
     ...overrides,
   };

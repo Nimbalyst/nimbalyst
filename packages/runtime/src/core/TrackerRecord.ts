@@ -122,7 +122,7 @@ export function trackerItemToRecord(item: TrackerItem): TrackerRecord {
     fieldUpdatedAt[key] = persistedTimestamps[key] ?? now;
   }
 
-  return {
+  const record: TrackerRecord = {
     id: item.id,
     primaryType: item.type,
     typeTags: item.typeTags ?? [item.type],
@@ -154,6 +154,19 @@ export function trackerItemToRecord(item: TrackerItem): TrackerRecord {
     fields,
     fieldUpdatedAt,
   };
+
+  // Pull any SYSTEM_KEYS found in customFields into system generically.
+  // This avoids hardcoding field names -- any key declared in SYSTEM_KEYS
+  // (e.g. activity, comments) that came through the JSONB catch-all lands here.
+  if (item.customFields) {
+    for (const key of SYSTEM_KEYS) {
+      if (key in item.customFields && (record.system as any)[key] === undefined) {
+        (record.system as any)[key] = item.customFields[key];
+      }
+    }
+  }
+
+  return record;
 }
 
 /**
@@ -317,6 +330,7 @@ export function recordToDbParams(record: TrackerRecord): {
   if (record.system.linkedCommitSha) data.linkedCommitSha = record.system.linkedCommitSha;
   if (record.system.documentId) data.documentId = record.system.documentId;
   if (record.system.activity?.length) data.activity = record.system.activity;
+  if (record.system.comments?.length) data.comments = record.system.comments;
   if (record.system.createdAt) data.created = record.system.createdAt;
   if (record.system.updatedAt) data.updated = record.system.updatedAt;
 

@@ -42,6 +42,7 @@ function makePayload(overrides: Partial<TrackerItemPayload> & { itemId: string }
     system: {},
     fields: { title: 'Test bug', status: 'to-do', priority: 'medium' },
     comments: [],
+    activity: [],
     fieldUpdatedAt: {},
     ...overrides,
   };
@@ -585,5 +586,130 @@ describe('mergeTrackerItems', () => {
     const merged = mergeTrackerItems(local, remote);
     expect(merged.system.linkedSessions).toEqual(['s-1']);
     expect(merged.system.documentId).toBe('doc-remote');
+  });
+
+  it('should union comments by ID when both sides add different comments', () => {
+    const now = Date.now();
+    const local = makePayload({
+      itemId: 'merge-comments-1',
+      comments: [
+        { id: 'c1', authorIdentity: { displayName: 'user1' } as any, body: 'Local comment', createdAt: now - 2000 },
+      ],
+      fieldUpdatedAt: { comments: now - 1000 },
+    });
+    const remote = makePayload({
+      itemId: 'merge-comments-1',
+      comments: [
+        { id: 'c2', authorIdentity: { displayName: 'user2' } as any, body: 'Remote comment', createdAt: now - 1000 },
+      ],
+      fieldUpdatedAt: { comments: now },
+    });
+    const merged = mergeTrackerItems(local, remote);
+    expect(merged.comments).toHaveLength(2);
+    expect(merged.comments.map(c => c.id)).toEqual(['c1', 'c2']);
+  });
+
+  it('should keep newer version when same comment ID exists on both sides', () => {
+    const now = Date.now();
+    const local = makePayload({
+      itemId: 'merge-comments-2',
+      comments: [
+        { id: 'c1', authorIdentity: { displayName: 'user1' } as any, body: 'Original', createdAt: now - 2000, updatedAt: now - 1000 },
+      ],
+      fieldUpdatedAt: { comments: now - 1000 },
+    });
+    const remote = makePayload({
+      itemId: 'merge-comments-2',
+      comments: [
+        { id: 'c1', authorIdentity: { displayName: 'user1' } as any, body: 'Edited', createdAt: now - 2000, updatedAt: now },
+      ],
+      fieldUpdatedAt: { comments: now },
+    });
+    const merged = mergeTrackerItems(local, remote);
+    expect(merged.comments).toHaveLength(1);
+    expect(merged.comments[0].body).toBe('Edited');
+  });
+
+  it('should union activity entries by ID and bound to 100', () => {
+    const now = Date.now();
+    const local = makePayload({
+      itemId: 'merge-activity-1',
+      activity: [
+        { id: 'a1', authorIdentity: { displayName: 'user1' } as any, action: 'created', timestamp: now - 2000 },
+      ],
+      fieldUpdatedAt: { activity: now - 1000 },
+    });
+    const remote = makePayload({
+      itemId: 'merge-activity-1',
+      activity: [
+        { id: 'a2', authorIdentity: { displayName: 'user2' } as any, action: 'commented', timestamp: now - 1000 },
+      ],
+      fieldUpdatedAt: { activity: now },
+    });
+    const merged = mergeTrackerItems(local, remote);
+    expect(merged.activity).toHaveLength(2);
+    expect(merged.activity.map(a => a.id)).toEqual(['a1', 'a2']);
+  });
+});
+
+// ============================================================================
+// recordToPayload / payloadToRecord round-trip with comments and activity
+// ============================================================================
+
+describe('recordToPayload and payloadToRecord round-trip comments/activity', () => {
+  it('should round-trip comments through payload', () => {
+    const record: TrackerRecord = {
+      id: 'rt-1',
+      primaryType: 'bug',
+      typeTags: ['bug'],
+      source: 'native',
+      archived: false,
+      syncStatus: 'synced',
+      system: {
+        workspace: '/test',
+        createdAt: '2026-01-01',
+        updatedAt: '2026-01-01',
+        comments: [
+          { id: 'c1', authorIdentity: { displayName: 'user1' } as any, body: 'Test', createdAt: 1000 },
+        ],
+      },
+      fields: { title: 'Test', status: 'to-do' },
+      fieldUpdatedAt: {},
+    };
+    const payload = recordToPayload(record);
+    expect(payload.comments).toHaveLength(1);
+    expect(payload.comments[0].body).toBe('Test');
+
+    const back = payloadToRecord(payload, '/test');
+    expect(back.system.comments).toHaveLength(1);
+    expect(back.system.comments![0].body).toBe('Test');
+  });
+
+  it('should round-trip activity through payload', () => {
+    const record: TrackerRecord = {
+      id: 'rt-2',
+      primaryType: 'task',
+      typeTags: ['task'],
+      source: 'native',
+      archived: false,
+      syncStatus: 'synced',
+      system: {
+        workspace: '/test',
+        createdAt: '2026-01-01',
+        updatedAt: '2026-01-01',
+        activity: [
+          { id: 'a1', authorIdentity: { displayName: 'user1' } as any, action: 'created', timestamp: 1000 },
+        ],
+      },
+      fields: { title: 'Test', status: 'to-do' },
+      fieldUpdatedAt: {},
+    };
+    const payload = recordToPayload(record);
+    expect(payload.activity).toHaveLength(1);
+    expect(payload.activity[0].action).toBe('created');
+
+    const back = payloadToRecord(payload, '/test');
+    expect(back.system.activity).toHaveLength(1);
+    expect(back.system.activity![0].action).toBe('created');
   });
 });

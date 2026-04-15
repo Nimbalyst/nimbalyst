@@ -337,4 +337,53 @@ describe('recordToDbParams', () => {
     expect(data.linkedSessions).toBeUndefined();
     expect(data.documentId).toBeUndefined();
   });
+
+  it('should preserve comments in JSONB data', () => {
+    const record: TrackerRecord = {
+      id: 'comments-test',
+      primaryType: 'bug',
+      typeTags: ['bug'],
+      source: 'native',
+      archived: false,
+      syncStatus: 'local',
+      system: {
+        workspace: '/ws',
+        createdAt: '2026-01-01',
+        updatedAt: '2026-01-01',
+        comments: [
+          { id: 'c1', authorIdentity: { displayName: 'user1' } as any, body: 'Test comment', createdAt: 1000 },
+        ],
+      },
+      fields: { title: 'Bug with comments' },
+      fieldUpdatedAt: { title: 1 },
+    };
+
+    const params = recordToDbParams(record);
+    const data = JSON.parse(params.data);
+    expect(data.comments).toHaveLength(1);
+    expect(data.comments[0].body).toBe('Test comment');
+  });
+});
+
+describe('trackerItemToRecord comments/activity via customFields', () => {
+  it('should pull comments from customFields into system', () => {
+    const item: TrackerItem = {
+      id: 'cf-test',
+      type: 'bug',
+      title: 'Test',
+      status: 'to-do',
+      module: '',
+      workspace: '/ws',
+      lastIndexed: new Date(),
+      customFields: {
+        comments: [{ id: 'c1', authorIdentity: { displayName: 'u1' }, body: 'hi', createdAt: 1 }],
+        activity: [{ id: 'a1', authorIdentity: { displayName: 'u1' }, action: 'created', timestamp: 1 }],
+      },
+    };
+    const record = trackerItemToRecord(item);
+    expect(record.system.comments).toHaveLength(1);
+    expect(record.system.comments![0].body).toBe('hi');
+    expect(record.system.activity).toHaveLength(1);
+    expect(record.system.activity![0].action).toBe('created');
+  });
 });

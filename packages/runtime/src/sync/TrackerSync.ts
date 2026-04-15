@@ -26,7 +26,9 @@ import type {
   TrackerConfigBroadcastMessage,
   EncryptedTrackerItem,
   TrackerRoomConfig,
+  TrackerComment,
 } from './trackerSyncTypes';
+import type { TrackerActivity } from '../core/DocumentService';
 
 // ============================================================================
 // Encryption Utilities
@@ -134,8 +136,8 @@ export function mergeTrackerItems(
     }
   }
 
-  // Merge top-level routing fields
-  const routingKeys = ['issueNumber', 'issueKey', 'archived', 'comments'] as const;
+  // Merge top-level routing fields (LWW by timestamp)
+  const routingKeys = ['issueNumber', 'issueKey', 'archived'] as const;
   const merged: TrackerItemPayload = {
     ...local,
     fields: mergedFields,
@@ -149,6 +151,38 @@ export function mergeTrackerItems(
       (merged as any)[key] = (remote as any)[key];
       mergedTimestamps[key] = remoteTs;
     }
+  }
+
+  // Comments: union by ID, keep newer version per comment
+  const commentMap = new Map<string, TrackerComment>();
+  for (const c of local.comments ?? []) commentMap.set(c.id, c);
+  for (const c of remote.comments ?? []) {
+    const existing = commentMap.get(c.id);
+    if (!existing || (c.updatedAt ?? c.createdAt) >= (existing.updatedAt ?? existing.createdAt)) {
+      commentMap.set(c.id, c);
+    }
+  }
+  merged.comments = Array.from(commentMap.values()).sort((a, b) => a.createdAt - b.createdAt);
+  mergedTimestamps.comments = Math.max(local.fieldUpdatedAt.comments ?? 0, remote.fieldUpdatedAt.comments ?? 0);
+
+  // Activity: union by ID, append-only, bounded to 100
+  const activityMap = new Map<string, TrackerActivity>();
+  for (const a of local.activity ?? []) activityMap.set(a.id, a);
+  for (const a of remote.activity ?? []) activityMap.set(a.id, a);
+  merged.activity = Array.from(activityMap.values())
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .slice(-100);
+  mergedTimestamps.activity = Math.max(local.fieldUpdatedAt.activity ?? 0, remote.fieldUpdatedAt.activity ?? 0);
+
+  // Content: LWW by timestamp
+  const localContentTs = local.fieldUpdatedAt.content ?? 0;
+  const remoteContentTs = remote.fieldUpdatedAt.content ?? 0;
+  if (remoteContentTs > localContentTs) {
+    merged.content = remote.content;
+    mergedTimestamps.content = remoteContentTs;
+  } else {
+    merged.content = local.content;
+    mergedTimestamps.content = localContentTs;
   }
 
   return merged;

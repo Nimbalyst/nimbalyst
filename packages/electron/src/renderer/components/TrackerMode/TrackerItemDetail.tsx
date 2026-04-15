@@ -249,6 +249,8 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
   const [contentLoaded, setContentLoaded] = useState(false);
   const getContentFnRef = useRef<(() => string) | null>(null);
   const contentSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track local content saves to skip refetch (prevents cursor loss)
+  const lastLocalContentSaveRef = useRef<number>(0);
 
   // Reset local editing state when navigating to a different item.
   // We don't sync on item data changes (saves) to avoid clobbering in-progress text.
@@ -266,10 +268,17 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
     }
   }, [itemId]); // itemId only -- not item fields
 
-  // Load rich content from PGLite when item changes (only native items have embedded content)
+  // Load rich content from PGLite when item changes (only native items have embedded content).
+  // Also re-fetches when updatedAt changes from a remote sync, but skips if we just saved locally
+  // to prevent cursor loss / editor repaint.
   useEffect(() => {
     if (!hasRichContent) {
       setContentLoaded(true);
+      return;
+    }
+
+    // Skip refetch if a local content save happened within the last 3 seconds
+    if (contentLoaded && Date.now() - lastLocalContentSaveRef.current < 3000) {
       return;
     }
 
@@ -281,7 +290,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
     window.electronAPI.documentService.getTrackerItemContent({ itemId: item!.id })
       .then((result) => {
         if (cancelled) return;
-        if (result.success && result.content) {
+        if (result.success && result.content != null) {
           // Content is stored as markdown string in JSONB
           const markdown = typeof result.content === 'string'
             ? result.content
@@ -300,7 +309,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
       });
 
     return () => { cancelled = true; };
-  }, [item?.id, hasRichContent]);
+  }, [item?.id, hasRichContent, item?.system?.updatedAt]);
 
   // Escape to close
   useEffect(() => {
@@ -353,6 +362,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
     if (contentSaveTimerRef.current) clearTimeout(contentSaveTimerRef.current);
     contentSaveTimerRef.current = setTimeout(async () => {
       try {
+        lastLocalContentSaveRef.current = Date.now();
         await window.electronAPI.documentService.updateTrackerItemContent({
           itemId: item!.id,
           content: markdown,

@@ -130,6 +130,12 @@ export interface TrackerItemPayload {
   /** Comments thread */
   comments: TrackerComment[];
 
+  /** Activity log (status changes, field edits, etc.) */
+  activity: TrackerActivity[];
+
+  /** Rich content (Lexical editor state JSON) */
+  content?: unknown;
+
   /** Server-side created timestamp (epoch ms). Set from EncryptedTrackerItem envelope. */
   serverCreatedAt?: number;
 
@@ -244,7 +250,7 @@ export interface EncryptedTrackerItem {
 // TrackerRecord <-> TrackerItemPayload Mapping
 // ============================================================================
 
-import type { TrackerItem, TrackerIdentity } from '../core/DocumentService';
+import type { TrackerItem, TrackerIdentity, TrackerActivity } from '../core/DocumentService';
 import type { TrackerRecord } from '../core/TrackerRecord';
 import { trackerItemToRecord, trackerRecordToItem } from '../core/TrackerRecord';
 
@@ -273,6 +279,10 @@ export function recordToPayload(record: TrackerRecord): TrackerItemPayload {
   fieldUpdatedAt.issueKey = fieldUpdatedAt.issueKey ?? now;
   fieldUpdatedAt.archived = fieldUpdatedAt.archived ?? now;
   fieldUpdatedAt.comments = fieldUpdatedAt.comments ?? now;
+  fieldUpdatedAt.activity = fieldUpdatedAt.activity ?? now;
+  if (record.content !== undefined) {
+    fieldUpdatedAt.content = fieldUpdatedAt.content ?? now;
+  }
 
   return {
     itemId: record.id,
@@ -293,6 +303,8 @@ export function recordToPayload(record: TrackerRecord): TrackerItemPayload {
     fields: { ...record.fields },
     fieldUpdatedAt,
     comments: record.system.comments ?? [],
+    activity: record.system.activity ?? [],
+    content: record.content,
   };
 }
 
@@ -339,7 +351,9 @@ export function payloadToRecord(payload: TrackerItemPayload, workspace: string):
       linkedCommitSha: sys.linkedCommitSha ?? p.linkedCommitSha,
       documentId: sys.documentId ?? p.documentId,
       comments: payload.comments,
+      activity: payload.activity,
     },
+    content: payload.content,
     fields,
     fieldUpdatedAt: { ...payload.fieldUpdatedAt },
   };

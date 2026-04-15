@@ -993,7 +993,7 @@ export class ElectronDocumentService implements DocumentService {
       dueDate: data.dueDate || undefined,
       lastIndexed: new Date(row.last_indexed),
       // Rich content (Lexical editor state)
-      content: row.content || undefined,
+      content: row.content != null ? row.content : undefined,
       // Archive state
       archived: row.archived ?? false,
       archivedAt: row.archived_at ? new Date(row.archived_at).toISOString() : undefined,
@@ -1013,6 +1013,8 @@ export class ElectronDocumentService implements DocumentService {
       linkedCommitSha: data.linkedCommitSha || undefined,
       documentId: data.documentId || undefined,
       syncStatus: row.sync_status || 'local',
+      // Map persisted per-field LWW timestamps to the top-level property
+      fieldUpdatedAt: data?._fieldUpdatedAt || undefined,
       // Pass through extra JSONB data fields (e.g. kanbanSortOrder) so they
       // survive the TrackerItem -> TrackerRecord conversion via customFields.
       customFields: (() => {
@@ -1031,6 +1033,18 @@ export class ElectronDocumentService implements DocumentService {
         return Object.keys(extra).length > 0 ? extra : undefined;
       })(),
     };
+  }
+
+  /**
+   * Get a single tracker item by ID, or null if not found.
+   */
+  async getTrackerItemById(itemId: string): Promise<TrackerItem | null> {
+    const result = await database.query<any>(
+      `SELECT * FROM tracker_items WHERE id = $1`,
+      [itemId]
+    );
+    if (result.rows.length === 0) return null;
+    return this.rowToTrackerItem(result.rows[0]);
   }
 
   /**
@@ -1129,7 +1143,7 @@ export class ElectronDocumentService implements DocumentService {
    * Update the rich content (Lexical editor state) of a tracker item.
    */
   async updateTrackerItemContent(itemId: string, content: any): Promise<void> {
-    const contentJson = content ? JSON.stringify(content) : null;
+    const contentJson = content != null ? JSON.stringify(content) : null;
     await database.query(
       `UPDATE tracker_items SET content = $1, updated = NOW() WHERE id = $2`,
       [contentJson, itemId]
@@ -1160,7 +1174,7 @@ export class ElectronDocumentService implements DocumentService {
       [itemId]
     );
     if (result.rows.length === 0) return null;
-    return result.rows[0].content || null;
+    return result.rows[0].content ?? null;
   }
 
   /**
@@ -2405,6 +2419,22 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
   }) => {
     try {
       await requireDocumentService(event).updateTrackerItemContent(payload.itemId, payload.content);
+
+      // Stamp fieldUpdatedAt.content and trigger sync
+      try {
+        const row = await database.query<any>(`SELECT * FROM tracker_items WHERE id = $1`, [payload.itemId]);
+        if (row.rows.length > 0) {
+          const data = typeof row.rows[0].data === 'string' ? JSON.parse(row.rows[0].data) : row.rows[0].data || {};
+          const fieldUpdatedAt = data._fieldUpdatedAt || {};
+          fieldUpdatedAt.content = Date.now();
+          data._fieldUpdatedAt = fieldUpdatedAt;
+          await database.query(`UPDATE tracker_items SET data = $1 WHERE id = $2`, [JSON.stringify(data), payload.itemId]);
+          await syncAfterCommentMutation(event, payload.itemId, row.rows[0].workspace, row.rows[0].type);
+        }
+      } catch (syncErr) {
+        console.error('[DocumentService] content sync failed:', syncErr);
+      }
+
       return { success: true };
     } catch (error) {
       console.error('[DocumentService] tracker-item-update-content failed:', error);
@@ -2501,6 +2531,69 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
     }
   });
 
+  /** Trigger sync for a tracker item after a local mutation (same pattern as update-tracker-item) */
+  async function syncAfterCommentMutation(event: IpcMainInvokeEvent, itemId: string, workspace: string, itemType: string): Promise<void> {
+    try {
+      const syncPolicy = getEffectiveTrackerSyncPolicy(workspace, itemType as any);
+      if (shouldSyncTrackerPolicy(syncPolicy)) {
+        if (isTrackerSyncActive(workspace)) {
+          const service = requireDocumentService(event);
+          const item = await service.getTrackerItemById(itemId);
+          if (item) {
+            await syncTrackerItem(item);
+          }
+        } else {
+          await requireDocumentService(event).updateTrackerItemSyncStatus(itemId, 'pending');
+        }
+      }
+    } catch (syncErr) {
+      console.error('[DocumentService] comment sync failed:', syncErr);
+    }
+  }
+
+  /** Re-read a tracker item from DB and broadcast change to the event sender */
+  async function broadcastTrackerItemUpdate(event: IpcMainInvokeEvent, itemId: string): Promise<void> {
+    try {
+      const result = await database.query<any>(`SELECT * FROM tracker_items WHERE id = $1`, [itemId]);
+      if (result.rows.length === 0) return;
+      const r = result.rows[0];
+      const d = typeof r.data === 'string' ? JSON.parse(r.data) : r.data || {};
+      const typeTags: string[] = r.type_tags?.length > 0 ? r.type_tags : [r.type];
+      const item: TrackerItem = {
+        id: r.id, issueNumber: r.issue_number ?? undefined, issueKey: r.issue_key ?? undefined,
+        type: r.type, typeTags, title: d.title || r.title, description: d.description || undefined,
+        status: d.status || r.status, priority: d.priority || undefined, owner: d.owner || undefined,
+        module: r.document_path, lineNumber: r.line_number || undefined, workspace: r.workspace,
+        tags: d.tags || undefined, created: d.created || r.created || undefined,
+        updated: d.updated || r.updated || undefined, dueDate: d.dueDate || undefined,
+        lastIndexed: new Date(r.last_indexed), content: r.content || undefined,
+        archived: r.archived ?? false,
+        archivedAt: r.archived_at ? new Date(r.archived_at).toISOString() : undefined,
+        source: r.source || (r.document_path ? 'inline' : 'native'),
+        sourceRef: r.source_ref || undefined,
+        authorIdentity: d.authorIdentity || undefined, lastModifiedBy: d.lastModifiedBy || undefined,
+        createdByAgent: d.createdByAgent || false,
+        assigneeEmail: d.assigneeEmail || undefined, reporterEmail: d.reporterEmail || undefined,
+        assigneeId: d.assigneeId || undefined, reporterId: d.reporterId || undefined,
+        labels: d.labels || undefined, linkedSessions: d.linkedSessions || undefined,
+        linkedCommitSha: d.linkedCommitSha || undefined, documentId: d.documentId || undefined,
+        syncStatus: r.sync_status || 'local',
+        fieldUpdatedAt: d._fieldUpdatedAt || undefined,
+      };
+      // Pass through extra JSONB data fields (activity, comments, etc.)
+      // Uses the item's own keys as the "known" set -- no hardcoded list.
+      const itemKeys = new Set(Object.keys(item));
+      const extra: Record<string, any> = {};
+      for (const [k, v] of Object.entries(d)) {
+        if (v !== undefined && !itemKeys.has(k)) extra[k] = v;
+      }
+      if (Object.keys(extra).length > 0) (item as any).customFields = extra;
+      event.sender.send('document-service:tracker-items-changed', {
+        added: [], updated: [item], removed: [], timestamp: new Date(),
+      });
+    } catch { /* best-effort */ }
+  }
+
   // Comment management handlers
   safeHandle('document-service:tracker-item-add-comment', async (event, payload: {
     itemId: string;
@@ -2527,17 +2620,39 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
       data.comments = comments;
       data.lastModifiedBy = authorIdentity;
 
+      // Record activity for the comment
+      const activity = data.activity || [];
+      activity.push({
+        id: `activity_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        authorIdentity,
+        action: 'commented',
+        timestamp: Date.now(),
+      });
+      data.activity = activity.length > 100 ? activity.slice(-100) : activity;
+
+      // Stamp field-level LWW timestamp for sync conflict resolution
+      const fieldUpdatedAt = data._fieldUpdatedAt || {};
+      fieldUpdatedAt.comments = Date.now();
+      data._fieldUpdatedAt = fieldUpdatedAt;
+
       await database.query(
         `UPDATE tracker_items SET data = $1, updated = NOW() WHERE id = $2`,
         [JSON.stringify(data), payload.itemId]
       );
+
+      // Re-read updated row and broadcast so UI refreshes
+      await broadcastTrackerItemUpdate(event, payload.itemId);
+
+      // Trigger sync
+      await syncAfterCommentMutation(event, payload.itemId, row.rows[0].workspace, row.rows[0].type);
+
       return { success: true, commentId };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   });
 
-  safeHandle('document-service:tracker-item-update-comment', async (_event, payload: {
+  safeHandle('document-service:tracker-item-update-comment', async (event, payload: {
     itemId: string;
     commentId: string;
     body?: string;
@@ -2561,10 +2676,22 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
       }
       data.comments = comments;
 
+      // Stamp field-level LWW timestamp for sync conflict resolution
+      const fieldUpdatedAt = data._fieldUpdatedAt || {};
+      fieldUpdatedAt.comments = Date.now();
+      data._fieldUpdatedAt = fieldUpdatedAt;
+
       await database.query(
         `UPDATE tracker_items SET data = $1, updated = NOW() WHERE id = $2`,
         [JSON.stringify(data), payload.itemId]
       );
+
+      // Re-read updated row and broadcast so UI refreshes
+      await broadcastTrackerItemUpdate(event, payload.itemId);
+
+      // Trigger sync
+      await syncAfterCommentMutation(event, payload.itemId, row.rows[0].workspace, row.rows[0].type);
+
       return { success: true };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
