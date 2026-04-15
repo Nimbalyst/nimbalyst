@@ -22,6 +22,7 @@
     "**/e2e/**",
     "packages/electron/marketing/fixtures",
     "packages/collabv3",
+    "packages/marketplace",
     "packages/electron/release",
     "packages/extension-sdk-docs/examples",
     "worktrees",
