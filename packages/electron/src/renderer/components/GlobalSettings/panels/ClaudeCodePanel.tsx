@@ -209,11 +209,8 @@ export function ClaudeCodePanel({
   const handleSetUseStandaloneBinary = async (enabled: boolean) => {
     setUseStandaloneBinaryState(enabled);
     try {
-      const currentSettings = await window.electronAPI.aiGetSettings();
-      await window.electronAPI.aiSaveSettings({
-        ...currentSettings,
-        useStandaloneBinary: enabled,
-      });
+      // Send only the changed field -- ai:saveSettings handles partial updates
+      await window.electronAPI.aiSaveSettings({ useStandaloneBinary: enabled });
     } catch (error) {
       console.error('[ClaudeCodePanel] Failed to save standalone binary setting:', error);
       // Revert on error
@@ -226,11 +223,8 @@ export function ClaudeCodePanel({
     const previousPath = customClaudeCodePath;
     setCustomClaudeCodePathState(newPath);
     try {
-      const currentSettings = await window.electronAPI.aiGetSettings();
-      await window.electronAPI.aiSaveSettings({
-        ...currentSettings,
-        customClaudeCodePath: newPath,
-      });
+      // Send only the changed field -- ai:saveSettings handles partial updates
+      await window.electronAPI.aiSaveSettings({ customClaudeCodePath: newPath });
     } catch (error) {
       console.error('[ClaudeCodePanel] Failed to save custom Claude Code path:', error);
       setCustomClaudeCodePathState(previousPath);
@@ -241,11 +235,8 @@ export function ClaudeCodePanel({
   const handleSetPlanTrackingEnabled = async (enabled: boolean) => {
     setPlanTrackingEnabledState(enabled);
     try {
-      const currentSettings = await window.electronAPI.aiGetSettings();
-      await window.electronAPI.aiSaveSettings({
-        ...currentSettings,
-        planTrackingEnabled: enabled,
-      });
+      // Send only the changed field -- ai:saveSettings handles partial updates
+      await window.electronAPI.aiSaveSettings({ planTrackingEnabled: enabled });
     } catch (error) {
       console.error('[ClaudeCodePanel] Failed to save plan tracking setting:', error);
       setPlanTrackingEnabledState(!enabled);

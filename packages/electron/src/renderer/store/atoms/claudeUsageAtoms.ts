@@ -50,11 +50,8 @@ function scheduleUsageIndicatorPersist(enabled: boolean): void {
     usageIndicatorPersistTimer = null;
     if (typeof window !== 'undefined' && window.electronAPI) {
       try {
-        const currentSettings = await window.electronAPI.aiGetSettings();
-        await window.electronAPI.aiSaveSettings({
-          ...currentSettings,
-          showUsageIndicator: enabled,
-        });
+        // Send only the changed field -- ai:saveSettings handles partial updates
+        await window.electronAPI.aiSaveSettings({ showUsageIndicator: enabled });
       } catch (error) {
         console.error('[claudeUsageAtoms] Failed to save usage indicator setting:', error);
       }

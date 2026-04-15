@@ -31,11 +31,8 @@ function scheduleAutoCommitPersist(enabled: boolean): void {
     autoCommitPersistTimer = null;
     if (typeof window !== 'undefined' && window.electronAPI) {
       try {
-        const currentSettings = await window.electronAPI.aiGetSettings();
-        await window.electronAPI.aiSaveSettings({
-          ...currentSettings,
-          autoCommitEnabled: enabled,
-        });
+        // Send only the changed field -- ai:saveSettings handles partial updates
+        await window.electronAPI.aiSaveSettings({ autoCommitEnabled: enabled });
       } catch (error) {
         console.error('[autoCommitAtoms] Failed to save auto-commit setting:', error);
       }

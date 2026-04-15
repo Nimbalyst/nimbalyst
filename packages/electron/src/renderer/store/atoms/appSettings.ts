@@ -879,11 +879,9 @@ function scheduleAIDebugPersist(settings: AIDebugSettings): void {
   aiDebugPersistTimer = setTimeout(async () => {
     aiDebugPersistTimer = null;
     if (typeof window !== 'undefined' && window.electronAPI) {
-      // We need to load existing AI settings and merge just the debug fields
+      // Send only the changed fields -- ai:saveSettings handles partial updates
       try {
-        const currentSettings = await window.electronAPI.aiGetSettings();
         await window.electronAPI.aiSaveSettings({
-          ...currentSettings,
           showToolCalls: settings.showToolCalls,
           aiDebugLogging: settings.aiDebugLogging,
           showPromptAdditions: settings.showPromptAdditions,

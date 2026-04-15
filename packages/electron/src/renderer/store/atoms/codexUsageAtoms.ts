@@ -49,11 +49,8 @@ function scheduleCodexUsageIndicatorPersist(enabled: boolean): void {
     codexUsageIndicatorPersistTimer = null;
     if (typeof window !== 'undefined' && window.electronAPI) {
       try {
-        const currentSettings = await window.electronAPI.aiGetSettings();
-        await window.electronAPI.aiSaveSettings({
-          ...currentSettings,
-          showCodexUsageIndicator: enabled,
-        });
+        // Send only the changed field -- ai:saveSettings handles partial updates
+        await window.electronAPI.aiSaveSettings({ showCodexUsageIndicator: enabled });
       } catch (error) {
         console.error('[codexUsageAtoms] Failed to save usage indicator setting:', error);
       }
