@@ -106,7 +106,7 @@ interface WorkstreamGroupProps {
   sessions: SessionItem[];
   sortBy?: 'updated' | 'created'; // Which field to sort child sessions by
   activeSessionId: string | null;
-  onSessionSelect: (sessionId: string) => void;
+  onSessionSelect: (sessionId: string, e: Pick<React.MouseEvent, 'metaKey' | 'ctrlKey' | 'shiftKey'>) => void;
   onChildSessionSelect?: (childSessionId: string, parentId: string, parentType: 'workstream' | 'worktree') => void;
   onSessionDelete?: (sessionId: string) => void;
   onSessionArchive?: (sessionId: string) => void;
@@ -686,14 +686,11 @@ export const WorkstreamGroup: React.FC<WorkstreamGroupProps> = ({
               key={session.id}
               session={session}
               isActive={session.id === activeSessionId}
-              onClick={() => {
-                // If onChildSessionSelect is provided, use it to maintain parent context
-                // Otherwise fall back to regular session select
-                if (onChildSessionSelect) {
-                  onChildSessionSelect(session.id, id, type);
-                } else {
-                  onSessionSelect(session.id);
-                }
+              onClick={(e) => {
+                // Always go through onSessionSelect so shift/cmd-click selection works.
+                // onSessionSelect (handleSessionClick) handles the regular click path
+                // by calling its own onSessionSelect which navigates to the session.
+                onSessionSelect(session.id, e);
               }}
               onDelete={onSessionDelete ? () => onSessionDelete(session.id) : undefined}
               onArchive={onSessionArchive ? () => onSessionArchive(session.id) : undefined}
@@ -978,7 +975,7 @@ const WorkstreamSessionStatusIndicator = memo<{ sessionId: string; uncommittedCo
 interface WorkstreamSessionItemProps {
   session: SessionItem;
   isActive: boolean;
-  onClick: () => void;
+  onClick: (e: Pick<React.MouseEvent, 'metaKey' | 'ctrlKey' | 'shiftKey'>) => void;
   onDelete?: () => void;
   onArchive?: () => void;
   onUnarchive?: () => void;
@@ -1157,7 +1154,7 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          onClick();
+          onClick(e);
         }
       }}
       aria-label={`Session: ${displayTitle}`}

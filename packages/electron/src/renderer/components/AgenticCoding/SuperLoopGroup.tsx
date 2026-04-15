@@ -37,7 +37,7 @@ interface SuperLoopGroupProps {
   onToggle: () => void;
   onMultiSelect?: (e: React.MouseEvent) => void;
   activeSessionId: string | null;
-  onSessionSelect: (sessionId: string) => void;
+  onSessionSelect: (sessionId: string, e: Pick<React.MouseEvent, 'metaKey' | 'ctrlKey' | 'shiftKey'>) => void;
   onArchive?: () => void;
   onUnarchive?: () => void;
   onRename?: (newName: string) => void;
@@ -158,7 +158,7 @@ const SuperIterationRow: React.FC<{
   iteration: SuperIteration;
   learning?: SuperLearning;
   isActive: boolean;
-  onSelect: () => void;
+  onSelect: (e: Pick<React.MouseEvent, 'metaKey' | 'ctrlKey' | 'shiftKey'>) => void;
 }> = memo(({ iteration, learning, isActive, onSelect }) => (
   <div
     className={`super-loop-iteration-item flex items-center gap-2 py-1.5 px-3 mr-2 mb-0.5 cursor-pointer rounded transition-colors duration-150 select-none ${
@@ -167,7 +167,7 @@ const SuperIterationRow: React.FC<{
     onClick={onSelect}
     role="button"
     tabIndex={0}
-    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(); } }}
+    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(e); } }}
     aria-label={`Iteration ${iteration.iterationNumber}`}
     aria-current={isActive ? 'page' : undefined}
   >
@@ -378,7 +378,7 @@ export const SuperLoopGroup: React.FC<SuperLoopGroupProps> = memo(({
     }
     if (iterations.length > 0) {
       const latestIteration = iterations[iterations.length - 1];
-      onSessionSelect(latestIteration.sessionId);
+      onSessionSelect(latestIteration.sessionId, e);
     }
   }, [iterations, onSessionSelect, onMultiSelect]);
 
@@ -664,7 +664,7 @@ export const SuperLoopGroup: React.FC<SuperLoopGroupProps> = memo(({
                   iteration={iteration}
                   learning={learning}
                   isActive={iteration.sessionId === activeSessionId}
-                  onSelect={() => onSessionSelect(iteration.sessionId)}
+                  onSelect={(e) => onSessionSelect(iteration.sessionId, e)}
                 />
               );
             })

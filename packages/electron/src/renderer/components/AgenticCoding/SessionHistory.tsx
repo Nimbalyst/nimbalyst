@@ -339,7 +339,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const setShowArchived = setShowArchivedAtom;
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
   const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set()); // Format: "blitz:id", "worktree:id", "workstream:id", "superloop:id"
-  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null); // For shift+click range selection
+  const lastSelectedIdRef = useRef<string | null>(null); // For shift+click range selection
   const [worktreeCache, setWorktreeCache] = useState<Map<string, WorktreeWithStatus>>(new Map()); // Cache worktree data
   const [workstreamChildrenCache, setWorkstreamChildrenCache] = useState<Map<string, SessionItem[]>>(new Map()); // Cache workstream children
   const [blitzCache, setBlitzCache] = useState<Map<string, BlitzData>>(new Map()); // Cache blitz data
@@ -927,27 +927,28 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const clearSelection = useCallback(() => {
     setSelectedSessionIds(new Set());
     setSelectedGroupIds(new Set());
-    setLastSelectedId(null);
+    lastSelectedIdRef.current = null;
   }, []);
 
-  // Ref holding the current visual order of session IDs for shift-click range selection.
-  // Updated from flatVirtuosoItems (defined later) so it always matches what the user sees.
-  // Using a ref lets handleSessionClick read current values without being in its dependency array.
+  // Refs for shift-click range selection. Using refs instead of state means handleSessionClick
+  // has a stable identity and memoized child components won't hold stale references.
   const visualOrderRef = useRef<string[]>([]);
+  const activeSessionIdRef = useRef(activeSessionId);
+  activeSessionIdRef.current = activeSessionId;
 
   // Handle session click with multi-select support
-  const handleSessionClick = useCallback((sessionId: string, e: React.MouseEvent) => {
+  // Stable callback: reads all volatile state from refs so memoized children never hold a stale reference.
+  const handleSessionClick = useCallback((sessionId: string, e: Pick<React.MouseEvent, 'metaKey' | 'ctrlKey' | 'shiftKey'>) => {
     const isMetaKey = e.metaKey || e.ctrlKey;
     const isShiftKey = e.shiftKey;
 
     if (isMetaKey) {
       // Cmd/Ctrl+click: toggle selection
+      const currentActiveId = activeSessionIdRef.current;
       setSelectedSessionIds(prev => {
         const next = new Set(prev);
-        // When starting multi-select from empty, include the currently active session
-        // so the user doesn't lose the visually-highlighted active session from the selection
-        if (prev.size === 0 && activeSessionId && activeSessionId !== sessionId) {
-          next.add(activeSessionId);
+        if (prev.size === 0 && currentActiveId && currentActiveId !== sessionId) {
+          next.add(currentActiveId);
         }
         if (next.has(sessionId)) {
           next.delete(sessionId);
@@ -956,15 +957,16 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         }
         return next;
       });
-      setLastSelectedId(sessionId);
+      lastSelectedIdRef.current = sessionId;
     } else if (isShiftKey) {
       // Shift+click: range selection
-      // Use lastSelectedId, or fall back to activeSessionId as the anchor
-      const anchorId = lastSelectedId || activeSessionId;
+      const anchorId = lastSelectedIdRef.current || activeSessionIdRef.current;
       if (anchorId) {
         const ids = visualOrderRef.current;
         const anchorIndex = ids.indexOf(anchorId);
         const currentIndex = ids.indexOf(sessionId);
+
+        // console.log(`[SessionHistory] shift-click debug: anchor=${anchorId.slice(0, 8)} (${lastSelectedIdRef.current ? 'lastSelectedId' : 'activeSessionId'}) anchorIdx=${anchorIndex} target=${sessionId.slice(0, 8)} targetIdx=${currentIndex} totalIds=${ids.length} range=${anchorIndex !== -1 && currentIndex !== -1 ? Math.abs(currentIndex - anchorIndex) + 1 : 'N/A'}`);
 
         if (anchorIndex !== -1 && currentIndex !== -1) {
           const start = Math.min(anchorIndex, currentIndex);
@@ -972,24 +974,20 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           const rangeIds = ids.slice(start, end + 1);
 
           setSelectedSessionIds(new Set(rangeIds));
-          setLastSelectedId(sessionId);
+          lastSelectedIdRef.current = sessionId;
         }
       } else {
-        // No anchor point, just select this one
         setSelectedSessionIds(new Set([sessionId]));
-        setLastSelectedId(sessionId);
+        lastSelectedIdRef.current = sessionId;
       }
     } else {
       // Regular click: clear multi-selection and navigate to session.
-      // Clear selection sets but then re-set lastSelectedId so subsequent
-      // shift-click ranges start from HERE, not from activeSessionId
-      // (which may be far away in the list).
       setSelectedSessionIds(new Set());
       setSelectedGroupIds(new Set());
-      setLastSelectedId(sessionId);
+      lastSelectedIdRef.current = sessionId;
       onSessionSelect(sessionId);
     }
-  }, [lastSelectedId, activeSessionId, clearSelection, onSessionSelect]);
+  }, [onSessionSelect]);
 
   // Determine the group key that the currently active session belongs to.
   // Used to auto-include the "focused" group when starting multi-select from empty.
@@ -2201,14 +2199,48 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     return flat;
   }, [groupKeys, groupedItems, collapsedGroups]);
 
-  // Keep visual order ref in sync with the flattened list for shift-click range selection
+  // Keep visual order ref in sync with the flattened list for shift-click range selection.
+  // Must include ALL visible session IDs in exact visual order -- including sessions nested
+  // inside worktree, workstream, blitz, superLoop, and metaAgent groups.
   visualOrderRef.current = useMemo(() => {
-    return flatVirtuosoItems
-      .filter((entry): entry is { kind: 'item'; groupKey: string; item: UnifiedListItem } =>
-        entry.kind === 'item' && entry.item.type === 'session'
-      )
-      .map(entry => (entry.item as { type: 'session'; session: SessionItem }).session.id);
-  }, [flatVirtuosoItems]);
+    const ids: string[] = [];
+    for (const entry of flatVirtuosoItems) {
+      if (entry.kind !== 'item') continue;
+      const item = entry.item;
+      switch (item.type) {
+        case 'session':
+          ids.push(item.session.id);
+          break;
+        case 'workstream':
+          // Workstream header session + its children
+          ids.push(item.session.id);
+          for (const child of item.sessions) ids.push(child.id);
+          break;
+        case 'worktree':
+          for (const s of item.sessions) ids.push(s.id);
+          break;
+        case 'blitz':
+          for (const wt of item.worktrees) {
+            for (const s of wt.sessions) ids.push(s.id);
+          }
+          break;
+        case 'superLoop': {
+          // SuperLoop wraps a worktree -- get its sessions from worktreeGroupsData
+          const loopSessions = worktreeGroupsData.get(item.loop.worktreeId);
+          if (loopSessions) {
+            for (const s of loopSessions.sessions) ids.push(s.id);
+          }
+          break;
+        }
+        case 'metaAgent':
+          ids.push(item.metaSession.id);
+          for (const child of item.childSessions) ids.push(child.id);
+          break;
+      }
+    }
+    console.log('[SessionHistory] visualOrderRef updated:', ids.length, 'session IDs (from', flatVirtuosoItems.filter(e => e.kind === 'item').length, 'items). First 5:', ids.slice(0, 5).map(id => id.slice(0, 8)));
+    return ids;
+  }, [flatVirtuosoItems, worktreeGroupsData]);
 
   // Ref for Virtuoso to support scroll-to-active
   const virtuosoRef = useRef<VirtuosoHandle>(null);
@@ -2960,7 +2992,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                       <div
                         key={`blitz-card-${item.blitzId}`}
                         className={`session-history-card p-4 rounded-xl border border-[var(--nim-border)] cursor-pointer transition-all duration-150 hover:border-[var(--nim-primary)]/40 hover:shadow-[0_0_0_1px_var(--nim-primary)]/20 ${isBlitzActive ? 'bg-[var(--nim-primary)]/10 border-[var(--nim-primary)]/30' : 'bg-[var(--nim-bg-secondary)]'}`}
-                        onClick={() => onSessionSelect(firstSession.id)}
+                        onClick={() => { clearSelection(); onSessionSelect(firstSession.id); }}
                       >
                         <div className="flex items-center gap-2 mb-2">
                           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="text-[var(--nim-primary)] shrink-0">
@@ -2986,7 +3018,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                       <div
                         key={`worktree-card-${item.worktreeId}`}
                         className={`session-history-card ${isWorktreeActive ? 'active' : ''} ${worktreeData?.isPinned ? 'pinned' : ''} ${worktreeData?.isArchived ? 'archived' : ''}`}
-                        onClick={() => firstSession && onSessionSelect(firstSession.id)}
+                        onClick={() => { clearSelection(); firstSession && onSessionSelect(firstSession.id); }}
                         onContextMenu={(e) => handleCardContextMenu(e, 'worktree', undefined, item.worktreeId, worktreeData?.isPinned, worktreeData?.isArchived)}
                       >
                         <div className="session-history-card-icon">
@@ -3055,7 +3087,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                       <div
                         key={`workstream-card-${session.id}`}
                         className={`session-history-card ${session.id === activeSessionId || activeSessionParentId === session.id ? 'active' : ''} ${session.isPinned ? 'pinned' : ''} ${session.isArchived ? 'archived' : ''}`}
-                        onClick={() => onSessionSelect(session.id)}
+                        onClick={() => { clearSelection(); onSessionSelect(session.id); }}
                         onContextMenu={(e) => handleCardContextMenu(e, 'workstream', session.id, undefined, session.isPinned, session.isArchived)}
                       >
                         <div className="session-history-card-icon">
@@ -3108,7 +3140,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                       <div
                         key={`session-card-${session.id}`}
                         className={`session-history-card ${session.id === activeSessionId ? 'active' : ''} ${session.isPinned ? 'pinned' : ''} ${session.isArchived ? 'archived' : ''} ${loadedSessionIds.includes(session.id) ? 'loaded' : ''}`}
-                        onClick={() => onSessionSelect(session.id)}
+                        onClick={() => { clearSelection(); onSessionSelect(session.id); }}
                         onContextMenu={(e) => handleCardContextMenu(e, 'session', session.id, undefined, session.isPinned, session.isArchived)}
                       >
                         <div className="session-history-card-icon">
@@ -3209,7 +3241,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                         worktreeData: worktreeCache.get(w.worktreeId),
                       }))}
                       activeSessionId={activeSessionId}
-                      onSessionSelect={onSessionSelect}
+                      onSessionSelect={handleSessionClick}
                       worktreeCache={worktreeCache}
                       collapsedGroups={collapsedGroups}
                       onToggleWorktreeGroup={handleToggleGroup}
@@ -3239,19 +3271,21 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                       onToggle={() => handleToggleGroup(`worktree:${item.worktreeId}`)}
                       onMultiSelect={() => handleGroupMultiSelect(`worktree:${item.worktreeId}`)}
                       onSelect={() => {
+                        clearSelection();
                         const lastActiveSessionId = store.get(worktreeActiveSessionAtom(item.worktreeId));
                         const sessionToSelect = lastActiveSessionId
                           ? item.sessions.find(s => s.id === lastActiveSessionId)
                           : null;
                         const targetSession = sessionToSelect || item.sessions[0];
                         if (targetSession) {
+                          lastSelectedIdRef.current = targetSession.id;
                           onSessionSelect(targetSession.id);
                         }
                       }}
                       sessions={item.sessions}
                       sortBy={sortBy}
                       activeSessionId={activeSessionId}
-                      onSessionSelect={onSessionSelect}
+                      onSessionSelect={handleSessionClick}
                       onChildSessionSelect={onChildSessionSelect}
                       onSessionDelete={onSessionDelete ? handleDeleteSession : undefined}
                       onSessionArchive={handleArchiveSession}
@@ -3288,11 +3322,11 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                       isSelected={selectedGroupIds.has(`workstream:${session.id}`)}
                       onToggle={() => handleToggleGroup(`workstream:${session.id}`)}
                       onMultiSelect={() => handleGroupMultiSelect(`workstream:${session.id}`)}
-                      onSelect={() => onSessionSelect(session.id)}
+                      onSelect={() => { clearSelection(); lastSelectedIdRef.current = session.id; onSessionSelect(session.id); }}
                       sessions={item.sessions}
                       sortBy={sortBy}
                       activeSessionId={activeSessionId}
-                      onSessionSelect={onSessionSelect}
+                      onSessionSelect={handleSessionClick}
                       onChildSessionSelect={onChildSessionSelect}
                       onSessionDelete={onSessionDelete ? handleDeleteSession : undefined}
                       onSessionArchive={handleArchiveSession}
@@ -3325,7 +3359,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                       onToggle={() => handleToggleGroup(`meta-agent:${item.metaSession.id}`)}
                       onMultiSelect={() => handleGroupMultiSelect(`meta-agent:${item.metaSession.id}`)}
                       activeSessionId={activeSessionId}
-                      onSessionSelect={onSessionSelect}
+                      onSessionSelect={handleSessionClick}
                     />
                   );
                 }
@@ -3346,7 +3380,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                       onToggle={() => handleToggleGroup(`super-loop:${item.loop.id}`)}
                       onMultiSelect={() => handleGroupMultiSelect(`superloop:${item.loop.id}`)}
                       activeSessionId={activeSessionId}
-                      onSessionSelect={onSessionSelect}
+                      onSessionSelect={handleSessionClick}
                       onArchive={() => handleSuperLoopArchive(item.loop)}
                       onRename={(newName) => handleSuperLoopRename(item.loop.id, newName)}
                       onPinToggle={(isPinned) => handleSuperLoopPinToggle(item.loop.id, isPinned)}

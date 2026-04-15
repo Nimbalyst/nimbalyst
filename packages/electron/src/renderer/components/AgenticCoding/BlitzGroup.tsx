@@ -37,7 +37,7 @@ interface BlitzGroupProps {
   onMultiSelect?: (e: React.MouseEvent) => void;
   worktrees: BlitzWorktreeEntry[];
   activeSessionId: string | null;
-  onSessionSelect: (sessionId: string) => void;
+  onSessionSelect: (sessionId: string, e: Pick<React.MouseEvent, 'metaKey' | 'ctrlKey' | 'shiftKey'>) => void;
   worktreeCache: Map<string, WorktreeWithStatus>;
   collapsedGroups: string[];
   onToggleWorktreeGroup: (groupKey: string) => void;
@@ -131,7 +131,7 @@ const BlitzSessionRow: React.FC<{
   onRenameChange: (value: string) => void;
   onRenameKeyDown: (e: React.KeyboardEvent) => void;
   onRenameBlur: () => void;
-  onSelect: () => void;
+  onSelect: (e: Pick<React.MouseEvent, 'metaKey' | 'ctrlKey' | 'shiftKey'>) => void;
   onContextMenu: (e: React.MouseEvent) => void;
 }> = memo(({ session, sessionTitle, isActive, isRenaming, isAnalysis, renameInputRef, renameValue, onRenameChange, onRenameKeyDown, onRenameBlur, onSelect, onContextMenu }) => (
   <div
@@ -142,7 +142,7 @@ const BlitzSessionRow: React.FC<{
     onContextMenu={onContextMenu}
     role="button"
     tabIndex={0}
-    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(); } }}
+    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(e); } }}
     aria-label={`Session: ${sessionTitle}`}
     aria-current={isActive ? 'page' : undefined}
   >
@@ -264,7 +264,7 @@ export const BlitzGroup: React.FC<BlitzGroupProps> = memo(({
     // Select the first session in the blitz
     const firstSession = worktrees[0]?.sessions[0];
     if (firstSession) {
-      onSessionSelect(firstSession.id);
+      onSessionSelect(firstSession.id, e);
     }
   }, [worktrees, onSessionSelect, onMultiSelect]);
 
@@ -584,7 +584,7 @@ export const BlitzGroup: React.FC<BlitzGroupProps> = memo(({
                   onRenameChange={setRenameItemValue}
                   onRenameKeyDown={handleRenameItemKeyDown}
                   onRenameBlur={handleRenameSubmitItem}
-                  onSelect={() => onSessionSelect(session.id)}
+                  onSelect={(e) => onSessionSelect(session.id, e)}
                   onContextMenu={(e) => handleSessionContextMenu(e, worktreeId, session.id, sessionTitle, hasSessionTitle)}
                 />
               );
@@ -623,10 +623,10 @@ export const BlitzGroup: React.FC<BlitzGroupProps> = memo(({
                   </button>
                   <div
                     className="flex items-center gap-1.5 flex-1 min-w-0 py-1 pr-2 pl-0.5 cursor-pointer"
-                    onClick={(e) => { e.stopPropagation(); onSessionSelect(sessions[0].id); }}
+                    onClick={(e) => { e.stopPropagation(); onSessionSelect(sessions[0].id, e); }}
                     role="button"
                     tabIndex={0}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSessionSelect(sessions[0].id); } }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSessionSelect(sessions[0].id, e); } }}
                   >
                     {/* Worktree icon */}
                     <div className={`shrink-0 flex items-center justify-center ${
@@ -672,7 +672,7 @@ export const BlitzGroup: React.FC<BlitzGroupProps> = memo(({
                           onRenameChange={setRenameItemValue}
                           onRenameKeyDown={handleRenameItemKeyDown}
                           onRenameBlur={handleRenameSubmitItem}
-                          onSelect={() => onSessionSelect(session.id)}
+                          onSelect={(e) => onSessionSelect(session.id, e)}
                           onContextMenu={(e) => handleSessionContextMenu(e, worktreeId, session.id, sessionTitle, hasSessionTitle)}
                         />
                       );

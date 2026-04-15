@@ -29,7 +29,7 @@ interface MetaAgentGroupProps {
   onToggle: () => void;
   onMultiSelect?: (e: React.MouseEvent) => void;
   activeSessionId: string | null;
-  onSessionSelect: (sessionId: string) => void;
+  onSessionSelect: (sessionId: string, e: Pick<React.MouseEvent, 'metaKey' | 'ctrlKey' | 'shiftKey'>) => void;
 }
 
 /**
@@ -101,7 +101,7 @@ const ChildSessionStatus: React.FC<{ sessionId: string }> = memo(({ sessionId })
 const MetaAgentChildRow: React.FC<{
   session: SessionMeta;
   isActive: boolean;
-  onSelect: () => void;
+  onSelect: (e: Pick<React.MouseEvent, 'metaKey' | 'ctrlKey' | 'shiftKey'>) => void;
 }> = memo(({ session, isActive, onSelect }) => (
   <div
     className={`meta-agent-child-item flex items-center gap-2 py-1.5 px-3 mr-2 mb-0.5 cursor-pointer rounded transition-colors duration-150 select-none ${
@@ -110,7 +110,7 @@ const MetaAgentChildRow: React.FC<{
     onClick={onSelect}
     role="button"
     tabIndex={0}
-    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(); } }}
+    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(e); } }}
     aria-label={session.title}
     aria-current={isActive ? 'page' : undefined}
   >
@@ -160,7 +160,7 @@ export const MetaAgentGroup: React.FC<MetaAgentGroupProps> = memo(({
           if (e.metaKey || e.ctrlKey) {
             onMultiSelect?.(e);
           } else {
-            onSessionSelect(metaSession.id);
+            onSessionSelect(metaSession.id, e);
           }
         }}
         onContextMenu={(e) => e.preventDefault()}
@@ -169,7 +169,7 @@ export const MetaAgentGroup: React.FC<MetaAgentGroupProps> = memo(({
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            onSessionSelect(metaSession.id);
+            onSessionSelect(metaSession.id, e);
           }
         }}
         aria-expanded={isExpanded}
@@ -231,7 +231,7 @@ export const MetaAgentGroup: React.FC<MetaAgentGroupProps> = memo(({
               key={session.id}
               session={session}
               isActive={activeSessionId === session.id}
-              onSelect={() => onSessionSelect(session.id)}
+              onSelect={(e) => onSessionSelect(session.id, e)}
             />
           ))}
         </div>
