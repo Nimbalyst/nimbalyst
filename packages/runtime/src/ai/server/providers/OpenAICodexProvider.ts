@@ -896,8 +896,10 @@ export class OpenAICodexProvider extends BaseAgentProvider {
         for (const item of transcriptAdapter.processEvent(event)) {
           switch (item.kind) {
             case 'text':
-              // Content rendered from canonical events -- no StreamChunk yield
+              // Content rendered from canonical events, but AIService still needs
+              // text yields for OS notification body content.
               fullText += item.text;
+              yield { type: 'text', content: item.text };
               break;
 
             case 'tool_call':

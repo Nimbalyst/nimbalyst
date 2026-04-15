@@ -746,6 +746,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
             switch (item.kind) {
               case 'text':
                 fullContent += item.text;
+                yield { type: 'text', content: item.text };
                 break;
 
               case 'session_id':

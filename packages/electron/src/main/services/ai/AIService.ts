@@ -3887,10 +3887,11 @@ export class AIService {
                 const notificationBody = notificationText.length > 0
                   ? notificationText.substring(0, 100) + (notificationText.length > 100 ? '...' : '')
                   : 'Response complete';
+                const sessionLabel = session.title || session.provider;
 
                 await notificationService.showNotification({
-                  title: 'Nimbalyst AI Response Ready',
-                  body: `${session.provider}: ${notificationBody}`,
+                  title: `${sessionLabel} -- Response Ready`,
+                  body: notificationBody,
                   sessionId: session.id,
                   workspacePath: workspacePath,
                   provider: session.provider
