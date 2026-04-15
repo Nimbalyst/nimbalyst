@@ -27,6 +27,7 @@ import {
   sessionOrChildProcessingAtom,
   sessionUnreadAtom,
   sessionPendingPromptAtom,
+  sessionHasPendingInteractivePromptAtom,
   groupSessionStatusAtom,
   viewModeAtom,
   setViewModeAtom,
@@ -145,8 +146,17 @@ const SessionCardStatus: React.FC<{ sessionId: string }> = ({ sessionId }) => {
   const isProcessing = useAtomValue(sessionOrChildProcessingAtom(sessionId));
   const hasUnread = useAtomValue(sessionUnreadAtom(sessionId));
   const hasPendingPrompt = useAtomValue(sessionPendingPromptAtom(sessionId));
+  const hasPendingInteractivePrompt = useAtomValue(sessionHasPendingInteractivePromptAtom(sessionId));
 
-  // Priority: processing > pending prompt > unread (same as SessionListItem)
+  // Priority: interactive prompt > processing > pending prompt > unread (same as GroupCardStatus)
+  if (hasPendingInteractivePrompt) {
+    return (
+      <div className="session-card-status-indicator waiting-for-input" title="Waiting for your response">
+        <MaterialSymbol icon="contact_support" size={18} />
+      </div>
+    );
+  }
+
   if (isProcessing) {
     return (
       <div className="session-card-status-indicator processing flex items-center justify-center text-[var(--nim-primary)]" title="Processing">
@@ -157,8 +167,8 @@ const SessionCardStatus: React.FC<{ sessionId: string }> = ({ sessionId }) => {
 
   if (hasPendingPrompt) {
     return (
-      <div className="session-card-status-indicator pending flex items-center justify-center text-[var(--nim-warning)] animate-pulse" title="Waiting for your response">
-        <MaterialSymbol icon="help" size={14} />
+      <div className="session-card-status-indicator waiting-for-input" title="Waiting for your response">
+        <MaterialSymbol icon="help" size={18} />
       </div>
     );
   }
@@ -174,6 +184,70 @@ const SessionCardStatus: React.FC<{ sessionId: string }> = ({ sessionId }) => {
   return null;
 };
 
+// Hook to check if a session is awaiting user input (interactive prompt or pending prompt)
+function useSessionAwaitingInput(sessionId: string): boolean {
+  const hasPendingInteractivePrompt = useAtomValue(sessionHasPendingInteractivePromptAtom(sessionId));
+  const hasPendingPrompt = useAtomValue(sessionPendingPromptAtom(sessionId));
+  return hasPendingInteractivePrompt || hasPendingPrompt;
+}
+
+// Extracted session card component so we can use hooks for awaiting-input state
+const SessionCardItem: React.FC<{
+  session: SessionMeta;
+  isActive: boolean;
+  isLoaded: boolean;
+  relativeTime: string;
+  onSelect: (id: string) => void;
+  onContextMenu: (e: React.MouseEvent, type: 'session' | 'workstream' | 'worktree', sessionId?: string, worktreeId?: string, isPinned?: boolean, isArchived?: boolean) => void;
+  clearSelection: () => void;
+}> = ({ session, isActive, isLoaded, relativeTime, onSelect, onContextMenu, clearSelection }) => {
+  const isAwaitingInput = useSessionAwaitingInput(session.id);
+
+  return (
+    <div
+      className={`session-history-card ${isActive ? 'active' : ''} ${session.isPinned ? 'pinned' : ''} ${session.isArchived ? 'archived' : ''} ${isLoaded ? 'loaded' : ''}`}
+      onClick={() => { clearSelection(); onSelect(session.id); }}
+      onContextMenu={(e) => onContextMenu(e, 'session', session.id, undefined, session.isPinned, session.isArchived)}
+      style={isAwaitingInput ? { borderColor: 'var(--nim-warning)', backgroundColor: 'rgba(251, 191, 36, 0.08)' } : undefined}
+    >
+      <div className="session-history-card-icon">
+        <svg width="32" height="32" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M4 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" stroke="currentColor" strokeWidth="1.2"/>
+          <path d="M5 6h6M5 9h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+        </svg>
+        {isLoaded && (
+          <div className="session-history-card-loaded-dot"></div>
+        )}
+      </div>
+      <div className="session-history-card-content">
+        <div className="session-history-card-header">
+          <span className="session-history-card-title">{session.title || 'Untitled Session'}</span>
+          <div className="session-history-card-badges">
+            <SessionCardStatus sessionId={session.id} />
+            {session.isPinned && (
+              <svg className="session-history-card-pin-icon" width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M9.828 3.172a.5.5 0 0 1 .707 0l2.293 2.293a.5.5 0 0 1 0 .707l-4 4a.5.5 0 0 1-.708 0L5.828 7.879a.5.5 0 0 1 0-.707l4-4z"/>
+                <path d="M8 12l-1.5 1.5a.5.5 0 0 1-.707-.707L7.293 11.5 8 12z"/>
+              </svg>
+            )}
+            {session.isArchived && (
+              <span className="session-history-card-archive-badge">archived</span>
+            )}
+          </div>
+        </div>
+        <div className="session-history-card-info">
+          <span className="session-history-card-provider">{session.provider}</span>
+          <span className="session-history-card-timestamp">{relativeTime}</span>
+          <span className="session-history-card-meta">{session.messageCount || 0} message{session.messageCount !== 1 ? 's' : ''}</span>
+          {session.uncommittedCount !== undefined && session.uncommittedCount > 0 && (
+            <span className="session-history-card-uncommitted-badge">{session.uncommittedCount} uncommitted</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Component for rendering worktree/workstream status indicators (checks all child sessions)
 // Uses groupSessionStatusAtom to properly subscribe to processing/unread/pending state changes
 // for all sessions in the group without violating React hooks rules.
@@ -187,10 +261,10 @@ const GroupCardStatus: React.FC<{ sessionIds: string[] }> = ({ sessionIds }) => 
 
   // Priority: interactive prompt > processing > pending prompt > unread (same as SessionListItem)
   // Only show "waiting" if something is also processing (safety net for stale atom state)
-  if (hasPendingInteractivePrompt && hasProcessing) {
+  if (hasPendingInteractivePrompt) {
     return (
-      <div className="session-card-status-indicator waiting-for-input flex items-center justify-center text-[var(--nim-warning)] animate-pulse" title="Waiting for your response">
-        <MaterialSymbol icon="contact_support" size={14} />
+      <div className="session-card-status-indicator waiting-for-input" title="Waiting for your response">
+        <MaterialSymbol icon="contact_support" size={18} />
       </div>
     );
   }
@@ -205,8 +279,8 @@ const GroupCardStatus: React.FC<{ sessionIds: string[] }> = ({ sessionIds }) => 
 
   if (hasPendingPrompt) {
     return (
-      <div className="session-card-status-indicator pending flex items-center justify-center text-[var(--nim-warning)] animate-pulse" title="Waiting for your response">
-        <MaterialSymbol icon="help" size={14} />
+      <div className="session-card-status-indicator waiting-for-input" title="Waiting for your response">
+        <MaterialSymbol icon="help" size={18} />
       </div>
     );
   }
@@ -2238,7 +2312,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           break;
       }
     }
-    console.log('[SessionHistory] visualOrderRef updated:', ids.length, 'session IDs (from', flatVirtuosoItems.filter(e => e.kind === 'item').length, 'items). First 5:', ids.slice(0, 5).map(id => id.slice(0, 8)));
+    // console.log('[SessionHistory] visualOrderRef updated:', ids.length, 'session IDs (from', flatVirtuosoItems.filter(e => e.kind === 'item').length, 'items). First 5:', ids.slice(0, 5).map(id => id.slice(0, 8)));
     return ids;
   }, [flatVirtuosoItems, worktreeGroupsData]);
 
@@ -3137,47 +3211,16 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                     const relativeTime = new Date(timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
                     return (
-                      <div
+                      <SessionCardItem
                         key={`session-card-${session.id}`}
-                        className={`session-history-card ${session.id === activeSessionId ? 'active' : ''} ${session.isPinned ? 'pinned' : ''} ${session.isArchived ? 'archived' : ''} ${loadedSessionIds.includes(session.id) ? 'loaded' : ''}`}
-                        onClick={() => { clearSelection(); onSessionSelect(session.id); }}
-                        onContextMenu={(e) => handleCardContextMenu(e, 'session', session.id, undefined, session.isPinned, session.isArchived)}
-                      >
-                        <div className="session-history-card-icon">
-                            <svg width="32" height="32" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M4 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" stroke="currentColor" strokeWidth="1.2"/>
-                              <path d="M5 6h6M5 9h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-                            </svg>
-                          {loadedSessionIds.includes(session.id) && (
-                            <div className="session-history-card-loaded-dot"></div>
-                          )}
-                        </div>
-                        <div className="session-history-card-content">
-                          <div className="session-history-card-header">
-                            <span className="session-history-card-title">{session.title || 'Untitled Session'}</span>
-                            <div className="session-history-card-badges">
-                              <SessionCardStatus sessionId={session.id} />
-                              {session.isPinned && (
-                                <svg className="session-history-card-pin-icon" width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-                                  <path d="M9.828 3.172a.5.5 0 0 1 .707 0l2.293 2.293a.5.5 0 0 1 0 .707l-4 4a.5.5 0 0 1-.708 0L5.828 7.879a.5.5 0 0 1 0-.707l4-4z"/>
-                                  <path d="M8 12l-1.5 1.5a.5.5 0 0 1-.707-.707L7.293 11.5 8 12z"/>
-                                </svg>
-                              )}
-                              {session.isArchived && (
-                                <span className="session-history-card-archive-badge">archived</span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="session-history-card-info">
-                            <span className="session-history-card-provider">{session.provider}</span>
-                            <span className="session-history-card-timestamp">{relativeTime}</span>
-                            <span className="session-history-card-meta">{session.messageCount || 0} message{session.messageCount !== 1 ? 's' : ''}</span>
-                            {session.uncommittedCount !== undefined && session.uncommittedCount > 0 && (
-                              <span className="session-history-card-uncommitted-badge">{session.uncommittedCount} uncommitted</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                        session={session}
+                        isActive={session.id === activeSessionId}
+                        isLoaded={loadedSessionIds.includes(session.id)}
+                        relativeTime={relativeTime}
+                        onSelect={onSessionSelect}
+                        onContextMenu={handleCardContextMenu}
+                        clearSelection={clearSelection}
+                      />
                     );
                   }
                 });

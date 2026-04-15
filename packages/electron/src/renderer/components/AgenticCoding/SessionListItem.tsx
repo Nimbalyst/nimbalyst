@@ -20,9 +20,7 @@ const SessionStatusIndicator = memo<{ sessionId: string; messageCount?: number }
 
   // Priority: waiting for input > processing > pending prompt > unread > message count
   // All interactive prompts (AskUserQuestion, ExitPlanMode, ToolPermission, etc.) show same indicator
-  // Only show "waiting" if session is also processing - a completed session with a stale
-  // pending prompt flag should not show as waiting (safety net for missed resolved events)
-  if (hasPendingInteractivePrompt && isProcessing) {
+  if (hasPendingInteractivePrompt) {
     return (
       <div className="session-list-item-status waiting-for-input flex items-center justify-center w-5 h-5 text-[var(--nim-warning)] animate-pulse" title="Waiting for your response">
         <MaterialSymbol icon="contact_support" size={14} />
@@ -170,6 +168,11 @@ export const SessionListItem = memo<SessionListItemProps>(({
 
   // Share state (for the share icon indicator in the list item)
   const shareInfo = useAtomValue(sessionShareAtom(id));
+
+  // Awaiting input state (interactive prompt or pending prompt)
+  const hasInteractivePrompt = useAtomValue(sessionHasPendingInteractivePromptAtom(id));
+  const hasPendingPromptAtom = useAtomValue(sessionPendingPromptAtom(id));
+  const isAwaitingInput = hasInteractivePrompt || hasPendingPromptAtom;
 
   // Determine if this session can be dragged
   // Can drag if: (1) Has a parent (is a child session), OR (2) Is an orphan (no parent, no children)
@@ -407,7 +410,9 @@ export const SessionListItem = memo<SessionListItemProps>(({
         ${isDragging ? 'dragging opacity-50 cursor-grabbing' : ''}
         ${isValidDropTarget ? 'drop-target-valid bg-[rgba(83,89,93,0.4)] border-2 border-dashed border-[var(--nim-primary)]' : ''}
         ${isDraggable ? 'cursor-grab' : ''}
+        ${isAwaitingInput && !isActive ? 'bg-[rgba(251,191,36,0.08)]' : ''}
       `}
+      style={isAwaitingInput ? { borderLeft: '2px solid var(--nim-warning)' } : undefined}
       onClick={onClick}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}

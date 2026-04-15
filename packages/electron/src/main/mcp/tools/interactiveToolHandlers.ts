@@ -3,6 +3,7 @@ import {
   AgentMessagesRepository,
   AISessionsRepository,
 } from "@nimbalyst/runtime";
+import { getSessionStateManager } from "@nimbalyst/runtime/ai/server/SessionStateManager";
 import { notificationService } from "../../services/NotificationService";
 import { TrayManager } from "../../tray/TrayManager";
 import { findWindowIdForWorkspacePath } from "../mcpWorkspaceResolver";
@@ -259,6 +260,16 @@ export async function handleAskUserQuestion(
 
   console.log(`[MCP Server] AskUserQuestion waiting for response: questionId=${questionId}, sessionId=${sessionId}`);
 
+  // Update session status so all windows show the pending indicator
+  if (sessionId) {
+    getSessionStateManager().updateActivity({
+      sessionId,
+      status: 'waiting_for_input',
+    }).catch((err) => {
+      console.error('[MCP Server] Failed to update session status to waiting_for_input:', err);
+    });
+  }
+
   return new Promise((resolve) => {
     let settled = false;
     let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -272,6 +283,15 @@ export async function handleAskUserQuestion(
       settled = true;
 
       console.log(`[MCP Server] AskUserQuestion settled via ${source}: questionId=${questionId}, cancelled=${result?.cancelled}`);
+
+      // Update session status back to running
+      if (sessionId) {
+        getSessionStateManager().updateActivity({
+          sessionId,
+          status: 'running',
+          isStreaming: true,
+        }).catch(() => {});
+      }
 
       if (pollTimer) {
         clearInterval(pollTimer);
@@ -633,6 +653,16 @@ export async function handleGitCommitProposal(
       );
 
       if (response.action === "committed" && response.commitHash) {
+        // Link commit to tracker items via session (fire-and-forget)
+        import("../../services/CommitTrackerLinker").then(({ commitTrackerLinker }) => {
+          commitTrackerLinker.linkBySession(
+            response.commitHash!,
+            commitMessage,
+            targetSessionId,
+            workspacePath,
+          ).catch((err) => console.error("[MCP Server] Commit-tracker linking failed:", err));
+        }).catch(() => { /* CommitTrackerLinker not available */ });
+
         return {
           content: [
             {
@@ -718,6 +748,18 @@ export async function handleGitCommitProposal(
       ipcMain.removeListener(responseChannel, onResponse);
 
       if (result.action === "committed" && result.commitHash) {
+        // Link commit to tracker items via session (fire-and-forget)
+        if (targetSessionId && targetSessionId !== "unknown") {
+          import("../../services/CommitTrackerLinker").then(({ commitTrackerLinker }) => {
+            commitTrackerLinker.linkBySession(
+              result.commitHash!,
+              result.commitMessage || proposalArgs.commitMessage || "",
+              targetSessionId,
+              workspacePath,
+            ).catch((err) => console.error("[MCP Server] Commit-tracker linking failed:", err));
+          }).catch(() => { /* CommitTrackerLinker not available */ });
+        }
+
         const filesCount =
           result.filesCommitted?.length ||
           proposalArgs.filesToStage!.map(getFilePath).length;

@@ -37,8 +37,7 @@ const WorkstreamGroupStatusIndicator: React.FC<{ sessionIds: string[] }> = memo(
   const { hasPendingInteractivePrompt, hasProcessing, hasPendingPrompt, hasUnread } = useAtomValue(groupSessionStatusAtom(sessionIdsKey));
 
   // Priority: interactive prompt > processing > pending prompt > unread
-  // Only show "waiting" if something is also processing (safety net for stale atom state)
-  if (hasPendingInteractivePrompt && hasProcessing) {
+  if (hasPendingInteractivePrompt) {
     return (
       <div className="workstream-group-status-indicator waiting-for-input flex items-center justify-center text-[var(--nim-warning)] animate-pulse" title="Waiting for your response">
         <MaterialSymbol icon="contact_support" size={12} />
@@ -924,8 +923,7 @@ const WorkstreamSessionStatusIndicator = memo<{ sessionId: string; uncommittedCo
   const hasUnread = useAtomValue(sessionUnreadAtom(sessionId));
 
   // Priority: interactive prompt > processing > pending prompt > unread > uncommitted count
-  // Only show "waiting" if session is also processing (safety net for stale atom state)
-  if (hasPendingInteractivePrompt && isProcessing) {
+  if (hasPendingInteractivePrompt) {
     return (
       <div className="workstream-session-item-status waiting-for-input flex items-center justify-center text-[var(--nim-warning)] animate-pulse" title="Waiting for your response">
         <MaterialSymbol icon="contact_support" size={12} />

@@ -211,6 +211,16 @@
   flex-shrink: 0;
 }
 
+.session-card-status-indicator.waiting-for-input {
+  color: var(--nim-warning);
+  animation: gentle-pulse 2s ease-in-out infinite;
+}
+
+@keyframes gentle-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
 .session-card-status-icon {
   display: block;
 }
