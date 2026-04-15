@@ -20,6 +20,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.13] - 2026-04-15
+
+
+### Added
+- Main-process commit event subscription API in GitRefWatcher
+
+### Changed
+- Updated About window copy to reflect current product positioning
+
+### Fixed
+- OS notifications now show actual response text and session title instead of text before trailing tool calls
+- Tracker sync: content refetch retry, nullish checks, and dbRowToRecord improvements
+- Prevent aiSaveSettings callers from clobbering unrelated fields via read-modify-write
+- Wire tracker comments, activity, and content through sync pipeline
+- Tracker items created via MCP now get local issue keys and proper content formatting
+- Unified shift/cmd-click selection across all session group types
+- Persist fieldUpdatedAt timestamps for correct tracker sync last-write-wins
+- Render system errors as errors instead of system reminders
+- @@session reference links now navigate to the referenced session
+- Auto-open workspace when mobile sends prompts to a closed project
+- Unified tracker kanban and list view data sources to eliminate ghost entries
+
 ## [0.57.12] - 2026-04-14
 
 
