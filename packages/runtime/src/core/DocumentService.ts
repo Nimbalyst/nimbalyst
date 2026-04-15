@@ -156,6 +156,10 @@ export interface TrackerItem {
   documentId?: string;
   /** Sync status: local (never synced), synced (up to date), pending (queued for sync) */
   syncStatus?: TrackerItemSyncStatus;
+
+  // Field-level LWW timestamps (persisted for sync conflict resolution)
+  /** Per-field timestamps for Last-Write-Wins conflict resolution during sync */
+  fieldUpdatedAt?: Record<string, number>;
 }
 
 /**

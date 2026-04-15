@@ -516,6 +516,8 @@ async function hydrateTrackerItem(
     // Spread customFields at the top level so generated columns (e.g. kanban_sort_order)
     // can read them via data->>'fieldName'. Don't nest under a customFields sub-key.
     ...(item.customFields || {}),
+    // Preserve per-field LWW timestamps from the sync payload for conflict resolution
+    _fieldUpdatedAt: payload.fieldUpdatedAt,
   };
 
   // Preserve local-only fields (like kanbanSortOrder) that the server may not have.

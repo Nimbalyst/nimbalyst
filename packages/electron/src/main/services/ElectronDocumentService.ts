@@ -1090,11 +1090,18 @@ export class ElectronDocumentService implements DocumentService {
     // getCurrentIdentity imported statically at top of file
     data.lastModifiedBy = getCurrentIdentity(row.workspace);
 
+    // Stamp per-field LWW timestamps for sync conflict resolution
+    const fieldTimestamps: Record<string, number> = data._fieldUpdatedAt || {};
+    const now = Date.now();
+
     // Merge remaining updates into data (skip typeTags since it's a column)
     for (const [key, value] of Object.entries(updates)) {
       if (key === 'typeTags') continue;
       data[key] = value;
+      fieldTimestamps[key] = now;
     }
+
+    data._fieldUpdatedAt = fieldTimestamps;
 
     await database.query(
       `UPDATE tracker_items SET data = $1, updated = NOW() WHERE id = $2`,
@@ -1596,6 +1603,16 @@ export class ElectronDocumentService implements DocumentService {
     if (payload.customFields) {
       Object.assign(data, payload.customFields);
     }
+
+    // Stamp per-field LWW timestamps for sync conflict resolution on create
+    const now = Date.now();
+    const fieldTimestamps: Record<string, number> = {};
+    for (const key of Object.keys(data)) {
+      // Skip system/internal keys that aren't user fields
+      if (key === '_fieldUpdatedAt' || key === 'authorIdentity' || key === 'kanbanSortOrder') continue;
+      fieldTimestamps[key] = now;
+    }
+    data._fieldUpdatedAt = fieldTimestamps;
 
     const source = payload.source || 'native';
     const contentJson = payload.content ? JSON.stringify(payload.content) : null;
