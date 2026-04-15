@@ -30,6 +30,7 @@ public class TranscriptController: ObservableObject {
 public struct TranscriptWebView: UIViewRepresentable {
     let session: Session
     let messages: [Message]
+    let waitForInitialMessages: Bool
     let onSendPrompt: (String) -> Void
     let onInteractiveResponse: (String, String, [String: Any]) -> Void
     let controller: TranscriptController?
@@ -40,6 +41,7 @@ public struct TranscriptWebView: UIViewRepresentable {
     public init(
         session: Session,
         messages: [Message],
+        waitForInitialMessages: Bool = false,
         onSendPrompt: @escaping (String) -> Void,
         onInteractiveResponse: @escaping (String, String, [String: Any]) -> Void,
         controller: TranscriptController? = nil,
@@ -49,6 +51,7 @@ public struct TranscriptWebView: UIViewRepresentable {
     ) {
         self.session = session
         self.messages = messages
+        self.waitForInitialMessages = waitForInitialMessages
         self.onSendPrompt = onSendPrompt
         self.onInteractiveResponse = onInteractiveResponse
         self.controller = controller
@@ -62,6 +65,7 @@ public struct TranscriptWebView: UIViewRepresentable {
     public func makeCoordinator() -> Coordinator {
         let coordinator = Coordinator(
             session: session,
+            waitForInitialMessages: waitForInitialMessages,
             onSendPrompt: onSendPrompt,
             onInteractiveResponse: onInteractiveResponse,
             onReady: onReady,
@@ -154,6 +158,7 @@ public struct TranscriptWebView: UIViewRepresentable {
 
     public func updateUIView(_ webView: WKWebView, context: Context) {
         let coordinator = context.coordinator
+        coordinator.waitForInitialMessages = waitForInitialMessages
 
         // Check if session changed
         if coordinator.currentSessionId != session.id {
@@ -174,9 +179,8 @@ public struct TranscriptWebView: UIViewRepresentable {
         // instead of trying to append (append requires isReady which needs loadSession first).
         // This handles the race where GRDB fires with real data before the WebView is ready.
         if !coordinator.isReady {
-            if coordinator.pendingSession != nil {
-                coordinator.pendingSession = (session, messages)
-            } else if coordinator.webViewReady {
+            coordinator.pendingSession = (session, messages)
+            if coordinator.webViewReady {
                 coordinator.loadSessionIntoWebView(session: session, messages: messages)
             }
             return
@@ -238,6 +242,9 @@ public struct TranscriptWebView: UIViewRepresentable {
         /// Session + messages waiting for the web view to be ready.
         var pendingSession: (Session, [Message])?
 
+        /// Defer the first JS load until Swift has real initial transcript data.
+        var waitForInitialMessages: Bool
+
         private let session: Session
         private let onSendPrompt: (String) -> Void
         private let onInteractiveResponse: (String, String, [String: Any]) -> Void
@@ -250,6 +257,7 @@ public struct TranscriptWebView: UIViewRepresentable {
 
         init(
             session: Session,
+            waitForInitialMessages: Bool,
             onSendPrompt: @escaping (String) -> Void,
             onInteractiveResponse: @escaping (String, String, [String: Any]) -> Void,
             onReady: (() -> Void)? = nil,
@@ -257,6 +265,7 @@ public struct TranscriptWebView: UIViewRepresentable {
             onOpenFile: ((String) -> Void)? = nil
         ) {
             self.session = session
+            self.waitForInitialMessages = waitForInitialMessages
             self.onSendPrompt = onSendPrompt
             self.onInteractiveResponse = onInteractiveResponse
             self.onReady = onReady
@@ -285,7 +294,6 @@ public struct TranscriptWebView: UIViewRepresentable {
                 if let (session, messages) = pendingSession {
                     logger.info("Bridge ready: loading pending session \(session.id) with \(messages.count) messages")
                     loadSessionIntoWebView(session: session, messages: messages)
-                    pendingSession = nil
                 }
 
             case "prompt":
@@ -471,7 +479,6 @@ public struct TranscriptWebView: UIViewRepresentable {
                     if let (session, messages) = self.pendingSession {
                         self.logger.info("Pool probe: flushing pending session \(session.id) with \(messages.count) messages")
                         self.loadSessionIntoWebView(session: session, messages: messages)
-                        self.pendingSession = nil
                     }
                     return
                 }
@@ -523,10 +530,21 @@ public struct TranscriptWebView: UIViewRepresentable {
             }
         }
 
-        func loadSessionIntoWebView(session: Session, messages: [Message]) {
-            guard let webView = webView, !isLoadingSession else { return }
+        @discardableResult
+        func loadSessionIntoWebView(session: Session, messages: [Message]) -> Bool {
+            guard let webView = webView, !isLoadingSession else {
+                pendingSession = (session, messages)
+                return false
+            }
+
+            if waitForInitialMessages {
+                logger.debug("loadSession: deferred initial load for session \(session.id) with \(messages.count) messages")
+                pendingSession = (session, messages)
+                return false
+            }
 
             isLoadingSession = true
+            pendingSession = nil
             let bridgeMessages = messages.map { messageToBridgeJSON($0) }
 
             let metadata: [String: Any] = [
@@ -559,10 +577,23 @@ public struct TranscriptWebView: UIViewRepresentable {
                     self?.lastModel = session.model
                     self?.lastTitle = session.titleDecrypted
 
+                    if let pending = self?.pendingSession,
+                       pending.0.id == session.id,
+                       pending.1.count > messages.count {
+                        let newMessages = Array(pending.1[messages.count...])
+                        self?.appendMessagesToWebView(messages: newMessages)
+                        self?.lastMessageCount = pending.1.count
+                        self?.pendingSession = nil
+                    } else if self?.pendingSession?.0.id == session.id {
+                        self?.pendingSession = nil
+                    }
+
                     // Signal to the parent view that transcript is ready.
                     self?.onReady?()
                 }
             }
+
+            return true
         }
 
         func appendMessageToWebView(message: Message) {

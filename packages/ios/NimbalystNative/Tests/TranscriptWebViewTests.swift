@@ -257,6 +257,7 @@ final class TranscriptWebViewTests: XCTestCase {
 
         let coordinator = TranscriptWebView.Coordinator(
             session: session,
+            waitForInitialMessages: false,
             onSendPrompt: { _ in },
             onInteractiveResponse: { action, promptId, _ in
                 receivedAction = action
@@ -289,6 +290,7 @@ final class TranscriptWebViewTests: XCTestCase {
 
         let coordinator = TranscriptWebView.Coordinator(
             session: session,
+            waitForInitialMessages: false,
             onSendPrompt: { text in
                 receivedPrompt = text
                 expectation.fulfill()

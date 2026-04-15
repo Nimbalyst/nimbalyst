@@ -62,10 +62,12 @@ struct DocumentListView: View {
             }
         }
         .listStyle(.plain)
+        #if canImport(UIKit)
         .navigationDestination(for: SyncedDocument.self) { doc in
             DocumentEditorView(document: doc)
                 .environmentObject(appState)
         }
+        #endif
     }
 
     private var emptyState: some View {

@@ -156,7 +156,7 @@ final class WebSocketClient: @unchecked Sendable {
         wsTask.resume()
 
         onConnectionStateChanged?(true)
-        startReceiving()
+        startReceiving(on: wsTask)
         if sendsDeviceAnnounce {
             startDeviceAnnounceTimer()
         }
@@ -206,9 +206,10 @@ final class WebSocketClient: @unchecked Sendable {
 
     // MARK: - Receive Loop
 
-    private func startReceiving() {
-        task?.receive { [weak self] result in
+    private func startReceiving(on wsTask: URLSessionWebSocketTask) {
+        wsTask.receive { [weak self] result in
             guard let self = self else { return }
+            guard self.task === wsTask else { return }
 
             switch result {
             case .success(let message):
@@ -223,22 +224,23 @@ final class WebSocketClient: @unchecked Sendable {
                     break
                 }
                 // Continue receiving
-                self.startReceiving()
+                self.startReceiving(on: wsTask)
 
             case .failure(let error):
                 self.logger.error("Receive error: \(error.localizedDescription)")
-                self.handleDisconnect()
+                self.handleDisconnect(for: wsTask)
             }
         }
     }
 
     // MARK: - Reconnection
 
-    private func handleDisconnect() {
+    private func handleDisconnect(for wsTask: URLSessionWebSocketTask) {
         // Receive callbacks fire on a URLSession background queue.
         // Hop to main for Timer invalidation and shared state mutation.
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
+            guard self.task === wsTask else { return }
             self.task = nil
             self.stopDeviceAnnounceTimer()
             self.onConnectionStateChanged?(false)

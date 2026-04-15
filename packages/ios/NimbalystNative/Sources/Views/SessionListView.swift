@@ -65,13 +65,6 @@ struct GroupedSessionItems: Identifiable {
     var id: String { period.rawValue }
 }
 
-/// Legacy type alias for macOS SessionListView variant in NimbalystApp.swift.
-struct GroupedSessions: Identifiable {
-    let period: TimePeriod
-    let sessions: [Session]
-    var id: String { period.rawValue }
-}
-
 // MARK: - Workstream Group Model
 
 struct WorkstreamGroup: Identifiable {
@@ -152,13 +145,33 @@ public struct SessionListView: View {
     @EnvironmentObject var appState: AppState
     public let project: Project
 
+    /// When non-nil, the List uses selection binding for NavigationSplitView sidebar mode.
+    /// When nil, NavigationLink push navigation is used (iPhone NavigationStack mode).
+    private var selectedSession: Binding<Session?>?
+
+    /// Called when the user taps the project switcher button (iPad sidebar only).
+    private var onSwitchProject: (() -> Void)?
+
+    /// Whether this view is operating as a NavigationSplitView sidebar.
+    private var isIPadSidebar: Bool { selectedSession != nil }
+
     @State private var sessions: [Session] = []
     @State private var cancellable: AnyDatabaseCancellable?
     @State private var expandedWorkstreams: Set<String> = []
     @State private var selectedTab: ProjectTab = .sessions
 
+    /// iPhone init: push navigation via NavigationLink.
     public init(project: Project) {
         self.project = project
+        self.selectedSession = nil
+        self.onSwitchProject = nil
+    }
+
+    /// iPad init: selection binding drives NavigationSplitView detail column.
+    public init(project: Project, selectedSession: Binding<Session?>, onSwitchProject: @escaping () -> Void) {
+        self.project = project
+        self.selectedSession = selectedSession
+        self.onSwitchProject = onSwitchProject
     }
     @State private var searchText = ""
     @State private var isCreatingSession = false
@@ -310,34 +323,52 @@ public struct SessionListView: View {
     }
 
     public var body: some View {
-        VStack(spacing: 0) {
-            // Sessions | Files segmented control
-            Picker("Tab", selection: $selectedTab) {
-                ForEach(ProjectTab.allCases, id: \.self) { tab in
-                    Text(tab.rawValue).tag(tab)
-                }
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-
-            // Tab content
-            switch selectedTab {
-            case .sessions:
+        Group {
+            if isIPadSidebar {
+                // iPad sidebar: sessions only, no tab picker
                 sessionListContent
-            case .files:
-                DocumentListView(project: project)
-                    .environmentObject(appState)
+            } else {
+                VStack(spacing: 0) {
+                    // Sessions | Files segmented control
+                    Picker("Tab", selection: $selectedTab) {
+                        ForEach(ProjectTab.allCases, id: \.self) { tab in
+                            Text(tab.rawValue).tag(tab)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+
+                    // Tab content
+                    switch selectedTab {
+                    case .sessions:
+                        sessionListContent
+                    case .files:
+                        DocumentListView(project: project)
+                            .environmentObject(appState)
+                    }
+                }
             }
         }
         .navigationTitle(project.name)
         #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarTitleDisplayMode(isIPadSidebar ? .large : .inline)
         #endif
         .navigationDestination(for: Session.self) { session in
+            // Only used in iPhone NavigationStack mode.
+            // In iPad sidebar mode, NavigationLinks are not emitted so this never triggers.
             SessionDetailView(session: session)
         }
         .toolbar {
+            #if os(iOS)
+            if let switchProject = onSwitchProject {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { switchProject() } label: {
+                        Image(systemName: "folder")
+                    }
+                }
+            }
+            #endif
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: 12) {
                     #if os(iOS)
@@ -378,6 +409,11 @@ public struct SessionListView: View {
         .onChange(of: appState.availableModels) { _ in
             resolveDefaultModel()
         }
+        .onChange(of: project.id) { _ in
+            cancellable?.cancel()
+            startObserving()
+            loadExpandedState()
+        }
         .onDisappear {
             cancellable?.cancel()
         }
@@ -385,30 +421,44 @@ public struct SessionListView: View {
 
     // MARK: - Session List Content
 
-    private var sessionListContent: some View {
-        List {
-            // Phase filter - only show when sessions have phase data
-            if hasPhaseData {
-                Picker("Filter", selection: $phaseFilter) {
-                    ForEach(PhaseFilter.allCases, id: \.self) { filter in
-                        Text(filter.rawValue).tag(filter)
-                    }
+    @ViewBuilder
+    private var sessionListRows: some View {
+        // Phase filter - only show when sessions have phase data
+        if hasPhaseData {
+            Picker("Filter", selection: $phaseFilter) {
+                ForEach(PhaseFilter.allCases, id: \.self) { filter in
+                    Text(filter.rawValue).tag(filter)
                 }
-                .pickerStyle(.segmented)
-                .listRowSeparator(.hidden)
-                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
             }
+            .pickerStyle(.segmented)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+        }
 
-            // All items interleaved by time period
-            ForEach(allItemsGroupedByPeriod) { periodGroup in
-                Section(periodGroup.period.rawValue) {
-                    ForEach(periodGroup.items) { item in
-                        sessionListItemView(item)
-                    }
+        // All items interleaved by time period
+        ForEach(allItemsGroupedByPeriod) { periodGroup in
+            Section(periodGroup.period.rawValue) {
+                ForEach(periodGroup.items) { item in
+                    sessionListItemView(item)
                 }
             }
         }
-        .listStyle(.plain)
+    }
+
+    private var sessionListContent: some View {
+        Group {
+            if let binding = selectedSession {
+                List(selection: binding) {
+                    sessionListRows
+                }
+                .listStyle(.sidebar)
+            } else {
+                List {
+                    sessionListRows
+                }
+                .listStyle(.plain)
+            }
+        }
         .searchable(text: $searchText, prompt: "Search sessions")
         .refreshable {
             appState.requestSync()
@@ -493,20 +543,32 @@ public struct SessionListView: View {
                         saveExpandedState()
                     }
                 ),
-                voiceFocusedSessionId: voiceFocusedSessionId
+                voiceFocusedSessionId: voiceFocusedSessionId,
+                useSelectionTags: isIPadSidebar
             )
             .contextMenu {
                 groupContextMenu(for: group)
             }
         case .session(let session):
-            NavigationLink(value: session) {
+            if isIPadSidebar {
                 SessionRow(
                     session: session,
                     voiceFocusedSessionId: voiceFocusedSessionId
                 )
-            }
-            .contextMenu {
-                standaloneContextMenu(for: session)
+                .tag(session)
+                .contextMenu {
+                    standaloneContextMenu(for: session)
+                }
+            } else {
+                NavigationLink(value: session) {
+                    SessionRow(
+                        session: session,
+                        voiceFocusedSessionId: voiceFocusedSessionId
+                    )
+                }
+                .contextMenu {
+                    standaloneContextMenu(for: session)
+                }
             }
         }
     }
@@ -671,6 +733,10 @@ public struct SessionListView: View {
         do {
             try db.deleteSession(session.id)
             try db.refreshSessionCount(forProject: project.id)
+            // Clear selection if the deleted session was selected (iPad sidebar)
+            if selectedSession?.wrappedValue?.id == session.id {
+                selectedSession?.wrappedValue = nil
+            }
         } catch {
             print("Failed to delete session: \(error)")
         }
@@ -799,6 +865,10 @@ public struct SessionListView: View {
         do {
             try sync.setSessionArchived(sessionId: session.id, isArchived: archive)
             AnalyticsManager.shared.capture(archive ? "mobile_session_archived" : "mobile_session_unarchived")
+            // Clear selection if archiving the selected session while archive view is hidden
+            if archive && !showArchived && selectedSession?.wrappedValue?.id == session.id {
+                selectedSession?.wrappedValue = nil
+            }
         } catch {
             print("Failed to \(archive ? "archive" : "unarchive") session: \(error)")
         }
@@ -826,28 +896,49 @@ struct WorkstreamSection: View {
     let group: WorkstreamGroup
     @Binding var isExpanded: Bool
     var voiceFocusedSessionId: String?
+    /// When true, rows use .tag() for List(selection:) instead of NavigationLink.
+    var useSelectionTags: Bool = false
 
     var body: some View {
         Group {
             if group.children.isEmpty {
-                // Single-session worktree: show header as a navigable link to the session
-                NavigationLink(value: group.parent) {
+                // Single-session worktree: navigable row for the session
+                if useSelectionTags {
                     WorkstreamHeader(
                         title: group.parent.titleDecrypted ?? (group.isWorktree ? "Worktree" : "Workstream"),
                         childCount: 0,
                         status: computeAggregatedStatus([group.parent]),
                         isWorktree: group.isWorktree
                     )
+                    .tag(group.parent)
+                } else {
+                    NavigationLink(value: group.parent) {
+                        WorkstreamHeader(
+                            title: group.parent.titleDecrypted ?? (group.isWorktree ? "Worktree" : "Workstream"),
+                            childCount: 0,
+                            status: computeAggregatedStatus([group.parent]),
+                            isWorktree: group.isWorktree
+                        )
+                    }
                 }
             } else {
                 DisclosureGroup(isExpanded: $isExpanded) {
                     ForEach(group.children) { child in
-                        NavigationLink(value: child) {
+                        if useSelectionTags {
                             SessionRow(
                                 session: child,
                                 isChild: true,
                                 voiceFocusedSessionId: voiceFocusedSessionId
                             )
+                            .tag(child)
+                        } else {
+                            NavigationLink(value: child) {
+                                SessionRow(
+                                    session: child,
+                                    isChild: true,
+                                    voiceFocusedSessionId: voiceFocusedSessionId
+                                )
+                            }
                         }
                     }
                 } label: {

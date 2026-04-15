@@ -449,6 +449,7 @@ public final class SyncManager: ObservableObject {
             contextWindow: clientMeta?.currentContext?.contextWindow ?? existing?.contextWindow,
             createdAt: entry.createdAt,
             updatedAt: entry.updatedAt,
+            lastSyncedSeq: entry.messageCount ?? existing?.lastSyncedSeq ?? 0,
             lastReadAt: entry.lastReadAt ?? existing?.lastReadAt,
             lastMessageAt: entry.lastMessageAt ?? existing?.lastMessageAt,
             // "" from remote means "cleared" -> nil locally; nil means "not sent" -> keep existing
@@ -609,6 +610,7 @@ public final class SyncManager: ObservableObject {
             contextWindow: clientMeta?.currentContext?.contextWindow ?? existing?.contextWindow,
             createdAt: entry.createdAt,
             updatedAt: entry.updatedAt,
+            lastSyncedSeq: entry.messageCount ?? existing?.lastSyncedSeq ?? 0,
             lastReadAt: entry.lastReadAt ?? existing?.lastReadAt,
             lastMessageAt: entry.lastMessageAt ?? existing?.lastMessageAt,
             // "" from remote means "cleared" -> nil locally; nil means "not sent" -> keep existing
@@ -827,9 +829,22 @@ public final class SyncManager: ObservableObject {
     private func requestSessionSync(attempt: Int = 0) {
         guard let sessionId = activeSessionId else { return }
 
-        // Check if we have a sync watermark for this session
+        let localMessages = (try? database.messages(forSession: sessionId)) ?? []
+        let localCount = localMessages.count
+        let maxLocalSequence = localMessages.map(\.sequence).max() ?? 0
+        let expectedCount = (try? database.session(byId: sessionId))?.lastSyncedSeq ?? 0
+        let hasSparseLocalHistory = maxLocalSequence > localCount
+        let isBelowExpectedCount = expectedCount > 0 && localCount < expectedCount
+
+        // If the local cache has a high-sequence mobile message but is missing
+        // earlier rows, a delta cursor would permanently skip the old transcript.
+        let forceFullSync = hasSparseLocalHistory || isBelowExpectedCount
+
         let sinceSeq: Int?
-        if let state = try? database.syncState(forRoom: sessionId) {
+        if forceFullSync {
+            sinceSeq = nil
+            logger.info("Session sync requesting full history for \(sessionId): localCount=\(localCount), maxLocalSequence=\(maxLocalSequence), expectedCount=\(expectedCount)")
+        } else if let state = try? database.syncState(forRoom: sessionId) {
             sinceSeq = state.lastSequence > 0 ? state.lastSequence : nil
         } else {
             sinceSeq = nil

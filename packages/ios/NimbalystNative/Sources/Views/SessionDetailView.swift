@@ -62,6 +62,12 @@ public struct SessionDetailView: View {
     /// Live message list from GRDB observation.
     @State private var messages: [Message] = []
     @State private var messagesCancellable: AnyDatabaseCancellable?
+    /// Whether GRDB has emitted the first message snapshot for this session.
+    @State private var hasObservedInitialMessages = false
+    /// Whether the session room has explicitly reported no transcript messages.
+    @State private var serverConfirmedNoMessages = false
+    /// Whether the current session room has returned its initial sync response.
+    @State private var hasCompletedInitialSessionSync = false
 
     /// Compose bar state.
     @State private var composeText = ""
@@ -142,22 +148,13 @@ public struct SessionDetailView: View {
                 TranscriptWebView(
                     session: displaySession,
                     messages: messages,
+                    waitForInitialMessages: shouldWaitForInitialTranscriptMessages,
                     onSendPrompt: { text in sendPrompt(text) },
                     onInteractiveResponse: handleInteractiveResponse,
                     controller: transcriptController,
                     onReady: {
                         isWebViewReady = true
-                        // For sessions that have synced messages before,
-                        // keep the loading overlay until messages arrive
-                        // to avoid flashing the empty capabilities list.
-                        let hasHistory = session.lastSyncedSeq > 0
-                        if !hasHistory || !messages.isEmpty {
-                            withAnimation(.easeOut(duration: 0.2)) {
-                                isTranscriptReady = true
-                                loadError = nil
-                            }
-                            timeoutWorkItem?.cancel()
-                        }
+                        tryRevealTranscript()
                     },
                     onError: { errorMessage in
                         if loadError == nil {
@@ -269,6 +266,9 @@ public struct SessionDetailView: View {
             composeText = draft
             DispatchQueue.main.async { isApplyingRemoteDraft = false }
         }
+        .onChange(of: session.id) { _ in
+            resetTranscriptLoadState()
+        }
         .onChange(of: composeText) { newText in
             // Push draft changes back to sync (debounced)
             guard !isApplyingRemoteDraft else { return }
@@ -352,23 +352,63 @@ public struct SessionDetailView: View {
             }
         }
         .onChange(of: messages.count) { _ in
-            // Web view was ready but waiting for initial messages — reveal now
-            if isWebViewReady && !isTranscriptReady {
-                withAnimation(.easeOut(duration: 0.2)) {
-                    isTranscriptReady = true
-                    loadError = nil
-                }
-                timeoutWorkItem?.cancel()
-            }
+            // Re-check reveal: messages may have arrived after onReady fired
+            tryRevealTranscript()
             // Debounce prompt list refresh to avoid IPC spam when many messages arrive at once
             promptRefreshWorkItem?.cancel()
             let item = DispatchWorkItem { refreshPromptList() }
             promptRefreshWorkItem = item
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: item)
         }
+        .onChange(of: hasCompletedInitialSessionSync) { _ in
+            tryRevealTranscript()
+        }
+        .onChange(of: serverConfirmedNoMessages) { _ in
+            tryRevealTranscript()
+        }
     }
 
     // MARK: - Status Bar
+
+    private var hasExpectedTranscriptMessages: Bool {
+        displaySession.lastSyncedSeq > 0 || (displaySession.lastMessageAt ?? 0) > 0
+    }
+
+    private var hasAllExpectedLocalMessages: Bool {
+        displaySession.lastSyncedSeq > 0 && messages.count >= displaySession.lastSyncedSeq
+    }
+
+    private var shouldWaitForInitialTranscriptMessages: Bool {
+        if !hasObservedInitialMessages { return true }
+        if serverConfirmedNoMessages { return false }
+        if hasExpectedTranscriptMessages {
+            if hasAllExpectedLocalMessages { return false }
+            if !hasCompletedInitialSessionSync { return true }
+            // Sync completed but GRDB hasn't delivered messages yet.
+            // Keep waiting so loadSessionIntoWebView gets real data
+            // instead of rendering the empty "ready to assist" state.
+            return messages.isEmpty
+        }
+        return false
+    }
+
+    private var canRevealTranscript: Bool {
+        hasObservedInitialMessages
+            && !shouldWaitForInitialTranscriptMessages
+            && (!messages.isEmpty || serverConfirmedNoMessages || !hasExpectedTranscriptMessages)
+    }
+
+    /// Re-check whether the transcript overlay can be dismissed.
+    /// Called from multiple onChange handlers so the reveal isn't gated
+    /// on a single one-shot callback (onReady).
+    private func tryRevealTranscript() {
+        guard !isTranscriptReady, isWebViewReady, canRevealTranscript else { return }
+        withAnimation(.easeOut(duration: 0.2)) {
+            isTranscriptReady = true
+            loadError = nil
+        }
+        timeoutWorkItem?.cancel()
+    }
 
     private var hasStatusInfo: Bool {
         displaySession.isExecuting || displaySession.hasQueuedPrompts || displaySession.contextUsagePercent != nil
@@ -556,14 +596,27 @@ public struct SessionDetailView: View {
 
     // MARK: - Load Timeout
 
+    private func resetTranscriptLoadState() {
+        isTranscriptReady = false
+        isWebViewReady = false
+        loadError = nil
+        lastDiagnostic = nil
+        hasObservedInitialMessages = false
+        serverConfirmedNoMessages = false
+        hasCompletedInitialSessionSync = false
+        timeoutWorkItem?.cancel()
+        startLoadTimeout()
+    }
+
     private func startLoadTimeout() {
         timeoutWorkItem?.cancel()
         let item = DispatchWorkItem { [self] in
             guard !isTranscriptReady else { return }
+            guard !shouldWaitForInitialTranscriptMessages else { return }
             withAnimation {
                 loadError = .timeout(
                     messageCount: messages.count,
-                    webViewReady: true, // We can't easily read coordinator state, but the detail is in the description
+                    webViewReady: isWebViewReady,
                     isTranscriptReady: isTranscriptReady
                 )
             }
@@ -578,6 +631,13 @@ public struct SessionDetailView: View {
         appState.syncManager?.onSessionSyncDiagnostic = { [self] sessionId, diagnostic in
             guard sessionId == session.id else { return }
             lastDiagnostic = diagnostic
+            hasCompletedInitialSessionSync = true
+
+            if diagnostic.error == nil, diagnostic.totalServerMessages == 0 {
+                // No error but also no messages — could be normal for a brand new session.
+                serverConfirmedNoMessages = true
+                return
+            }
 
             if let error = diagnostic.error {
                 if diagnostic.decryptedCount == 0 && diagnostic.totalServerMessages > 0 {
@@ -587,8 +647,6 @@ public struct SessionDetailView: View {
                             totalCount: diagnostic.totalServerMessages
                         )
                     }
-                } else if diagnostic.totalServerMessages == 0 && diagnostic.error == nil {
-                    // No error but also no messages — could be normal for a brand new session
                 } else {
                     withAnimation {
                         loadError = .syncFailed(error)
@@ -601,11 +659,7 @@ public struct SessionDetailView: View {
     // MARK: - Retry
 
     private func retryLoad() {
-        loadError = nil
-        isTranscriptReady = false
-        isWebViewReady = false
-        lastDiagnostic = nil
-        startLoadTimeout()
+        resetTranscriptLoadState()
         appState.syncManager?.leaveSessionRoom()
         appState.syncManager?.joinSessionRoom(sessionId: session.id)
     }
@@ -682,6 +736,7 @@ public struct SessionDetailView: View {
                 print("Message observation error: \(error)")
             },
             onChange: { newMessages in
+                hasObservedInitialMessages = true
                 messages = newMessages
             }
         )
