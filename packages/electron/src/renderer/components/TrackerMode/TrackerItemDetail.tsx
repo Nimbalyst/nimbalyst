@@ -773,6 +773,48 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
           </div>
         )}
 
+        {/* Linked Commits */}
+        {item.system.linkedCommits && item.system.linkedCommits.length > 0 && (
+          <div className="pt-1 border-t border-nim">
+            <label className="text-[11px] font-medium text-nim-muted uppercase tracking-[0.5px] mb-1.5 block">
+              Commits ({item.system.linkedCommits.length})
+            </label>
+            <div className="space-y-1">
+              {item.system.linkedCommits.slice().reverse().map((commit: { sha: string; message: string; sessionId?: string; timestamp: string }) => (
+                <div
+                  key={commit.sha}
+                  className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-nim-tertiary transition-colors group"
+                >
+                  <button
+                    className="text-[11px] font-mono text-nim-primary hover:underline shrink-0"
+                    onClick={() => {
+                      navigator.clipboard.writeText(commit.sha);
+                    }}
+                    title={`Copy full SHA: ${commit.sha}`}
+                  >
+                    {commit.sha.slice(0, 7)}
+                  </button>
+                  <span className="flex-1 text-xs text-nim truncate" title={commit.message}>
+                    {commit.message}
+                  </span>
+                  {commit.sessionId && (
+                    <button
+                      className="opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => onSwitchToAgentMode?.(commit.sessionId!)}
+                      title="Open linked session"
+                    >
+                      <MaterialSymbol icon="smart_toy" size={14} className="text-nim-faint" />
+                    </button>
+                  )}
+                  <span className="text-[10px] text-nim-faint shrink-0">
+                    {getRelativeTimeString(new Date(commit.timestamp).getTime())}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Comments section */}
         {item.source !== 'inline' && item.source !== 'frontmatter' && (
           <div className="space-y-2">
@@ -932,19 +974,49 @@ const ReadOnlyField: React.FC<{ field: FieldDefinition; value: any }> = ({ field
 const CommentsSection: React.FC<{ itemId: string; comments?: any[] }> = ({ itemId, comments }) => {
   const [newComment, setNewComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const visibleComments = (comments || []).filter((c: any) => !c.deleted);
+  // Optimistic comments shown immediately on submit, before the atom round-trips
+  const [optimisticComments, setOptimisticComments] = useState<any[]>([]);
+
+  // When server-side comments arrive (atom update), clear optimistic entries
+  // that are now present in the real data.
+  const serverComments = (comments || []).filter((c: any) => !c.deleted);
+  const visibleComments = useMemo(() => {
+    if (optimisticComments.length === 0) return serverComments;
+    // Keep only optimistic comments whose body isn't yet in the server list
+    // (simple dedup -- optimistic entries don't have real IDs)
+    const serverBodies = new Set(serverComments.map((c: any) => c.body));
+    const stillPending = optimisticComments.filter(c => !serverBodies.has(c.body));
+    if (stillPending.length < optimisticComments.length) {
+      // Some optimistic comments were confirmed -- schedule cleanup
+      // Use queueMicrotask to avoid setState during render
+      queueMicrotask(() => setOptimisticComments(stillPending));
+    }
+    return [...serverComments, ...stillPending];
+  }, [serverComments, optimisticComments]);
 
   const handleSubmit = useCallback(async () => {
     if (!newComment.trim() || submitting) return;
+    const body = newComment.trim();
     setSubmitting(true);
+    // Optimistically show the comment immediately
+    setOptimisticComments(prev => [...prev, {
+      id: `optimistic_${Date.now()}`,
+      body,
+      createdAt: Date.now(),
+      updatedAt: null,
+      deleted: false,
+      _optimistic: true,
+    }]);
+    setNewComment('');
     try {
       await window.electronAPI.invoke('document-service:tracker-item-add-comment', {
         itemId,
-        body: newComment.trim(),
+        body,
       });
-      setNewComment('');
     } catch (err) {
       console.error('Failed to add comment:', err);
+      // Remove the optimistic comment on failure
+      setOptimisticComments(prev => prev.filter(c => c.body !== body));
     } finally {
       setSubmitting(false);
     }
@@ -953,9 +1025,9 @@ const CommentsSection: React.FC<{ itemId: string; comments?: any[] }> = ({ itemI
   return (
     <div className="space-y-2">
       {visibleComments.map((comment: any) => (
-        <div key={comment.id} className="rounded bg-nim-tertiary p-2 space-y-1">
+        <div key={comment.id} className={`rounded bg-nim-tertiary p-2 space-y-1${comment._optimistic ? ' opacity-70' : ''}`}>
           <div className="flex items-center gap-2 text-[11px]">
-            <span className="font-medium text-nim-muted">{comment.authorIdentity?.displayName || 'Unknown'}</span>
+            <span className="font-medium text-nim-muted">{comment.authorIdentity?.displayName || 'You'}</span>
             <span className="text-nim-faint">{getRelativeTimeString(comment.createdAt)}</span>
             {comment.updatedAt && <span className="text-nim-faint">(edited)</span>}
           </div>
