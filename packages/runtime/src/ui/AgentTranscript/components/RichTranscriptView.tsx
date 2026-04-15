@@ -396,6 +396,8 @@ interface RichTranscriptViewProps {
   readFile?: (filePath: string) => Promise<{ success: boolean; content?: string; error?: string }>;
   /** Optional: Open a file in the editor */
   onOpenFile?: (filePath: string) => void;
+  /** Optional: Navigate to a session by ID (for @@session reference links) */
+  onOpenSession?: (sessionId: string) => void;
   /** Optional: Callback to trigger /compact command */
   onCompact?: () => void;
   /** Optional: Prompt additions for debugging (system prompt, user message, and attachments) */
@@ -704,7 +706,7 @@ export const extractEditsFromToolMessage = (message: TranscriptViewMessage): any
 export const RichTranscriptView = React.forwardRef<
   { scrollToMessage: (index: number) => void; scrollToTop: () => void },
   RichTranscriptViewProps
->(({ sessionId, sessionStatus, isProcessing, hasPendingInteractivePrompt, messages, provider, settings: propsSettings, onSettingsChange, showSettings, documentContext, workspacePath, renderEmptyExtra, readFile, onOpenFile, onCompact, promptAdditions, currentTeammates, waitingForNoun, appStartTime, getToolCallDiffs }, ref) => {
+>(({ sessionId, sessionStatus, isProcessing, hasPendingInteractivePrompt, messages, provider, settings: propsSettings, onSettingsChange, showSettings, documentContext, workspacePath, renderEmptyExtra, readFile, onOpenFile, onOpenSession, onCompact, promptAdditions, currentTeammates, waitingForNoun, appStartTime, getToolCallDiffs }, ref) => {
   const [collapsedMessages, setCollapsedMessages] = useState<Set<number>>(new Set());
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
   const scrollButtonRef = useRef<HTMLDivElement>(null);
@@ -1390,7 +1392,7 @@ export const RichTranscriptView = React.forwardRef<
                 <details className="rich-transcript-tool-details my-2">
                   <summary className="rich-transcript-tool-details-summary text-xs text-[var(--nim-text-faint)] cursor-pointer py-1 select-none hover:text-[var(--nim-text-muted)]">View full prompt</summary>
                   <div className="rich-transcript-tool-details-content mt-1 text-sm">
-                    <MarkdownRenderer content={prompt} isUser={false} onOpenFile={onOpenFile} />
+                    <MarkdownRenderer content={prompt} isUser={false} onOpenFile={onOpenFile} onOpenSession={onOpenSession} />
                   </div>
                 </details>
               )}
@@ -1434,9 +1436,9 @@ export const RichTranscriptView = React.forwardRef<
                   </summary>
                   <div className="rich-transcript-tool-details-content mt-1 text-sm">
                     {resultText ? (
-                      <MarkdownRenderer content={resultText} isUser={false} onOpenFile={onOpenFile} />
+                      <MarkdownRenderer content={resultText} isUser={false} onOpenFile={onOpenFile} onOpenSession={onOpenSession} />
                     ) : typeof tool.result === 'string' ? (
-                      <MarkdownRenderer content={tool.result} isUser={false} onOpenFile={onOpenFile} />
+                      <MarkdownRenderer content={tool.result} isUser={false} onOpenFile={onOpenFile} onOpenSession={onOpenSession} />
                     ) : (
                       <JSONViewer data={tool.result} maxHeight="16rem" />
                     )}
@@ -1691,7 +1693,7 @@ export const RichTranscriptView = React.forwardRef<
                                 <span className="text-[10px] shrink-0">{formatMessageTime(message.createdAt?.getTime() ?? 0)}</span>
                               </summary>
                               <div className="teammate-content ml-5 mt-1 mb-0.5">
-                                <MarkdownRenderer content={content} isUser={false} onOpenFile={onOpenFile} />
+                                <MarkdownRenderer content={content} isUser={false} onOpenFile={onOpenFile} onOpenSession={onOpenSession} />
                               </div>
                             </details>
                           ) : (
@@ -1817,6 +1819,7 @@ export const RichTranscriptView = React.forwardRef<
                             sessionId={sessionId}
                             isLastMessage={index === messages.length - 1}
                             onOpenFile={onOpenFile}
+                            onOpenSession={onOpenSession}
                             onCompact={onCompact}
                             provider={provider}
                           />

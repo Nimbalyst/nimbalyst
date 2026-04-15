@@ -69,7 +69,7 @@ import {
 } from '../../store';
 import { streamCompletionSignalAtom } from '../../store/atoms/sessionTranscript';
 import { convertToWorkstreamAtom, sessionPromptAdditionsAtom, sessionLastSubmitAtAtom, sessionDraftLocalModifiedAtAtom, nextOptimisticId } from '../../store/atoms/sessions';
-import { scrollToTeammateAtom, scrollToMessageAtom } from '../../store/atoms/agentMode';
+import { scrollToTeammateAtom, scrollToMessageAtom, requestOpenSessionAtom } from '../../store/atoms/agentMode';
 import { usePostHog } from 'posthog-js/react';
 import { setAgentModeSettingsAtom, showPromptAdditionsAtom, hasExternalEditorAtom, externalEditorNameAtom, openInExternalEditorAtom, defaultAgentModelAtom, defaultEffortLevelAtom } from '../../store/atoms/appSettings';
 import { supportsEffortLevel, parseEffortLevel, type EffortLevel } from '../../utils/modelUtils';
@@ -842,6 +842,11 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     onFileClick?.(filePath);
   }, [onFileClick]);
 
+  const setRequestOpenSession = useSetAtom(requestOpenSessionAtom);
+  const handleOpenSession = useCallback((targetSessionId: string) => {
+    setRequestOpenSession(targetSessionId);
+  }, [setRequestOpenSession]);
+
   const getToolCallDiffs = useCallback(async (toolCallItemId: string, toolCallTimestamp?: number) => {
     try {
       const result = await window.electronAPI.invoke(
@@ -1545,6 +1550,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
             isProcessing={isLoading}
             hasPendingInteractivePrompt={hasPendingInteractivePrompt}
             onFileClick={handleFileClick}
+            onOpenSession={handleOpenSession}
             hideSidebar={hideSidebar || mode === 'chat'}
             showFloatingActions={mode === 'agent'}
             workspacePath={workspacePath}

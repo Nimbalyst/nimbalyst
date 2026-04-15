@@ -26,6 +26,8 @@ interface AgentTranscriptPanelProps {
   showSettings?: boolean;
   initialSettings?: TranscriptSettings;
   onFileClick?: (filePath: string) => void;
+  /** Optional: Navigate to a session by ID (for @@session reference links) */
+  onOpenSession?: (sessionId: string) => void;
   hideSidebar?: boolean;  // Hide the prompts/files sidebar
   /** Show floating actions (prompts menu, archive) even when sidebar is hidden. Defaults to !hideSidebar */
   showFloatingActions?: boolean;
@@ -100,6 +102,7 @@ const AgentTranscriptPanelComponent = React.forwardRef<
   showSettings,
   initialSettings,
   onFileClick,
+  onOpenSession,
   hideSidebar = false,
   showFloatingActions,
   workspacePath: workspacePathProp,
@@ -345,6 +348,7 @@ const AgentTranscriptPanelComponent = React.forwardRef<
           renderEmptyExtra={renderEmptyExtra}
           readFile={readFile}
           onOpenFile={onFileClick}
+          onOpenSession={onOpenSession}
           onCompact={onCompact}
           promptAdditions={promptAdditions}
           currentTeammates={currentTeammates ?? sessionData.metadata?.currentTeammates as Array<{ agentId: string; status: 'running' | 'completed' | 'errored' | 'idle' }> | undefined}

@@ -203,6 +203,10 @@ export const scrollToTeammateAtom = atom<{ sessionId: string; agentId: string } 
  *  Set by PromptQuickOpen on select, consumed by SessionTranscript.  */
 export const scrollToMessageAtom = atom<{ sessionId: string; timestamp: number } | null>(null);
 
+/** Write-only atom to request navigating to a session by ID.
+ *  Set by MarkdownRenderer link clicks (@@session references), consumed by AgentMode.  */
+export const requestOpenSessionAtom = atom<string | null>(null);
+
 // ============================================================
 // Debounced Persistence
 // ============================================================

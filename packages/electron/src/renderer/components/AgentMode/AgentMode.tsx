@@ -59,6 +59,7 @@ import { initFileTreeListeners } from '../../store/listeners/fileTreeListeners';
 import { initSessionListListeners } from '../../store/listeners/sessionListListeners';
 import { initSessionTranscriptListeners } from '../../store/listeners/sessionTranscriptListeners';
 import { initTrayListeners, trayNewSessionRequestAtom } from '../../store/listeners/trayListeners';
+import { requestOpenSessionAtom } from '../../store/atoms/agentMode';
 import { fetchSessionSharesAtom } from '../../store';
 import type { WorktreeCreateResult, SessionCreateResult } from '../../../shared/ipc/types';
 import { BlitzDialog } from '../BlitzDialog/BlitzDialog';
@@ -751,6 +752,16 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
       });
     }
   }, [workspacePath, setSelectedWorkstream, addSession]);
+
+  // Handle @@session reference link clicks from transcript
+  const requestedSessionId = useAtomValue(requestOpenSessionAtom);
+  const setRequestedSessionId = useSetAtom(requestOpenSessionAtom);
+  useEffect(() => {
+    if (requestedSessionId) {
+      setRequestedSessionId(null);
+      openSessionInTab(requestedSessionId);
+    }
+  }, [requestedSessionId, setRequestedSessionId, openSessionInTab]);
 
   // Handle child session selection from workstream group
   // Opens the parent workstream and sets the child as active

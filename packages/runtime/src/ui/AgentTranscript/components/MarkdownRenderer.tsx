@@ -179,12 +179,17 @@ const OverflowWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) 
   );
 };
 
+/** Matches a UUID (v4-style hex with dashes) used as session reference hrefs. */
+const SESSION_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 interface MarkdownRendererProps {
   content: string;
   isUser?: boolean;
   isSystemMessage?: boolean;
   /** Optional: Open local file links directly in the editor */
   onOpenFile?: (filePath: string) => void;
+  /** Optional: Navigate to a session by ID (for @@session reference links) */
+  onOpenSession?: (sessionId: string) => void;
 }
 
 function safeDecodeURIComponent(value: string): string {
@@ -266,7 +271,8 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
   content,
   isUser = false,
   isSystemMessage = false,
-  onOpenFile
+  onOpenFile,
+  onOpenSession
 }) => {
   return (
     <div
@@ -442,15 +448,21 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
           // Links
           a: ({ href, children }) => {
             const filePath = onOpenFile ? resolveTranscriptFilePathFromHref(href) : null;
+            const isSessionLink = onOpenSession && href && SESSION_UUID_RE.test(href.trim());
+            const isInternalLink = filePath || isSessionLink;
             return (
               <a
                 href={href}
-                target={filePath ? undefined : '_blank'}
-                rel={filePath ? undefined : 'noopener noreferrer'}
+                target={isInternalLink ? undefined : '_blank'}
+                rel={isInternalLink ? undefined : 'noopener noreferrer'}
                 onClick={(event) => {
-                  if (!filePath || !onOpenFile) return;
-                  event.preventDefault();
-                  onOpenFile(filePath);
+                  if (isSessionLink) {
+                    event.preventDefault();
+                    onOpenSession(href!.trim());
+                  } else if (filePath && onOpenFile) {
+                    event.preventDefault();
+                    onOpenFile(filePath);
+                  }
                 }}
                 style={{
                   color: 'var(--nim-primary)',
