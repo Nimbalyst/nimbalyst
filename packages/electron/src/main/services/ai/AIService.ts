@@ -2777,6 +2777,7 @@ export class AIService {
       try {
         let fullResponse = '';
         let lastTextSection = '';  // Track text after the last tool call (for notifications)
+        let prevTextSection = '';  // Previous non-empty text section (fallback if last section is empty)
         const toolCalls: any[] = [];
         const edits: any[] = [];  // Track edits for the assistant message
         let hasStreamingContent = false;  // Track if we used streamContent tool
@@ -2977,6 +2978,7 @@ export class AIService {
               if (chunk.toolCall) {
                 toolCallCount++;
                 toolCalls.push(chunk.toolCall);
+                if (lastTextSection.trim()) prevTextSection = lastTextSection.trim();
                 lastTextSection = '';  // Reset so notification shows text after last tool call
                 console.groupEnd();
 
@@ -3843,7 +3845,7 @@ export class AIService {
               safeSend(event, 'ai:streamResponse', {
                 sessionId: session.id,
                 content: fullResponse,
-                lastTextSection: lastTextSection.trim(),
+                lastTextSection: lastTextSection.trim() || prevTextSection,
                 isComplete: true,
                 autoContextPending: session.provider === 'claude-code'
               });
@@ -3883,7 +3885,7 @@ export class AIService {
 
                 // Show OS notification if enabled and window not focused
                 // Use lastTextSection (text after last tool call) for more relevant notification content
-                const notificationText = lastTextSection.trim() || fullResponse;
+                const notificationText = lastTextSection.trim() || prevTextSection || fullResponse;
                 const notificationBody = notificationText.length > 0
                   ? notificationText.substring(0, 100) + (notificationText.length > 100 ? '...' : '')
                   : 'Response complete';
