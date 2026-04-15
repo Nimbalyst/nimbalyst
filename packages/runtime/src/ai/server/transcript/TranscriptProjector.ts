@@ -188,6 +188,9 @@ function projectEvent(
       const p = event.payload as unknown as SystemMessagePayload;
       base.text = event.searchableText ?? undefined;
       base.systemMessage = p;
+      if (p.systemType === 'error') {
+        base.isError = true;
+      }
       break;
     }
     case 'tool_call': {

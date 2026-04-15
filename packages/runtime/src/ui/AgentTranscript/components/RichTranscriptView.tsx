@@ -1707,7 +1707,7 @@ export const RichTranscriptView = React.forwardRef<
                       );
                     }
 
-                    if (message.type === 'system_message' || (message.metadata?.promptType as string) === 'system_reminder') {
+                    if ((message.type === 'system_message' && message.systemMessage?.systemType !== 'error') || (message.metadata?.promptType as string) === 'system_reminder') {
                       return (
                         <div
                           key={`${sessionId}-${index}`}
