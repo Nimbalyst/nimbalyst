@@ -573,8 +573,8 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
                 Database
               </span>
             )}
-            {item.id && (
-              <span className="text-[10px] text-nim-faint font-mono">{item.id}</span>
+            {(item.issueKey || item.id) && (
+              <span className="text-[10px] text-nim-faint font-mono">{item.issueKey || item.id}</span>
             )}
             {item.archived && (
               <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[#6b728020] text-nim-faint">

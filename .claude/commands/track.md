@@ -2,43 +2,47 @@
 packageVersion: 1.0.0
 packageId: core
 ---
-
 # /track Command
 
-Create a tracking item in the appropriate tracking document.
-
-## Tracking System Overview
-
-Tracking items are organized by type in `nimbalyst-local/tracker/`. Common types include:
-- **Bugs**: Issues and defects that need fixing
-- **Tasks**: Work items and todos
-- **Ideas**: Concepts and proposals to explore
-- **Decisions**: Important decisions and their rationale
-- **Feature Requests**: User-requested features
-- **User Stories**: User-focused functionality
-- **Feedback**: User feedback and insights
-- **Tech Debt**: Technical debt items
-
-## Tracking Item Structure
-
-```markdown
-- [Brief description] #[type][id:[type]_[ulid] status:to-do priority:medium created:YYYY-MM-DD]
-```
+Create a tracking item using the Nimbalyst tracker system.
 
 ## Usage
 
 When the user types `/track [type] [description]`:
 
-Where `[type]` is the tracker type (e.g., bug, task, idea, feature-request, etc.)
+Where `[type]` is the tracker type (e.g., bug, task, idea, feature, decision, feedback, tech-debt, etc.)
 
-1. Parse the type from the command
-2. Generate ULID for the unique item ID
-3. Determine priority based on description keywords:
-   - "critical", "urgent", "blocking" → high/critical
-   - "nice to have", "minor", "low" → low
-   - Otherwise → medium
-4. Add to appropriate tracker file (`nimbalyst-local/tracker/[type]s.md`)
-5. Confirm to the user where the item was tracked
+1. Parse the type and description from the command
+2. Determine priority based on description keywords:
+  - "critical", "urgent", "blocking" -> critical/high
+  - "nice to have", "minor", "low" -> low
+  - Otherwise -> medium
+3. Create the tracker item using `tracker_create`
+4. Confirm to the user with the item ID and title
+
+## How to Create
+
+Use the `tracker_create` MCP tool:
+
+```
+tracker_create({
+  type: "[type]",
+  title: "[description]",
+  priority: "[priority]",
+  labels: ["[area]"],  // infer from context if possible
+  description: "[optional longer description if the user provided extra context]"
+})
+```
+
+## Supported Types
+
+- **bug**: Issues and defects that need fixing
+- **task**: Work items and todos
+- **idea**: Concepts and proposals to explore
+- **decision**: Important decisions and their rationale
+- **feature**: Feature requests
+- **feedback**: User feedback and insights
+- **tech-debt**: Technical debt items
 
 ## Examples
 
@@ -46,24 +50,12 @@ Where `[type]` is the tracker type (e.g., bug, task, idea, feature-request, etc.
 /track bug Login fails on mobile Safari
 /track task Update API documentation
 /track idea Add dark mode support
-/track feature-request Export to PDF functionality
+/track feature Export to PDF functionality
 /track decision Use PostgreSQL for database
 /track feedback Users find settings page confusing
 ```
 
-## Multi-Type Support
+## Notes
 
-The `/track` command automatically detects which tracker schemas are installed in your workspace and routes items to the appropriate file. If a tracker type doesn't exist, it will suggest creating one or offer alternatives.
-
-## CRITICAL: Do NOT Call tracker_create
-
-**Never call the `tracker_create` MCP tool when executing /track.** The markdown file you write is automatically synced to the tracker widget via frontmatter/inline parsing. Calling `tracker_create` in addition to writing the markdown file creates a duplicate entry. Only write the markdown file; the tracker system handles the rest.
-
-## Best Practices
-
-- Be specific in descriptions
-- Include context when helpful
-- Use consistent naming for types
-- Review and update tracked items regularly
-- Set priorities appropriately
-- Link to related plans or documents when relevant
+- `tracker_create` automatically links the new item to the current AI session (bidirectional link) -- no need to call `tracker_link_session` separately
+- Use `tracker_link_session` only when linking to an **existing** tracker item that wasn't just created

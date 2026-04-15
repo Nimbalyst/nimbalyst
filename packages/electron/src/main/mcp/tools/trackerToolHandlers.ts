@@ -5,6 +5,7 @@ import {
   shouldSyncTrackerPolicy,
 } from '../../services/TrackerPolicyService';
 import { isTrackerSyncActive, syncTrackerItem } from '../../services/TrackerSyncManager';
+import { getWorkspaceState } from '../../utils/store';
 
 type McpToolResult = {
   content: Array<{ type: string; text?: string }>;
@@ -908,7 +909,7 @@ export async function handleTrackerCreate(
       createdByAgent: true,
     };
     if (args.tags?.length) data[rf('tags', 'tags')] = args.tags;
-    if (args.description) data.description = args.description;
+    if (args.description) data.description = args.description.replace(/\\n/g, '\n');
     if (args.owner) data[rf('assignee', 'owner')] = args.owner;
     if (args.dueDate) data[rf('dueDate', 'dueDate')] = args.dueDate;
     if (args.progress !== undefined) data[rf('progress', 'progress')] = args.progress;
@@ -942,8 +943,12 @@ export async function handleTrackerCreate(
       }
     }
 
-    const contentJson = args.description
-      ? JSON.stringify(args.description)
+    // Normalize literal \n sequences to real newlines (MCP tool args may contain escaped sequences)
+    const descriptionText = args.description
+      ? args.description.replace(/\\n/g, '\n')
+      : null;
+    const contentJson = descriptionText
+      ? JSON.stringify(descriptionText)
       : null;
 
     await db.query(
@@ -970,6 +975,29 @@ export async function handleTrackerCreate(
         createdItem = createdRow ? rowToTrackerItem(createdRow) : createdItem;
       } catch (syncError) {
         console.error('[MCP Server] tracker_create sync failed:', syncError);
+      }
+    }
+
+    // Allocate a local issue key if sync didn't assign one
+    if (createdRow && !createdRow.issue_key) {
+      try {
+        const prefix = workspacePath
+          ? (getWorkspaceState(workspacePath).issueKeyPrefix || 'NIM')
+          : 'NIM';
+        const maxResult = await db.query<{ max_num: number | null }>(
+          `SELECT MAX(issue_number) as max_num FROM tracker_items WHERE workspace = $1`,
+          [workspacePath || '']
+        );
+        const nextNum = (maxResult.rows[0]?.max_num ?? 0) + 1;
+        const issueKey = `${prefix}-${nextNum}`;
+        await db.query(
+          `UPDATE tracker_items SET issue_number = $1, issue_key = $2 WHERE id = $3`,
+          [nextNum, issueKey, id]
+        );
+        createdRow = await resolveTrackerRowByReference(db, id, workspacePath);
+        createdItem = createdRow ? rowToTrackerItem(createdRow) : createdItem;
+      } catch (issueKeyError) {
+        console.error('[MCP Server] Local issue key allocation failed:', issueKeyError);
       }
     }
 
@@ -1101,8 +1129,9 @@ export async function handleTrackerUpdate(
 
     // Non-role fields (system metadata)
     if (args.description !== undefined) {
-      changes.description = { from: data.description, to: args.description };
-      data.description = args.description;
+      const normalizedDesc = args.description.replace(/\\n/g, '\n');
+      changes.description = { from: data.description, to: normalizedDesc };
+      data.description = normalizedDesc;
     }
     if (args.labels !== undefined) { data.labels = args.labels; }
     if (args.linkedCommitSha !== undefined) { data.linkedCommitSha = args.linkedCommitSha; }
@@ -1169,7 +1198,8 @@ export async function handleTrackerUpdate(
 
     // Update content if description changed
     if (args.description !== undefined) {
-      const contentJson = JSON.stringify(args.description);
+      const normalizedContent = args.description.replace(/\\n/g, '\n');
+      const contentJson = JSON.stringify(normalizedContent);
       await db.query(
         `UPDATE tracker_items SET content = $1 WHERE id = $2`,
         [contentJson, row.id]
