@@ -251,6 +251,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
   const contentSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Track local content saves to skip refetch (prevents cursor loss)
   const lastLocalContentSaveRef = useRef<number>(0);
+  const [contentFetchTrigger, setContentFetchTrigger] = useState(0);
 
   // Reset local editing state when navigating to a different item.
   // We don't sync on item data changes (saves) to avoid clobbering in-progress text.
@@ -277,9 +278,15 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
       return;
     }
 
-    // Skip refetch if a local content save happened within the last 3 seconds
-    if (contentLoaded && Date.now() - lastLocalContentSaveRef.current < 3000) {
-      return;
+    // Defer refetch if a local content save happened recently (prevents cursor loss).
+    // Schedule a retry after the window expires so remote content updates aren't lost.
+    const sinceLastSave = Date.now() - lastLocalContentSaveRef.current;
+    if (contentLoaded && sinceLastSave < 3000) {
+      const retryTimer = setTimeout(() => {
+        lastLocalContentSaveRef.current = 0;
+        setContentFetchTrigger(n => n + 1);
+      }, 3000 - sinceLastSave + 100);
+      return () => clearTimeout(retryTimer);
     }
 
     let cancelled = false;
@@ -309,7 +316,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
       });
 
     return () => { cancelled = true; };
-  }, [item?.id, hasRichContent, item?.system?.updatedAt]);
+  }, [item?.id, hasRichContent, item?.system?.updatedAt, contentFetchTrigger]);
 
   // Escape to close
   useEffect(() => {
