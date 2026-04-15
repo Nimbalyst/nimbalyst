@@ -61,6 +61,27 @@ const SessionStatusIndicator = memo<{ sessionId: string; messageCount?: number }
   return null;
 });
 
+const PHASE_STYLES: Record<string, { label: string; color: string; bg: string }> = {
+  backlog: { label: 'Backlog', color: 'var(--nim-text-faint)', bg: 'rgba(128,128,128,0.12)' },
+  planning: { label: 'Planning', color: 'var(--nim-primary)', bg: 'rgba(96,165,250,0.12)' },
+  implementing: { label: 'Implementing', color: 'var(--nim-warning)', bg: 'rgba(251,191,36,0.12)' },
+  validating: { label: 'Validating', color: '#a78bfa', bg: 'rgba(167,139,250,0.12)' },
+  complete: { label: 'Complete', color: 'var(--nim-success)', bg: 'rgba(74,222,128,0.12)' },
+};
+
+const SessionPhaseBadge = memo<{ phase: string }>(({ phase }) => {
+  const style = PHASE_STYLES[phase];
+  if (!style) return null;
+  return (
+    <span
+      className="session-list-item-phase text-[0.5625rem] leading-tight px-1 py-px rounded font-medium whitespace-nowrap"
+      style={{ color: style.color, backgroundColor: style.bg }}
+    >
+      {style.label}
+    </span>
+  );
+});
+
 interface SessionListItemProps {
   id: string;
   title: string;
@@ -468,6 +489,7 @@ export const SessionListItem = memo<SessionListItemProps>(({
             <div className="session-list-item-meta flex gap-1.5 text-[0.6875rem] text-[var(--nim-text-faint)] items-center mt-0.5">
               <span className="session-list-item-datetime text-[0.6875rem] text-[var(--nim-text-faint)] whitespace-nowrap transition-colors duration-150" title={fullDateTime}>{relativeTime}</span>
               {displayModel && <span className="session-list-item-model overflow-hidden text-ellipsis whitespace-nowrap">{displayModel}</span>}
+              {phase && <SessionPhaseBadge phase={phase} />}
             </div>
           </>
         )}
