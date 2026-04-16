@@ -21,6 +21,10 @@ const BINARY_EXTENSIONS = new Set([
   '.woff', '.woff2', '.ttf', '.eot', '.otf',
   '.sqlite', '.db', '.lock',
   '.wasm', '.node',
+  // Electron/packaged-app bundle artifacts — caching these blew up memory when
+  // release-smoke-backup-marker/ was accidentally dropped into the workspace.
+  '.pak', '.pdb', '.dat', '.bin', '.blockmap', '.asar', '.icns', '.appimage',
+  '.dmg', '.deb', '.rpm', '.snap', '.msi', '.nupkg',
 ]);
 
 const IGNORED_DIRS = new Set([

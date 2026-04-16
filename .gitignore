@@ -131,6 +131,9 @@ coverage/
 # Workspace files
 *.code-workspace
 
+# Release smoke-test artifacts (unpacked Electron builds left behind by release scripts)
+release-smoke-*/
+
 # Local history
 .history/
 

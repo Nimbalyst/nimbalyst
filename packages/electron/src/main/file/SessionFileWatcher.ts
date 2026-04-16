@@ -14,6 +14,8 @@ const BINARY_EXTENSIONS = new Set([
   '.woff', '.woff2', '.ttf', '.eot', '.otf',
   '.sqlite', '.db', '.lock',
   '.wasm', '.node',
+  '.pak', '.pdb', '.dat', '.bin', '.blockmap', '.asar', '.icns', '.appimage',
+  '.dmg', '.deb', '.rpm', '.snap', '.msi', '.nupkg',
 ]);
 
 /** TTL for editor save markers (ms). Must exceed chokidar's awaitWriteFinish delay. */
