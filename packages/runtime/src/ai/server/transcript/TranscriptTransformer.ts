@@ -24,6 +24,7 @@ import type {
   ParseContext,
   CanonicalEventDescriptor,
 } from './parsers/IRawMessageParser';
+import { processDescriptor as processDescriptorShared } from './processDescriptor';
 
 // ---------------------------------------------------------------------------
 // Dependencies (injected via interfaces)
@@ -417,162 +418,20 @@ export class TranscriptTransformer {
     return event;
   }
 
-  private async processDescriptor(
+  private processDescriptor(
     writer: TranscriptWriter,
     sessionId: string,
     desc: CanonicalEventDescriptor,
     toolEventIds: Map<string, number>,
     subagentEventIds: Map<string, number>,
   ): Promise<TranscriptEvent | null> {
-    switch (desc.type) {
-      case 'user_message': {
-        return writer.appendUserMessage(sessionId, desc.text, {
-          mode: desc.mode,
-          attachments: desc.attachments,
-          createdAt: desc.createdAt,
-        });
-      }
-
-      case 'assistant_message': {
-        return writer.appendAssistantMessage(sessionId, desc.text, {
-          mode: desc.mode,
-          createdAt: desc.createdAt,
-        });
-      }
-
-      case 'system_message': {
-        return writer.appendSystemMessage(sessionId, desc.text, {
-          systemType: desc.systemType,
-          searchable: desc.searchable,
-          createdAt: desc.createdAt,
-        });
-      }
-
-      case 'tool_call_started': {
-        // Codex SDK reuses item IDs (e.g. "item_7") across session resumes,
-        // so check for an existing event with this providerToolCallId before
-        // creating a duplicate. If one exists for the same tool, skip (idempotent).
-        // If one exists for a different tool, it's an ID collision -- create a
-        // new event (the DB allows multiple events with the same providerToolCallId).
-        if (desc.providerToolCallId && !toolEventIds.has(desc.providerToolCallId)) {
-          const existing = await this.transcriptStore.findByProviderToolCallId(desc.providerToolCallId);
-          if (existing) {
-            const existingPayload = existing.payload as Record<string, unknown>;
-            if (existingPayload.toolName === desc.toolName) {
-              // Same tool, same ID -- already created (e.g. batch replay or duplicate)
-              toolEventIds.set(desc.providerToolCallId, existing.id);
-              return null;
-            }
-            // Different tool -- ID collision from Codex session resume.
-            // Fall through to create a new event; the new event will have
-            // the same providerToolCallId but findByProviderToolCallId returns
-            // the most recent one (ORDER BY id DESC), so subsequent completions
-            // will match this new event correctly.
-          }
-        }
-        const event = await writer.createToolCall(sessionId, {
-          toolName: desc.toolName,
-          toolDisplayName: desc.toolDisplayName,
-          arguments: desc.arguments,
-          targetFilePath: desc.targetFilePath,
-          mcpServer: desc.mcpServer,
-          mcpTool: desc.mcpTool,
-          providerToolCallId: desc.providerToolCallId,
-          subagentId: desc.subagentId,
-          createdAt: desc.createdAt,
-        });
-        if (desc.providerToolCallId) {
-          toolEventIds.set(desc.providerToolCallId, event.id);
-        }
-        return event;
-      }
-
-      case 'tool_call_completed': {
-        let eventId = toolEventIds.get(desc.providerToolCallId);
-        if (!eventId) {
-          const existing = await this.transcriptStore.findByProviderToolCallId(desc.providerToolCallId);
-          if (existing) {
-            eventId = existing.id;
-            toolEventIds.set(desc.providerToolCallId, eventId);
-          }
-        }
-        if (!eventId) return null;
-
-        await writer.updateToolCall(eventId, {
-          status: desc.status,
-          result: desc.result,
-          isError: desc.isError,
-          exitCode: desc.exitCode,
-          durationMs: desc.durationMs,
-        });
-        // Return the updated event for notification
-        return this.transcriptStore.getEventById(eventId);
-      }
-
-      case 'tool_progress': {
-        const parentEventId = toolEventIds.get(desc.providerToolCallId);
-        if (!parentEventId) return null;
-
-        return writer.appendToolProgress(sessionId, {
-          parentEventId,
-          toolName: desc.toolName,
-          elapsedSeconds: desc.elapsedSeconds,
-          progressContent: desc.progressContent,
-          subagentId: desc.subagentId,
-          createdAt: desc.createdAt,
-        });
-      }
-
-      case 'subagent_started': {
-        const event = await writer.createSubagent(sessionId, {
-          subagentId: desc.subagentId,
-          agentType: desc.agentType,
-          teammateName: desc.teammateName,
-          teamName: desc.teamName,
-          teammateMode: desc.teammateMode,
-          isBackground: desc.isBackground,
-          prompt: desc.prompt,
-          createdAt: desc.createdAt,
-        });
-        subagentEventIds.set(desc.subagentId, event.id);
-        toolEventIds.set(desc.subagentId, event.id);
-        return event;
-      }
-
-      case 'subagent_completed': {
-        const eventId = subagentEventIds.get(desc.subagentId);
-        if (!eventId) return null;
-
-        await writer.updateSubagent(eventId, {
-          status: desc.status,
-          resultSummary: desc.resultSummary,
-        });
-        return this.transcriptStore.getEventById(eventId);
-      }
-
-      case 'interactive_prompt_created': {
-        return writer.createInteractivePrompt(sessionId, desc.payload, {
-          subagentId: desc.subagentId,
-          createdAt: desc.createdAt,
-        });
-      }
-
-      case 'interactive_prompt_updated': {
-        return null;
-      }
-
-      case 'turn_ended': {
-        return writer.recordTurnEnded(sessionId, {
-          contextFill: desc.contextFill,
-          contextWindow: desc.contextWindow,
-          cumulativeUsage: desc.cumulativeUsage,
-          contextCompacted: desc.contextCompacted,
-          subagentId: desc.subagentId,
-        });
-      }
-
-      default:
-        return null;
-    }
+    return processDescriptorShared(
+      writer,
+      this.transcriptStore,
+      sessionId,
+      desc,
+      toolEventIds,
+      subagentEventIds,
+    );
   }
 }

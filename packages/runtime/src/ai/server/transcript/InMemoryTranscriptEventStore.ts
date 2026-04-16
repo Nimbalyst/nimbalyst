@@ -1,0 +1,117 @@
+/**
+ * InMemoryTranscriptEventStore -- non-persistent ITranscriptEventStore used by
+ * client-side transcript projection (iOS/Android WKWebView bundles).
+ *
+ * Mobile clients receive raw ai_agent_messages via sync but do not have the
+ * canonical ai_transcript_events table. This store backs a one-shot
+ * projection: parse raw messages, accumulate canonical events in memory,
+ * hand them to TranscriptProjector for rendering.
+ *
+ * Only implements the methods exercised by TranscriptWriter +
+ * processDescriptor. Query methods used by server-side code (search, tail,
+ * multi-session, child/subagent lookups, deletes) throw if called.
+ */
+
+import type {
+  ITranscriptEventStore,
+  TranscriptEvent,
+  TranscriptEventType,
+} from './types';
+
+export class InMemoryTranscriptEventStore implements ITranscriptEventStore {
+  private events: TranscriptEvent[] = [];
+  private nextId = 1;
+  private sequenceBySession = new Map<string, number>();
+
+  async insertEvent(event: Omit<TranscriptEvent, 'id'>): Promise<TranscriptEvent> {
+    const inserted: TranscriptEvent = { ...event, id: this.nextId++ };
+    this.events.push(inserted);
+    const current = this.sequenceBySession.get(event.sessionId) ?? 0;
+    if (event.sequence >= current) {
+      this.sequenceBySession.set(event.sessionId, event.sequence + 1);
+    }
+    return inserted;
+  }
+
+  async updateEventPayload(id: number, payload: Record<string, unknown>): Promise<void> {
+    const idx = this.events.findIndex(e => e.id === id);
+    if (idx >= 0) {
+      this.events[idx] = { ...this.events[idx], payload };
+    }
+  }
+
+  async mergeEventPayload(id: number, partialPayload: Record<string, unknown>): Promise<void> {
+    const idx = this.events.findIndex(e => e.id === id);
+    if (idx >= 0) {
+      this.events[idx] = {
+        ...this.events[idx],
+        payload: { ...this.events[idx].payload, ...partialPayload },
+      };
+    }
+  }
+
+  async getSessionEvents(
+    sessionId: string,
+    options?: { eventTypes?: TranscriptEventType[]; limit?: number; offset?: number },
+  ): Promise<TranscriptEvent[]> {
+    let filtered = this.events.filter(e => e.sessionId === sessionId);
+    if (options?.eventTypes && options.eventTypes.length > 0) {
+      const types = new Set(options.eventTypes);
+      filtered = filtered.filter(e => types.has(e.eventType));
+    }
+    filtered.sort((a, b) => a.sequence - b.sequence);
+    const offset = options?.offset ?? 0;
+    const limit = options?.limit ?? filtered.length;
+    return filtered.slice(offset, offset + limit);
+  }
+
+  async getNextSequence(sessionId: string): Promise<number> {
+    return this.sequenceBySession.get(sessionId) ?? 0;
+  }
+
+  async findByProviderToolCallId(providerToolCallId: string): Promise<TranscriptEvent | null> {
+    for (let i = this.events.length - 1; i >= 0; i--) {
+      if (this.events[i].providerToolCallId === providerToolCallId) {
+        return this.events[i];
+      }
+    }
+    return null;
+  }
+
+  async getEventById(id: number): Promise<TranscriptEvent | null> {
+    return this.events.find(e => e.id === id) ?? null;
+  }
+
+  async getChildEvents(parentEventId: number): Promise<TranscriptEvent[]> {
+    return this.events
+      .filter(e => e.parentEventId === parentEventId)
+      .sort((a, b) => a.sequence - b.sequence);
+  }
+
+  async getSubagentEvents(subagentId: string, sessionId: string): Promise<TranscriptEvent[]> {
+    return this.events
+      .filter(e => e.sessionId === sessionId && e.subagentId === subagentId)
+      .sort((a, b) => a.sequence - b.sequence);
+  }
+
+  async getMultiSessionEvents(): Promise<TranscriptEvent[]> {
+    throw new Error('InMemoryTranscriptEventStore: getMultiSessionEvents not supported');
+  }
+
+  async searchSessions(): Promise<Array<{ event: TranscriptEvent; sessionId: string }>> {
+    throw new Error('InMemoryTranscriptEventStore: searchSessions not supported');
+  }
+
+  async getTailEvents(): Promise<TranscriptEvent[]> {
+    throw new Error('InMemoryTranscriptEventStore: getTailEvents not supported');
+  }
+
+  async deleteSessionEvents(sessionId: string): Promise<void> {
+    this.events = this.events.filter(e => e.sessionId !== sessionId);
+    this.sequenceBySession.delete(sessionId);
+  }
+
+  getAllEvents(): TranscriptEvent[] {
+    return [...this.events].sort((a, b) => a.sequence - b.sequence);
+  }
+}

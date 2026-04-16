@@ -10,3 +10,8 @@ export { parseToolResult } from './toolResultParser';
 export type { IRawMessageParser, ParseContext, CanonicalEventDescriptor } from './parsers/IRawMessageParser';
 export { ClaudeCodeRawParser } from './parsers/ClaudeCodeRawParser';
 export { CodexRawParser } from './parsers/CodexRawParser';
+export { InMemoryTranscriptEventStore } from './InMemoryTranscriptEventStore';
+export {
+  projectRawMessagesToViewMessages,
+  rawMessagesToCanonicalEvents,
+} from './projectRawMessages';

@@ -9,7 +9,9 @@ import { setInteractiveWidgetHost } from '@nimbalyst/runtime/store';
 // prevents tree-shaking, producing a ~25MB bundle that crashes WKWebView.
 import { AgentTranscriptPanel } from '@nimbalyst/runtime/ui/AgentTranscript/components/AgentTranscriptPanel';
 import { noopInteractiveWidgetHost } from '@nimbalyst/runtime/ui/AgentTranscript/components/CustomToolWidgets/InteractiveWidgetHost';
-import { transformAgentMessagesToViewMessages } from '@nimbalyst/runtime/ai/server/SessionManager';
+import { projectRawMessagesToViewMessages } from '@nimbalyst/runtime/ai/server/transcript/projectRawMessages';
+import type { RawMessage } from '@nimbalyst/runtime/ai/server/transcript/TranscriptTransformer';
+import type { TranscriptViewMessage } from '@nimbalyst/runtime/ai/server/transcript/TranscriptProjector';
 import type { SessionData } from '@nimbalyst/runtime/ai/server/types';
 import type { InteractiveWidgetHost } from '@nimbalyst/runtime/ui/AgentTranscript/components/CustomToolWidgets/InteractiveWidgetHost';
 import './styles.css';
@@ -53,29 +55,22 @@ interface BridgeMetadataUpdate {
 // Convert bridge messages to the format transformAgentMessagesToViewMessages expects
 // ============================================================================
 
-function bridgeMessageToRaw(msg: BridgeMessage): {
-  id: string;
-  createdAt: number;
-  source: string;
-  direction: 'input' | 'output';
-  content: string;
-  metadata?: Record<string, unknown>;
-  hidden?: boolean;
-} {
+function bridgeMessageToRaw(msg: BridgeMessage, syntheticId: number): RawMessage {
   const raw = msg.contentDecrypted || '';
 
-  // The encrypted payload is an envelope: { content: "...", metadata: {...}, hidden: false }
-  // We need to unwrap it to get the actual message content, which is what
-  // transformAgentMessagesToViewMessages expects (e.g., '{"type":"text","content":"..."}')
+  // The encrypted payload is an envelope: { content: "...", metadata: {...}, hidden: false }.
+  // Unwrap to the actual message content expected by the raw-message parsers
+  // (e.g. Claude Code JSON chunks, Codex SDK events).
   try {
     const envelope = JSON.parse(raw);
     if (envelope && typeof envelope === 'object' && 'content' in envelope) {
       return {
-        id: msg.id,
-        createdAt: msg.createdAt,
+        id: syntheticId,
+        sessionId: msg.sessionId,
         source: msg.source,
         direction: msg.direction as 'input' | 'output',
         content: typeof envelope.content === 'string' ? envelope.content : JSON.stringify(envelope.content),
+        createdAt: new Date(msg.createdAt),
         metadata: envelope.metadata || (msg.metadataJson ? tryParseJson(msg.metadataJson) : undefined),
         hidden: envelope.hidden,
       };
@@ -85,11 +80,12 @@ function bridgeMessageToRaw(msg: BridgeMessage): {
   }
 
   return {
-    id: msg.id,
-    createdAt: msg.createdAt,
+    id: syntheticId,
+    sessionId: msg.sessionId,
     source: msg.source,
     direction: msg.direction as 'input' | 'output',
     content: raw,
+    createdAt: new Date(msg.createdAt),
     metadata: msg.metadataJson ? tryParseJson(msg.metadataJson) : undefined,
   };
 }
@@ -167,6 +163,53 @@ function postErrorToNative(label: string, error: unknown) {
   } catch {
     // Not in WKWebView
   }
+}
+
+// Detailed error capture -- runs BEFORE React mounts so we catch bundle-eval
+// errors too. Uses addEventListener (not window.onerror) so we co-exist with
+// the native-injected cross-origin-sanitizing handler and can read the real
+// Error object from the event.
+try {
+  window.addEventListener('error', (event) => {
+    try {
+      const err = event.error;
+      const msg = err instanceof Error
+        ? `${err.message}\n${err.stack ?? ''}`
+        : String(event.message || err || 'unknown');
+      (window as any).webkit?.messageHandlers?.bridge?.postMessage({
+        type: 'js_error',
+        message: `[window.error] ${msg}`,
+        url: event.filename || 'transcript/main.tsx',
+        line: event.lineno ?? 0,
+        col: event.colno ?? 0,
+        stack: err instanceof Error ? err.stack || '' : '',
+      });
+    } catch {
+      // swallow
+    }
+  });
+  window.addEventListener('unhandledrejection', (event) => {
+    try {
+      const reason: any = event.reason;
+      const msg = reason instanceof Error
+        ? `${reason.message}\n${reason.stack ?? ''}`
+        : typeof reason === 'string'
+          ? reason
+          : (() => { try { return JSON.stringify(reason); } catch { return String(reason); } })();
+      (window as any).webkit?.messageHandlers?.bridge?.postMessage({
+        type: 'js_error',
+        message: `[unhandledrejection] ${msg}`,
+        url: 'transcript/main.tsx',
+        line: 0,
+        col: 0,
+        stack: reason instanceof Error ? reason.stack || '' : '',
+      });
+    } catch {
+      // swallow
+    }
+  });
+} catch {
+  // Not in WKWebView
 }
 
 class TranscriptErrorBoundary extends React.Component<
@@ -305,35 +348,60 @@ function TranscriptApp() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Transform raw bridge messages to UI format
+  // Transform raw bridge messages to UI format via the canonical transcript
+  // pipeline (per-provider parser -> in-memory projector). Async because the
+  // parsers return Promises, even when backed by an in-memory store.
+  const [viewMessages, setViewMessages] = useState<TranscriptViewMessage[]>([]);
+
+  useEffect(() => {
+    if (!sessionId) {
+      setViewMessages([]);
+      return;
+    }
+    let cancelled = false;
+    try {
+      const provider = metadata.provider || 'claude-code';
+      const rawForTransform: RawMessage[] = rawMessages.map((m, i) => bridgeMessageToRaw(m, i + 1));
+      projectRawMessagesToViewMessages(rawForTransform, provider)
+        .then((vms) => {
+          if (cancelled) return;
+          try {
+            setViewMessages(vms);
+          } catch (e) {
+            postErrorToNative('projectRawMessages:setState', e);
+          }
+        })
+        .catch((e) => {
+          if (!cancelled) postErrorToNative('projectRawMessages:async', e);
+        });
+    } catch (e) {
+      postErrorToNative('projectRawMessages:sync', e);
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, rawMessages, metadata.provider]);
+
   const sessionData: SessionData | null = React.useMemo(() => {
     if (!sessionId) return null;
 
-    try {
-      const rawForTransform = rawMessages.map(bridgeMessageToRaw);
-      const transformedMessages = transformAgentMessagesToViewMessages(rawForTransform);
-
-      let sessionStatus: string | undefined;
-      if (metadata.isExecuting) {
-        sessionStatus = 'running';
-      }
-
-      return {
-        id: sessionId,
-        provider: metadata.provider || 'unknown',
-        model: metadata.model,
-        mode: metadata.mode as 'planning' | 'agent' | undefined,
-        messages: transformedMessages,
-        title: metadata.title,
-        createdAt: rawMessages[0]?.createdAt || Date.now(),
-        updatedAt: rawMessages[rawMessages.length - 1]?.createdAt || Date.now(),
-        metadata: sessionStatus ? { sessionStatus } : undefined,
-      };
-    } catch (e) {
-      postErrorToNative('transformMessages', e);
-      return null;
+    let sessionStatus: string | undefined;
+    if (metadata.isExecuting) {
+      sessionStatus = 'running';
     }
-  }, [sessionId, rawMessages, metadata]);
+
+    return {
+      id: sessionId,
+      provider: metadata.provider || 'unknown',
+      model: metadata.model,
+      mode: metadata.mode as 'planning' | 'agent' | undefined,
+      messages: viewMessages,
+      title: metadata.title,
+      createdAt: rawMessages[0]?.createdAt || Date.now(),
+      updatedAt: rawMessages[rawMessages.length - 1]?.createdAt || Date.now(),
+      metadata: sessionStatus ? { sessionStatus } : undefined,
+    };
+  }, [sessionId, rawMessages, metadata, viewMessages]);
 
   // Keep ref in sync so the bridge's getPromptList can access transformed messages
   sessionDataRef.current = sessionData;
