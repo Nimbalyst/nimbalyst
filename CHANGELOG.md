@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Claude Opus 4.7 as the default Claude model (`claude:claude-opus-4-7`); previous default (Sonnet 4.6) remains selectable
+- Claude Opus 4.7 with the full 1M-token context window as the default Claude model (`claude:claude-opus-4-7`). Opus 4.7 uses 1M context natively on the Messages API — no `context-1m-2025-08-07` beta header required, unlike Opus 4.6. Previous default (Sonnet 4.6) remains selectable.
 
 ### Changed
 - Upgraded `@anthropic-ai/claude-agent-sdk` from 0.2.87 to 0.2.111 (Opus 4.7 support, task management, agent teams, plan-mode refinements)

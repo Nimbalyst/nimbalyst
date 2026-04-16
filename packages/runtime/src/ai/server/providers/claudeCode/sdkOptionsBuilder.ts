@@ -197,7 +197,12 @@ export async function buildSdkOptions(
     ...sanitizedProcessEnv,
     ...sanitizedShellEnv,
     ...sanitizedSettingsEnv,
-    ENABLE_TOOL_SEARCH: 'auto:10',
+    // `auto:N` defers MCP tools when their descriptions exceed N% of the
+    // context window. With Opus 4.7's 1M-context default, `auto:10` means
+    // ~100K tokens of tool descriptions are still loaded upfront — we saw
+    // ~112K baseline usage on new sessions. `auto:2` (20K on 1M, 4K on 200K)
+    // matches the previous lazy-loading behavior we had under Sonnet 4.6.
+    ENABLE_TOOL_SEARCH: 'auto:2',
     // Explicitly force-clear in case the SDK overlays its own process.env view.
     // These will be re-set from config.apiKey below if the user has configured one.
     ANTHROPIC_API_KEY: '',
