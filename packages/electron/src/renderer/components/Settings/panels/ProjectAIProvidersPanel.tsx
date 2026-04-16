@@ -27,10 +27,7 @@ interface Model {
 
 interface TrackerAutomationOverride {
   enabled?: boolean;
-  autoLinkCommitsToSessions?: boolean;
-  parseIssueKeysFromCommits?: boolean;
   autoCloseOnCommit?: boolean;
-  agentAppendIssueKeys?: boolean;
 }
 
 interface ProjectAIProvidersPanelProps {

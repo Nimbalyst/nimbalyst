@@ -97,19 +97,17 @@ export class CommitTrackerLinker {
 
     logger.main.info(`[CommitTrackerLinker] Commit detected: ${event.commitHash.slice(0, 7)} in ${event.workspacePath}`);
 
-    if (settings.parseIssueKeysFromCommits) {
-      await this.linkByIssueKeys(event, settings);
-    }
+    // When enabled, always parse issue keys. Auto-close is gated separately.
+    await this.linkByIssueKeys(event, settings);
   }
 
   /**
    * Link a commit to tracker items via session's linked tracker item IDs.
    * Called after a successful commit through the proposal widget.
    *
-   * This always runs when a session has linked tracker items -- no opt-in required.
+   * Always runs when a session has linked tracker items -- no opt-in required.
    * The user already explicitly linked the session to tracker items via tracker_link_session,
    * so linking the commit back is the expected, natural behavior.
-   * Only the autoLinkCommitsToSessions sub-toggle can disable it (when the master toggle is on).
    */
   async linkBySession(
     commitHash: string,
@@ -117,10 +115,6 @@ export class CommitTrackerLinker {
     sessionId: string,
     workspacePath: string,
   ): Promise<void> {
-    const settings = this.getSettings(workspacePath);
-    // If automation is enabled and the sub-toggle is explicitly off, bail.
-    // Otherwise, always link (session-based linking is low-friction, expected behavior).
-    if (settings.enabled && !settings.autoLinkCommitsToSessions) return;
 
     const db = this.getDb();
     if (!db) return;
@@ -162,10 +156,7 @@ export class CommitTrackerLinker {
   private getSettings(workspacePath: string): TrackerAutomationSettings {
     const defaults: TrackerAutomationSettings = {
       enabled: false,
-      autoLinkCommitsToSessions: true,
-      parseIssueKeysFromCommits: true,
       autoCloseOnCommit: true,
-      agentAppendIssueKeys: true,
     };
     const stored = this.getAISettingsStore().get('trackerAutomation', defaults) as TrackerAutomationSettings;
     const globalSettings: TrackerAutomationSettings = { ...defaults, ...stored };

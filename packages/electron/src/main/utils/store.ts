@@ -391,10 +391,7 @@ export interface WorkspaceState {
   // Tracker automation override for this project (undefined fields inherit from global)
   trackerAutomationOverride?: {
     enabled?: boolean;
-    autoLinkCommitsToSessions?: boolean;
-    parseIssueKeysFromCommits?: boolean;
     autoCloseOnCommit?: boolean;
-    agentAppendIssueKeys?: boolean;
   };
   lastUpdated: number;
 }
@@ -947,10 +944,7 @@ export function clearAIProviderOverrides(workspacePath: string): void {
 // Tracker Automation Override State Management
 export type TrackerAutomationSettings = {
   enabled: boolean;
-  autoLinkCommitsToSessions: boolean;
-  parseIssueKeysFromCommits: boolean;
   autoCloseOnCommit: boolean;
-  agentAppendIssueKeys: boolean;
 };
 
 export type TrackerAutomationOverride = Partial<TrackerAutomationSettings>;
@@ -975,10 +969,7 @@ export function getEffectiveTrackerAutomation(
   if (!override) return globalSettings;
   return {
     enabled: override.enabled ?? globalSettings.enabled,
-    autoLinkCommitsToSessions: override.autoLinkCommitsToSessions ?? globalSettings.autoLinkCommitsToSessions,
-    parseIssueKeysFromCommits: override.parseIssueKeysFromCommits ?? globalSettings.parseIssueKeysFromCommits,
     autoCloseOnCommit: override.autoCloseOnCommit ?? globalSettings.autoCloseOnCommit,
-    agentAppendIssueKeys: override.agentAppendIssueKeys ?? globalSettings.agentAppendIssueKeys,
   };
 }
 

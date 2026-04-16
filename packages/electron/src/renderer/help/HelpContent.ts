@@ -171,6 +171,11 @@ export const HelpContent: Record<string, HelpEntry> = {
     body: 'Archive this session to keep your session list organized. Archived sessions can be restored anytime.',
   },
 
+  'tracker-automation-section': {
+    title: 'Tracker Automation',
+    body: `Automatically connect git commits to your tracker items. When enabled, Nimbalyst links commits via the session's tracker items and by parsing issue keys (e.g. **NIM-123**) from commit messages — including commits made in your terminal.\n\nFor project-specific behavior, add instructions to your project's **CLAUDE.md** (e.g. "always reference tracker issue keys in commits" or "don't auto-close critical bugs without review").`,
+  },
+
   // ============================================================================
   // Agent Mode - AI Input
   // ============================================================================

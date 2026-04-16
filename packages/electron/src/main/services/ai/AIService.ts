@@ -5082,16 +5082,10 @@ export class AIService {
       const autoCommitEnabled = this.getSettingsStore().get('autoCommitEnabled', false) as boolean;
       const trackerAutomation = this.getSettingsStore().get('trackerAutomation', {
         enabled: false,
-        autoLinkCommitsToSessions: true,
-        parseIssueKeysFromCommits: true,
         autoCloseOnCommit: true,
-        agentAppendIssueKeys: true,
       }) as {
         enabled: boolean;
-        autoLinkCommitsToSessions: boolean;
-        parseIssueKeysFromCommits: boolean;
         autoCloseOnCommit: boolean;
-        agentAppendIssueKeys: boolean;
       };
 
       return {
@@ -5217,10 +5211,7 @@ export class AIService {
         // Merge with existing to allow partial updates
         const current = this.getSettingsStore().get('trackerAutomation', {
           enabled: false,
-          autoLinkCommitsToSessions: true,
-          parseIssueKeysFromCommits: true,
           autoCloseOnCommit: true,
-          agentAppendIssueKeys: true,
         }) as Record<string, unknown>;
         this.getSettingsStore().set('trackerAutomation', { ...current, ...settings.trackerAutomation });
       }
