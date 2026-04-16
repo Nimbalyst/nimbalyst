@@ -177,18 +177,31 @@ export async function buildSdkOptions(
   }
 
   // Set up environment variables.
-  // Strip API keys from inherited env so we never silently use a key the user
-  // didn't explicitly configure in Nimbalyst settings. A user's .env file with
-  // ANTHROPIC_API_KEY was picked up here and billed their personal account $100+.
+  // Strip API keys from every env source we compose so we never silently use
+  // a key the user didn't explicitly configure in Nimbalyst settings. A user's
+  // .env file with ANTHROPIC_API_KEY was picked up here and billed their
+  // personal Anthropic account $100+.
+  //
+  // Defense-in-depth: the main-process bootstrap already deletes these from
+  // process.env before any code runs, but claude-agent-sdk 0.2.111 changed
+  // options.env from "replaces process.env" to "overlays process.env". We
+  // therefore also strip from every composed source and explicitly set the
+  // key from config.apiKey (or empty string) at the end, so nothing the SDK
+  // may inject from its own view of process.env can leak through.
   const { ANTHROPIC_API_KEY: _envAnthropicKey, OPENAI_API_KEY: _envOpenaiKey, ...sanitizedProcessEnv } = process.env;
   const { ANTHROPIC_API_KEY: _shellAnthropicKey, OPENAI_API_KEY: _shellOpenaiKey, ...sanitizedShellEnv } = shellEnv;
+  const { ANTHROPIC_API_KEY: _settingsAnthropicKey, OPENAI_API_KEY: _settingsOpenaiKey, ...sanitizedSettingsEnv } = settingsEnv;
 
-  const enableAgentTeams = settingsEnv.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS === '1';
+  const enableAgentTeams = sanitizedSettingsEnv.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS === '1';
   const env: any = {
     ...sanitizedProcessEnv,
     ...sanitizedShellEnv,
-    ...settingsEnv,
+    ...sanitizedSettingsEnv,
     ENABLE_TOOL_SEARCH: 'auto:10',
+    // Explicitly force-clear in case the SDK overlays its own process.env view.
+    // These will be re-set from config.apiKey below if the user has configured one.
+    ANTHROPIC_API_KEY: '',
+    OPENAI_API_KEY: '',
     ...(config.effortLevel && config.effortLevel !== DEFAULT_EFFORT_LEVEL && {
       CLAUDE_CODE_EFFORT_LEVEL: config.effortLevel
     }),

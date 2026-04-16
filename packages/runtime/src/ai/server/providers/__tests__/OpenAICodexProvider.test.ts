@@ -1206,6 +1206,45 @@ describe('OpenAICodexProvider', () => {
     expect(result.result).toEqual({ ok: true });
   });
 
+  describe('buildCodexEnvironment (env-key hardening)', () => {
+    it('strips ANTHROPIC_API_KEY and OPENAI_API_KEY from the composed child env', () => {
+      const originalAnthropic = process.env.ANTHROPIC_API_KEY;
+      const originalOpenAI = process.env.OPENAI_API_KEY;
+
+      process.env.ANTHROPIC_API_KEY = 'sk-ant-leaked-from-shell';
+      process.env.OPENAI_API_KEY = 'sk-leaked-from-shell';
+
+      OpenAICodexProvider.setShellEnvironmentLoader(() => ({
+        ANTHROPIC_API_KEY: 'sk-ant-leaked-from-shellenv',
+        OPENAI_API_KEY: 'sk-leaked-from-shellenv',
+        AWS_PROFILE: 'dev',
+      }));
+      OpenAICodexProvider.setEnhancedPathLoader(() => '/opt/homebrew/bin:/usr/bin');
+
+      try {
+        const env = (OpenAICodexProvider as any).buildCodexEnvironment() as Record<string, string> | null;
+
+        expect(env).not.toBeNull();
+        expect(env!.ANTHROPIC_API_KEY).toBeUndefined();
+        expect(env!.OPENAI_API_KEY).toBeUndefined();
+        // Non-sensitive shell state still flows through
+        expect(env!.AWS_PROFILE).toBe('dev');
+        expect(env!.PATH).toBe('/opt/homebrew/bin:/usr/bin');
+      } finally {
+        if (originalAnthropic === undefined) {
+          delete process.env.ANTHROPIC_API_KEY;
+        } else {
+          process.env.ANTHROPIC_API_KEY = originalAnthropic;
+        }
+        if (originalOpenAI === undefined) {
+          delete process.env.OPENAI_API_KEY;
+        } else {
+          process.env.OPENAI_API_KEY = originalOpenAI;
+        }
+      }
+    });
+  });
+
   describe('Live Codex SDK integration', () => {
     const hasApiKey = !!process.env.OPENAI_API_KEY;
     const runProviderTests = process.env.RUN_AI_PROVIDER_TESTS === 'true';

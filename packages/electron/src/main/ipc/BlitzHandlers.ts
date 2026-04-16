@@ -34,7 +34,7 @@ const MAX_BLITZ_WORKTREES = 10;
  */
 function getBlitzSessionModelLabel(model: string): string {
   const CLAUDE_CODE_LABELS: Record<string, string> = {
-    'opus': 'Opus 4.6',
+    'opus': 'Opus 4.7',
     'sonnet': 'Sonnet 4.6',
     'haiku': 'Haiku 3.5',
   };

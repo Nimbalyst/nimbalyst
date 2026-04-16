@@ -26,6 +26,21 @@ import { app, dialog } from 'electron';
 import * as path from 'path';
 import Store from 'electron-store';
 
+// CRITICAL: Strip inherited API keys from process.env before ANY downstream code
+// (SDKs, providers, services) can observe them. See CLAUDE.md, section
+// "Never Use Environment Variables as Implicit API Key Sources".
+//
+// A user had ANTHROPIC_API_KEY in a local .env file for unrelated work.
+// Nimbalyst silently picked it up via process.env and billed the user's
+// personal Anthropic account $100+ instead of their Nimbalyst subscription.
+//
+// As of claude-agent-sdk 0.2.111, `options.env` overlays `process.env`
+// instead of replacing it, so per-session scrubbing in providers is no
+// longer sufficient on its own. Stripping at the main-process boundary
+// ensures no SDK or child process can ever inherit these keys.
+delete process.env.ANTHROPIC_API_KEY;
+delete process.env.OPENAI_API_KEY;
+
 // Global uncaught exception handler - must be registered early
 // This catches errors that bubble up from async SDK operations
 // Throttling: suppress duplicate errors and cap dialog frequency to prevent dialog floods

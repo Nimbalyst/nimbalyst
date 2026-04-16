@@ -12,6 +12,13 @@ export interface ModelDefinition {
 
 export const CLAUDE_MODELS: ModelDefinition[] = [
   {
+    id: 'claude-opus-4-7',
+    displayName: 'Claude Opus 4.7',
+    shortName: 'Opus 4.7',
+    maxTokens: 8192,
+    contextWindow: 200000,
+  },
+  {
     id: 'claude-opus-4-6',
     displayName: 'Claude Opus 4.6',
     shortName: 'Opus 4.6',
@@ -157,7 +164,7 @@ export const OPENAI_MODELS: ModelDefinition[] = [
 ];
 
 export const DEFAULT_MODELS = {
-  claude: 'claude:claude-sonnet-4-6',
+  claude: 'claude:claude-opus-4-7',
   openai: 'openai:gpt-5.4',
   'claude-code': 'claude-code:opus-1m',
   'openai-codex': 'openai-codex:gpt-5.4',

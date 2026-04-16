@@ -9,13 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-<!-- New features go here -->
+- Claude Opus 4.7 as the default Claude model (`claude:claude-opus-4-7`); previous default (Sonnet 4.6) remains selectable
 
 ### Changed
-<!-- Changes to existing functionality go here -->
+- Upgraded `@anthropic-ai/claude-agent-sdk` from 0.2.87 to 0.2.111 (Opus 4.7 support, task management, agent teams, plan-mode refinements)
+- Upgraded `@openai/codex-sdk` from 0.117.0 to 0.121.0
+- Upgraded `@modelcontextprotocol/sdk` to 1.29.0
+- Claude Agent variant label now reports Opus 4.7 (was Opus 4.6)
 
 ### Fixed
-<!-- Bug fixes go here -->
+- Unconditionally strip `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` from `process.env` at main-process startup; explicitly clear them in `options.env` for the Claude Code SDK and in the Codex child-process env so the 0.2.111 overlay behavior (which no longer replaces `process.env`) cannot silently re-introduce a shell-inherited key
 
 ### Removed
 <!-- Removed features go here -->

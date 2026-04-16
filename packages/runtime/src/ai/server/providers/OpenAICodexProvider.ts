@@ -1414,6 +1414,15 @@ export class OpenAICodexProvider extends BaseAgentProvider {
       env.PATH = enhancedPath;
     }
 
+    // Defense-in-depth against silently inheriting API keys the user did not
+    // configure in Nimbalyst settings. The main-process bootstrap already
+    // strips these from process.env, but shellEnv may re-introduce a shell
+    // export, so we force-clear them here. Per-session keys from provider
+    // config are injected at the call site, not here.
+    // See CLAUDE.md "Never Use Environment Variables as Implicit API Key Sources".
+    delete env.ANTHROPIC_API_KEY;
+    delete env.OPENAI_API_KEY;
+
     return env;
   }
 

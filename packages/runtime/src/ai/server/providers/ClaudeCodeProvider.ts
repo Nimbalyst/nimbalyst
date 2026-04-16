@@ -121,7 +121,7 @@ type ClaudeCodeVariant = typeof CLAUDE_CODE_VARIANTS[number];
 // Map variants to their current version numbers
 // These correspond to the underlying Claude models used by Claude Code
 const CLAUDE_CODE_VARIANT_VERSIONS: Record<ClaudeCodeVariant, string> = {
-  opus: '4.6',
+  opus: '4.7',
   sonnet: '4.6',
   haiku: '4.5'
 };
