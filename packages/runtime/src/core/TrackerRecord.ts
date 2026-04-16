@@ -13,6 +13,13 @@ import type { TrackerComment } from '../sync/trackerSyncTypes';
 // Canonical Record
 // ---------------------------------------------------------------------------
 
+export interface LinkedCommit {
+  sha: string;
+  message: string;
+  sessionId?: string;
+  timestamp: string;
+}
+
 export interface TrackerRecordSystem {
   workspace: string;
   documentPath?: string;
@@ -25,6 +32,7 @@ export interface TrackerRecordSystem {
   createdByAgent?: boolean;
   linkedSessions?: string[];
   linkedCommitSha?: string;
+  linkedCommits?: LinkedCommit[];
   documentId?: string;
   activity?: TrackerActivity[];
   comments?: TrackerComment[];
@@ -56,6 +64,7 @@ const SYSTEM_KEYS = new Set([
   'createdByAgent',
   'linkedSessions',
   'linkedCommitSha',
+  'linkedCommits',
   'documentId',
   'activity',
   'comments',
@@ -149,6 +158,7 @@ export function trackerItemToRecord(item: TrackerItem): TrackerRecord {
       createdByAgent: item.createdByAgent,
       linkedSessions: item.linkedSessions,
       linkedCommitSha: item.linkedCommitSha,
+      linkedCommits: item.linkedCommits,
       documentId: item.documentId,
     },
     fields,
@@ -226,6 +236,7 @@ export function trackerRecordToItem(record: TrackerRecord): TrackerItem {
     createdByAgent: record.system.createdByAgent,
     linkedSessions: record.system.linkedSessions,
     linkedCommitSha: record.system.linkedCommitSha,
+    linkedCommits: record.system.linkedCommits,
     documentId: record.system.documentId,
     syncStatus: record.syncStatus as TrackerItem['syncStatus'],
     customFields: Object.keys(customFields).length > 0 ? customFields : undefined,
@@ -291,6 +302,7 @@ export function dbRowToRecord(row: any): TrackerRecord {
       createdByAgent: data.createdByAgent || false,
       linkedSessions: data.linkedSessions || undefined,
       linkedCommitSha: data.linkedCommitSha || undefined,
+      linkedCommits: data.linkedCommits || undefined,
       documentId: data.documentId || undefined,
       activity: data.activity || undefined,
       comments: data.comments || undefined,
@@ -329,6 +341,7 @@ export function recordToDbParams(record: TrackerRecord): {
   if (record.system.createdByAgent) data.createdByAgent = record.system.createdByAgent;
   if (record.system.linkedSessions?.length) data.linkedSessions = record.system.linkedSessions;
   if (record.system.linkedCommitSha) data.linkedCommitSha = record.system.linkedCommitSha;
+  if (record.system.linkedCommits?.length) data.linkedCommits = record.system.linkedCommits;
   if (record.system.documentId) data.documentId = record.system.documentId;
   if (record.system.activity?.length) data.activity = record.system.activity;
   if (record.system.comments?.length) data.comments = record.system.comments;

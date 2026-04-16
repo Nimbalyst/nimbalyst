@@ -25,6 +25,14 @@ interface Model {
   provider: string;
 }
 
+interface TrackerAutomationOverride {
+  enabled?: boolean;
+  autoLinkCommitsToSessions?: boolean;
+  parseIssueKeysFromCommits?: boolean;
+  autoCloseOnCommit?: boolean;
+  agentAppendIssueKeys?: boolean;
+}
+
 interface ProjectAIProvidersPanelProps {
   workspacePath: string;
   workspaceName: string;
@@ -50,6 +58,7 @@ export function ProjectAIProvidersPanel({ workspacePath, workspaceName }: Projec
   const [projectOverrides, setProjectOverrides] = useState<AIProviderOverrides>({});
   const [availableModels, setAvailableModels] = useState<Record<string, Model[]>>({});
   const [expandedProvider, setExpandedProvider] = useState<string | null>(null);
+  const [trackerAutomationOverride, setTrackerAutomationOverride] = useState<TrackerAutomationOverride | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -78,6 +87,16 @@ export function ProjectAIProvidersPanel({ workspacePath, workspaceName }: Projec
         setProjectOverrides({});
       }
 
+      // Load tracker automation override
+      try {
+        const trackerResult = await window.electronAPI.invoke('ai:getProjectTrackerAutomation', workspacePath);
+        if (trackerResult.success) {
+          setTrackerAutomationOverride(trackerResult.override);
+        }
+      } catch (err) {
+        console.error('Failed to load tracker automation override:', err);
+      }
+
       // Load available models
       try {
         const modelsResult = await window.electronAPI.aiGetAllModels();
@@ -98,6 +117,7 @@ export function ProjectAIProvidersPanel({ workspacePath, workspaceName }: Projec
     setSaving(true);
     try {
       await window.electronAPI.invoke('ai:saveProjectSettings', workspacePath, projectOverrides);
+      await window.electronAPI.invoke('ai:saveProjectTrackerAutomation', workspacePath, trackerAutomationOverride);
       setHasChanges(false);
     } catch (error) {
       console.error('Failed to save project AI settings:', error);
@@ -409,6 +429,33 @@ export function ProjectAIProvidersPanel({ workspacePath, workspaceName }: Projec
             <span>This project has custom AI provider settings</span>
           </div>
         )}
+      </div>
+
+      {/* Tracker Automation Override */}
+      <div className="tracker-automation-override mt-6 pt-4 border-t border-[var(--nim-border)]">
+        <h3 className="text-sm font-semibold text-[var(--nim-text)] mb-3">Tracker Automation</h3>
+        <div className="flex items-center gap-3 mb-2">
+          <select
+            className="text-sm rounded border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] text-[var(--nim-text)] px-3 py-1.5"
+            value={trackerAutomationOverride === null ? 'inherit' : trackerAutomationOverride?.enabled ? 'enable' : 'disable'}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (val === 'inherit') {
+                setTrackerAutomationOverride(null);
+              } else {
+                setTrackerAutomationOverride({ enabled: val === 'enable' });
+              }
+              setHasChanges(true);
+            }}
+          >
+            <option value="inherit">Inherit from global settings</option>
+            <option value="enable">Enable for this project</option>
+            <option value="disable">Disable for this project</option>
+          </select>
+        </div>
+        <p className="text-xs text-[var(--nim-text-faint)] m-0">
+          Override the global tracker automation setting for this workspace.
+        </p>
       </div>
 
       <div className="panel-footer flex justify-end pt-4 border-t border-[var(--nim-border)]">

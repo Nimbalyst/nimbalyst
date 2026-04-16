@@ -85,6 +85,7 @@ export interface TrackerPayloadSystem {
   createdByAgent?: boolean;
   linkedSessions?: string[];
   linkedCommitSha?: string;
+  linkedCommits?: Array<{ sha: string; message: string; sessionId?: string; timestamp: string }>;
   documentId?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -268,7 +269,7 @@ export function recordToPayload(record: TrackerRecord): TrackerItemPayload {
   // System field timestamps
   const systemKeys = [
     'authorIdentity', 'lastModifiedBy', 'createdByAgent',
-    'linkedSessions', 'linkedCommitSha', 'documentId',
+    'linkedSessions', 'linkedCommitSha', 'linkedCommits', 'documentId',
     'createdAt', 'updatedAt',
   ];
   for (const key of systemKeys) {
@@ -296,6 +297,7 @@ export function recordToPayload(record: TrackerRecord): TrackerItemPayload {
       createdByAgent: record.system.createdByAgent,
       linkedSessions: record.system.linkedSessions,
       linkedCommitSha: record.system.linkedCommitSha,
+      linkedCommits: record.system.linkedCommits,
       documentId: record.system.documentId,
       createdAt: record.system.createdAt,
       updatedAt: record.system.updatedAt,
@@ -349,6 +351,7 @@ export function payloadToRecord(payload: TrackerItemPayload, workspace: string):
       createdByAgent: sys.createdByAgent ?? p.createdByAgent,
       linkedSessions: sys.linkedSessions ?? p.linkedSessions,
       linkedCommitSha: sys.linkedCommitSha ?? p.linkedCommitSha,
+      linkedCommits: sys.linkedCommits ?? p.linkedCommits,
       documentId: sys.documentId ?? p.documentId,
       comments: payload.comments,
       activity: payload.activity,

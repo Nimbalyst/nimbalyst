@@ -52,6 +52,10 @@ import {
   autoCommitEnabledAtom,
   initAutoCommitSetting,
 } from './store/atoms/autoCommitAtoms';
+import {
+  trackerAutomationAtom,
+  initTrackerAutomationSettings,
+} from './store/atoms/trackerAutomationAtoms';
 
 // console.log('[RENDERER] Imports complete at', new Date().toISOString());
 
@@ -140,6 +144,9 @@ await Promise.allSettled([
   }),
   initAutoCommitSetting().then((enabled) => {
     store.set(autoCommitEnabledAtom, enabled);
+  }),
+  initTrackerAutomationSettings().then((settings) => {
+    store.set(trackerAutomationAtom, settings);
   }),
 ]);
 

@@ -388,6 +388,14 @@ export interface WorkspaceState {
   accountId?: string;
   // Hidden gutter buttons (navigation sidebar)
   hiddenGutterButtons?: string[];
+  // Tracker automation override for this project (undefined fields inherit from global)
+  trackerAutomationOverride?: {
+    enabled?: boolean;
+    autoLinkCommitsToSessions?: boolean;
+    parseIssueKeysFromCommits?: boolean;
+    autoCloseOnCommit?: boolean;
+    agentAppendIssueKeys?: boolean;
+  };
   lastUpdated: number;
 }
 
@@ -934,6 +942,44 @@ export function clearAIProviderOverrides(workspacePath: string): void {
   updateWorkspaceState(workspacePath, workspace => {
     delete workspace.aiProviderOverrides;
   });
+}
+
+// Tracker Automation Override State Management
+export type TrackerAutomationSettings = {
+  enabled: boolean;
+  autoLinkCommitsToSessions: boolean;
+  parseIssueKeysFromCommits: boolean;
+  autoCloseOnCommit: boolean;
+  agentAppendIssueKeys: boolean;
+};
+
+export type TrackerAutomationOverride = Partial<TrackerAutomationSettings>;
+
+export function getTrackerAutomationOverride(workspacePath: string): TrackerAutomationOverride | undefined {
+  return getWorkspaceState(workspacePath).trackerAutomationOverride;
+}
+
+export function saveTrackerAutomationOverride(workspacePath: string, override: TrackerAutomationOverride | undefined): void {
+  updateWorkspaceState(workspacePath, workspace => {
+    workspace.trackerAutomationOverride = override;
+  });
+}
+
+/** Merge global tracker automation settings with project-level overrides */
+export function getEffectiveTrackerAutomation(
+  globalSettings: TrackerAutomationSettings,
+  workspacePath?: string,
+): TrackerAutomationSettings {
+  if (!workspacePath) return globalSettings;
+  const override = getTrackerAutomationOverride(workspacePath);
+  if (!override) return globalSettings;
+  return {
+    enabled: override.enabled ?? globalSettings.enabled,
+    autoLinkCommitsToSessions: override.autoLinkCommitsToSessions ?? globalSettings.autoLinkCommitsToSessions,
+    parseIssueKeysFromCommits: override.parseIssueKeysFromCommits ?? globalSettings.parseIssueKeysFromCommits,
+    autoCloseOnCommit: override.autoCloseOnCommit ?? globalSettings.autoCloseOnCommit,
+    agentAppendIssueKeys: override.agentAppendIssueKeys ?? globalSettings.agentAppendIssueKeys,
+  };
 }
 
 function normalizeAIProviderOverrides(overrides: AIProviderOverrides | undefined): AIProviderOverrides | undefined {

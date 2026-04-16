@@ -27,6 +27,10 @@ import {
   autoCommitEnabledAtom,
   setAutoCommitEnabledAtom,
 } from '../../../store/atoms/autoCommitAtoms';
+import {
+  trackerAutomationAtom,
+  setTrackerAutomationAtom,
+} from '../../../store/atoms/trackerAutomationAtoms';
 
 /** Reusable compact dropdown row */
 function DropdownRow({
@@ -102,6 +106,10 @@ export function AdvancedPanel() {
   // Auto-commit setting
   const autoCommitEnabled = useAtomValue(autoCommitEnabledAtom);
   const setAutoCommitEnabled = useSetAtom(setAutoCommitEnabledAtom);
+
+  // Tracker automation settings
+  const trackerAutomation = useAtomValue(trackerAutomationAtom);
+  const setTrackerAutomation = useSetAtom(setTrackerAutomationAtom);
 
   // External editor settings from Jotai atoms
   const [externalEditorSettings] = useAtom(externalEditorSettingsAtom);
@@ -616,6 +624,50 @@ export function AdvancedPanel() {
               Reset All Guides
             </button>
           </div>
+        )}
+      </div>
+
+      {/* ── Tracker Automation ── */}
+      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+        <h4 className="provider-panel-section-title text-base font-semibold mb-2 text-[var(--nim-text)]">Tracker Automation</h4>
+
+        <SettingsToggle
+          checked={trackerAutomation.enabled}
+          onChange={(checked) => setTrackerAutomation({ enabled: checked })}
+          name="Enable Commit-Tracker Linking"
+          description="Automatically link git commits to tracker items via session relationships and issue key parsing."
+        />
+
+        {trackerAutomation.enabled && (
+          <>
+            <SettingsToggle
+              checked={trackerAutomation.autoLinkCommitsToSessions}
+              onChange={(checked) => setTrackerAutomation({ autoLinkCommitsToSessions: checked })}
+              name="Link Commits to Session Items"
+              description="After a commit, link it to tracker items associated with the session."
+            />
+
+            <SettingsToggle
+              checked={trackerAutomation.parseIssueKeysFromCommits}
+              onChange={(checked) => setTrackerAutomation({ parseIssueKeysFromCommits: checked })}
+              name="Parse Issue Keys from Commits"
+              description="Detect issue keys (e.g. NIM-123) in commit messages and link them."
+            />
+
+            <SettingsToggle
+              checked={trackerAutomation.autoCloseOnCommit}
+              onChange={(checked) => setTrackerAutomation({ autoCloseOnCommit: checked })}
+              name="Auto-close on Fixes/Closes/Resolves"
+              description="Set tracker items to done when a commit message contains closing keywords."
+            />
+
+            <SettingsToggle
+              checked={trackerAutomation.agentAppendIssueKeys}
+              onChange={(checked) => setTrackerAutomation({ agentAppendIssueKeys: checked })}
+              name="Agent Appends Issue Keys"
+              description="AI agents append Resolves NIM-X to proposed commit messages."
+            />
+          </>
         )}
       </div>
 

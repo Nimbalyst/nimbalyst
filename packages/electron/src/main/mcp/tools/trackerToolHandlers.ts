@@ -160,6 +160,7 @@ function rowToTrackerItem(row: any): any {
     labels: data.labels || undefined,
     linkedSessions: data.linkedSessions || undefined,
     linkedCommitSha: data.linkedCommitSha || undefined,
+    linkedCommits: data.linkedCommits || undefined,
     documentId: data.documentId || undefined,
     syncStatus: row.sync_status || 'local',
     fieldUpdatedAt: data._fieldUpdatedAt || undefined,

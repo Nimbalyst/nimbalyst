@@ -5068,6 +5068,19 @@ export class AIService {
       const useStandaloneBinary = this.getSettingsStore().get('useStandaloneBinary', false) as boolean;
       const customClaudeCodePath = this.getSettingsStore().get('customClaudeCodePath', '') as string;
       const autoCommitEnabled = this.getSettingsStore().get('autoCommitEnabled', false) as boolean;
+      const trackerAutomation = this.getSettingsStore().get('trackerAutomation', {
+        enabled: false,
+        autoLinkCommitsToSessions: true,
+        parseIssueKeysFromCommits: true,
+        autoCloseOnCommit: true,
+        agentAppendIssueKeys: true,
+      }) as {
+        enabled: boolean;
+        autoLinkCommitsToSessions: boolean;
+        parseIssueKeysFromCommits: boolean;
+        autoCloseOnCommit: boolean;
+        agentAppendIssueKeys: boolean;
+      };
 
       return {
         defaultProvider: this.getSettingsStore().get('defaultProvider', 'claude-code'),
@@ -5081,6 +5094,7 @@ export class AIService {
         useStandaloneBinary,
         customClaudeCodePath,
         autoCommitEnabled,
+        trackerAutomation,
       };
     });
 
@@ -5185,6 +5199,18 @@ export class AIService {
 
       if (settings.autoCommitEnabled !== undefined) {
         this.getSettingsStore().set('autoCommitEnabled', settings.autoCommitEnabled);
+      }
+
+      if (settings.trackerAutomation !== undefined) {
+        // Merge with existing to allow partial updates
+        const current = this.getSettingsStore().get('trackerAutomation', {
+          enabled: false,
+          autoLinkCommitsToSessions: true,
+          parseIssueKeysFromCommits: true,
+          autoCloseOnCommit: true,
+          agentAppendIssueKeys: true,
+        }) as Record<string, unknown>;
+        this.getSettingsStore().set('trackerAutomation', { ...current, ...settings.trackerAutomation });
       }
 
       return { success: true };
@@ -5601,6 +5627,21 @@ export class AIService {
         success: true,
         overrides: overrides || null,
       };
+    });
+
+    // Get project-level tracker automation override
+    safeHandle('ai:getProjectTrackerAutomation', async (_event, workspacePath: string) => {
+      if (!workspacePath) return { success: false, error: 'workspacePath is required' };
+      const { getTrackerAutomationOverride } = await import('../../utils/store');
+      return { success: true, override: getTrackerAutomationOverride(workspacePath) ?? null };
+    });
+
+    // Save project-level tracker automation override
+    safeHandle('ai:saveProjectTrackerAutomation', async (_event, workspacePath: string, override: any) => {
+      if (!workspacePath) return { success: false, error: 'workspacePath is required' };
+      const { saveTrackerAutomationOverride } = await import('../../utils/store');
+      saveTrackerAutomationOverride(workspacePath, override || undefined);
+      return { success: true };
     });
 
     // Save project-level AI provider overrides

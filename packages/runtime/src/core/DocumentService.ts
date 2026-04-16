@@ -150,8 +150,10 @@ export interface TrackerItem {
   labels?: string[];
   /** Linked AI session IDs */
   linkedSessions?: string[];
-  /** Linked git commit SHA */
+  /** Linked git commit SHA (deprecated: use linkedCommits) */
   linkedCommitSha?: string;
+  /** Linked git commits with metadata */
+  linkedCommits?: Array<{ sha: string; message: string; sessionId?: string; timestamp: string }>;
   /** DocumentRoom ID for rich collaborative content */
   documentId?: string;
   /** Sync status: local (never synced), synced (up to date), pending (queued for sync) */

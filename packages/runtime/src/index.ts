@@ -84,7 +84,7 @@ export type {
   DocumentHeaderComponentProps,
 } from './plugins/TrackerPlugin';
 // Canonical TrackerRecord type
-export type { TrackerRecord, TrackerRecordSystem } from './core/TrackerRecord';
+export type { TrackerRecord, TrackerRecordSystem, LinkedCommit } from './core/TrackerRecord';
 export { trackerItemToRecord, trackerRecordToItem, dbRowToRecord, recordToDbParams } from './core/TrackerRecord';
 // Generic Frontmatter Plugin
 // Import triggers registration with DocumentHeaderRegistry (priority 50, below tracker's 100)
