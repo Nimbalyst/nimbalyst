@@ -277,7 +277,7 @@ const TabContentComponent: React.FC<TabContentProps> = ({
     if (isCollab && !collabConfig) {
       console.warn('[TabContent] Closing collab tab without config:', tab.filePath);
       element.remove();
-      root.unmount();
+      queueMicrotask(() => root.unmount());
       // Schedule tab close on next tick to avoid mutating during syncTabs
       setTimeout(() => propsRef.current.onTabClose?.(tab.id), 0);
       return;
@@ -358,8 +358,14 @@ const TabContentComponent: React.FC<TabContentProps> = ({
       removeCollabConfig(instance.tabData.filePath);
     }
 
-    instance.root.unmount();
+    // Defer root.unmount() to avoid "synchronously unmount a root while React
+    // was already rendering" warning. This callback can fire during React's
+    // commit phase (via tabsActions.subscribe or useEffect cleanup), so
+    // unmounting a child root synchronously races with the current render.
+    // Remove the DOM element immediately to avoid visual artifacts.
     instance.element.remove();
+    const root = instance.root;
+    queueMicrotask(() => root.unmount());
     tabInstancesRef.current.delete(tabId);
     saveFunctionsRef.current.delete(tabId);
     getContentFunctionsRef.current.delete(tabId);
@@ -560,10 +566,11 @@ const TabContentComponent: React.FC<TabContentProps> = ({
         }
       });
 
-      // Clean up editor instances
+      // Clean up editor instances -- defer unmount to avoid React render collision
       tabInstancesRef.current.forEach((instance) => {
-        instance.root.unmount();
         instance.element.remove();
+        const root = instance.root;
+        queueMicrotask(() => root.unmount());
       });
       tabInstancesRef.current.clear();
 
