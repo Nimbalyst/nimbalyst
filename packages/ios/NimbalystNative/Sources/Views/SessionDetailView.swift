@@ -296,8 +296,16 @@ public struct SessionDetailView: View {
             timeoutWorkItem?.cancel()
             promptRefreshWorkItem?.cancel()
             draftDebounceItem?.cancel()
-            appState.syncManager?.onSessionSyncDiagnostic = nil
-            appState.syncManager?.leaveSessionRoom()
+            // Remove only THIS session's diagnostic handler. The incoming
+            // view may have already registered its own; a blanket
+            // `onSessionSyncDiagnostic = nil` would drop its registration and
+            // cause its diagnostic to be silently swallowed.
+            appState.syncManager?.removeSessionSyncDiagnosticHandler(sessionId: session.id)
+            // Scope the leave to THIS session: SwiftUI often fires the new
+            // view's `.task { joinSessionRoom(next) }` before this onDisappear,
+            // so a bare leaveSessionRoom() would tear down the next session's
+            // socket and leave it stuck forever.
+            appState.syncManager?.leaveSessionRoom(expectedSessionId: session.id)
         }
         #if canImport(UIKit)
         .sheet(isPresented: $showPromptPicker) {
@@ -612,7 +620,13 @@ public struct SessionDetailView: View {
         timeoutWorkItem?.cancel()
         let item = DispatchWorkItem { [self] in
             guard !isTranscriptReady else { return }
-            guard !shouldWaitForInitialTranscriptMessages else { return }
+            // Fire the timeout regardless of whether we're still "waiting for
+            // initial messages". Previously the guard
+            //   guard !shouldWaitForInitialTranscriptMessages else { return }
+            // suppressed this error whenever session sync never completed --
+            // which is exactly the failure case we want to surface. If we've
+            // been stuck 15s waiting on the sync response, the user needs to
+            // see an error and a retry option, not an infinite spinner.
             withAnimation {
                 loadError = .timeout(
                     messageCount: messages.count,
@@ -628,8 +642,12 @@ public struct SessionDetailView: View {
     // MARK: - Diagnostic Subscription
 
     private func subscribeToDiagnostics() {
-        appState.syncManager?.onSessionSyncDiagnostic = { [self] sessionId, diagnostic in
-            guard sessionId == session.id else { return }
+        // Use the per-session handler API so the outgoing view's teardown can't
+        // accidentally drop our registration. Previously we replaced (and the
+        // outgoing view's .onDisappear nulled) a single shared callback on
+        // SyncManager, which caused the incoming session's diagnostic to be
+        // silently swallowed -- leaving the transcript spinner forever.
+        appState.syncManager?.addSessionSyncDiagnosticHandler(sessionId: session.id) { [self] diagnostic in
             lastDiagnostic = diagnostic
             hasCompletedInitialSessionSync = true
 

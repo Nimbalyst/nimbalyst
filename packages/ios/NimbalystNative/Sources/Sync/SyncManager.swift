@@ -48,8 +48,40 @@ public final class SyncManager: ObservableObject {
     public var onSettingsSynced: ((SyncedSettings) -> Void)?
 
     /// Called with diagnostic info when session message sync completes (success or failure).
-    /// Parameters: (sessionId, diagnostic)
+    /// Parameters: (sessionId, diagnostic).
+    ///
+    /// Deprecated: prefer `addSessionSyncDiagnosticHandler(sessionId:handler:)`,
+    /// which is robust against the SwiftUI lifecycle race where an outgoing
+    /// view's `onDisappear` nulls the single shared callback before the
+    /// incoming view's `onAppear` has re-registered, causing sync diagnostics
+    /// to be silently dropped for the newly-opened session. Kept as a fallback
+    /// so any remaining single-callback consumers still fire.
     public var onSessionSyncDiagnostic: ((String, SessionSyncDiagnostic) -> Void)?
+
+    /// Per-session diagnostic handlers. Multiple views (e.g., outgoing + incoming
+    /// during navigation) can subscribe without stomping on each other.
+    private var sessionSyncDiagnosticHandlers: [String: (SessionSyncDiagnostic) -> Void] = [:]
+
+    /// Register a diagnostic handler for a specific session.
+    /// Replaces any previous handler for the same sessionId.
+    public func addSessionSyncDiagnosticHandler(
+        sessionId: String,
+        handler: @escaping (SessionSyncDiagnostic) -> Void
+    ) {
+        sessionSyncDiagnosticHandlers[sessionId] = handler
+    }
+
+    /// Remove the diagnostic handler for a specific session.
+    public func removeSessionSyncDiagnosticHandler(sessionId: String) {
+        sessionSyncDiagnosticHandlers.removeValue(forKey: sessionId)
+    }
+
+    /// Dispatch a diagnostic to both the per-session handler (if registered)
+    /// and the legacy single-callback consumer.
+    private func emitSessionSyncDiagnostic(_ sessionId: String, _ diagnostic: SessionSyncDiagnostic) {
+        sessionSyncDiagnosticHandlers[sessionId]?(diagnostic)
+        onSessionSyncDiagnostic?(sessionId, diagnostic)
+    }
 
     private var serverUrl: String
     private var userId: String
@@ -161,7 +193,19 @@ public final class SyncManager: ObservableObject {
     }
 
     /// Leave the current session room.
-    public func leaveSessionRoom() {
+    ///
+    /// Pass `expectedSessionId` to scope the leave to a specific session.
+    /// This prevents a SwiftUI lifecycle race where the outgoing view's
+    /// `.onDisappear` fires AFTER the incoming view's `.task` has already
+    /// joined a new room -- in that case, calling a bare `leaveSessionRoom()`
+    /// would tear down the new session's socket and null out activeSessionId,
+    /// leaving the new session stuck forever waiting for a sync response.
+    public func leaveSessionRoom(expectedSessionId: String? = nil) {
+        if let expectedSessionId = expectedSessionId,
+           activeSessionId != expectedSessionId {
+            logger.info("leaveSessionRoom: skipping stale leave for \(expectedSessionId) — active is \(self.activeSessionId ?? "nil")")
+            return
+        }
         sessionClient.disconnect()
         activeSessionId = nil
         sessionSyncBuffer = []
@@ -813,8 +857,10 @@ public final class SyncManager: ObservableObject {
     private func setupSessionClient() {
         sessionClient.onConnectionStateChanged = { [weak self] connected in
             Task { @MainActor in
+                guard let self = self else { return }
+                self.logger.info("sessionClient connection state: \(connected) (activeSessionId=\(self.activeSessionId ?? "nil"))")
                 if connected {
-                    self?.requestSessionSync()
+                    self.requestSessionSync()
                 }
             }
         }
@@ -827,7 +873,10 @@ public final class SyncManager: ObservableObject {
     }
 
     private func requestSessionSync(attempt: Int = 0) {
-        guard let sessionId = activeSessionId else { return }
+        guard let sessionId = activeSessionId else {
+            logger.warning("requestSessionSync skipped: activeSessionId is nil (connection state fired without a target)")
+            return
+        }
 
         let localMessages = (try? database.messages(forSession: sessionId)) ?? []
         let localCount = localMessages.count
@@ -852,7 +901,15 @@ public final class SyncManager: ObservableObject {
 
         let request = SessionSyncRequest(sinceSeq: sinceSeq)
         guard let data = try? JSONEncoder().encode(request),
-              let json = String(data: data, encoding: .utf8) else { return }
+              let json = String(data: data, encoding: .utf8) else {
+            logger.error("requestSessionSync failed to encode request for session \(sessionId)")
+            return
+        }
+
+        // Always log the send attempt -- the stuck-at-"deferred initial load"
+        // bug manifests when this line appears but no syncResponse ever returns,
+        // so its presence/absence is a critical diagnostic signal.
+        logger.info("requestSessionSync: sending sinceSeq=\(sinceSeq ?? -1) for session \(sessionId) (attempt \(attempt))")
 
         // Use completion-based send to detect failures and retry.
         // The WebSocket connection may not be fully established yet when this
@@ -860,13 +917,18 @@ public final class SyncManager: ObservableObject {
         // Without a successful syncRequest, the server won't mark this connection
         // as synced and won't include it in message broadcasts.
         sessionClient.sendRaw(json) { [weak self] error in
-            guard let self = self, error != nil else { return }
-            guard attempt < 3, self.activeSessionId == sessionId else { return }
+            guard let self = self else { return }
+            if let error = error {
+                self.logger.warning("requestSessionSync send failed for \(sessionId): \(error.localizedDescription)")
+                guard attempt < 3, self.activeSessionId == sessionId else { return }
 
-            self.logger.info("Session sync request failed, retrying (attempt \(attempt + 1))")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                guard let self = self, self.activeSessionId == sessionId else { return }
-                self.requestSessionSync(attempt: attempt + 1)
+                self.logger.info("Session sync request failed, retrying (attempt \(attempt + 1))")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                    guard let self = self, self.activeSessionId == sessionId else { return }
+                    self.requestSessionSync(attempt: attempt + 1)
+                }
+            } else {
+                self.logger.debug("requestSessionSync: send acknowledged for \(sessionId)")
             }
         }
     }
@@ -898,11 +960,12 @@ public final class SyncManager: ObservableObject {
         let response: SessionSyncResponse
         do {
             response = try decoder.decode(SessionSyncResponse.self, from: data)
+            logger.info("handleSessionSyncResponse: \(response.messages.count) messages, hasMore=\(response.hasMore) for session \(self.activeSessionId ?? "nil")")
         } catch {
             let rawPreview = String(data: data.prefix(500), encoding: .utf8) ?? "<binary>"
             logger.error("Failed to decode session syncResponse: \(error.localizedDescription) — raw: \(rawPreview)")
             if let sessionId = activeSessionId {
-                onSessionSyncDiagnostic?(sessionId, SessionSyncDiagnostic(
+                emitSessionSyncDiagnostic(sessionId, SessionSyncDiagnostic(
                     totalServerMessages: 0, decryptedCount: 0, storedCount: 0,
                     failedMessageIds: [], failedSequences: [],
                     error: "Sync response decode failed: \(error.localizedDescription)"
@@ -971,27 +1034,27 @@ public final class SyncManager: ObservableObject {
             // Report diagnostics
             if messages.isEmpty && totalCount > 0 {
                 logger.error("All \(totalCount) messages failed decryption for session \(sessionId)")
-                onSessionSyncDiagnostic?(sessionId, SessionSyncDiagnostic(
+                emitSessionSyncDiagnostic(sessionId, SessionSyncDiagnostic(
                     totalServerMessages: totalCount, decryptedCount: 0, storedCount: 0,
                     failedMessageIds: failedIds, failedSequences: failedSeqs,
                     error: "All \(totalCount) messages failed decryption"
                 ))
             } else if messages.isEmpty && totalCount == 0 {
                 logger.info("Session sync returned 0 messages for session \(sessionId) — transcript may not exist on server")
-                onSessionSyncDiagnostic?(sessionId, SessionSyncDiagnostic(
+                emitSessionSyncDiagnostic(sessionId, SessionSyncDiagnostic(
                     totalServerMessages: 0, decryptedCount: 0, storedCount: 0,
                     failedMessageIds: [], failedSequences: [],
                     error: nil
                 ))
             } else if !failedIds.isEmpty {
-                onSessionSyncDiagnostic?(sessionId, SessionSyncDiagnostic(
+                emitSessionSyncDiagnostic(sessionId, SessionSyncDiagnostic(
                     totalServerMessages: totalCount, decryptedCount: messages.count,
                     storedCount: messages.count,
                     failedMessageIds: failedIds, failedSequences: failedSeqs,
                     error: "\(failedIds.count) of \(totalCount) messages failed decryption"
                 ))
             } else {
-                onSessionSyncDiagnostic?(sessionId, SessionSyncDiagnostic(
+                emitSessionSyncDiagnostic(sessionId, SessionSyncDiagnostic(
                     totalServerMessages: totalCount, decryptedCount: messages.count,
                     storedCount: messages.count,
                     failedMessageIds: [], failedSequences: [],
@@ -1000,7 +1063,7 @@ public final class SyncManager: ObservableObject {
             }
         } catch {
             logger.error("Failed to store session messages: \(error.localizedDescription)")
-            onSessionSyncDiagnostic?(sessionId, SessionSyncDiagnostic(
+            emitSessionSyncDiagnostic(sessionId, SessionSyncDiagnostic(
                 totalServerMessages: totalCount, decryptedCount: messages.count, storedCount: 0,
                 failedMessageIds: failedIds, failedSequences: failedSeqs,
                 error: "Database write failed: \(error.localizedDescription)"
