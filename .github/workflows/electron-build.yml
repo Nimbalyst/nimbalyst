@@ -63,6 +63,12 @@ jobs:
           - os: windows-latest
             platform: win
             arch: x64
+          # windows-11-arm runners are in public preview on GitHub Actions.
+          # Using a native ARM64 runner avoids cross-compile toolchain wrangling
+          # for node-pty and lets bun/electron-builder pick up ARM64 prebuilds.
+          - os: windows-11-arm
+            platform: win
+            arch: arm64
 
     runs-on: ${{ matrix.os }}
     
@@ -126,7 +132,11 @@ jobs:
           if [ "${{ matrix.platform }}" == "mac" ]; then
             npm run build:claude-helper:mac
           elif [ "${{ matrix.platform }}" == "win" ]; then
-            npm run build:claude-helper:windows
+            if [ "${{ matrix.arch }}" == "arm64" ]; then
+              npm run build:claude-helper:windows-arm64
+            else
+              npm run build:claude-helper:windows
+            fi
           else
             npm run build:claude-helper:linux
           fi
@@ -161,7 +171,7 @@ jobs:
 
       # Windows code signing setup (DigiCert KeyLocker)
       - name: Decode DigiCert Client Certificate (Windows)
-        if: matrix.os == 'windows-latest' && env.DIGICERT_CLIENT_CERT_BASE64 != ''
+        if: matrix.platform == 'win' && env.DIGICERT_CLIENT_CERT_BASE64 != ''
         env:
           DIGICERT_CLIENT_CERT_BASE64: ${{ secrets.DIGICERT_CLIENT_CERT_BASE64 }}
         run: |
@@ -206,19 +216,25 @@ jobs:
               npm run build:mac:local -- --${{ matrix.arch }} --mac dmg zip
             fi
           elif [ "${{ matrix.platform }}" == "win" ]; then
-            npm run build:win
+            if [ "${{ matrix.arch }}" == "arm64" ]; then
+              npm run build:win:arm64
+            else
+              npm run build:win
+            fi
           else
             npm run build:linux
           fi
         shell: bash
 
-      # Sign Windows exe with DigiCert KeyLocker (post-build)
+      # Sign Windows exe with DigiCert KeyLocker (post-build).
+      # The artifactName template "${productName}-Windows-${arch}.${ext}" means
+      # each matrix job produces a distinct arch-suffixed exe to sign.
       - name: Sign Windows exe with DigiCert KeyLocker
-        if: matrix.os == 'windows-latest' && env.DIGICERT_CLIENT_CERT_BASE64 != ''
+        if: matrix.platform == 'win' && env.DIGICERT_CLIENT_CERT_BASE64 != ''
         uses: digicert/code-signing-software-trust-action@v1.0.0
         with:
           simple-signing-mode: true
-          input: "packages/electron/release/Nimbalyst-Windows.exe"
+          input: "packages/electron/release/Nimbalyst-Windows-${{ matrix.arch }}.exe"
           keypair-alias: ${{ secrets.DIGICERT_KEYPAIR_ALIAS }}
         env:
           DIGICERT_CLIENT_CERT_BASE64: ${{ secrets.DIGICERT_CLIENT_CERT_BASE64 }}
@@ -227,8 +243,26 @@ jobs:
           SM_CLIENT_CERT_FILE: ${{ runner.temp }}\digicert_client_cert.p12
           SM_CLIENT_CERT_PASSWORD: ${{ secrets.DIGICERT_CLIENT_CERT_PW }}
 
+      # Create a backwards-compatible copy of the signed x64 exe so any existing
+      # download links pointing at Nimbalyst-Windows.exe keep working. ARM64
+      # users are expected to pick the -arm64 file explicitly.
+      - name: Create backwards-compatible x64 exe copy
+        if: matrix.platform == 'win' && matrix.arch == 'x64'
+        shell: bash
+        run: |
+          set -e
+          src="packages/electron/release/Nimbalyst-Windows-x64.exe"
+          dest="packages/electron/release/Nimbalyst-Windows.exe"
+          if [ ! -f "$src" ]; then
+            echo "Expected signed artifact not found: $src"
+            ls -la packages/electron/release/
+            exit 1
+          fi
+          cp "$src" "$dest"
+          echo "Copied $src -> $dest for backwards-compatible download links"
+
       - name: Verify bundled Windows app-update.yml
-        if: matrix.os == 'windows-latest'
+        if: matrix.platform == 'win'
         working-directory: packages/electron
         run: |
           APP_UPDATE_YML=$(find release -path '*/resources/app-update.yml' | head -n 1)
@@ -491,7 +525,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "*Nimbalyst ${{ steps.get_version.outputs.VERSION }} alpha build published*\nPlatforms: macOS (arm64, x64), Linux, Windows\nR2 alpha channel updated"
+                    "text": "*Nimbalyst ${{ steps.get_version.outputs.VERSION }} alpha build published*\nPlatforms: macOS (arm64, x64), Linux, Windows (x64, arm64)\nR2 alpha channel updated"
                   }
                 },
                 {

@@ -21,6 +21,7 @@
     "build:claude-helper": "bash scripts/build-claude-helper.sh",
     "build:claude-helper:mac": "bash scripts/build-claude-helper.sh --mac",
     "build:claude-helper:windows": "bash scripts/build-claude-helper.sh --windows",
+    "build:claude-helper:windows-arm64": "bash scripts/build-claude-helper.sh --windows-arm64",
     "build:claude-helper:linux": "bash scripts/build-claude-helper.sh --linux",
     "build:claude-helper:all": "bash scripts/build-claude-helper.sh --all",
     "typecheck": "tsc --noEmit",
@@ -37,7 +38,7 @@
     "validate:win-updater-config": "node build/validate-windows-updater-config.js",
     "build:win": "npm run build && npm run build:extensions && npm run validate:win-updater-config && electron-builder --win --x64",
     "build:win:arm64": "npm run build && npm run build:extensions && npm run validate:win-updater-config && electron-builder --win --arm64",
-    "build:win:universal": "npm run build && npm run build:extensions && npm run validate:win-updater-config && electron-builder --win --x64 --arm64",
+    "build:win:all": "npm run build && npm run build:extensions && npm run validate:win-updater-config && electron-builder --win --x64 --arm64",
     "build:linux": "npm run build && npm run build:extensions && electron-builder --linux",
     "test": "vitest",
     "test:ui": "vitest --ui",
@@ -395,7 +396,7 @@
           "target": "nsis"
         }
       ],
-      "artifactName": "${productName}-Windows.${ext}",
+      "artifactName": "${productName}-Windows-${arch}.${ext}",
       "signtoolOptions": {
         "publisherName": "NIMBALYST, INC."
       }

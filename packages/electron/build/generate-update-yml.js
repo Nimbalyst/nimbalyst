@@ -163,26 +163,48 @@ function generateMacYml() {
 
 // Function to generate latest.yml (for Windows)
 function generateWindowsYml() {
-  // Use the artifactName from package.json: "${productName}-Windows.${ext}"
-  const exeFile = `${productName}-Windows.exe`;
-  const exePath = path.join(releaseDir, exeFile);
+  // artifactName in package.json is "${productName}-Windows-${arch}.${ext}",
+  // so builds produce Nimbalyst-Windows-x64.exe and Nimbalyst-Windows-arm64.exe.
+  //
+  // CI also copies the signed x64 exe to Nimbalyst-Windows.exe for backwards-
+  // compatible download links, but latest.yml only references the arch-suffixed
+  // files so electron-updater can route each machine to the correct binary.
 
-  if (!fs.existsSync(exePath)) {
-    console.log(`Windows exe not found: ${exePath}, skipping latest.yml`);
+  const files = [];
+
+  const x64Exe = `${productName}-Windows-x64.exe`;
+  const x64Path = path.join(releaseDir, x64Exe);
+  const arm64Exe = `${productName}-Windows-arm64.exe`;
+  const arm64Path = path.join(releaseDir, arm64Exe);
+
+  if (fs.existsSync(x64Path)) {
+    files.push({
+      url: x64Exe,
+      sha512: calculateSHA512(x64Path),
+      size: getFileSize(x64Path),
+      arch: 'x64'
+    });
+  }
+
+  if (fs.existsSync(arm64Path)) {
+    files.push({
+      url: arm64Exe,
+      sha512: calculateSHA512(arm64Path),
+      size: getFileSize(arm64Path),
+      arch: 'arm64'
+    });
+  }
+
+  if (files.length === 0) {
+    console.log(`No Windows exe files found in ${releaseDir}, skipping latest.yml`);
     return false;
   }
 
-  const yamlContent = {
-    version: version,
-    files: [{
-      url: exeFile,
-      sha512: calculateSHA512(exePath),
-      size: getFileSize(exePath)
-    }],
-    path: exeFile,
-    sha512: calculateSHA512(exePath),
-    releaseDate: new Date().toISOString()
-  };
+  // x64 is the primary file -- it's the most common architecture and matches
+  // the backwards-compatible Nimbalyst-Windows.exe download. If only arm64 is
+  // present (per-job generation before the release merge), fall back to it.
+  const primaryFile = files.find((f) => f.arch === 'x64') || files[0];
+
   const publisherNames = getWindowsPublisherNames();
 
   if (publisherNames.length === 0) {
@@ -193,16 +215,17 @@ function generateWindowsYml() {
   }
 
   // Convert to YAML format
-  let yamlString = `version: ${yamlContent.version}\n`;
+  let yamlString = `version: ${version}\n`;
   yamlString += `files:\n`;
-  yamlContent.files.forEach(file => {
+  files.forEach(file => {
     yamlString += `  - url: ${file.url}\n`;
     yamlString += `    sha512: ${file.sha512}\n`;
     yamlString += `    size: ${file.size}\n`;
+    yamlString += `    arch: ${file.arch}\n`;
   });
-  yamlString += `path: ${yamlContent.path}\n`;
-  yamlString += `sha512: ${yamlContent.sha512}\n`;
-  yamlString += `releaseDate: '${yamlContent.releaseDate}'\n`;
+  yamlString += `path: ${primaryFile.url}\n`;
+  yamlString += `sha512: ${primaryFile.sha512}\n`;
+  yamlString += `releaseDate: '${new Date().toISOString()}'\n`;
   // publisherName tells electron-updater which Authenticode publisher to expect.
   // Without this, it falls back to comparing against the installed app's registry
   // publisher, which breaks when the signing certificate changes (e.g., personal
@@ -215,7 +238,7 @@ function generateWindowsYml() {
   // Write the file
   const outputPath = path.join(releaseDir, 'latest.yml');
   fs.writeFileSync(outputPath, yamlString);
-  console.log(`Generated ${outputPath}`);
+  console.log(`Generated ${outputPath} with ${files.length} arch(es): ${files.map((f) => f.arch).join(', ')}`);
   return true;
 }
 

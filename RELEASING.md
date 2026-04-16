@@ -75,10 +75,16 @@ git push origin v0.42.61
 #### 5. GitHub Actions Builds Internal Release
 
 Pushing the tag triggers the GitHub Actions workflow which:
-1. Builds for macOS, Windows, and Linux
-2. Signs and notarizes macOS builds
+1. Builds for macOS (arm64 + x64), Windows (x64 + arm64), and Linux (x64)
+2. Signs and notarizes macOS builds; signs Windows builds via DigiCert KeyLocker
 3. Creates release in `nimbalyst/nimbalyst-code` (private repo)
 4. Uploads build artifacts
+
+**Windows artifacts:** Two installers ship per release. `Nimbalyst-Windows-x64.exe`
+and `Nimbalyst-Windows-arm64.exe` are the arch-specific installers referenced by
+`latest.yml` for auto-update. A third file, `Nimbalyst-Windows.exe`, is a copy of
+the signed x64 installer kept for backwards-compatible download links — it is not
+referenced by the updater metadata.
 
 #### 6. Test Internal Build
 

@@ -4,11 +4,12 @@
 # On macOS, this prevents the dock icon from appearing
 #
 # Usage:
-#   ./build-claude-helper.sh              # Build for current platform
-#   ./build-claude-helper.sh --mac        # Build universal macOS binary (arm64 + x64)
-#   ./build-claude-helper.sh --windows    # Build Windows binary (x64)
-#   ./build-claude-helper.sh --linux      # Build Linux binary (x64)
-#   ./build-claude-helper.sh --all        # Build for all platforms
+#   ./build-claude-helper.sh                  # Build for current platform
+#   ./build-claude-helper.sh --mac            # Build universal macOS binary (arm64 + x64)
+#   ./build-claude-helper.sh --windows        # Build Windows binary (x64)
+#   ./build-claude-helper.sh --windows-arm64  # Build Windows binary (arm64)
+#   ./build-claude-helper.sh --linux          # Build Linux binary (x64)
+#   ./build-claude-helper.sh --all            # Build for all platforms
 
 set -e
 
@@ -108,9 +109,27 @@ build_mac_universal() {
 
 build_windows() {
     echo ""
-    echo "=== Building Windows Binary ==="
+    echo "=== Building Windows Binary (x64) ==="
 
     build_for_target "bun-windows-x64" "$OUTPUT_DIR/claude-helper.exe"
+
+    echo "Created Windows binary: $OUTPUT_DIR/claude-helper.exe"
+}
+
+build_windows_arm64() {
+    echo ""
+    echo "=== Building Windows Binary (arm64) ==="
+
+    # Bun does not yet publish a native Windows ARM64 target. The Windows ARM64
+    # runner has Windows' built-in x64 emulation, so an x64 Bun binary will run;
+    # however, bun's `bun-windows-arm64` target is preferred when available.
+    # Fall back to x64 if the arm64 target is unsupported by the local bun.
+    if bun build --help 2>/dev/null | grep -q "bun-windows-arm64"; then
+        build_for_target "bun-windows-arm64" "$OUTPUT_DIR/claude-helper.exe"
+    else
+        echo "bun-windows-arm64 target not supported by this bun version; falling back to bun-windows-x64 (Windows 11 ARM runs x64 under emulation)."
+        build_for_target "bun-windows-x64" "$OUTPUT_DIR/claude-helper.exe"
+    fi
 
     echo "Created Windows binary: $OUTPUT_DIR/claude-helper.exe"
 }
@@ -155,6 +174,9 @@ case "$1" in
         ;;
     --windows)
         build_windows
+        ;;
+    --windows-arm64)
+        build_windows_arm64
         ;;
     --linux)
         build_linux
