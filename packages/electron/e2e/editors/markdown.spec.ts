@@ -34,6 +34,8 @@ import {
   openFileFromTree,
   closeTabByFileName,
   getTabByFileName,
+  switchToAgentMode,
+  switchToFilesMode,
 } from '../utils/testHelpers';
 
 test.describe.configure({ mode: 'serial' });
@@ -822,4 +824,126 @@ test('autosave does not hijack cursor when editor content is unchanged', async (
   expect(diskContent).toContain('First batch typed and more text');
 
   await closeTabByFileName(page, 'multi-editor-test.md');
+});
+
+test('autosave does not hijack cursor when same file is open in FilesMode and AgentMode', async () => {
+  // Reproduces the reported bug: with the same file open in both FilesMode and
+  // AgentMode, autosave from the focused (FilesMode) editor must NOT reload
+  // content or reset the cursor.
+  //
+  // This drives the REAL UI flow: it opens the file in FilesMode (one real
+  // Lexical editor), creates a real agent session via IPC, mounts that
+  // session's WorkstreamEditorTabs with the same file open (a second real
+  // Lexical editor), then switches back to FilesMode and types across
+  // multiple autosave cycles. Both TabEditor instances remain in the DOM
+  // (AgentMode is hidden via CSS display). If the cursor is hijacked,
+  // keystrokes land in the wrong position and the batches are non-contiguous.
+  const mdPath = path.join(workspaceDir, 'multi-editor-test.md');
+
+  // Reset file
+  await fs.writeFile(mdPath, '# Cursor Sibling Test\n\nStart line.\n', 'utf8');
+
+  // Open in FilesMode -- mounts first TabEditor
+  await openFileFromTree(page, 'multi-editor-test.md');
+  await page.waitForSelector(ACTIVE_EDITOR_SELECTOR, { timeout: TEST_TIMEOUTS.EDITOR_LOAD });
+  await page.waitForTimeout(500);
+
+  // Switch to AgentMode and open the same file in a new session's workstream
+  // editor tabs. This mounts a second real TabEditor (also Lexical) for the
+  // same file path. Both editors attach to the same DocumentModel singleton.
+  await switchToAgentMode(page);
+  const sessionId = await page.evaluate(async ({ workspacePath, filePath }) => {
+    const helpers = (window as any).__testHelpers;
+    if (!helpers?.openFileInAgentMode) {
+      throw new Error('openFileInAgentMode test helper not exposed');
+    }
+    return helpers.openFileInAgentMode(workspacePath, filePath);
+  }, { workspacePath: workspaceDir, filePath: mdPath });
+  expect(typeof sessionId).toBe('string');
+
+  // Wait for the AgentMode TabEditor to actually mount for this file
+  // (identified by data-file-path inside the agent workstream editor area).
+  await page.waitForFunction((fp) => {
+    const instances = document.querySelectorAll(`[data-file-path="${fp}"].multi-editor-instance`);
+    return instances.length >= 2;
+  }, mdPath, { timeout: 10000 });
+
+  // Confirm two real TabEditor instances now exist for this file
+  const instanceCount = await page.evaluate((fp) => {
+    return document.querySelectorAll(`[data-file-path="${fp}"].multi-editor-instance`).length;
+  }, mdPath);
+  expect(instanceCount).toBe(2);
+
+  // Switch back to FilesMode. AgentMode's DOM stays mounted (display:none),
+  // so the AgentMode TabEditor and its Lexical editor remain attached to the
+  // DocumentModel -- matching the exact user scenario.
+  await switchToFilesMode(page);
+  await page.waitForSelector(ACTIVE_EDITOR_SELECTOR, { timeout: TEST_TIMEOUTS.EDITOR_LOAD });
+  await page.waitForTimeout(500);
+
+  // Focus the FilesMode editor and place cursor at end of document
+  const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
+  await editor.click();
+  await page.keyboard.press('End');
+
+  // Type first batch
+  await page.keyboard.type(' FIRST');
+  await page.waitForTimeout(200);
+
+  // Wait for autosave cycle (2s interval + 200ms debounce + buffer)
+  await page.waitForTimeout(3000);
+
+  // Type second batch -- if the cursor was hijacked during autosave
+  // (e.g. by $getRoot().clear() reload from a sibling notification),
+  // this lands in the wrong position and the batches won't be contiguous.
+  await page.keyboard.type(' SECOND');
+  await page.waitForTimeout(200);
+  await page.waitForTimeout(3000);
+
+  // Type third batch -- catches delayed file-watcher-echo races where
+  // the first autosave looks clean but a reload arrives later.
+  await page.keyboard.type(' THIRD');
+  await page.waitForTimeout(200);
+  await page.waitForTimeout(3000);
+
+  // All three batches must appear contiguously, in typing order.
+  // (We don't anchor to "Start line." -- Lexical's trailing empty
+  // paragraph means `End` can land on the line after it.)
+  await expect(editor).toContainText('FIRST SECOND THIRD');
+
+  const diskContent = await fs.readFile(mdPath, 'utf-8');
+  expect(diskContent).toContain('FIRST SECOND THIRD');
+  expect(diskContent.match(/FIRST/g)?.length ?? 0).toBe(1);
+  expect(diskContent.match(/SECOND/g)?.length ?? 0).toBe(1);
+  expect(diskContent.match(/THIRD/g)?.length ?? 0).toBe(1);
+
+  // The AgentMode editor should now reflect the saved content too. We can't
+  // easily query its selection, but we CAN verify its DOM text -- proves the
+  // DocumentModel actually propagated the FilesMode save to the sibling.
+  const agentEditorText = await page.evaluate((fp) => {
+    // Second instance is the AgentMode one (first is FilesMode, currently active)
+    const instances = document.querySelectorAll(`[data-file-path="${fp}"].multi-editor-instance`);
+    // Find the one that is NOT inside the currently-visible files tab container.
+    // In practice both exist; grab whichever is inside the agent mode layout.
+    for (const el of Array.from(instances)) {
+      if (el.closest('[data-layout="agent-mode-wrapper"]')) {
+        return el.textContent ?? '';
+      }
+    }
+    return null;
+  }, mdPath);
+  expect(agentEditorText).not.toBeNull();
+  expect(agentEditorText).toContain('FIRST SECOND THIRD');
+
+  // Cleanup: close the FilesMode tab (scoped to the FilesMode tab container
+  // because closeTabByFileName would match both the FilesMode and AgentMode
+  // tabs otherwise). AgentMode's session + editor tabs clean up at teardown.
+  const filesModeTab = page
+    .locator(PLAYWRIGHT_TEST_SELECTORS.fileTabsContainer)
+    .locator(PLAYWRIGHT_TEST_SELECTORS.tab, {
+      has: page.locator('[data-filename="multi-editor-test.md"]'),
+    });
+  await filesModeTab.locator(PLAYWRIGHT_TEST_SELECTORS.tabCloseButton).click();
+  await expect(filesModeTab).not.toBeVisible({ timeout: 3000 });
+  await page.waitForTimeout(300);
 });

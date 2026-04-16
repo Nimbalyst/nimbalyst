@@ -48,6 +48,15 @@ import { AgentMode, type AgentModeRef } from './components/AgentMode';
 import { ChatSidebar, type ChatSidebarRef } from './components/ChatSidebar';
 import EditorMode, { type EditorModeRef } from './components/EditorMode/EditorMode';
 import { TabsProvider } from './contexts/TabsContext';
+import { DocumentModelRegistry } from './services/document-model/DocumentModelRegistry';
+import {
+  addWorkstreamFileAtom,
+  setWorkstreamLayoutModeAtom,
+} from './store/atoms/workstreamState';
+import {
+  addSessionFullAtom,
+  setSelectedWorkstreamAtom,
+} from './store/atoms/sessions';
 import { NavigationGutter } from './components/NavigationGutter';
 // NOTE: useTabs and useTabNavigation removed - EditorMode manages tabs now
 import type { ContentMode } from './types/WindowModeTypes';
@@ -441,6 +450,52 @@ export default function App() {
           if (scope) setSettingsInitialScope(scope);
           incrementSettingsKey();
           setTimeout(() => setActiveMode('settings'), 0);
+        },
+        // Expose DocumentModelRegistry for multi-editor coordination tests
+        documentModelRegistry: DocumentModelRegistry,
+        // Open a file in a real AgentMode workstream editor tab (for multi-editor
+        // tests). Creates a real session via IPC, selects it as the active
+        // workstream, adds the file to openFilePaths, and switches layoutMode
+        // to 'split' so WorkstreamEditorTabs mounts and renders a TabEditor
+        // for the file. Returns the sessionId / workstreamId.
+        openFileInAgentMode: async (workspacePath: string, filePath: string) => {
+          const sessionId = crypto.randomUUID();
+          const result = await window.electronAPI.invoke('sessions:create', {
+            session: {
+              id: sessionId,
+              provider: 'claude-code',
+              model: 'claude-code:sonnet',
+              title: 'Multi-editor Test Session',
+            },
+            workspaceId: workspacePath,
+          });
+          if (!result?.success || !result.id) {
+            throw new Error('Failed to create test agent session');
+          }
+          store.set(addSessionFullAtom, {
+            id: result.id,
+            title: 'Multi-editor Test Session',
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            provider: 'claude-code',
+            model: 'claude-code:sonnet',
+            sessionType: 'session',
+            messageCount: 0,
+            workspaceId: workspacePath,
+            isArchived: false,
+            isPinned: false,
+            parentSessionId: null,
+            worktreeId: null,
+            childCount: 0,
+            uncommittedCount: 0,
+          });
+          store.set(setSelectedWorkstreamAtom, {
+            workspacePath,
+            selection: { type: 'session', id: result.id },
+          });
+          store.set(addWorkstreamFileAtom, { workstreamId: result.id, filePath });
+          store.set(setWorkstreamLayoutModeAtom, { workstreamId: result.id, mode: 'split' });
+          return result.id;
         },
       };
       console.log('[App] Test helpers exposed, DEV mode:', import.meta.env.DEV);
