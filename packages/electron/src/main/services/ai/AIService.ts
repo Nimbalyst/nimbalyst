@@ -3891,6 +3891,18 @@ export class AIService {
                   : 'Response complete';
                 const sessionLabel = session.title || session.provider;
 
+                logger.ai.info('[AIService] Notification content', {
+                  sessionId: session.id,
+                  lastTextPreview: previewForLog(lastTextSection.trim()),
+                  prevTextPreview: previewForLog(prevTextSection),
+                  fullResponsePreview: previewForLog(fullResponse),
+                  selectedSource: lastTextSection.trim()
+                    ? 'lastTextSection'
+                    : prevTextSection
+                    ? 'prevTextSection'
+                    : 'fullResponse',
+                });
+
                 await notificationService.showNotification({
                   title: `${sessionLabel} -- Response Ready`,
                   body: notificationBody,

@@ -371,8 +371,16 @@ export class ClaudeCodeTranscriptAdapter {
       items.push({ kind: 'usage', usage: chunk.usage, modelUsage: chunk.modelUsage, isPerStep: false });
     }
 
-    // Slash command result text (non-error result with string content)
-    if (chunk.result && typeof chunk.result === 'string' && chunk.result.trim().length > 0) {
+    // Slash command result text (non-error result with string content).
+    // Skip if assistant text was already emitted this turn -- the result chunk
+    // duplicates the final assistant text for regular turns, so only emit when
+    // there were no streaming assistant chunks (slash command path).
+    if (
+      chunk.result
+      && typeof chunk.result === 'string'
+      && chunk.result.trim().length > 0
+      && this.processedTextMessageIds.size === 0
+    ) {
       items.push({ kind: 'text', text: chunk.result });
     }
 
