@@ -9,19 +9,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+<!-- Bug fixes go here -->
+
+### Removed
+<!-- Removed features go here -->
+
+## [0.57.14] - 2026-04-16
+
+
+### Added
 - Claude Opus 4.7 with the full 1M-token context window as the default Claude model (`claude:claude-opus-4-7`). Opus 4.7 uses 1M context natively on the Messages API — no `context-1m-2025-08-07` beta header required, unlike Opus 4.6. Previous default (Sonnet 4.6) remains selectable.
+- Commit-tracker item linking with opt-in automation settings
+- Session phase badges shown in agent mode history panel
 
 ### Changed
 - Upgraded `@anthropic-ai/claude-agent-sdk` from 0.2.87 to 0.2.111 (Opus 4.7 support, task management, agent teams, plan-mode refinements)
 - Upgraded `@openai/codex-sdk` from 0.117.0 to 0.121.0
 - Upgraded `@modelcontextprotocol/sdk` to 1.29.0
 - Claude Agent variant label now reports Opus 4.7 (was Opus 4.6)
+- Simplified tracker automation to 2 toggles with CLAUDE.md hint
+- Lowered tool-search threshold to 2%
+- Local config for trackers: added blog, bug, and task metadata configurations
 
 ### Fixed
 - Unconditionally strip `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` from `process.env` at main-process startup; explicitly clear them in `options.env` for the Claude Code SDK and in the Codex child-process env so the 0.2.111 overlay behavior (which no longer replaces `process.env`) cannot silently re-introduce a shell-inherited key
-
-### Removed
-<!-- Removed features go here -->
+- Deduplicate claude-code notification text between assistant and result chunks
+- Correct Opus 4.7 context window reporting to 1M
+- Defer React root.unmount() to avoid render race condition
+- iOS transcript loading deadlock and unified iPad/iPhone session list
+- Awaiting-input indicator visibility and priority in session history
+- Tracker comments now appear immediately after posting
 
 ## [0.57.13] - 2026-04-15
 
