@@ -15,6 +15,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
 import { spawn } from 'child_process';
+import extractZip from 'extract-zip';
 import { BrowserWindow, net } from 'electron';
 import { logger } from '../utils/logger';
 import { safeHandle } from '../utils/ipcRegistry';
@@ -190,32 +191,14 @@ async function verifyChecksum(filePath: string, expectedChecksum: string): Promi
 }
 
 /**
- * Extract a .nimext (zip) file to a directory using the unzip command.
- * Falls back to extract-zip if available.
+ * Extract a .nimext (zip) file to a directory.
+ *
+ * Uses the pure-JS `extract-zip` package so this works on Windows (where there
+ * is no system `unzip` binary) in addition to macOS and Linux.
  */
 async function extractNimext(nimextPath: string, destPath: string): Promise<void> {
   await fs.mkdir(destPath, { recursive: true });
-
-  // Try extract-zip first (available as transitive dep)
-  try {
-    const extractZip = require('extract-zip');
-    await extractZip(nimextPath, { dir: destPath });
-    return;
-  } catch {
-    // Fall back to unzip command
-  }
-
-  // Fall back to system unzip command (macOS/Linux)
-  return new Promise((resolve, reject) => {
-    const proc = spawn('unzip', ['-o', nimextPath, '-d', destPath], { stdio: 'pipe' });
-    let stderr = '';
-    proc.stderr?.on('data', (data) => { stderr += data.toString(); });
-    proc.on('close', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`unzip failed (code ${code}): ${stderr}`));
-    });
-    proc.on('error', (err) => reject(err));
-  });
+  await extractZip(nimextPath, { dir: destPath });
 }
 
 /**
