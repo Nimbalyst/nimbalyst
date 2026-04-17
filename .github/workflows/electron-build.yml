@@ -63,12 +63,8 @@ jobs:
           - os: windows-latest
             platform: win
             arch: x64
-          # windows-11-arm runners are in public preview on GitHub Actions.
-          # Using a native ARM64 runner avoids cross-compile toolchain wrangling
-          # for node-pty and lets bun/electron-builder pick up ARM64 prebuilds.
-          - os: windows-11-arm
-            platform: win
-            arch: arm64
+          # Windows ARM64 build is temporarily disabled while we work through
+          # winCodeSign / DigiCert tooling gaps on native ARM64 runners.
 
     runs-on: ${{ matrix.os }}
     
@@ -280,8 +276,17 @@ jobs:
       # Sign Windows exe with DigiCert KeyLocker (post-build).
       # The artifactName template "${productName}-Windows-${arch}.${ext}" means
       # each matrix job produces a distinct arch-suffixed exe to sign.
+      #
+      # Skipped on Windows ARM64: digicert/code-signing-software-trust-action@v1.0.0
+      # downloads an arch-specific `smctl` binary and DigiCert does not publish
+      # `smctl-win32-arm64`, so the action fails with "Unable to locate executable
+      # file: smctl". The electron-builder step already signs
+      # Nimbalyst-Windows-arm64.exe with the configured p12 cert, so the ARM64
+      # installer ships with a valid (non-EV) signature. Revisit to add
+      # cloud-HSM EV signing for ARM64 once DigiCert ships an ARM64 smctl or via
+      # x64 smctl under Windows ARM64 emulation.
       - name: Sign Windows exe with DigiCert KeyLocker
-        if: matrix.platform == 'win' && env.DIGICERT_CLIENT_CERT_BASE64 != ''
+        if: matrix.platform == 'win' && matrix.arch != 'arm64' && env.DIGICERT_CLIENT_CERT_BASE64 != ''
         uses: digicert/code-signing-software-trust-action@v1.0.0
         with:
           simple-signing-mode: true
@@ -576,7 +581,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "*Nimbalyst ${{ steps.get_version.outputs.VERSION }} alpha build published*\nPlatforms: macOS (arm64, x64), Linux, Windows (x64, arm64)\nR2 alpha channel updated"
+                    "text": "*Nimbalyst ${{ steps.get_version.outputs.VERSION }} alpha build published*\nPlatforms: macOS (arm64, x64), Linux, Windows (x64)\nR2 alpha channel updated"
                   }
                 },
                 {
