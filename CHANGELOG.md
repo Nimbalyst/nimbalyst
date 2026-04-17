@@ -20,6 +20,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.18] - 2026-04-17
+
+
+### Added
+- Windows ARM64 build alongside x64
+- Extension marketplace and Claude Plugins now open to all users
+
+### Changed
+- Single source of truth for Claude Code variant versions and labels
+- Rebuilt iOS transcript bundle
+
+### Fixed
+- Unblock Windows ARM64 Electron build by resolving missing signtool.exe
+- Skip workerd postinstall on Windows ARM64 CI
+- Marketplace extension install on Windows
+- iOS: stopped stale SwiftUI teardown from stranding the next session
+- Render Codex transcripts on iOS and Android via canonical projection
+- Prevent main-process OOM from release-artifact file storms
+- Align Codex/OpenCode provider tests with text chunk yields
+
 ## [0.57.17] - 2026-04-17
 
 
