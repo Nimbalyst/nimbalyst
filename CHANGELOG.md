@@ -20,6 +20,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.15] - 2026-04-16
+
+
+### Added
+- Windows ARM64 build alongside x64
+- Extension marketplace and Claude Plugins now open to all users
+
+### Changed
+- Single source of truth for Claude Code variant versions and labels
+- Rebuilt iOS transcript bundle
+
+### Fixed
+- iOS: stopped stale SwiftUI teardown from stranding the next session
+- Render Codex transcripts on iOS and Android via canonical projection
+- Prevent main-process OOM from release-artifact file storms
+
 ## [0.57.14] - 2026-04-16
 
 
