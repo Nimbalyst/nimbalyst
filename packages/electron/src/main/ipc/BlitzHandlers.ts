@@ -20,6 +20,11 @@ import { getDatabase } from '../database/initialize';
 import { getQueuedPromptsStore } from '../services/RepositoryManager';
 import { AISessionsRepository } from '@nimbalyst/runtime/storage/repositories/AISessionsRepository';
 import { ModelIdentifier, type AIProviderType } from '@nimbalyst/runtime/ai/server/types';
+import {
+  CLAUDE_CODE_VARIANT_VERSIONS,
+  CLAUDE_CODE_MODEL_LABELS,
+  type ClaudeCodeVariant,
+} from '@nimbalyst/runtime/ai/modelConstants';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { archiveWorktree } from './WorktreeHandlers';
 import type { BlitzCreateResult, WorktreeCreateResult } from '../../shared/ipc/types';
@@ -30,20 +35,17 @@ const MAX_BLITZ_WORKTREES = 10;
 
 /**
  * Convert a model ID to a human-readable label for blitz session titles.
- * Mirrors the renderer's modelUtils.ts logic but runs in main process.
+ * Version/label data comes from the shared `modelConstants` tables so we
+ * cannot drift from the picker / session chrome labels.
  */
 function getBlitzSessionModelLabel(model: string): string {
-  const CLAUDE_CODE_LABELS: Record<string, string> = {
-    'opus': 'Opus 4.7',
-    'sonnet': 'Sonnet 4.6',
-    'haiku': 'Haiku 3.5',
-  };
-
-  // Try parsing as provider:model via ModelIdentifier
   const parsed = ModelIdentifier.tryParse(model);
   if (parsed && parsed.provider === 'claude-code') {
-    const variant = parsed.baseVariant;
-    return CLAUDE_CODE_LABELS[variant] || variant.charAt(0).toUpperCase() + variant.slice(1);
+    const variant = parsed.baseVariant as ClaudeCodeVariant;
+    const label = CLAUDE_CODE_MODEL_LABELS[variant];
+    const version = CLAUDE_CODE_VARIANT_VERSIONS[variant];
+    if (label && version) return `${label} ${version}`;
+    return variant.charAt(0).toUpperCase() + variant.slice(1);
   }
 
   // For other providers, extract the model part

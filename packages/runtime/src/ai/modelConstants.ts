@@ -165,6 +165,29 @@ export const OPENAI_MODELS: ModelDefinition[] = [
   },
 ];
 
+/**
+ * Claude Code variant display metadata — single source of truth.
+ *
+ * Both the runtime (`ClaudeCodeProvider` — builds the model catalog that the
+ * SDK consumes) and the renderer (`modelUtils.ts` — renders the session-chrome
+ * label that shows which variant is active) must agree on these values.
+ * Duplicating the table in both places caused the renderer indicator to
+ * display a stale "Opus 4.6" after the runtime was bumped to 4.7.
+ */
+export type ClaudeCodeVariant = 'opus' | 'sonnet' | 'haiku';
+
+export const CLAUDE_CODE_VARIANT_VERSIONS: Record<ClaudeCodeVariant, string> = {
+  opus: '4.7',
+  sonnet: '4.6',
+  haiku: '4.5',
+};
+
+export const CLAUDE_CODE_MODEL_LABELS: Record<ClaudeCodeVariant, string> = {
+  opus: 'Opus',
+  sonnet: 'Sonnet',
+  haiku: 'Haiku',
+};
+
 export const DEFAULT_MODELS = {
   claude: 'claude:claude-opus-4-7',
   openai: 'openai:gpt-5.4',

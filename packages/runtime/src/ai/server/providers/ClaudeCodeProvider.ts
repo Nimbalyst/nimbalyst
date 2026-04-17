@@ -38,6 +38,10 @@ import {
   ModelIdentifier,
   resolveClaudeCodeModelVariant,
 } from '../types';
+import {
+  CLAUDE_CODE_VARIANT_VERSIONS,
+  CLAUDE_CODE_MODEL_LABELS,
+} from '../../modelConstants';
 import { isBedrockToolSearchError } from '../utils/errorDetection';
 import { AgentMessagesRepository } from '../../../storage/repositories/AgentMessagesRepository';
 import { TeammateManager, type TeammateToLeadMessage } from './TeammateManager';
@@ -116,21 +120,8 @@ const SDK_NATIVE_TOOLS: readonly string[] = [
  * https://github.com/anthropics/claude-agent-sdk-typescript/blob/main/CHANGELOG.md
  * https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md
  */
-type ClaudeCodeVariant = typeof CLAUDE_CODE_VARIANTS[number];
-
-// Map variants to their current version numbers
-// These correspond to the underlying Claude models used by Claude Code
-const CLAUDE_CODE_VARIANT_VERSIONS: Record<ClaudeCodeVariant, string> = {
-  opus: '4.7',
-  sonnet: '4.6',
-  haiku: '4.5'
-};
-
-const CLAUDE_CODE_MODEL_LABELS: Record<ClaudeCodeVariant, string> = {
-  opus: 'Opus',
-  sonnet: 'Sonnet',
-  haiku: 'Haiku'
-};
+// CLAUDE_CODE_VARIANT_VERSIONS and CLAUDE_CODE_MODEL_LABELS now live in
+// `modelConstants.ts` so the renderer can share them — see comment there.
 
 export class ClaudeCodeProvider extends BaseAgentProvider {
   private currentMode?: 'planning' | 'agent'; // Track session mode for prompt customization and tool filtering

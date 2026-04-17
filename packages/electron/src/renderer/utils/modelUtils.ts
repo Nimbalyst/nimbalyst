@@ -2,7 +2,12 @@
  * Model display utilities for renderer components
  */
 
-import { CLAUDE_MODELS, OPENAI_MODELS } from '@nimbalyst/runtime/ai/modelConstants';
+import {
+  CLAUDE_MODELS,
+  OPENAI_MODELS,
+  CLAUDE_CODE_VARIANT_VERSIONS,
+  type ClaudeCodeVariant,
+} from '@nimbalyst/runtime/ai/modelConstants';
 import { ModelIdentifier } from '@nimbalyst/runtime/ai/server/types';
 
 export { type EffortLevel, EFFORT_LEVELS, DEFAULT_EFFORT_LEVEL, parseEffortLevel } from '@nimbalyst/runtime/ai/server/effortLevels';
@@ -13,16 +18,6 @@ interface ModelInfo {
   modelName: string;
   shortModelName: string;
 }
-
-type ClaudeCodeVariant = 'opus' | 'sonnet' | 'haiku';
-
-// Map Claude Code variants to their current version numbers
-// These correspond to the underlying Claude models used by Claude Code
-const CLAUDE_CODE_VARIANT_VERSIONS: Record<ClaudeCodeVariant, string> = {
-  opus: '4.6',
-  sonnet: '4.6',
-  haiku: '4.5'
-};
 
 /**
  * Extract Claude Code variant from a model ID using ModelIdentifier.
@@ -54,28 +49,18 @@ function formatVariantLabel(variant: ClaudeCodeVariant): string {
 }
 
 export function getClaudeCodeModelLabel(modelId?: string): string {
-  const variant = extractClaudeCodeVariant(modelId);
-  // If no variant detected (shouldn't happen with legacy handling), default to Sonnet
-  if (!variant) return 'Claude Agent (Sonnet 4.6)';
-
-  // Check for extended context (1M) variant
+  const variant = extractClaudeCodeVariant(modelId) ?? 'sonnet';
   const parsed = modelId ? ModelIdentifier.tryParse(modelId) : null;
   const version = CLAUDE_CODE_VARIANT_VERSIONS[variant];
   const suffix = parsed?.isExtendedContext ? ' (1M)' : '';
-
   return `Claude Agent (${formatVariantLabel(variant)} ${version}${suffix})`;
 }
 
 export function getClaudeCodeModelShortLabel(modelId?: string): string {
-  const variant = extractClaudeCodeVariant(modelId);
-  // If no variant detected (shouldn't happen with legacy handling), default to Sonnet
-  if (!variant) return 'Sonnet 4.6';
-
-  // Check for extended context (1M) variant
+  const variant = extractClaudeCodeVariant(modelId) ?? 'sonnet';
   const parsed = modelId ? ModelIdentifier.tryParse(modelId) : null;
   const version = CLAUDE_CODE_VARIANT_VERSIONS[variant];
   const suffix = parsed?.isExtendedContext ? ' (1M)' : '';
-
   return `${formatVariantLabel(variant)} ${version}${suffix}`;
 }
 
