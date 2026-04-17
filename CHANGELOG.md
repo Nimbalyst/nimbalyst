@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.19] - 2026-04-17
+
+
+### Changed
+- Temporarily disabled Windows ARM64 build in CI while winCodeSign/DigiCert tooling gaps are sorted out
+
 ## [0.57.18] - 2026-04-17
 
 
