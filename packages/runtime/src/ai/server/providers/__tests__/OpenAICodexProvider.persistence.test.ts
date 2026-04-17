@@ -107,8 +107,9 @@ describe('OpenAICodexProvider persistence', () => {
       'unknown.output',
       'item.completed',
     ]);
-    // Text content goes through canonical transcript events, not StreamChunks
-    expect(chunks.some((chunk) => chunk.type === 'text')).toBe(false);
+    // Text chunks are also yielded alongside canonical events so AIService
+    // can populate fullResponse for OS notification bodies.
+    expect(chunks.some((chunk) => chunk.type === 'text')).toBe(true);
   });
 
   it('persists the session naming reminder as a tagged non-searchable input row', async () => {

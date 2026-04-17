@@ -287,8 +287,9 @@ describe('OpenAICodexProvider', () => {
 
     expect(startThread).toHaveBeenCalledTimes(1);
     expect(runStreamed).toHaveBeenCalledTimes(1);
-    // Text content goes through canonical transcript events, not StreamChunks
-    expect(chunks.some((chunk) => chunk.type === 'text')).toBe(false);
+    // Text chunks are also yielded alongside canonical events so AIService
+    // can populate fullResponse for OS notification bodies.
+    expect(chunks.some((chunk) => chunk.type === 'text')).toBe(true);
 
     const completeChunk = chunks.find((chunk) => chunk.type === 'complete');
     expect(completeChunk).toBeDefined();
@@ -984,8 +985,9 @@ describe('OpenAICodexProvider', () => {
       sandboxMode: 'workspace-write',
     }));
     expect(startThread).not.toHaveBeenCalled();
-    // Text content goes through canonical transcript events, not StreamChunks
-    expect(chunks.some((chunk) => chunk.type === 'text')).toBe(false);
+    // Text chunks are also yielded alongside canonical events so AIService
+    // can populate fullResponse for OS notification bodies.
+    expect(chunks.some((chunk) => chunk.type === 'text')).toBe(true);
   });
 
   it('denies Codex turns when workspace is not trusted', async () => {

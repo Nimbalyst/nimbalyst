@@ -141,8 +141,9 @@ describe('OpenCodeProvider', () => {
       chunks.push(chunk);
     }
 
-    // Text content goes through canonical transcript events, not StreamChunks
-    expect(chunks.some((c) => c.type === 'text')).toBe(false);
+    // Text chunks are also yielded alongside canonical events so AIService
+    // can populate fullResponse for OS notification bodies.
+    expect(chunks.some((c) => c.type === 'text')).toBe(true);
     expect(chunks.some((c) => c.type === 'complete')).toBe(true);
   });
 
