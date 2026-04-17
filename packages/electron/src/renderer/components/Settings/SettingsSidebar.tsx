@@ -60,7 +60,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
 }) => {
   // Get release channel and alpha/beta feature flags from Jotai atoms
   const releaseChannel = useAtomValue(releaseChannelAtom);
-  const alphaFeatures = useAlphaFeatures(['voice-mode', 'claude-plugins', 'collaboration', 'marketplace', 'opencode']);
+  const alphaFeatures = useAlphaFeatures(['voice-mode', 'collaboration', 'opencode']);
   const getStatusDot = (providerId: string): 'success' | 'warning' | 'error' | undefined => {
     const status = providerStatus[providerId];
     if (!status) return undefined;
@@ -201,7 +201,6 @@ Best for quick edits and tasks that do not require multi-file operations.`,
           id: 'marketplace',
           name: 'Marketplace',
           icon: <MaterialSymbol icon="storefront" size={16} />,
-          hidden: !alphaFeatures['marketplace'],
         },
         {
           id: 'installed-extensions',
@@ -212,7 +211,6 @@ Best for quick edits and tasks that do not require multi-file operations.`,
           id: 'claude-plugins',
           name: 'Claude Plugins',
           icon: <MaterialSymbol icon="widgets" size={16} />,
-          hidden: !alphaFeatures['claude-plugins'],
         },
         {
           id: 'mcp-servers',

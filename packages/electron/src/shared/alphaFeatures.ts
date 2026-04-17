@@ -32,12 +32,6 @@ export const ALPHA_FEATURES: readonly AlphaFeatureDefinition[] = [
     icon: 'mic',
   },
   {
-    tag: 'claude-plugins',
-    name: 'Claude Plugins',
-    description: 'Enable Claude Agent plugins and extensions management.',
-    icon: 'widgets',
-  },
-  {
     tag: 'card-mode',
     name: 'Card View Mode',
     description: 'Enable card view mode for agent sessions panel.',
@@ -66,12 +60,6 @@ export const ALPHA_FEATURES: readonly AlphaFeatureDefinition[] = [
     name: 'Tracker Kanban View',
     description: 'Enable kanban board view in tracker mode.',
     icon: 'view_kanban',
-  },
-  {
-    tag: 'marketplace',
-    name: 'Extension Marketplace',
-    description: 'Browse, install, and manage extensions from the marketplace.',
-    icon: 'storefront',
   },
   {
     tag: 'opencode',

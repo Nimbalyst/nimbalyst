@@ -394,7 +394,6 @@ const defaultAdvancedSettings: AdvancedSettings = {
   alphaFeatures: {
     sync: false,
     'voice-mode': false,
-    'claude-plugins': false,
     'card-mode': false,
     'super-loops': false,
   } as Record<AlphaFeatureTag, boolean>,
@@ -581,11 +580,6 @@ export const alphaSyncEnabledAtom = alphaFeatureEnabledAtom('sync');
  * Alpha feature: Voice mode enabled (convenience atom)
  */
 export const alphaVoiceModeEnabledAtom = alphaFeatureEnabledAtom('voice-mode');
-
-/**
- * Alpha feature: Claude plugins enabled (convenience atom)
- */
-export const alphaClaudePluginsEnabledAtom = alphaFeatureEnabledAtom('claude-plugins');
 
 /**
  * Check if a specific beta feature is enabled by tag.
