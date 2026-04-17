@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.17] - 2026-04-17
+
+
+### Fixed
+- Marketplace extension install on Windows
+
 ## [0.57.16] - 2026-04-17
 
 
