@@ -195,6 +195,43 @@ jobs:
           Write-Host "DigiCert client certificate decoded ($($certBytes.Length) bytes)"
         shell: powershell
 
+      # Pre-populate electron-builder's winCodeSign cache for ARM64.
+      # The published winCodeSign archive only ships windows-10/x64 and
+      # windows-10/ia32 signtool binaries. On ARM64 runners electron-builder
+      # looks for windows-10/arm64/signtool.exe and fails with ENOENT when it
+      # tries to sign helper binaries (claude-helper.exe, node-pty tools, ...).
+      # signtool.exe is architecture-agnostic for signing, so copying the x64
+      # payload into an arm64 folder lets the build proceed.
+      - name: Pre-populate winCodeSign for Windows ARM64
+        if: matrix.platform == 'win' && matrix.arch == 'arm64'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = "winCodeSign-2.6.0"
+          $cacheRoot = Join-Path $env:LOCALAPPDATA "electron-builder\Cache\winCodeSign"
+          $cacheDir = Join-Path $cacheRoot $version
+          $archive = Join-Path $env:RUNNER_TEMP "$version.7z"
+
+          New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
+
+          Write-Host "Downloading $version.7z..."
+          Invoke-WebRequest -Uri "https://github.com/electron-userland/electron-builder-binaries/releases/download/$version/$version.7z" -OutFile $archive
+
+          Write-Host "Extracting to $cacheDir..."
+          & 7z x $archive "-o$cacheDir" -y | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "7z extraction failed with exit code $LASTEXITCODE" }
+
+          $x64Dir = Join-Path $cacheDir "windows-10\x64"
+          $arm64Dir = Join-Path $cacheDir "windows-10\arm64"
+          if (-not (Test-Path $x64Dir)) {
+            throw "Expected x64 signtool directory not found at $x64Dir after extracting $version.7z"
+          }
+          New-Item -ItemType Directory -Force -Path $arm64Dir | Out-Null
+          Copy-Item -Path (Join-Path $x64Dir "*") -Destination $arm64Dir -Recurse -Force
+
+          Write-Host "Populated ARM64 signtool directory:"
+          Get-ChildItem $arm64Dir | ForEach-Object { Write-Host "  $($_.Name)" }
+
       # Build Electron app
       - name: Build Electron app
         env:
