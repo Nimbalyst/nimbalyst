@@ -102,66 +102,37 @@ export function registerClaudeCodeHandlers() {
   // Handle claude login command
   safeHandle('claude-code:login', async () => {
     try {
-      // Use the bundled CLI - no need for global installation
       const platform = process.platform;
       analytics.sendEvent('do_claude_code_login', {platform: platform});
-      const cliPath = findBundledCli();
-      if (!cliPath) {
-        throw new Error('Claude Agent SDK CLI not found in bundled installation. This is a build configuration issue.');
+      const binaryPath = resolveNativeBinaryPath() ?? (platform === 'win32' ? findWindowsClaudeExecutable() : null);
+      if (!binaryPath) {
+        throw new Error('Claude Agent SDK native binary not found. This is a build configuration issue.');
       }
 
-      // Open a Terminal window with an interactive Claude session for /login
-      // The setup-token command is for CI/CD token generation, not interactive login
-      // Users need to type /login in the interactive session to authenticate
       if (platform === 'darwin') {
-        // macOS: Use AppleScript to open Terminal with interactive Claude session
-
-        // Use Electron's bundled Node.js to run the CLI
-        const nodePath = process.execPath;
         const script = `
 tell application "Terminal"
   activate
-  do script "clear && echo 'Claude Code Authentication' && echo '' && echo 'Type /login and press Enter to authenticate.' && echo 'Complete the OAuth flow in your browser when prompted.' && echo 'When finished, type /quit to exit and close this window.' && echo '' && ELECTRON_RUN_AS_NODE=1 '${nodePath}' '${cliPath}'"
+  do script "clear && echo 'Claude Code Authentication' && echo '' && echo 'Type /login and press Enter to authenticate.' && echo 'Complete the OAuth flow in your browser when prompted.' && echo 'When finished, type /quit to exit and close this window.' && echo '' && '${binaryPath}'"
 end tell`;
 
         spawn('osascript', ['-e', script], {
           detached: true,
           stdio: 'ignore'
         }).unref();
-
-        // Return immediately - user will complete the flow in the terminal
-        return {
-          success: true,
-          message: 'Terminal window opened. Type /login and press Enter to authenticate, then click "Refresh Status" to verify.'
-        };
       } else if (platform === 'win32') {
-        // Windows: Use start command to open a new cmd window with interactive Claude session
-        // Windows requires a native Claude installation because the Windows console host
-        // can't provide proper TTY raw mode required by Ink-based CLIs when running through Electron's Node.js
-        const claudeCodePath = findWindowsClaudeExecutable();
-        if (!claudeCodePath) {
-          throw new Error('Claude Code executable not found. Please install Claude Code using the native installer or npm.');
-        }
-        spawn('cmd', ['/c', 'start', '"Claude Code Authentication"', 'cmd', '/k', `echo Claude Code Authentication && echo. && echo Type /login and press Enter to authenticate. && echo Complete the OAuth flow in your browser when prompted. && echo When finished, type /quit to exit and close this window. && echo. && "${claudeCodePath}"`], {
+        spawn('cmd', ['/c', 'start', '"Claude Code Authentication"', 'cmd', '/k', `echo Claude Code Authentication && echo. && echo Type /login and press Enter to authenticate. && echo Complete the OAuth flow in your browser when prompted. && echo When finished, type /quit to exit and close this window. && echo. && "${binaryPath}"`], {
           detached: true,
           stdio: 'ignore',
           shell: true
         }).unref();
-
-        return {
-          success: true,
-          message: 'Terminal window opened. Type /login and press Enter to authenticate, then click "Refresh Status" to verify.'
-        };
       } else {
-        // Linux: Try to open a terminal emulator with interactive Claude session
-        const nodePath = process.execPath;
-        // Try common terminal emulators
         const terminals = ['gnome-terminal', 'konsole', 'xterm', 'x-terminal-emulator'];
         let terminalOpened = false;
 
         for (const terminal of terminals) {
           try {
-            spawn(terminal, ['-e', `bash -c "clear; echo 'Claude Code Authentication'; echo ''; echo 'Type /login and press Enter to authenticate.'; echo 'Complete the OAuth flow in your browser when prompted.'; echo 'When finished, type /quit to exit.'; echo ''; ELECTRON_RUN_AS_NODE=1 '${nodePath}' '${cliPath}'"`], {
+            spawn(terminal, ['-e', `bash -c "clear; echo 'Claude Code Authentication'; echo ''; echo 'Type /login and press Enter to authenticate.'; echo 'Complete the OAuth flow in your browser when prompted.'; echo 'When finished, type /quit to exit.'; echo ''; '${binaryPath}'"`], {
               detached: true,
               stdio: 'ignore'
             }).unref();
@@ -172,15 +143,15 @@ end tell`;
           }
         }
 
-        if (terminalOpened) {
-          return {
-            success: true,
-            message: 'Terminal opened. Type /login and press Enter to authenticate, then click "Refresh Status" to verify.'
-          };
-        } else {
-          throw new Error('No terminal emulator found. Please run "' + nodePath + ' ' + cliPath + '" manually and type /login to authenticate.');
+        if (!terminalOpened) {
+          throw new Error('No terminal emulator found. Please run "' + binaryPath + '" manually and type /login to authenticate.');
         }
       }
+
+      return {
+        success: true,
+        message: 'Terminal window opened. Type /login and press Enter to authenticate, then click "Refresh Status" to verify.'
+      };
     } catch (error) {
       log.error('[ClaudeCodeHandlers] Login error:', error);
       throw error;
@@ -192,62 +163,35 @@ end tell`;
     try {
       const platform = process.platform;
       analytics.sendEvent('do_claude_code_logout', {platform: platform});
-      // Use the bundled CLI - same as login
-      const cliPath = findBundledCli();
-      if (!cliPath) {
-        throw new Error('Claude Agent SDK CLI not found in bundled installation. This is a build configuration issue.');
+      const binaryPath = resolveNativeBinaryPath() ?? (platform === 'win32' ? findWindowsClaudeExecutable() : null);
+      if (!binaryPath) {
+        throw new Error('Claude Agent SDK native binary not found. This is a build configuration issue.');
       }
 
-      // Open an interactive Terminal session where the user can type /logout
-      // This avoids the stdin raw mode issues when piping commands
       if (platform === 'darwin') {
-        // macOS: Use AppleScript to open Terminal with an interactive session
-
-        const nodePath = process.execPath;
         const script = `
 tell application "Terminal"
   activate
-  do script "clear && echo 'Claude Code Logout' && echo '' && echo 'Type /logout and press Enter to logout:' && echo '' && ELECTRON_RUN_AS_NODE=1 '${nodePath}' '${cliPath}'"
+  do script "clear && echo 'Claude Code Logout' && echo '' && echo 'Type /logout and press Enter to logout:' && echo '' && '${binaryPath}'"
 end tell`;
 
         spawn('osascript', ['-e', script], {
           detached: true,
           stdio: 'ignore'
         }).unref();
-
-        // Return immediately - user will complete logout in the terminal
-        return {
-          success: true,
-          message: 'Terminal window opened. Type /logout and press Enter to complete logout.'
-        };
       } else if (platform === 'win32') {
-        // Windows: Use start command to open a new cmd window
-        const claudeCodePath = findWindowsClaudeExecutable();
-        if (!claudeCodePath) {
-          throw new Error('Claude Code executable not found. Please install Claude Code using the native installer or npm.');
-        }
-        // TODO: On windows only, require access to a working claude installation because the Windows console
-        //  host is unable to provide a proper TTY raw mode required by Ink-based CLIs when running in Electron-NodeJS.
-        spawn('cmd', ['/c', 'start', '"Claude Code Logout"', 'cmd', '/k', `"${claudeCodePath}"`], {
+        spawn('cmd', ['/c', 'start', '"Claude Code Logout"', 'cmd', '/k', `"${binaryPath}"`], {
           detached: true,
           stdio: 'ignore',
           shell: true
         }).unref();
-
-        return {
-          success: true,
-          message: 'Command prompt opened. Type /logout and press Enter to complete logout.'
-        };
       } else {
-        // Linux: Try to open a terminal emulator
-        const nodePath = process.execPath;
-        // Try common terminal emulators
         const terminals = ['gnome-terminal', 'konsole', 'xterm', 'x-terminal-emulator'];
         let terminalOpened = false;
 
         for (const terminal of terminals) {
           try {
-            spawn(terminal, ['-e', `bash -c "clear; echo 'Claude Code Logout'; echo ''; echo 'Type /logout and press Enter to logout:'; echo ''; ELECTRON_RUN_AS_NODE=1 '${nodePath}' '${cliPath}'"`], {
+            spawn(terminal, ['-e', `bash -c "clear; echo 'Claude Code Logout'; echo ''; echo 'Type /logout and press Enter to logout:'; echo ''; '${binaryPath}'"`], {
               detached: true,
               stdio: 'ignore'
             }).unref();
@@ -258,15 +202,15 @@ end tell`;
           }
         }
 
-        if (terminalOpened) {
-          return {
-            success: true,
-            message: 'Terminal opened. Type /logout and press Enter to complete logout.'
-          };
-        } else {
-          throw new Error('No terminal emulator found. Please run "' + nodePath + ' ' + cliPath + '" manually and type /logout in your terminal.');
+        if (!terminalOpened) {
+          throw new Error('No terminal emulator found. Please run "' + binaryPath + '" manually and type /logout in your terminal.');
         }
       }
+
+      return {
+        success: true,
+        message: 'Terminal window opened. Type /logout and press Enter to complete logout.'
+      };
     } catch (error) {
       log.error('[ClaudeCodeHandlers] Logout error:', error);
       throw error;
@@ -316,24 +260,3 @@ function findWindowsClaudeExecutable(): string | null {
   return null;
 }
 
-/**
- * Find the bundled Claude Agent SDK CLI
- */
-function findBundledCli(): string | null {
-  try {
-    // Try to resolve the package
-    const packagePath = require.resolve('@anthropic-ai/claude-agent-sdk');
-    const packageDir = path.dirname(packagePath);
-    const cliPath = path.join(packageDir, 'cli.js');
-
-    if (fs.existsSync(cliPath)) {
-      return cliPath;
-    }
-
-    log.error('[ClaudeCodeHandlers] CLI not found at expected path:', cliPath);
-    return null;
-  } catch (error) {
-    log.error('[ClaudeCodeHandlers] Error finding bundled CLI:', error);
-    return null;
-  }
-}
