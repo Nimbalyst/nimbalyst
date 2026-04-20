@@ -813,6 +813,31 @@ export class AIService {
     return { success: true };
   }
 
+  /**
+   * Append any claude-code variants that were added after this user's
+   * `providerSettings['claude-code'].models` list was first persisted. Without
+   * this, `ai:getModels` filters out newly-introduced variants (e.g. the
+   * `opus-4-6` pinned variant) because they aren't in the saved list and
+   * there's no UI in ClaudeCodePanel to re-enable them.
+   */
+  private migrateClaudeCodeModelList(): void {
+    const MIGRATION_KEY = 'migrations.claudeCodeOpus46Added';
+    if (this.settingsStore!.get(MIGRATION_KEY)) return;
+    const providerSettings = this.settingsStore!.get('providerSettings', {}) as any;
+    const claudeCode = providerSettings?.['claude-code'];
+    if (claudeCode && Array.isArray(claudeCode.models) && !claudeCode.models.includes('claude-code:opus-4-6')) {
+      const opusIndex = claudeCode.models.indexOf('claude-code:opus');
+      const insertAt = opusIndex >= 0 ? opusIndex + 1 : claudeCode.models.length;
+      claudeCode.models = [
+        ...claudeCode.models.slice(0, insertAt),
+        'claude-code:opus-4-6',
+        ...claudeCode.models.slice(insertAt),
+      ];
+      this.settingsStore!.set('providerSettings', providerSettings);
+    }
+    this.settingsStore!.set(MIGRATION_KEY, true);
+  }
+
   private getSettingsStore(): Store<Record<string, unknown>> {
     if (!this.settingsStore) {
       this.settingsStore = new Store<Record<string, unknown>>({
@@ -837,7 +862,7 @@ export class AIService {
                 enabled: true,
                 testStatus: "idle",
                 installStatus: "not-installed",
-                models: ["claude-code:opus", "claude-code:sonnet", "claude-code:haiku"]
+                models: ["claude-code:opus", "claude-code:opus-4-6", "claude-code:sonnet", "claude-code:haiku"]
               },
               openai: {
                 enabled: false,
@@ -865,6 +890,7 @@ export class AIService {
           }
         }
       });
+      this.migrateClaudeCodeModelList();
     }
     return this.settingsStore;
   }

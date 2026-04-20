@@ -83,6 +83,7 @@
   "overrides": {
     "@anthropic-ai/claude-agent-sdk": "0.2.114",
     "prismjs": "^1.30.0",
-    "vite": "^7.0.0"
+    "vite": "^7.0.0",
+    "zod": "^4.0.0"
   }
 }
