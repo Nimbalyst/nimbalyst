@@ -283,6 +283,19 @@ export interface SyncProvider {
    */
   reconnectIndex?(): Promise<void>;
 
+  /**
+   * Returns true if the index is currently past its post-open stability window
+   * and considered usable for fan-out to other sync providers.
+   */
+  isIndexReady?(): boolean;
+
+  /**
+   * Wait for the index to reach the `ready` state (open + stable). Resolves
+   * immediately if already ready. Rejects after `timeoutMs` otherwise. Used by
+   * the reconnect cascade to gate other providers on a verified-healthy index.
+   */
+  waitForIndexReady?(timeoutMs?: number): Promise<void>;
+
   /** Push a file index entry to the IndexRoom (for mobile markdown sync) */
   syncFileToIndex?(file: FileIndexData): void;
 

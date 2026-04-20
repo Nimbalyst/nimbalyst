@@ -984,6 +984,36 @@ export class DocumentSyncProvider {
     }
   }
 
+  /**
+   * Immediately reconnect, cancelling any pending backoff and resetting attempts.
+   * Called externally when the network has been confirmed available (e.g. after
+   * the CollabV3 index has reached `synced`). Falls back to normal backoff on failure.
+   */
+  reconnectNow(): void {
+    if (this.destroyed) return;
+    if (this.ws && this.synced) return; // already connected and caught up
+
+    this.cancelReconnect();
+    this.reconnectAttempt = 0;
+
+    // Tear down any half-open WS so connect() creates a fresh one.
+    if (this.ws) {
+      try {
+        this.ws.close();
+      } catch {
+        /* ignore */
+      }
+      this.ws = null;
+    }
+    this.connecting = false;
+
+    console.log('[DocumentSync] Network available, attempting immediate reconnect');
+    this.connect().catch(err => {
+      console.error('[DocumentSync] reconnectNow failed:', err);
+      this.scheduleReconnect();
+    });
+  }
+
   private scheduleReplayAckTimeout(clientUpdateId: string): void {
     this.clearReplayAckTimer();
     this.replayAckTimer = setTimeout(() => {

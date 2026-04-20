@@ -241,7 +241,7 @@ export class TrackerSyncProvider {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts = 0;
   private static readonly BASE_RECONNECT_DELAY_MS = 1000;
-  private static readonly MAX_RECONNECT_DELAY_MS = 60000;
+  private static readonly MAX_RECONNECT_DELAY_MS = 30000;
 
   constructor(config: TrackerSyncConfig) {
     this.config = config;
@@ -322,6 +322,37 @@ export class TrackerSyncProvider {
     }
     this.synced = false;
     this.setStatus('disconnected');
+  }
+
+  /**
+   * Immediately reconnect, cancelling any pending backoff and resetting attempts.
+   * Called externally when the network has been confirmed available (e.g. after
+   * the CollabV3 index has reached `synced`). Falls back to normal backoff if
+   * the connect attempt fails.
+   */
+  reconnectNow(): void {
+    if (this.destroyed) return;
+    // Already have a connection -- nothing to do. If the WS is open and healthy,
+    // we don't need to churn; if it's in a zombie state, disconnect() first.
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
+
+    this.cancelReconnect(true);
+
+    // Tear down any half-open WS so connect() creates a fresh one.
+    if (this.ws) {
+      try {
+        this.ws.close();
+      } catch {
+        /* ignore */
+      }
+      this.ws = null;
+    }
+
+    console.log('[TrackerSync] Network available, attempting immediate reconnect');
+    this.connect().catch(err => {
+      console.error('[TrackerSync] reconnectNow failed:', err);
+      this.handleDisconnect();
+    });
   }
 
   /**

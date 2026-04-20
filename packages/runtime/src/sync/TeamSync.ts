@@ -518,4 +518,32 @@ export class TeamSyncProvider {
       this.reconnectTimer = null;
     }
   }
+
+  /**
+   * Immediately reconnect, cancelling any pending backoff and resetting attempts.
+   * Called externally when the network has been confirmed available (e.g. after
+   * the CollabV3 index has reached `synced`). Falls back to normal backoff on failure.
+   */
+  reconnectNow(): void {
+    if (this.destroyed) return;
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
+
+    this.cancelReconnect();
+    this.reconnectAttempt = 0;
+
+    if (this.ws) {
+      try {
+        this.ws.close();
+      } catch {
+        /* ignore */
+      }
+      this.ws = null;
+    }
+
+    console.log('[TeamSync] Network available, attempting immediate reconnect');
+    this.connect().catch(err => {
+      console.error('[TeamSync] reconnectNow failed:', err);
+      this.scheduleReconnect();
+    });
+  }
 }

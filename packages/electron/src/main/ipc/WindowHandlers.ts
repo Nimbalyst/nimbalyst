@@ -5,6 +5,7 @@ import { basename, join } from 'path';
 import { writeFileSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { reportDesktopActivity, setWindowFocused, setScreenLocked, setIdleThresholdMs, attemptReconnect } from '../services/SyncManager';
+import { startNetworkAvailability, onNetworkAvailable, notifyNetworkAvailable } from '../services/NetworkAvailability';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { getPackageRoot } from '../utils/appPaths';
 
@@ -201,27 +202,32 @@ export function registerWindowHandlers() {
         setWindowFocused(anyFocused);
     });
 
-    // Track screen lock state for sync presence
+    // Track screen lock state for sync presence. Note: reconnect logic itself
+    // lives in NetworkAvailability -- this handler is only for presence.
     powerMonitor.on('lock-screen', () => {
         setScreenLocked(true);
     });
 
     powerMonitor.on('unlock-screen', () => {
         setScreenLocked(false);
-        // Attempt to reconnect sync when screen is unlocked (user is back)
+    });
+
+    // Start the centralized NetworkAvailability broker and subscribe the sync
+    // reconnect cascade to it. The broker owns all OS-level network signals
+    // (resume, unlock, net.isOnline polling, renderer online events) and
+    // debounces them so attemptReconnect runs at most once per burst.
+    startNetworkAvailability();
+    onNetworkAvailable(() => {
         attemptReconnect().catch(() => {
             // Errors are logged in attemptReconnect
         });
     });
 
-    // Attempt to reconnect sync when system resumes from sleep/suspend
-    powerMonitor.on('resume', () => {
-        // Small delay to allow network to stabilize after resume
-        setTimeout(() => {
-            attemptReconnect().catch(() => {
-                // Errors are logged in attemptReconnect
-            });
-        }, 2000);
+    // Allow the renderer to forward `window.online` events. Chromium fires
+    // these on network-interface changes even when macOS doesn't deliver
+    // a powerMonitor event (e.g. hotel wifi handoff without sleep/lock).
+    safeOn('sync:network-came-online', () => {
+        notifyNetworkAvailable('renderer:window.online');
     });
 
     // IPC handler to set idle threshold for testing

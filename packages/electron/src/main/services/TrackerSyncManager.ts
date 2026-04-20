@@ -200,6 +200,21 @@ export function getTrackerSyncProvider(workspacePath?: string): import('@nimbaly
 }
 
 /**
+ * Trigger an immediate reconnect on every active TrackerSyncProvider. Called
+ * by SyncManager.attemptReconnect after the CollabV3 index is confirmed ready,
+ * so each tracker WS bypasses its internal backoff and reconnects right away.
+ */
+export function reconnectAllTrackerSyncs(): void {
+  for (const [workspacePath, state] of workspaceStates) {
+    try {
+      state.provider.reconnectNow();
+    } catch (err) {
+      console.error(`[TrackerSyncManager] reconnectNow failed for ${workspacePath}:`, err);
+    }
+  }
+}
+
+/**
  * Check if tracker sync is active for a given workspace (or any workspace).
  */
 export function isTrackerSyncActive(workspacePath?: string): boolean {

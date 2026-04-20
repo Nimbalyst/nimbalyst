@@ -90,6 +90,7 @@ import {
 } from './store';
 import { initClaudeUsageListeners } from './store/listeners/claudeUsageListeners';
 import { initCodexUsageListeners } from './store/listeners/codexUsageListeners';
+import { initNetworkAvailabilityListeners } from './store/listeners/networkAvailabilityListeners';
 import { initTrackerSyncListeners } from './store/listeners/trackerSyncListeners';
 import { initUpdateListeners } from './store/listeners/updateListeners';
 import { initWalkthroughListeners } from './store/listeners/walkthroughListeners';
@@ -243,6 +244,7 @@ export default function App() {
     const cleanupTrackerSync = initTrackerSyncListeners();
     const cleanupUpdate = initUpdateListeners();
     const cleanupWalkthrough = initWalkthroughListeners();
+    initNetworkAvailabilityListeners();
     return () => {
       cleanupClaude?.();
       cleanupCodex?.();

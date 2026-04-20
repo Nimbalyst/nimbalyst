@@ -34,6 +34,7 @@ import {
   hasCollabUnsyncedChanges,
   type RemoteUser,
 } from '../../store/atoms/collabEditor';
+import { documentSyncRegistry } from '../../store/atoms/documentSyncRegistry';
 import { CollabAssetService } from '../../services/CollabAssetService';
 
 interface CollaborativeTabEditorProps {
@@ -265,6 +266,11 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
     syncProviderRef.current = syncProvider;
     collabProviderRef.current = collabProvider;
 
+    // Register with the DocumentSync registry so the network-available cascade
+    // can kick this provider's reconnect loop after the CollabV3 index is
+    // confirmed healthy (see networkAvailabilityListeners.ts).
+    documentSyncRegistry.register(syncProvider);
+
     // One-time flip: mount MarkdownEditor
     if (!providerReadyRef.current) {
       providerReadyRef.current = true;
@@ -273,6 +279,7 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
 
     return () => {
       awarenessUnsub();
+      documentSyncRegistry.unregister(syncProvider);
       syncProvider.destroy();
       syncProviderRef.current = null;
       collabProviderRef.current = null;

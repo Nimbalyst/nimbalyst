@@ -770,19 +770,93 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
   const sessions = new Map<string, SessionConnection>();
   const sessionIndexCache = new Map<string, CachedSessionIndex>();
+  /**
+   * Session IDs the caller has explicitly asked us to keep connected. Populated
+   * on `connect(sessionId)`, cleared on `disconnect(sessionId)`/`disconnectAll`.
+   * After an index reconnect we re-subscribe to everything in this set so prompts
+   * and outbound changes start flowing again without waiting for a user action.
+   */
+  const wantedSessions = new Set<string>();
   let indexWs: WebSocket | null = null;
   let indexConnected = false;
+  /**
+   * Index "ready" signal. Flips true once the index WebSocket is `open` AND
+   * remains open past the stability window (see INDEX_STABILITY_MS). This is
+   * what callers wait on when cascading reconnects -- `open` alone is not
+   * enough because a stale network interface can produce an open-then-error
+   * within a few ms.
+   */
+  let indexReady = false;
+  let indexReadyListeners = new Set<() => void>();
+  const INDEX_STABILITY_MS = 500;
+  let indexStabilityTimer: ReturnType<typeof setTimeout> | null = null;
   let deviceAnnounceInterval: ReturnType<typeof setInterval> | null = null;
   let pingInterval: ReturnType<typeof setInterval> | null = null;
   let indexReconnectAttempts = 0;
   let indexReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-  /** Schedule a reconnect attempt for the index WebSocket with exponential backoff. */
-  function scheduleIndexReconnect(): void {
-    // Exponential backoff: 2s, 4s, 8s, 16s, 30s max
-    const delay = Math.min(2000 * Math.pow(2, indexReconnectAttempts), 30000);
-    indexReconnectAttempts++;
-    console.log(`[CollabV3] Scheduling index reconnect attempt ${indexReconnectAttempts} in ${delay}ms`);
+  function clearIndexReady(): void {
+    indexReady = false;
+    if (indexStabilityTimer) {
+      clearTimeout(indexStabilityTimer);
+      indexStabilityTimer = null;
+    }
+  }
+
+  function markIndexReady(): void {
+    if (indexReady) return;
+    indexReady = true;
+    // Snapshot listeners before calling -- resubscribe logic may add new ones.
+    const listeners = Array.from(indexReadyListeners);
+    indexReadyListeners.clear();
+    for (const cb of listeners) {
+      try {
+        cb();
+      } catch (err) {
+        console.error('[CollabV3] indexReady listener threw:', err);
+      }
+    }
+  }
+
+  /**
+   * After a successful index reconnect, re-subscribe any session rooms that
+   * were previously connected. Without this, `sessions.delete(sessionId)` on
+   * the session WS `onclose` would silently orphan per-session subscriptions
+   * and the user would keep seeing `sessionExists: false` warnings.
+   */
+  function resubscribeWantedSessions(): void {
+    if (wantedSessions.size === 0) return;
+    for (const sessionId of wantedSessions) {
+      if (sessions.has(sessionId)) continue;
+      // Use the public `connect` method via the captured `provider` ref.
+      // Fire-and-forget: individual session connect errors shouldn't block the cascade.
+      provider.connect(sessionId).catch(err => {
+        console.error(`[CollabV3] Failed to resubscribe session ${sessionId}:`, err);
+      });
+    }
+  }
+
+  /**
+   * Schedule a reconnect attempt for the index WebSocket with exponential backoff.
+   *
+   * `preOpenFailure: true` keeps the backoff flat at the base delay (2s) rather
+   * than incrementing the attempts counter. Rationale: if the WS never reached
+   * `onopen`, the network probably isn't actually up yet (e.g. fresh from sleep,
+   * DHCP still in progress). Bumping the backoff pushes us into the 30s cap
+   * where we spend minutes in "dead but pretending" state. Staying at 2s lets
+   * us recover within a couple of seconds of the network actually coming up.
+   */
+  function scheduleIndexReconnect(options?: { preOpenFailure?: boolean }): void {
+    const preOpenFailure = options?.preOpenFailure ?? false;
+    // Exponential backoff: 2s, 4s, 8s, 16s, 30s max -- for true mid-connection
+    // drops. For pre-open failures we stay at the base 2s.
+    const delay = preOpenFailure
+      ? 2000
+      : Math.min(2000 * Math.pow(2, indexReconnectAttempts), 30000);
+    if (!preOpenFailure) {
+      indexReconnectAttempts++;
+    }
+    console.log(`[CollabV3] Scheduling index reconnect attempt ${indexReconnectAttempts}${preOpenFailure ? ' (pre-open, flat backoff)' : ''} in ${delay}ms`);
 
     if (indexReconnectTimer) clearTimeout(indexReconnectTimer);
     indexReconnectTimer = setTimeout(() => {
@@ -793,8 +867,9 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
           console.error('[CollabV3] Failed to reconnect to index:', err);
           // Schedule another attempt - connectToIndex() may have failed before
           // creating a WebSocket (e.g. JWT refresh failed), so onclose won't fire
-          // and we'd never retry without this.
-          scheduleIndexReconnect();
+          // and we'd never retry without this. Treat as pre-open failure since
+          // the WS wasn't even created.
+          scheduleIndexReconnect({ preOpenFailure: true });
         });
       }
     }, delay);
@@ -1347,7 +1422,18 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
     indexWs = new WebSocket(wsUrl);
 
+    /**
+     * Tracks whether THIS WebSocket instance ever fired `onopen`. Pre-open
+     * failures (OS still negotiating DHCP, JWT refresh 401, TLS handshake
+     * rejection) shouldn't advance the exponential-backoff counter -- we
+     * want to keep retrying fast while the network is genuinely unavailable.
+     * Only a drop *after* the WS successfully opened counts as a real
+     * backoff-worthy failure.
+     */
+    let reachedOpen = false;
+
     indexWs.onopen = () => {
+      reachedOpen = true;
       indexConnected = true;
       indexReconnectAttempts = 0;
       // console.log('[CollabV3] Connected to index');
@@ -1364,16 +1450,34 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
       // Keep connection alive with pings
       startPingInterval();
+
+      // Start the stability window. If the WS stays open for INDEX_STABILITY_MS
+      // we treat the connection as truly usable and mark it ready. This is what
+      // gates the cross-provider cascade -- we've seen the index `open` then
+      // error within 7ms when the OS hasn't finished switching network interfaces.
+      if (indexStabilityTimer) clearTimeout(indexStabilityTimer);
+      indexStabilityTimer = setTimeout(() => {
+        indexStabilityTimer = null;
+        if (indexWs && indexConnected) {
+          markIndexReady();
+          resubscribeWantedSessions();
+        }
+      }, INDEX_STABILITY_MS);
     };
 
     indexWs.onclose = () => {
       stopPingInterval();
       indexConnected = false;
       indexWs = null;
+      clearIndexReady();
       stopDeviceAnnounceInterval();
 
       console.log('[CollabV3] Disconnected from index');
-      scheduleIndexReconnect();
+      // Pre-open failure: the network likely isn't actually up yet. Keep
+      // reconnect attempts fast by not letting the failure bump the backoff
+      // exponent. If we're in a flaky post-wake window we want to keep probing
+      // quickly instead of slipping to the 30s cap.
+      scheduleIndexReconnect({ preOpenFailure: !reachedOpen });
     };
 
     indexWs.onerror = (event) => {
@@ -2249,6 +2353,10 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
   // Create provider object
   const provider: SyncProvider = {
     async connect(sessionId: string): Promise<void> {
+      // Track this session as wanted so we re-subscribe after reconnects.
+      // Do this before the short-circuit so callers resubscribing an already-connected
+      // session (e.g. after the Map got deleted on onclose) still register intent.
+      wantedSessions.add(sessionId);
       if (sessions.has(sessionId)) {
         // console.log(`[CollabV3] connect() - already connected to session ${sessionId}`);
         return; // Already connected
@@ -2352,6 +2460,9 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     },
 
     disconnect(sessionId: string): void {
+      // Caller explicitly no longer wants this session -- drop intent so it
+      // isn't resubscribed on the next index reconnect.
+      wantedSessions.delete(sessionId);
       const session = sessions.get(sessionId);
       if (!session) return;
 
@@ -2360,6 +2471,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     },
 
     disconnectAll(): void {
+      wantedSessions.clear();
       for (const sessionId of sessions.keys()) {
         this.disconnect(sessionId);
       }
@@ -2369,6 +2481,8 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         indexReconnectTimer = null;
       }
       indexReconnectAttempts = 0;
+      clearIndexReady();
+      indexReadyListeners.clear();
       if (indexWs) {
         indexWs.close();
         indexWs = null;
@@ -3176,6 +3290,36 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         // Start the backoff retry loop since the explicit reconnect failed
         scheduleIndexReconnect();
       }
+    },
+
+    /**
+     * Returns true if the index is currently past its post-open stability window
+     * and considered usable for fan-out to other sync providers.
+     */
+    isIndexReady(): boolean {
+      return indexReady;
+    },
+
+    /**
+     * Wait for the index to reach the `ready` state (open + stable). Resolves
+     * immediately if already ready. Rejects after `timeoutMs` otherwise.
+     *
+     * Used by SyncManager.attemptReconnect to gate cascading reconnects of
+     * TrackerSync, TeamSync, and DocumentSync on a verified-healthy index.
+     */
+    waitForIndexReady(timeoutMs: number = 5000): Promise<void> {
+      if (indexReady) return Promise.resolve();
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          indexReadyListeners.delete(listener);
+          reject(new Error(`Index not ready within ${timeoutMs}ms`));
+        }, timeoutMs);
+        const listener = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+        indexReadyListeners.add(listener);
+      });
     },
   };
 

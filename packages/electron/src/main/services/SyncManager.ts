@@ -28,6 +28,8 @@ import { windowStates } from '../window/WindowManager';
 import { getNormalizedGitRemote } from '../utils/gitUtils';
 import { createHash } from 'crypto';
 import { setSleepPreventionMode, setSyncConnected, shutdownSleepPrevention, type PreventSleepMode } from './PowerSaveService';
+import { reconnectAllTrackerSyncs } from './TrackerSyncManager';
+import { BrowserWindow } from 'electron';
 
 function loadSyncModule() {
   return syncModule;
@@ -1268,6 +1270,28 @@ export async function decryptMobileAttachments(
  * Attempt to reconnect the sync connection when network becomes available.
  * Called by the main process when powerMonitor detects resume or network change.
  */
+/**
+ * Coalesce rapid-fire network-available events so we don't kick off overlapping
+ * cascade reconnects. The broker debounces at its own layer too, but this is
+ * a second line of defence that also prevents races when the `waitForIndexReady`
+ * promise from a prior call is still in flight.
+ */
+let attemptReconnectInFlight = false;
+
+/**
+ * Retry parameters for the cascade. When `waitForIndexReady` times out -- the
+ * network-available event fired but the index can't actually open a stable WS
+ * yet -- we retry the full probe rather than cede to CollabV3's internal
+ * exponential backoff, which grows to a 30s cap and leaves long gaps.
+ *
+ * `MAX_CASCADE_ATTEMPTS = 3` with 5s between attempts bounds the cascade at
+ * ~15s of extra wall-clock before we give up and let the broker's next event
+ * (or CollabV3's own backoff) take over.
+ */
+const WAIT_INDEX_READY_TIMEOUT_MS = 5000;
+const CASCADE_RETRY_DELAY_MS = 5000;
+const MAX_CASCADE_ATTEMPTS = 3;
+
 export async function attemptReconnect(): Promise<void> {
   const provider = state.provider;
   if (!provider) {
@@ -1280,13 +1304,82 @@ export async function attemptReconnect(): Promise<void> {
     return;
   }
 
+  if (attemptReconnectInFlight) {
+    logger.main.debug('[SyncManager] Reconnect cascade already in flight, skipping');
+    return;
+  }
+  attemptReconnectInFlight = true;
+
   logger.main.info('[SyncManager] Network change detected, attempting to reconnect sync...');
   try {
-    await provider.reconnectIndex();
+    // 1+2. Probe + gate, with retries. Each attempt:
+    //   a. reconnectIndex() -- cheapest, most-hardened reconnect path; same
+    //      origin/TLS/JWT as real traffic, so success implies network usable.
+    //   b. waitForIndexReady() -- gates on `open + 500ms stable`. Without this
+    //      we've seen the WS `open` then error within 7ms on a stale network
+    //      interface, which would cause every provider to churn through a bad
+    //      reconnect.
+    //
+    // We retry on `waitForIndexReady` timeout because the broker's edge-triggered
+    // sources (resume / unlock / online / isOnline edge) all fire in a ~20s
+    // burst after wake. If every attempt in that burst fails (network is still
+    // negotiating DHCP / auth), there's no more broker event coming -- CollabV3's
+    // own backoff takes over with increasing delays up to 30s. Retrying inside
+    // the cascade closes that gap.
+    let ready = false;
+    for (let attempt = 1; attempt <= MAX_CASCADE_ATTEMPTS; attempt++) {
+      try {
+        await provider.reconnectIndex();
+      } catch (err) {
+        logger.main.warn(`[SyncManager] reconnectIndex threw on attempt ${attempt}/${MAX_CASCADE_ATTEMPTS}:`, err);
+      }
+
+      if (!provider.waitForIndexReady) {
+        ready = true;
+        break;
+      }
+
+      try {
+        await provider.waitForIndexReady(WAIT_INDEX_READY_TIMEOUT_MS);
+        ready = true;
+        break;
+      } catch (err) {
+        if (attempt < MAX_CASCADE_ATTEMPTS) {
+          logger.main.info(`[SyncManager] Index not ready on attempt ${attempt}/${MAX_CASCADE_ATTEMPTS}, retrying in ${CASCADE_RETRY_DELAY_MS}ms`);
+          await new Promise(resolve => setTimeout(resolve, CASCADE_RETRY_DELAY_MS));
+        } else {
+          logger.main.warn('[SyncManager] Index did not reach ready state after all retries; ceding to CollabV3 internal backoff:', err);
+        }
+      }
+    }
+
+    if (!ready) {
+      return;
+    }
+
     updateSyncStatus({ connected: true, error: null });
     logger.main.info('[SyncManager] Successfully reconnected after network change');
 
-    // Trigger incremental sync after reconnecting to catch up on any missed changes
+    // 3. Fan out: all other sync providers get an immediate reconnect now that
+    //    we know the network is good. TrackerSync lives in main; TeamSync and
+    //    DocumentSync live in the renderer and get notified via IPC.
+    try {
+      reconnectAllTrackerSyncs();
+    } catch (err) {
+      logger.main.warn('[SyncManager] Failed to fan out to tracker syncs:', err);
+    }
+
+    try {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send('sync:network-available');
+        }
+      }
+    } catch (err) {
+      logger.main.warn('[SyncManager] Failed to broadcast sync:network-available:', err);
+    }
+
+    // 4. Trigger incremental sync to catch up on any missed changes
     setTimeout(() => {
       triggerIncrementalSync().catch(err => {
         logger.main.warn('[SyncManager] Failed to sync after reconnect:', err);
@@ -1294,5 +1387,7 @@ export async function attemptReconnect(): Promise<void> {
     }, 1000);
   } catch (error) {
     logger.main.warn('[SyncManager] Failed to reconnect after network change:', error);
+  } finally {
+    attemptReconnectInFlight = false;
   }
 }
