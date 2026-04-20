@@ -770,7 +770,13 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
                   }
                 }
 
-                toolCallsById.set(toolId, { id: toolId, name: toolName, arguments: args });
+                const toolCall = { id: toolId, name: toolName, arguments: args };
+                toolCallsById.set(toolId, toolCall);
+                // Yield so AIService can track tool calls (notification text reset,
+                // worktree inference, file tracking side effects). Parity with
+                // Codex/OpenCode providers -- the result is attached later in
+                // `tool_result` and picked up via toolCallsById.
+                yield { type: 'tool_call', toolCall };
                 break;
               }
 
