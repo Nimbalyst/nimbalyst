@@ -5,7 +5,17 @@
  */
 
 const path = require('path');
-const { spawn } = require('child_process');
+const { execSync, spawn } = require('child_process');
+
+// Validate extraResources before building
+try {
+  execSync('node build/validate-extra-resources.js', {
+    cwd: path.join(__dirname, '..'),
+    stdio: 'inherit',
+  });
+} catch {
+  process.exit(1);
+}
 
 // Store SKIP_NOTARIZE before loading .env (which might override it)
 const skipNotarize = process.env.SKIP_NOTARIZE;
