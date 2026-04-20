@@ -3307,78 +3307,85 @@ export class AIService {
                   }
                 }
 
-                // Save tool call as a separate message in the session
-                const toolResult = chunk.toolCall.result as any;
-                const isFailedResult = toolResult?.success === false;
+                // Agent providers (claude-code, codex, opencode) render tool calls
+                // through the canonical transcript pipeline. The legacy addMessage +
+                // streamResponse toolCalls path below is only for chat providers
+                // (claude, openai, lmstudio) that don't have canonical transcripts.
+                // Running both paths creates duplicate tool call entries.
+                if (!isAgentProvider(session.provider)) {
+                  // Save tool call as a separate message in the session
+                  const toolResult = chunk.toolCall.result as any;
+                  const isFailedResult = toolResult?.success === false;
 
-                if (!isFailedResult) {
-                  const toolMessage: Message = {
-                    role: 'tool',
-                    content: '',  // Tool messages don't have text content
-                    timestamp: Date.now(),
-                    toolCall: {
-                      ...chunk.toolCall,
-                      arguments: chunk.toolCall.arguments as Record<string, unknown> | undefined,
-                      result: chunk.toolCall.result as string | ToolResult | undefined
-                    },
-                    ...(toolResult !== undefined ? { errorMessage: toolResult?.error, isError: toolResult?.success === false } : {})
-                  };
-                  await this.sessionManager.addMessage(toolMessage, session.id);
-                }
-
-                // Send tool call to renderer
-                // For applyDiff (including MCP variants), include it as BOTH an edit AND a toolCall
-                if (toolName === 'applyDiff' || toolName?.endsWith('__applyDiff')) {
-                  // Create pre-edit tag BEFORE applying diff (for non-agentic providers)
-                  // This enables diff visualization and persistence across app restarts
-                  if (documentContext?.filePath && session.provider !== 'claude-code') {
-                    const toolUseId = chunk.toolCall.id || `diff-${Date.now()}`;
-                    await tagFileBeforeEdit(documentContext.filePath, session.id, toolUseId);
+                  if (!isFailedResult) {
+                    const toolMessage: Message = {
+                      role: 'tool',
+                      content: '',  // Tool messages don't have text content
+                      timestamp: Date.now(),
+                      toolCall: {
+                        ...chunk.toolCall,
+                        arguments: chunk.toolCall.arguments as Record<string, unknown> | undefined,
+                        result: chunk.toolCall.result as string | ToolResult | undefined
+                      },
+                      ...(toolResult !== undefined ? { errorMessage: toolResult?.error, isError: toolResult?.success === false } : {})
+                    };
+                    await this.sessionManager.addMessage(toolMessage, session.id);
                   }
 
-                  const edit = {
-                    type: 'diff',
-                    replacements: (chunk.toolCall.arguments as any)?.replacements,
-                    // MCP edits are applied automatically by the MCP server
-                    applied: toolName?.endsWith('__applyDiff')
-                  };
-                  edits.push(edit);  // Save edit for the assistant message
+                  // Send tool call to renderer
+                  // For applyDiff (including MCP variants), include it as BOTH an edit AND a toolCall
+                  if (toolName === 'applyDiff' || toolName?.endsWith('__applyDiff')) {
+                    // Create pre-edit tag BEFORE applying diff (for non-agentic providers)
+                    // This enables diff visualization and persistence across app restarts
+                    if (documentContext?.filePath) {
+                      const toolUseId = chunk.toolCall.id || `diff-${Date.now()}`;
+                      await tagFileBeforeEdit(documentContext.filePath, session.id, toolUseId);
+                    }
 
-                  if (!Array.isArray(edit.replacements) || edit.replacements.length === 0) {
-                    logger.ai.warn('[AIService] Forwarding applyDiff edit without replacements');
+                    const edit = {
+                      type: 'diff',
+                      replacements: (chunk.toolCall.arguments as any)?.replacements,
+                      // MCP edits are applied automatically by the MCP server
+                      applied: toolName?.endsWith('__applyDiff')
+                    };
+                    edits.push(edit);  // Save edit for the assistant message
+
+                    if (!Array.isArray(edit.replacements) || edit.replacements.length === 0) {
+                      logger.ai.warn('[AIService] Forwarding applyDiff edit without replacements');
+                    } else {
+                      logger.ai.info('[AIService] Forwarding applyDiff edit', {
+                        count: edit.replacements.length
+                      });
+                    }
+
+                    safeSend(event, 'ai:streamResponse', {
+                      sessionId: session.id,
+                      partial: '',
+                      isComplete: false,
+                      edits: [edit],
+                      toolCalls: [chunk.toolCall]  // Also send as toolCall so it displays in chat
+                    });
+                  } else if (chunk.toolCall.name === 'streamContent') {
+                    // Mark that we used streamContent AND track the tool call
+                    hasStreamingContent = true;
+                    toolCallCount++;
+                    toolCalls.push(chunk.toolCall);
+                    // Send to renderer so it displays in chat transcript
+                    safeSend(event, 'ai:streamResponse', {
+                      sessionId: session.id,
+                      partial: '',
+                      isComplete: false,
+                      toolCalls: [chunk.toolCall]
+                    });
                   } else {
-                    logger.ai.info('[AIService] Forwarding applyDiff edit', {
-                      count: edit.replacements.length
+                    // For other tools, just send the tool call
+                    safeSend(event, 'ai:streamResponse', {
+                      sessionId: session.id,
+                      partial: '',
+                      isComplete: false,
+                      toolCalls: [chunk.toolCall]
                     });
                   }
-
-                  safeSend(event, 'ai:streamResponse', {
-                    sessionId: session.id,
-                    partial: '',
-                    isComplete: false,
-                    edits: [edit],
-                    toolCalls: [chunk.toolCall]  // Also send as toolCall so it displays in chat
-                  });
-                } else if (chunk.toolCall.name === 'streamContent') {
-                  // Mark that we used streamContent AND track the tool call
-                  hasStreamingContent = true;
-                  toolCallCount++;
-                  toolCalls.push(chunk.toolCall);
-                  // Send to renderer so it displays in chat transcript
-                  safeSend(event, 'ai:streamResponse', {
-                    sessionId: session.id,
-                    partial: '',
-                    isComplete: false,
-                    toolCalls: [chunk.toolCall]
-                  });
-                } else {
-                  // For other tools, just send the tool call
-                  safeSend(event, 'ai:streamResponse', {
-                    sessionId: session.id,
-                    partial: '',
-                    isComplete: false,
-                    toolCalls: [chunk.toolCall]
-                  });
                 }
               }
               break;
