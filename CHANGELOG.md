@@ -20,6 +20,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.21] - 2026-04-20
+
+
+### Added
+- Delete custom tracker types from Settings > Trackers (built-in types remain protected)
+- Prewarm Claude Code SDK subprocess while user types for near-instant first-query response
+
+### Changed
+- Upgrade Claude Agent SDK to 0.2.114 with native per-platform binaries; remove Electron-as-Node launch chain, standalone binary toggle, and Bun/claude-helper CI steps
+- Prune non-target SDK binaries in afterPack to shrink installer by ~500MB
+- Runtime tsconfig upgraded to ES2024 for AsyncDisposable support; zod pinned to v3.23 for claude-agent-sdk compatibility
+
+### Fixed
+- TrackerPlugin no longer destroys automationStatus frontmatter, fixing stale lastRun, "[object Object]" schedule, and mismatched runCount in the automations UI (NIM-324)
+- Manual "Check for Updates" works after previously dismissing an update with "remind me later"
+- Windows Claude Code subprocess "exit code 1" failures resolved via native binary architecture; stderr is now captured for diagnostics
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.57.20] - 2026-04-20
 
 
