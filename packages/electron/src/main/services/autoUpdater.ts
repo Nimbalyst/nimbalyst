@@ -101,7 +101,8 @@ export class AutoUpdaterService {
     autoUpdater.on('update-available', async (info) => {
       log.info('Update available:', info);
       this.isCheckingForUpdate = false;
-      this.isManualCheck = false; // Reset manual check flag
+      const wasManualCheck = this.isManualCheck;
+      this.isManualCheck = false;
 
       // Fetch release notes from R2 if using alpha channel
       let releaseNotes = info.releaseNotes as string | undefined;
@@ -144,7 +145,7 @@ export class AutoUpdaterService {
         newVersion: info.version,
         releaseNotes: releaseNotes,
         releaseDate: info.releaseDate,
-        isManualCheck: this.isManualCheck
+        isManualCheck: wasManualCheck
       });
 
       // Track update toast shown
