@@ -190,6 +190,10 @@ export class TrackerDataModelRegistry {
     return this.models.has(type);
   }
 
+  isBuiltin(type: string): boolean {
+    return this.builtinTypes.has(type);
+  }
+
   validate(type: string, data: Record<string, any>): ValidationResult {
     const model = this.get(type);
     if (!model) {

@@ -3,6 +3,7 @@ import { useAtomValue } from 'jotai';
 import {
   MaterialSymbol,
   globalRegistry,
+  parseTrackerYAML,
   type TrackerDataModel,
   type TrackerSyncMode,
 } from '@nimbalyst/runtime';
@@ -31,6 +32,82 @@ const ISSUE_KEY_PREFIX_REGEX = /^[A-Z]{2,5}$/;
 function TrackerTypeCount({ type }: { type: string }) {
   const count = useAtomValue(trackerItemCountByTypeAtom(type));
   return <>{count}</>;
+}
+
+/** Find the YAML file in .nimbalyst/trackers whose parsed `type` matches and delete it. */
+async function deleteCustomTrackerYAML(workspacePath: string, type: string): Promise<boolean> {
+  const api = (window as any).electronAPI;
+  const trackersDir = `${workspacePath}/.nimbalyst/trackers`;
+  let files: Array<{ type: string; name: string }> = [];
+  try {
+    files = await api.getFolderContents(trackersDir);
+  } catch {
+    return false;
+  }
+  const yamlFiles = files.filter(
+    (f) => f.type === 'file' && (f.name.endsWith('.yaml') || f.name.endsWith('.yml'))
+  );
+  for (const file of yamlFiles) {
+    const filePath = `${trackersDir}/${file.name}`;
+    try {
+      const result = await api.readFileContent(filePath);
+      if (!result?.success || !result.content) continue;
+      const model = parseTrackerYAML(result.content);
+      if (model.type === type) {
+        await api.deleteFile(filePath);
+        return true;
+      }
+    } catch {
+      // Skip unparseable files
+    }
+  }
+  return false;
+}
+
+/**
+ * Trash button that subscribes to the count atom so it can block deletion when items exist.
+ * Rendered only for non-builtin tracker types.
+ */
+function DeleteTrackerTypeButton({
+  model,
+  workspacePath,
+}: {
+  model: TrackerDataModel;
+  workspacePath?: string;
+}) {
+  const count = useAtomValue(trackerItemCountByTypeAtom(model.type));
+
+  const handleClick = useCallback(async () => {
+    if (!workspacePath) return;
+    if (count > 0) {
+      window.alert(
+        `Cannot delete "${model.displayNamePlural}": ${count} item${count === 1 ? '' : 's'} of this type still exist. Delete those items first.`
+      );
+      return;
+    }
+    if (!window.confirm(`Delete tracker type "${model.displayNamePlural}"? This cannot be undone.`)) {
+      return;
+    }
+    const fileDeleted = await deleteCustomTrackerYAML(workspacePath, model.type);
+    if (!fileDeleted) {
+      window.alert(
+        `Could not find the source YAML file for "${model.displayNamePlural}" in .nimbalyst/trackers/. The tracker type was not deleted.`
+      );
+      return;
+    }
+    globalRegistry.unregister(model.type);
+  }, [count, model.displayNamePlural, model.type, workspacePath]);
+
+  return (
+    <button
+      onClick={handleClick}
+      className="p-1 rounded text-[var(--nim-text-muted)] hover:text-[#ef4444] hover:bg-[var(--nim-bg-tertiary)] cursor-pointer"
+      title={`Delete tracker type "${model.displayNamePlural}"`}
+      data-testid={`delete-tracker-type-${model.type}`}
+    >
+      <MaterialSymbol icon="delete" size={14} />
+    </button>
+  );
 }
 
 function SyncModeToggle({ mode, onChange }: {
@@ -185,9 +262,10 @@ function IssueKeyPrefixInput({ value, onChange }: {
 // Admin View
 // ============================================================================
 
-function AdminView({ trackers, onSyncModeChange }: {
+function AdminView({ trackers, onSyncModeChange, workspacePath }: {
   trackers: TrackerTypeConfig[];
   onSyncModeChange: (type: string, mode: TrackerSyncMode) => void;
+  workspacePath?: string;
 }) {
   return (
     <>
@@ -232,11 +310,14 @@ function AdminView({ trackers, onSyncModeChange }: {
                   {getSyncMetaText(tracker.syncMode)}
                 </div>
               </div>
-              <div className="shrink-0">
+              <div className="shrink-0 flex items-center gap-1">
                 <SyncModeToggle
                   mode={tracker.syncMode}
                   onChange={(mode) => onSyncModeChange(tracker.model.type, mode)}
                 />
+                {!globalRegistry.isBuiltin(tracker.model.type) && (
+                  <DeleteTrackerTypeButton model={tracker.model} workspacePath={workspacePath} />
+                )}
               </div>
             </div>
           ))}
@@ -270,7 +351,7 @@ function AdminView({ trackers, onSyncModeChange }: {
 // Member View
 // ============================================================================
 
-function MemberView({ trackers }: { trackers: TrackerTypeConfig[] }) {
+function MemberView({ trackers, workspacePath }: { trackers: TrackerTypeConfig[]; workspacePath?: string }) {
   const sharedTrackers = trackers.filter((t) => t.syncMode !== 'local');
   const localTrackers = trackers.filter((t) => t.syncMode === 'local');
 
@@ -335,8 +416,11 @@ function MemberView({ trackers }: { trackers: TrackerTypeConfig[] }) {
                     <TrackerTypeCount type={tracker.model.type} /> items, local only
                   </div>
                 </div>
-                <div className="shrink-0">
+                <div className="shrink-0 flex items-center gap-1">
                   <SyncBadge mode="local" />
+                  {!globalRegistry.isBuiltin(tracker.model.type) && (
+                    <DeleteTrackerTypeButton model={tracker.model} workspacePath={workspacePath} />
+                  )}
                 </div>
               </div>
             ))}
@@ -500,9 +584,10 @@ export function TrackerConfigPanel({ workspacePath }: TrackerConfigPanelProps) {
         <AdminView
           trackers={trackers}
           onSyncModeChange={handleSyncModeChange}
+          workspacePath={workspacePath}
         />
       ) : (
-        <MemberView trackers={trackers} />
+        <MemberView trackers={trackers} workspacePath={workspacePath} />
       )}
     </div>
   );
