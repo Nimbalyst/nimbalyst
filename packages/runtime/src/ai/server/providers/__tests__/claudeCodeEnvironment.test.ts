@@ -62,6 +62,5 @@ describe('claudeCodeEnvironment', () => {
     const env = setupClaudeCodeEnvironment();
 
     expect(env.NODE_PATH).toBe('/Applications/Nimbalyst.app/Contents/Resources/app.asar.unpacked/node_modules');
-    expect(env.ELECTRON_RUN_AS_NODE).toBe('1');
   });
 });

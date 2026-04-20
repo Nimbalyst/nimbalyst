@@ -246,7 +246,12 @@ export class ElectronDocumentService implements DocumentService {
 
   // Public method to trigger a full refresh (for tracker panel initialization, etc.)
   async refreshWorkspaceData() {
-    await this.refreshDocuments();
+    if (!this.initializationPromise) {
+      this.initializationPromise = this.refreshDocuments();
+      await this.initializationPromise;
+    } else {
+      await this.refreshDocuments();
+    }
   }
 
   private async refreshDocuments() {
