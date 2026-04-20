@@ -6,6 +6,7 @@ import type { ToolDefinition } from '../tools';
 import type { EffortLevel } from './effortLevels';
 import type { ToolResult } from './protocols/ProtocolInterface';
 import { ModelIdentifier } from './ModelIdentifier';
+import { CLAUDE_CODE_PINNED_SDK_MODELS } from '../modelConstants';
 import type { TranscriptViewMessage } from './transcript/TranscriptProjector';
 export type { ToolDefinition } from '../tools';
 export { ModelIdentifier } from './ModelIdentifier';
@@ -169,22 +170,31 @@ export function shouldBlockStartedSessionProviderSwitch(
 /**
  * Claude Code uses simplified variant names (opus, sonnet, haiku) instead of full model IDs.
  * These are ONLY valid for the claude-code provider.
+ *
+ * `opus-4-6` is a pinned-version variant retained after bumping the canonical
+ * `opus` alias to 4.7, so users can still choose the previous generation.
+ * See CLAUDE_CODE_PINNED_SDK_MODELS in modelConstants.ts.
  */
-export const CLAUDE_CODE_VARIANTS = ['opus', 'sonnet', 'haiku'] as const;
+export const CLAUDE_CODE_VARIANTS = ['opus', 'opus-4-6', 'sonnet', 'haiku'] as const;
 
 /**
  * Resolves a configured model string to the SDK model value.
  *
  * Key behaviors:
- * - For -1m variants, appends [1m] suffix so the SDK auto-detects the beta header.
- * - sonnet-1m uses the SDK's 'sonnet' variant (currently Sonnet 4.6) with [1m] suffix.
- * - opus-1m uses the SDK's 'opus' variant (currently Opus 4.6) with [1m] suffix.
- * - The SDK strips [1m] before sending the model ID to the API.
+ * - Canonical variants (opus, sonnet, haiku) are passed straight through — the
+ *   SDK maps these to the current-generation model.
+ * - Pinned variants (opus-4-6, ...) are substituted for their full Anthropic
+ *   model ID from CLAUDE_CODE_PINNED_SDK_MODELS, so they always resolve to a
+ *   specific version regardless of what "latest" becomes.
+ * - For -1m variants, appends `[1m]` so the SDK adds the 1M-context beta
+ *   header; the SDK strips `[1m]` before sending the model ID to the API.
  */
 export function resolveClaudeCodeModelVariant(configuredModel: string | undefined, defaultModel: string): string {
   type ClaudeCodeVariant = typeof CLAUDE_CODE_VARIANTS[number];
   const fallback: ClaudeCodeVariant = 'sonnet';
   const configured = configuredModel || defaultModel;
+
+  const toSdkBase = (variant: string): string => CLAUDE_CODE_PINNED_SDK_MODELS[variant as ClaudeCodeVariant] ?? variant;
 
   // Try parsing with ModelIdentifier
   const parsed = ModelIdentifier.tryParse(configured);
@@ -192,8 +202,9 @@ export function resolveClaudeCodeModelVariant(configuredModel: string | undefine
     // baseVariant strips suffixes like -1m
     const variant = parsed.baseVariant as ClaudeCodeVariant;
     if ((CLAUDE_CODE_VARIANTS as readonly string[]).includes(variant)) {
+      const sdkBase = toSdkBase(variant);
       // Append [1m] suffix for extended context so the SDK auto-detects the 1M beta
-      return parsed.isExtendedContext ? `${variant}[1m]` : variant;
+      return parsed.isExtendedContext ? `${sdkBase}[1m]` : sdkBase;
     }
   }
 
@@ -204,7 +215,8 @@ export function resolveClaudeCodeModelVariant(configuredModel: string | undefine
   const withoutContext = normalized?.replace(/-1m$/, '');
 
   if (withoutContext && (CLAUDE_CODE_VARIANTS as readonly string[]).includes(withoutContext)) {
-    return isExtended ? `${withoutContext}[1m]` : withoutContext as ClaudeCodeVariant;
+    const sdkBase = toSdkBase(withoutContext);
+    return isExtended ? `${sdkBase}[1m]` : sdkBase;
   }
 
   return fallback;

@@ -41,6 +41,7 @@ import {
 import {
   CLAUDE_CODE_VARIANT_VERSIONS,
   CLAUDE_CODE_MODEL_LABELS,
+  CLAUDE_CODE_VARIANTS_WITH_1M,
 } from '../../modelConstants';
 import { isBedrockToolSearchError } from '../utils/errorDetection';
 import { AgentMessagesRepository } from '../../../storage/repositories/AgentMessagesRepository';
@@ -2429,9 +2430,9 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         contextWindow: 200000
       });
 
-      // Add 1M context variants for Opus 4.6 and Sonnet 4.6
-      // 1M context is GA at standard pricing (March 2026)
-      if (variant === 'opus' || variant === 'sonnet') {
+      // Add 1M context variant if the variant supports it.
+      // 1M context is GA at standard pricing (March 2026).
+      if ((CLAUDE_CODE_VARIANTS_WITH_1M as readonly string[]).includes(variant)) {
         models.push({
           id: ModelIdentifier.create('claude-code', `${variant}-1m`).combined,
           name: `Claude Agent · ${CLAUDE_CODE_MODEL_LABELS[variant]} ${CLAUDE_CODE_VARIANT_VERSIONS[variant]} (1M)`,

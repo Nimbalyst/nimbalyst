@@ -8,7 +8,7 @@ import {
   CLAUDE_CODE_VARIANT_VERSIONS,
   type ClaudeCodeVariant,
 } from '@nimbalyst/runtime/ai/modelConstants';
-import { ModelIdentifier } from '@nimbalyst/runtime/ai/server/types';
+import { CLAUDE_CODE_VARIANTS, ModelIdentifier } from '@nimbalyst/runtime/ai/server/types';
 
 export { type EffortLevel, EFFORT_LEVELS, DEFAULT_EFFORT_LEVEL, parseEffortLevel } from '@nimbalyst/runtime/ai/server/effortLevels';
 
@@ -29,10 +29,12 @@ export function extractClaudeCodeVariant(modelId?: string): ClaudeCodeVariant | 
   // Try parsing with ModelIdentifier
   const parsed = ModelIdentifier.tryParse(modelId);
   if (parsed && parsed.provider === 'claude-code') {
-    // baseVariant strips suffixes like -1m
-    const variant = parsed.baseVariant as ClaudeCodeVariant;
-    if (variant === 'opus' || variant === 'sonnet' || variant === 'haiku') {
-      return variant;
+    // baseVariant strips suffixes like -1m. Membership is checked against the
+    // shared CLAUDE_CODE_VARIANTS array so pinned variants (opus-4-6, ...)
+    // aren't silently dropped and fall back to sonnet in the picker label.
+    const variant = parsed.baseVariant;
+    if ((CLAUDE_CODE_VARIANTS as readonly string[]).includes(variant)) {
+      return variant as ClaudeCodeVariant;
     }
   }
 
@@ -211,13 +213,13 @@ export function getModelShortName(provider: string, modelId: string): string {
 
 /**
  * Check if a model supports effort level configuration.
- * Supported: Claude Code Opus 4.6 and Sonnet 4.6 (excludes 4.5 1M variant), and OpenAI Codex models.
+ * Supported: Claude Code Opus (4.6+) and Sonnet (4.6+) variants including pinned
+ * versions, plus OpenAI Codex models.
  */
 export function supportsEffortLevel(modelId?: string): boolean {
   if (!modelId) return false;
   const variant = extractClaudeCodeVariant(modelId);
-  if (variant === 'opus') return true;
-  if (variant === 'sonnet') return true;
+  if (variant === 'opus' || variant === 'opus-4-6' || variant === 'sonnet') return true;
   // OpenAI Codex models support reasoning effort
   const parsed = ModelIdentifier.tryParse(modelId);
   if (parsed?.provider === 'openai-codex') return true;

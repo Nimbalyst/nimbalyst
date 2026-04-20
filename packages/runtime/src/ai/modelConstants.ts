@@ -173,20 +173,46 @@ export const OPENAI_MODELS: ModelDefinition[] = [
  * label that shows which variant is active) must agree on these values.
  * Duplicating the table in both places caused the renderer indicator to
  * display a stale "Opus 4.6" after the runtime was bumped to 4.7.
+ *
+ * Two kinds of variants:
+ * - Canonical variants (`opus`, `sonnet`, `haiku`) — the SDK resolves these
+ *   to the latest underlying model. The version field is for display only.
+ * - Pinned variants (`opus-4-6`, ...) — always resolve to a specific
+ *   Anthropic model ID via `CLAUDE_CODE_PINNED_SDK_MODELS`. Used to keep
+ *   the previous-generation Opus selectable after bumping the canonical
+ *   `opus` to the next version.
  */
-export type ClaudeCodeVariant = 'opus' | 'sonnet' | 'haiku';
+export type ClaudeCodeVariant = 'opus' | 'sonnet' | 'haiku' | 'opus-4-6';
 
 export const CLAUDE_CODE_VARIANT_VERSIONS: Record<ClaudeCodeVariant, string> = {
   opus: '4.7',
   sonnet: '4.6',
   haiku: '4.5',
+  'opus-4-6': '4.6',
 };
 
 export const CLAUDE_CODE_MODEL_LABELS: Record<ClaudeCodeVariant, string> = {
   opus: 'Opus',
   sonnet: 'Sonnet',
   haiku: 'Haiku',
+  'opus-4-6': 'Opus',
 };
+
+/**
+ * For pinned variants, the SDK needs the full Anthropic model ID instead of
+ * the short alias — the short aliases always resolve to "latest". An empty
+ * string (or missing entry) means "pass the variant name straight through".
+ */
+export const CLAUDE_CODE_PINNED_SDK_MODELS: Partial<Record<ClaudeCodeVariant, string>> = {
+  'opus-4-6': 'claude-opus-4-6',
+};
+
+/** Variants that support a 1M-context extended picker row. */
+export const CLAUDE_CODE_VARIANTS_WITH_1M: readonly ClaudeCodeVariant[] = [
+  'opus',
+  'sonnet',
+  'opus-4-6',
+];
 
 export const DEFAULT_MODELS = {
   claude: 'claude:claude-opus-4-7',

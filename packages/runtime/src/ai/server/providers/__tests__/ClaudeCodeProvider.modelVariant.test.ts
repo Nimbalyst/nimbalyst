@@ -71,6 +71,23 @@ describe('resolveClaudeCodeModelVariant', () => {
     });
   });
 
+  describe('pinned-version variants', () => {
+    it('opus-4-6 resolves to the full claude-opus-4-6 SDK model ID', () => {
+      // Pinned variants always point at a specific Anthropic model, not
+      // whatever "latest opus" happens to be, so users can stay on 4.6
+      // after the canonical `opus` alias is bumped to 4.7.
+      const result = resolveClaudeCodeModelVariant('claude-code:opus-4-6', DEFAULT_MODEL);
+      expect(result).toBe('claude-opus-4-6');
+    });
+
+    it('opus-4-6-1m resolves to claude-opus-4-6[1m]', () => {
+      // Opus 4.6 needs the context-1m-2025-08-07 beta header for 1M context;
+      // the SDK adds it when it sees the [1m] suffix.
+      const result = resolveClaudeCodeModelVariant('claude-code:opus-4-6-1m', DEFAULT_MODEL);
+      expect(result).toBe('claude-opus-4-6[1m]');
+    });
+  });
+
   describe('fallback behavior', () => {
     it('falls back to sonnet for unrecognized provider', () => {
       // Hardcoded last-resort fallback is always sonnet, regardless of DEFAULT_MODEL
