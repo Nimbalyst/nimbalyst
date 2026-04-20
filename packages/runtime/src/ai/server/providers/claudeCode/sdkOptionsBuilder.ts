@@ -11,7 +11,7 @@ import path from 'path';
 import { app } from 'electron';
 import { ClaudeCodeDeps } from './dependencyInjection';
 import { resolveClaudeAgentCliPath } from './cliPathResolver';
-import { setupClaudeCodeEnvironment, getClaudeCodeExecutableOptions, getClaudeCodeSpawnFunction, type ClaudeHelperMethod } from '../../../../electron/claudeCodeEnvironment';
+import { setupClaudeCodeEnvironment, resolveNativeBinaryPath } from '../../../../electron/claudeCodeEnvironment';
 import { DEFAULT_EFFORT_LEVEL } from '../../effortLevels';
 
 type SessionMode = 'planning' | 'agent' | undefined;
@@ -58,7 +58,7 @@ export interface BuildSdkOptionsParams {
 export interface BuildSdkOptionsResult {
   options: any;
   promptInput: string | AsyncIterable<SDKUserMessage>;
-  helperMethod: ClaudeHelperMethod;
+  helperMethod: 'native' | 'custom';
 }
 
 export async function buildSdkOptions(
@@ -92,7 +92,7 @@ export async function buildSdkOptions(
     isMetaAgent,
   } = params;
 
-  let helperMethod: ClaudeHelperMethod = 'electron';
+  let helperMethod: 'native' | 'custom' = 'native';
 
   // Determine which settings sources to use based on user preferences
   let settingSources: string[] = ['local'];
@@ -233,31 +233,25 @@ export async function buildSdkOptions(
     const packagedEnv = setupClaudeCodeEnvironment();
     Object.assign(env, packagedEnv);
 
+    // Resolve native binary path for packaged builds.
+    // The SDK resolves its own binary via require.resolve, but in asar-unpacked
+    // builds that may not work. We resolve it explicitly and pass as override.
     if (!ClaudeCodeDeps.customClaudeCodePath) {
-      const { options: executableOptions, method } = getClaudeCodeExecutableOptions(
-        ClaudeCodeDeps.useStandaloneBinary,
-        (msg, data) => console.log(`[ClaudeCodeProvider] ${msg}`, data || '')
-      );
-      Object.assign(options, executableOptions);
-      helperMethod = method;
-    }
-
-    const spawnFunction = getClaudeCodeSpawnFunction();
-    if (spawnFunction) {
-      options.spawnClaudeCodeProcess = spawnFunction;
+      const nativeBinaryPath = resolveNativeBinaryPath();
+      if (nativeBinaryPath) {
+        options.pathToClaudeCodeExecutable = nativeBinaryPath;
+        console.log(`[ClaudeCodeProvider] Using SDK native binary: ${nativeBinaryPath}`);
+      } else {
+        console.warn('[ClaudeCodeProvider] Native binary not found, SDK will attempt its own resolution');
+      }
+    } else {
+      helperMethod = 'custom';
     }
 
     // Share packaged-build options with TeammateManager
-    const executableOptionsForTeammates = ClaudeCodeDeps.customClaudeCodePath
-      ? { pathToClaudeCodeExecutable: ClaudeCodeDeps.customClaudeCodePath }
-      : getClaudeCodeExecutableOptions(
-          ClaudeCodeDeps.useStandaloneBinary,
-          (msg, data) => console.log(`[ClaudeCodeProvider] ${msg}`, data || '')
-        ).options;
     teammateManager.packagedBuildOptions = {
       env: packagedEnv as Record<string, string | undefined>,
-      ...executableOptionsForTeammates,
-      ...(spawnFunction ? { spawnClaudeCodeProcess: spawnFunction } : {}),
+      pathToClaudeCodeExecutable: ClaudeCodeDeps.customClaudeCodePath || options.pathToClaudeCodeExecutable,
     };
   }
 

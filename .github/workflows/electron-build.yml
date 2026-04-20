@@ -63,8 +63,17 @@ jobs:
           - os: windows-latest
             platform: win
             arch: x64
-          # Windows ARM64 build is temporarily disabled while we work through
-          # winCodeSign / DigiCert tooling gaps on native ARM64 runners.
+          # windows-11-arm runners are in public preview on GitHub Actions.
+          # Using a native ARM64 runner avoids cross-compile toolchain wrangling
+          # for node-pty and lets bun/electron-builder pick up ARM64 prebuilds.
+          #
+          # Note: DigiCert KeyLocker (smctl) has no `smtools-win32-arm64`
+          # bundle, so the cloud-HSM re-sign cannot run on this runner. The
+          # ARM64 installer is cross-signed by the `sign-windows-arm64` job
+          # below, which runs on windows-latest (x64).
+          - os: windows-11-arm
+            platform: win
+            arch: arm64
 
     runs-on: ${{ matrix.os }}
     
@@ -126,31 +135,6 @@ jobs:
           # Build csv-spreadsheet extension
           cd packages/extensions/csv-spreadsheet
           npm run build
-
-      # Install Bun for building Claude helper binary (all platforms)
-      # Pin to specific version for deterministic builds
-      # NOTE: Bun 1.2.4+ is required for macOS code signing support
-      - name: Install Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.8
-
-      # Build Claude helper binary for the current platform
-      - name: Build Claude helper binary
-        working-directory: packages/electron
-        run: |
-          if [ "${{ matrix.platform }}" == "mac" ]; then
-            npm run build:claude-helper:mac
-          elif [ "${{ matrix.platform }}" == "win" ]; then
-            if [ "${{ matrix.arch }}" == "arm64" ]; then
-              npm run build:claude-helper:windows-arm64
-            else
-              npm run build:claude-helper:windows
-            fi
-          else
-            npm run build:claude-helper:linux
-          fi
-        shell: bash
 
       # macOS specific setup
       - name: Import macOS certificates
@@ -366,8 +350,64 @@ jobs:
             packages/electron/release/*.yaml
           retention-days: 7
 
-  release:
+  # Cross-architecture DigiCert KeyLocker re-sign for the Windows ARM64
+  # installer. DigiCert does not ship a Windows ARM64 `smctl` binary (see
+  # https://github.com/digicert/code-signing-software-trust-action/issues/30),
+  # so `digicert/code-signing-software-trust-action@v1.0.0` cannot run on the
+  # windows-11-arm runner used by the ARM64 matrix build. Authenticode signing
+  # is architecture-agnostic for the target PE -- only the host running smctl
+  # has to match the runner -- so we download the unsigned-by-DigiCert ARM64
+  # artifact, re-sign it on windows-latest (x64) where smctl works natively,
+  # and upload the signed artifact back under the same name.
+  sign-windows-arm64:
     needs: build
+    runs-on: windows-latest
+    if: github.ref_type == 'tag' || inputs.release == true || inputs.release == 'true'
+    env:
+      DIGICERT_CLIENT_CERT_BASE64: ${{ secrets.DIGICERT_CLIENT_CERT_BASE64 }}
+    steps:
+      - name: Download win-arm64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: win-arm64
+          path: win-arm64
+
+      - name: Decode DigiCert Client Certificate
+        if: env.DIGICERT_CLIENT_CERT_BASE64 != ''
+        run: |
+          $certBytes = [System.Convert]::FromBase64String($env:DIGICERT_CLIENT_CERT_BASE64)
+          $certPath = Join-Path $env:RUNNER_TEMP "digicert_client_cert.p12"
+          [System.IO.File]::WriteAllBytes($certPath, $certBytes)
+          Write-Host "DigiCert client certificate decoded ($($certBytes.Length) bytes)"
+        shell: powershell
+
+      - name: Sign Windows ARM64 exe with DigiCert KeyLocker
+        if: env.DIGICERT_CLIENT_CERT_BASE64 != ''
+        uses: digicert/code-signing-software-trust-action@v1.0.0
+        with:
+          simple-signing-mode: true
+          input: win-arm64/Nimbalyst-Windows-arm64.exe
+          keypair-alias: ${{ secrets.DIGICERT_KEYPAIR_ALIAS }}
+        env:
+          DIGICERT_CLIENT_CERT_BASE64: ${{ secrets.DIGICERT_CLIENT_CERT_BASE64 }}
+          SM_HOST: "https://clientauth.one.digicert.com"
+          SM_API_KEY: ${{ secrets.DIGICERT_CLIENT_API_TOKEN }}
+          SM_CLIENT_CERT_FILE: ${{ runner.temp }}\digicert_client_cert.p12
+          SM_CLIENT_CERT_PASSWORD: ${{ secrets.DIGICERT_CLIENT_CERT_PW }}
+
+      # Re-upload every file that was in the original win-arm64 artifact so
+      # we don't silently drop blockmap/yml/etc. The download step unpacks
+      # into ./win-arm64, and upload-artifact re-archives that directory.
+      - name: Re-upload signed win-arm64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: win-arm64
+          path: win-arm64/*
+          retention-days: 7
+          overwrite: true
+
+  release:
+    needs: [build, sign-windows-arm64]
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag' || inputs.release == true || inputs.release == 'true'
     
@@ -581,7 +621,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "*Nimbalyst ${{ steps.get_version.outputs.VERSION }} alpha build published*\nPlatforms: macOS (arm64, x64), Linux, Windows (x64)\nR2 alpha channel updated"
+                    "text": "*Nimbalyst ${{ steps.get_version.outputs.VERSION }} alpha build published*\nPlatforms: macOS (arm64, x64), Linux, Windows (x64, arm64)\nR2 alpha channel updated"
                   }
                 },
                 {

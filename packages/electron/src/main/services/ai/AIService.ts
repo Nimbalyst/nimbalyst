@@ -5077,7 +5077,6 @@ export class AIService {
       const showPromptAdditions = this.getSettingsStore().get('showPromptAdditions', false) as boolean;
       const showUsageIndicator = this.getSettingsStore().get('showUsageIndicator', true) as boolean;
       const showCodexUsageIndicator = this.getSettingsStore().get('showCodexUsageIndicator', true) as boolean;
-      const useStandaloneBinary = this.getSettingsStore().get('useStandaloneBinary', false) as boolean;
       const customClaudeCodePath = this.getSettingsStore().get('customClaudeCodePath', '') as string;
       const autoCommitEnabled = this.getSettingsStore().get('autoCommitEnabled', false) as boolean;
       const trackerAutomation = this.getSettingsStore().get('trackerAutomation', {
@@ -5097,7 +5096,6 @@ export class AIService {
         showPromptAdditions,
         showUsageIndicator,
         showCodexUsageIndicator,
-        useStandaloneBinary,
         customClaudeCodePath,
         autoCommitEnabled,
         trackerAutomation,
@@ -5192,12 +5190,6 @@ export class AIService {
         this.getSettingsStore().set('showCodexUsageIndicator', settings.showCodexUsageIndicator);
       }
 
-      if (settings.useStandaloneBinary !== undefined) {
-        this.getSettingsStore().set('useStandaloneBinary', settings.useStandaloneBinary);
-        // Update ClaudeCodeProvider immediately so new sessions use the updated setting
-        ClaudeCodeProvider.setUseStandaloneBinary(settings.useStandaloneBinary);
-      }
-
       if (settings.customClaudeCodePath !== undefined) {
         this.getSettingsStore().set('customClaudeCodePath', settings.customClaudeCodePath);
         ClaudeCodeProvider.setCustomClaudeCodePath(settings.customClaudeCodePath);
@@ -5217,12 +5209,6 @@ export class AIService {
       }
 
       return { success: true };
-    });
-
-    // Check if standalone binary is available (macOS only, packaged builds only)
-    safeHandle('ai:isStandaloneBinaryAvailable', async () => {
-      const { isStandaloneBinaryAvailable } = await import('@nimbalyst/runtime/electron/claudeCodeEnvironment');
-      return isStandaloneBinaryAvailable();
     });
 
     // Test connection

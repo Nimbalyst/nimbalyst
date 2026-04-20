@@ -4,7 +4,7 @@ import fs from 'fs';
 import { claudeCodeDetector } from '../services/ClaudeCodeDetector';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { logger } from '../utils/logger';
-import { setupClaudeCodeEnvironment, getClaudeCodeExecutableOptions } from '@nimbalyst/runtime/electron/claudeCodeEnvironment';
+import { setupClaudeCodeEnvironment, resolveNativeBinaryPath } from '@nimbalyst/runtime/electron/claudeCodeEnvironment';
 import { AnalyticsService } from "../services/analytics/AnalyticsService.ts";
 import { shouldShowClaudeCodeWindowsWarning, dismissClaudeCodeWindowsWarning } from '../utils/store';
 import os from "os";
@@ -48,10 +48,10 @@ export function registerClaudeCodeHandlers() {
       // Build options for query - CRITICAL: pass env to options so SDK can find credentials
       // This is especially important on Intel Macs where HOME may not be set correctly
       // in packaged builds without explicitly passing the environment.
-      const { options: executableOptions } = getClaudeCodeExecutableOptions();
+      const nativeBinaryPath = resolveNativeBinaryPath();
       const options: any = {
-        ...executableOptions,
-        env
+        env,
+        ...(nativeBinaryPath ? { pathToClaudeCodeExecutable: nativeBinaryPath } : {}),
       };
 
       // Call query with proper signature: { prompt, options }

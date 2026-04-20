@@ -33,12 +33,8 @@ export type ExtensionFileTypesLoader = () => Set<string>;
 export const ClaudeCodeDeps = {
   // ---- Binary Configuration ----
 
-  // Setting for using standalone binary (injected from electron main process)
-  // When true, use Bun-compiled standalone binary on macOS to hide dock icon
-  useStandaloneBinary: false,
-
   // Custom Claude Code executable path (injected from electron main process)
-  // When set, overrides the bundled CLI and standalone binary
+  // When set, overrides the SDK's native binary (e.g., for corporate SSO wrappers)
   customClaudeCodePath: '' as string,
 
   // ---- MCP Server Ports ----
@@ -115,10 +111,6 @@ export const ClaudeCodeDeps = {
 
   // ---- Setters ----
   // Called from electron main process at startup
-
-  setUseStandaloneBinary(enabled: boolean): void {
-    this.useStandaloneBinary = enabled;
-  },
 
   setCustomClaudeCodePath(path: string): void {
     this.customClaudeCodePath = path;

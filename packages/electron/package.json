@@ -18,12 +18,6 @@
     "build": "npm run licenses:generate && cross-env NODE_OPTIONS='--max-old-space-size=8192' electron-vite build && npm run build:worker",
     "build:worker": "node build/build-worker.js",
     "build:extensions": "node build/build-extensions.js",
-    "build:claude-helper": "bash scripts/build-claude-helper.sh",
-    "build:claude-helper:mac": "bash scripts/build-claude-helper.sh --mac",
-    "build:claude-helper:windows": "bash scripts/build-claude-helper.sh --windows",
-    "build:claude-helper:windows-arm64": "bash scripts/build-claude-helper.sh --windows-arm64",
-    "build:claude-helper:linux": "bash scripts/build-claude-helper.sh --linux",
-    "build:claude-helper:all": "bash scripts/build-claude-helper.sh --all",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
@@ -195,6 +189,7 @@
       "nimbalyst-logo.png",
       "!node_modules/**/*",
       "node_modules/@anthropic-ai/claude-agent-sdk/**/*",
+      "node_modules/@anthropic-ai/claude-agent-sdk-*/**/*",
       "node_modules/electron-store/**/*",
       "node_modules/conf/**/*",
       "node_modules/type-fest/**/*",
@@ -309,14 +304,6 @@
           "**/vite.config.ts",
           "**/src/**"
         ]
-      },
-      {
-        "from": "resources/claude-helper.app",
-        "to": "claude-helper.app"
-      },
-      {
-        "from": "resources/claude-helper-bin",
-        "to": "claude-helper-bin"
       }
     ],
     "afterSign": "build/afterSign.js",

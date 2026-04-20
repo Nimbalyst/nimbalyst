@@ -172,7 +172,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.2.111",
+    "@anthropic-ai/claude-agent-sdk": "0.2.114",
     "@anthropic-ai/sdk": "^0.71.2",
     "@floating-ui/react": "^0.27.19",
     "@lexical/dragon": "^0.34.0",

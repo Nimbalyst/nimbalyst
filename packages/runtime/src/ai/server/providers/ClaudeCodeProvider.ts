@@ -50,7 +50,7 @@ import path from 'path';
 import os from 'os';
 import { app } from 'electron';
 import { buildClaudeCodeSystemPrompt, buildMetaAgentSystemPrompt } from '../../prompt';
-import type { ClaudeHelperMethod } from '../../../electron/claudeCodeEnvironment';
+
 import { SessionManager } from '../SessionManager';
 import { parseBashForFileOps, hasShellChainingOperators, splitOnShellOperators } from '../permissions/BashCommandAnalyzer';
 
@@ -135,7 +135,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   private static cachedSdkSkills: string[] = [];
   private static cachedSdkSlashCommands: string[] = [];
   private markMessagesAsHidden: boolean = false; // Flag to mark next messages as hidden
-  private helperMethod: ClaudeHelperMethod = 'electron'; // Track which helper method is being used
+  private helperMethod: 'native' | 'custom' = 'native';
 
   // Lead query reference for interruptWithMessage support
   private leadQuery: Query | null = null;
@@ -198,7 +198,6 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   // All static fields and setters live in ClaudeCodeDeps.
   // These forwarding setters maintain backward compatibility for callers.
 
-  public static setUseStandaloneBinary(enabled: boolean): void { ClaudeCodeDeps.setUseStandaloneBinary(enabled); }
   public static setCustomClaudeCodePath(path: string): void { ClaudeCodeDeps.setCustomClaudeCodePath(path); }
 
   constructor() {
@@ -447,6 +446,9 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     // Clear edited files tracker for new turn
     this.toolHooksService.clearEditedFiles();
 
+    // Capture stderr from the subprocess for diagnostics (populated inside try, read in catch)
+    const stderrLines: string[] = [];
+
     try {
       // Append document context to message using pre-built prompts from DocumentContextService
       // Skip adding system message if the prompt starts with a slash command
@@ -618,6 +620,14 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         documentContext?.mode === 'planning' ? 'planning' : 'agent',
         attachments as any,
       );
+
+      // Wire up stderr capture so process exit errors include diagnostic context.
+      const MAX_STDERR_LINES = 50;
+      options.stderr = (data: string) => {
+        if (stderrLines.length < MAX_STDERR_LINES) {
+          stderrLines.push(data);
+        }
+      };
 
       // console.log('[CLAUDE-CODE] Calling SDK query() - this spawns the claude process...');
       const queryCallStart = Date.now();
@@ -1133,6 +1143,19 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         console.error(`[CLAUDE-CODE] Error name: ${error.name}`);
         console.error(`[CLAUDE-CODE] Error message: ${error.message}`);
         console.error(`[CLAUDE-CODE] Error stack:`, error.stack);
+        if (stderrLines.length > 0) {
+          console.error(`[CLAUDE-CODE] Subprocess stderr (${stderrLines.length} lines):`);
+          for (const line of stderrLines) {
+            console.error(`[CLAUDE-CODE-STDERR] ${line}`);
+          }
+        }
+        // Enrich the error message with stderr for the UI
+        if (stderrLines.length > 0 && error.message?.includes('exited with code')) {
+          const stderrSummary = stderrLines.join('').trim().slice(0, 500);
+          if (stderrSummary) {
+            error.message = `${error.message}\n\nProcess output:\n${stderrSummary}`;
+          }
+        }
       }
 
       if (isAbort) {
@@ -2520,7 +2543,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     skillCount: number;
     pluginCount: number;
     toolCount: number;
-    helperMethod: ClaudeHelperMethod;
+    helperMethod: 'native' | 'custom';
   } | null {
     const baseData = (this as any)._initData;
     if (!baseData) return null;

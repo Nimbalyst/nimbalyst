@@ -72,10 +72,6 @@ export function ClaudeCodePanel({
   const usageIndicatorEnabled = useAtomValue(claudeUsageIndicatorEnabledAtom);
   const setUsageIndicatorEnabled = useSetAtom(setClaudeUsageIndicatorEnabledAtom);
 
-  // Standalone binary setting (macOS only - hides dock icon when spawning Claude Code)
-  const [useStandaloneBinary, setUseStandaloneBinaryState] = useState(false);
-  const [isStandaloneBinaryAvailable, setIsStandaloneBinaryAvailable] = useState(false);
-
   // Custom Claude executable path
   const [customClaudeCodePath, setCustomClaudeCodePathState] = useState('');
 
@@ -150,8 +146,7 @@ export function ClaudeCodePanel({
     checkLoginStatus();
     loadEnvVars();
 
-    // Load standalone binary setting and availability
-    loadStandaloneBinarySetting();
+    loadSettings();
   }, [loadEnvVars]);
 
   const checkLoginStatus = async () => {
@@ -189,32 +184,13 @@ export function ClaudeCodePanel({
   }
 
   // Load standalone binary setting and check availability
-  const loadStandaloneBinarySetting = async () => {
+  const loadSettings = async () => {
     try {
-      // Check if standalone binary is available in this build
-      const available = await window.electronAPI.aiIsStandaloneBinaryAvailable();
-      setIsStandaloneBinaryAvailable(available);
-
-      // Load current settings
       const settings = await window.electronAPI.aiGetSettings();
-      setUseStandaloneBinaryState(settings?.useStandaloneBinary ?? false);
       setCustomClaudeCodePathState(settings?.customClaudeCodePath ?? '');
       setPlanTrackingEnabledState(settings?.planTrackingEnabled ?? true);
     } catch (error) {
-      console.error('[ClaudeCodePanel] Failed to load standalone binary setting:', error);
-    }
-  };
-
-  // Save standalone binary setting
-  const handleSetUseStandaloneBinary = async (enabled: boolean) => {
-    setUseStandaloneBinaryState(enabled);
-    try {
-      // Send only the changed field -- ai:saveSettings handles partial updates
-      await window.electronAPI.aiSaveSettings({ useStandaloneBinary: enabled });
-    } catch (error) {
-      console.error('[ClaudeCodePanel] Failed to save standalone binary setting:', error);
-      // Revert on error
-      setUseStandaloneBinaryState(!enabled);
+      console.error('[ClaudeCodePanel] Failed to load settings:', error);
     }
   };
 
@@ -313,27 +289,6 @@ export function ClaudeCodePanel({
           onChange={setUsageIndicatorEnabled}
         />
       )}
-
-      {/* Standalone Binary Toggle */}
-      <div className="provider-enable flex flex-col gap-2 py-4 mb-4 border-b border-[var(--nim-border)]">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <span className="provider-enable-label text-sm font-medium text-[var(--nim-text)]">Use Standalone Binary (Experimental)</span>
-            <p className="text-xs text-[var(--nim-text-muted)] mt-1">
-              Use a standalone binary instead of Electron to run Claude Agent
-              {isMacOS && ' (prevents dock icon)'}
-            </p>
-          </div>
-          <ToggleSwitch checked={useStandaloneBinary} onChange={handleSetUseStandaloneBinary} />
-        </div>
-        {useStandaloneBinary && !isStandaloneBinaryAvailable && (
-          <div className="p-3 rounded-lg bg-[rgba(245,158,11,0.08)] border border-[rgba(245,158,11,0.2)]">
-            <p className="text-xs text-[var(--nim-warning)]">
-              Standalone binary not found in this build. Claude Agent sessions will fail to start. The standalone binary is included in official release builds.
-            </p>
-          </div>
-        )}
-      </div>
 
       {/* Custom Claude Installation */}
       <div className="provider-enable flex flex-col gap-2 py-4 mb-4 border-b border-[var(--nim-border)]">

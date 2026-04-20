@@ -28,8 +28,7 @@ vi.mock('../claudeCode/cliPathResolver', () => ({
 
 vi.mock('../../../../electron/claudeCodeEnvironment', () => ({
   setupClaudeCodeEnvironment: () => ({}),
-  getClaudeCodeExecutableOptions: () => ({ options: {}, method: 'electron' }),
-  getClaudeCodeSpawnFunction: () => undefined,
+  resolveNativeBinaryPath: () => undefined,
 }));
 
 import { buildSdkOptions } from '../claudeCode/sdkOptionsBuilder';

@@ -2,32 +2,50 @@ import { app } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { spawn, ChildProcess } from 'child_process';
 
 /**
- * Options passed to the spawn function by the Claude Agent SDK.
+ * Resolve the path to the SDK's native binary for the current platform.
+ *
+ * SDK 0.2.114+ ships per-platform native binaries as optional dependencies
+ * (e.g., @anthropic-ai/claude-agent-sdk-darwin-arm64/claude). In dev mode
+ * require.resolve() finds them directly. In packaged builds the binary lives
+ * inside app.asar.unpacked and require.resolve may not work, so we construct
+ * the path manually.
  */
-interface ClaudeSpawnOptions {
-  command: string;
-  args: string[];
-  cwd?: string;
-  env: { [envVar: string]: string | undefined };
-  signal: AbortSignal;
-}
+export function resolveNativeBinaryPath(): string | undefined {
+  const platform = process.platform;
+  const arch = process.arch;
+  const binaryName = platform === 'win32' ? 'claude.exe' : 'claude';
+  const packageName = `@anthropic-ai/claude-agent-sdk-${platform}-${arch}`;
 
-/**
- * Claude helper method used for spawning Claude Code subprocess.
- * - 'electron': Use Electron binary in node mode (default, works everywhere)
- * - 'standalone': Use Bun-compiled standalone binary (hides dock icon on macOS)
- */
-export type ClaudeHelperMethod = 'electron' | 'standalone';
+  // Dev mode: require.resolve works fine
+  if (!app.isPackaged) {
+    try {
+      return require.resolve(`${packageName}/${binaryName}`);
+    } catch {
+      // Platform package may not be installed in dev (e.g., CI on different arch)
+      return undefined;
+    }
+  }
 
-/**
- * Result of getting executable options, includes the method used for logging/analytics.
- */
-export interface ClaudeCodeExecutableResult {
-  options: { executable?: string; executableArgs?: string[]; pathToClaudeCodeExecutable?: string };
-  method: ClaudeHelperMethod;
+  // Packaged mode: construct path to the asar-unpacked binary
+  const appPath = app.getAppPath();
+  const unpackedPath = appPath.includes('app.asar')
+    ? appPath.replace(/app\.asar(?=[\/\\]|$)/, 'app.asar.unpacked')
+    : appPath;
+
+  const binaryPath = path.join(unpackedPath, 'node_modules', packageName, binaryName);
+
+  if (fs.existsSync(binaryPath)) {
+    return binaryPath;
+  }
+
+  // Fallback: try require.resolve in case asar-unpacked layout differs
+  try {
+    return require.resolve(`${packageName}/${binaryName}`);
+  } catch {
+    return undefined;
+  }
 }
 
 function getCandidateNodePaths(isPackaged: boolean): string[] {
@@ -61,12 +79,11 @@ function getCandidateNodePaths(isPackaged: boolean): string[] {
 }
 
 /**
- * Setup environment for Claude Agent SDK in packaged builds
- * This is used by both ClaudeCodeHandlers and ClaudeCodeProvider
+ * Setup environment for Claude Agent SDK in packaged builds.
  *
- * Returns an environment object suitable for:
- * - Setting process.env temporarily (in IPC handlers)
- * - Passing as options.env to the SDK (in providers)
+ * Even though SDK 0.2.114+ spawns a native binary (not Electron-as-Node),
+ * the subprocess still needs a proper environment with PATH, home directory,
+ * and temp directories set up correctly.
  */
 export function setupClaudeCodeEnvironment(): NodeJS.ProcessEnv {
   const isPackaged = app.isPackaged;
@@ -78,8 +95,6 @@ export function setupClaudeCodeEnvironment(): NodeJS.ProcessEnv {
   }
 
   if (!isPackaged) {
-    // The SDK may execute its extracted CLI from a temp location, so provide
-    // explicit module roots in dev mode instead of relying on relative lookup.
     return env;
   }
 
@@ -142,129 +157,5 @@ export function setupClaudeCodeEnvironment(): NodeJS.ProcessEnv {
     throw new Error(error);
   }
 
-  // Use Electron as Node
-  env.ELECTRON_RUN_AS_NODE = '1';
-
-  // Prevent dock icon from appearing on macOS when running as background process
-  if (platform === 'darwin') {
-    env.ELECTRON_NO_ATTACH_CONSOLE = '1';
-  }
-
   return env;
-}
-
-/**
- * Get the path to the standalone binary for the current platform.
- */
-function getStandaloneBinaryPath(): string {
-  const binaryName = process.platform === 'win32' ? 'claude-helper.exe' : 'claude-helper';
-  return path.join(
-    process.resourcesPath,
-    'claude-helper-bin',
-    binaryName
-  );
-}
-
-/**
- * Check if the standalone Bun-compiled binary is available.
- * Available on all platforms in packaged builds if the binary was built and included.
- */
-export function isStandaloneBinaryAvailable(): boolean {
-  if (!app.isPackaged) {
-    return false;
-  }
-
-  return fs.existsSync(getStandaloneBinaryPath());
-}
-
-/**
- * Get SDK options for packaged builds.
- * Sets the executable to use for spawning Claude Code subprocess.
- *
- * @param useStandaloneBinary - If true, use the standalone Bun-compiled binary (macOS only).
- *                              If false or binary unavailable, use Electron binary.
- * @param log - Optional logging function for diagnostics
- * @returns Object containing executable options and the method that was used
- */
-export function getClaudeCodeExecutableOptions(
-  useStandaloneBinary: boolean = false,
-  log?: (message: string, data?: Record<string, unknown>) => void
-): ClaudeCodeExecutableResult {
-  const logInfo = log || ((msg: string, data?: Record<string, unknown>) => {
-    console.log(`[ClaudeCodeEnvironment] ${msg}`, data || '');
-  });
-
-  if (!app.isPackaged) {
-    logInfo('Development mode - using default SDK spawn behavior', { method: 'electron' });
-    return {
-      options: {},
-      method: 'electron'
-    };
-  }
-
-  const helperBinaryPath = getStandaloneBinaryPath();
-  const standaloneBinaryExists = fs.existsSync(helperBinaryPath);
-
-  if (useStandaloneBinary) {
-    // User requested standalone - use it regardless of whether it exists
-    // If it doesn't exist, the spawn will fail and the user will see the error
-    logInfo('Using standalone Bun-compiled binary for Claude Code', {
-      method: 'standalone',
-      path: helperBinaryPath,
-      binaryExists: standaloneBinaryExists,
-      platform: process.platform
-    });
-    if (!standaloneBinaryExists) {
-      logInfo('WARNING: Standalone binary not found - spawn will likely fail', {
-        binaryPath: helperBinaryPath
-      });
-    }
-    return {
-      options: {
-        pathToClaudeCodeExecutable: helperBinaryPath
-      },
-      method: 'standalone'
-    };
-  } else {
-    logInfo('Using Electron binary for Claude Code (standalone not enabled)', {
-      method: 'electron',
-      standaloneBinaryAvailable: standaloneBinaryExists,
-      platform: process.platform
-    });
-  }
-
-  // Default: use Electron binary
-  return {
-    options: {
-      executable: process.execPath,
-      executableArgs: []
-    },
-    method: 'electron'
-  };
-}
-
-/**
- * Get a custom spawn function for the Claude Agent SDK.
- * - On Windows: Uses windowsHide to prevent console window
- * - On macOS/Linux: Uses default spawn (macOS uses wrapper via executable option)
- */
-export function getClaudeCodeSpawnFunction(): ((options: ClaudeSpawnOptions) => ChildProcess) | undefined {
-  if (!app.isPackaged) {
-    return undefined;
-  }
-
-  // On Windows, use windowsHide to prevent console window from appearing
-  if (process.platform === 'win32') {
-    return (options: ClaudeSpawnOptions): ChildProcess => {
-      return spawn(options.command, options.args, {
-        cwd: options.cwd,
-        env: options.env as NodeJS.ProcessEnv,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        windowsHide: true
-      });
-    };
-  }
-
-  // On macOS/Linux, use default spawn (macOS wrapper handles dock icon)
-  return undefined;
 }

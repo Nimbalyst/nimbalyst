@@ -88,15 +88,12 @@ export interface TeammateManagerDeps {
 
 /**
  * Packaged-build options for spawning Claude Code subprocesses.
- * In production Electron builds, the SDK needs explicit executable/env
- * configuration since `node` is not on PATH.
+ * In production Electron builds, the SDK needs environment and binary path
+ * configuration since the native binary lives inside asar-unpacked.
  */
 export interface PackagedBuildOptions {
   env: Record<string, string | undefined>;
-  executable?: string;
-  executableArgs?: string[];
   pathToClaudeCodeExecutable?: string;
-  spawnClaudeCodeProcess?: (options: any) => any;
 }
 
 // ─── Class ──────────────────────────────────────────────────────────────────
@@ -1468,18 +1465,9 @@ export class TeammateManager {
       additionalDirectories: teammateAdditionalDirectories,
     };
 
-    // Apply packaged-build executable options (production Electron)
-    if (this.packagedBuildOptions) {
-      if (this.packagedBuildOptions.executable) {
-        options.executable = this.packagedBuildOptions.executable;
-        options.executableArgs = this.packagedBuildOptions.executableArgs || [];
-      }
-      if (this.packagedBuildOptions.pathToClaudeCodeExecutable) {
-        options.pathToClaudeCodeExecutable = this.packagedBuildOptions.pathToClaudeCodeExecutable;
-      }
-      if (this.packagedBuildOptions.spawnClaudeCodeProcess) {
-        options.spawnClaudeCodeProcess = this.packagedBuildOptions.spawnClaudeCodeProcess;
-      }
+    // Apply packaged-build options (production Electron)
+    if (this.packagedBuildOptions?.pathToClaudeCodeExecutable) {
+      options.pathToClaudeCodeExecutable = this.packagedBuildOptions.pathToClaudeCodeExecutable;
     }
 
     if (resumeSessionId) {
