@@ -77,7 +77,6 @@ public final class DocumentSyncManager: ObservableObject {
     /// The projectId is the workspace path (matching Project.id).
     public func connectProject(_ projectId: String) {
         guard let authToken = authToken, let orgId = orgId else {
-            logger.warning("[DocSync] Cannot connect project: not authenticated")
             return
         }
 

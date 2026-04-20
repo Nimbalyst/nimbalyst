@@ -176,7 +176,6 @@ public final class SyncManager: ObservableObject {
     /// Join a session room to sync messages.
     public func joinSessionRoom(sessionId: String) {
         guard let authToken = authToken else {
-            logger.warning("Cannot join session room: not authenticated")
             return
         }
 

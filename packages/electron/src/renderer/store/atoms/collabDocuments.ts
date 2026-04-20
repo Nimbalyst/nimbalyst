@@ -225,9 +225,12 @@ export async function initSharedDocuments(workspacePath: string, retryCount = 0)
   try {
     const result = await window.electronAPI.documentSync.resolveIndexConfig(workspacePath);
     if (!result.success || !result.config) {
-      console.log('[collabDocuments] Could not resolve index config:', result.error);
-      // Only retry for transient errors (key not yet available), not for "no team found"
-      const isTransient = result.error && !result.error.includes('No team found');
+      const isNotAuthenticated = result.error?.includes('Not authenticated');
+      const isNoTeam = result.error?.includes('No team found');
+      const isTransient = result.error && !isNotAuthenticated && !isNoTeam;
+      if (isTransient) {
+        console.log('[collabDocuments] Could not resolve index config:', result.error);
+      }
       if (!isTransient) {
         store.set(workspaceHasTeamAtom, false);
       }

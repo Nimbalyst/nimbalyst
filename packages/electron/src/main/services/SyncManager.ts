@@ -333,18 +333,14 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
 
   // Require Stytch authentication for sync
   const authenticated = isAuthenticated();
-  logger.main.info('[SyncManager] isAuthenticated:', authenticated);
   if (!authenticated) {
-    logger.main.info('[SyncManager] Session sync enabled but user not authenticated with Stytch');
     return baseStore;
   }
 
   // Get user ID from Stytch (for encryption key derivation and device info)
   // Note: JWT refresh happens on-demand before each WebSocket connection via getJwt callback
   const stytchUserId = getStytchUserId();
-  logger.main.info('[SyncManager] stytchUserId:', stytchUserId);
   if (!stytchUserId) {
-    logger.main.info('[SyncManager] Session sync enabled but no Stytch user ID available');
     return baseStore;
   }
 
