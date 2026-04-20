@@ -4,6 +4,14 @@
  */
 
 import { query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import * as _sdkModule from '@anthropic-ai/claude-agent-sdk';
+
+// SDK's startup() and WarmQuery types use AsyncDisposable which TS 5.8 can't resolve
+// from the d.ts even with ESNext.Disposable lib. Access via namespace + cast.
+interface WarmQuery { query(prompt: any): any; close(): void }
+const startup = (_sdkModule as any).startup as (params?: {
+  options?: any; initializeTimeoutMs?: number;
+}) => Promise<WarmQuery>;
 
 // Query interface not properly exported by SDK, so we define it inline
 interface Query extends AsyncGenerator<SDKMessage, void> {
@@ -136,6 +144,12 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   private static cachedSdkSlashCommands: string[] = [];
   private markMessagesAsHidden: boolean = false; // Flag to mark next messages as hidden
   private helperMethod: 'native' | 'custom' = 'native';
+
+  // SDK prewarming: subprocess spawned before the user sends their first message
+  private warmQuery: WarmQuery | null = null;
+  private prewarmSessionId: string | null = null;
+  private prewarmModel: string | null = null;
+  private prewarmInProgress: boolean = false;
 
   // Lead query reference for interruptWithMessage support
   private leadQuery: Query | null = null;
@@ -368,6 +382,79 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     this.config = config;
 
     // Claude Code manages its own authentication - do not require or use API key
+  }
+
+  /**
+   * Pre-warm the SDK subprocess so the first query() resolves immediately.
+   * Called when the user starts typing before they send their first message.
+   * Builds the full SDK options (env, MCP servers, executable path, model)
+   * and calls startup() to spawn the subprocess in the background.
+   * The warm query is consumed by sendMessage() and discarded if the model changes.
+   */
+  async prewarm(workspacePath: string, sessionId?: string): Promise<void> {
+    if (this.prewarmInProgress || this.warmQuery) return;
+
+    const model = this.resolveModelVariant();
+    this.prewarmSessionId = sessionId ?? null;
+    this.prewarmModel = model;
+    this.prewarmInProgress = true;
+
+    try {
+      let settingsEnv: Record<string, string> = {};
+      let shellEnv: Record<string, string> = {};
+      if (ClaudeCodeDeps.claudeSettingsEnvLoader) {
+        try { settingsEnv = await ClaudeCodeDeps.claudeSettingsEnvLoader(); } catch { /* ignore */ }
+      }
+      if (ClaudeCodeDeps.shellEnvironmentLoader) {
+        try { shellEnv = ClaudeCodeDeps.shellEnvironmentLoader() || {}; } catch { /* ignore */ }
+      }
+
+      // Build full options so the subprocess gets the same env, MCP servers,
+      // executable path, and model it will use for the actual query.
+      // Hooks use no-ops since no tools execute during startup.
+      const noopHook = () => ({});
+      const { options } = await buildSdkOptions(
+        {
+          resolveModelVariant: () => model,
+          mcpConfigService: this.mcpConfigService,
+          createCanUseToolHandler: () => () => true,
+          toolHooksService: { createPreToolUseHook: noopHook, createPostToolUseHook: noopHook } as any,
+          teammateManager: this.teammateManager,
+          sessions: this.sessions,
+          config: this.config,
+          abortController: new AbortController(),
+        },
+        {
+          message: '',
+          workspacePath,
+          sessionId,
+          settingsEnv,
+          shellEnv,
+          systemPrompt: '',
+          currentMode: undefined,
+          imageContentBlocks: [],
+          documentContentBlocks: [],
+        }
+      );
+
+      const warmStartTime = Date.now();
+      this.warmQuery = await startup({ options });
+      console.log(`[CLAUDE-CODE] SDK prewarm completed in ${Date.now() - warmStartTime}ms (model=${model})`);
+    } catch (error) {
+      console.warn('[CLAUDE-CODE] SDK prewarm failed (non-fatal):', (error as Error).message);
+      this.warmQuery = null;
+    } finally {
+      this.prewarmInProgress = false;
+    }
+  }
+
+  discardWarmQuery(): void {
+    if (this.warmQuery) {
+      this.warmQuery.close();
+      this.warmQuery = null;
+      this.prewarmModel = null;
+      this.prewarmSessionId = null;
+    }
   }
 
   /**
@@ -629,17 +716,34 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         }
       };
 
-      // console.log('[CLAUDE-CODE] Calling SDK query() - this spawns the claude process...');
       const queryCallStart = Date.now();
-      const leadQuery = query({
-        prompt: promptInput as any,
-        options
-      });
+      let leadQuery: AsyncIterable<any>;
+
+      // Use prewarmed subprocess if available, model matches, and we're not resuming
+      // (prewarm doesn't have the provider session ID mapping, so options.resume won't be set)
+      const currentModel = this.resolveModelVariant();
+      if (this.warmQuery && this.prewarmModel === currentModel && !options.resume) {
+        console.log(`[CLAUDE-CODE] Using prewarmed subprocess (model=${currentModel})`);
+        leadQuery = this.warmQuery.query(promptInput as any);
+        this.warmQuery = null;
+        this.prewarmModel = null;
+        this.prewarmSessionId = null;
+      } else {
+        if (this.warmQuery) {
+          const reason = options.resume ? 'resuming existing session' : `model changed: ${this.prewarmModel} -> ${currentModel}`;
+          console.log(`[CLAUDE-CODE] Discarding prewarmed subprocess (${reason})`);
+          this.discardWarmQuery();
+        }
+        leadQuery = query({
+          prompt: promptInput as any,
+          options
+        });
+      }
+
       this.leadQuery = leadQuery as unknown as Query;
       this.teammateIdleMessagePending = false;
       const queryIterator = leadQuery as AsyncIterable<any>;
       const queryCallDuration = Date.now() - queryCallStart;
-      // console.log(`[CLAUDE-CODE] SDK query() returned iterator in ${queryCallDuration}ms`);
       if (queryCallDuration > 5000) {
         console.warn(`[CLAUDE-CODE] SDK query() took ${queryCallDuration}ms to return iterator (>5s threshold) - possible Windows Defender/antivirus delay`);
       }

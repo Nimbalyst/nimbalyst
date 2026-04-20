@@ -4251,6 +4251,27 @@ export class AIService {
     // Register the handler with IPC
     safeHandle('ai:sendMessage', this.sendMessageHandler);
 
+    // Pre-warm Claude Code subprocess when user starts typing
+    safeHandle('ai:prewarm', async (event, sessionId: string, workspacePath: string) => {
+      try {
+        const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
+        const session = await AISessionsRepository.get(sessionId);
+        if (!session || session.provider !== 'claude-code') return;
+
+        let provider = ProviderFactory.getProvider('claude-code', sessionId);
+        if (!provider) {
+          provider = ProviderFactory.createProvider('claude-code', sessionId);
+          const apiKey = this.getApiKeyForProvider('claude-code', workspacePath);
+          const model = session.model || (session.providerConfig as any)?.model;
+          await provider.initialize({ apiKey, model });
+        }
+
+        await (provider as any).prewarm(workspacePath, sessionId);
+      } catch (error) {
+        console.warn('[AIService] Prewarm failed:', (error as Error).message);
+      }
+    });
+
     // Get session history (full session data with messages - slow)
     safeHandle('ai:getSessions', async (event, workspacePath?: string) => {
       return await this.sessionManager.getSessions(workspacePath);
