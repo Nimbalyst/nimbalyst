@@ -20,6 +20,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.20] - 2026-04-20
+
+
+### Added
+- Opus 4.6 remains selectable in the Claude Code model picker via a pinned variant
+
+### Changed
+- Validate extraResources paths before building
+
+### Fixed
+- Recover sync quickly after network change or laptop sleep
+- Yield tool_call chunks from claude-code so lastTextSection resets between text sections
+- Codex SDK missing from packaged builds after upgrade
+
 ## [0.57.19] - 2026-04-17
 
 
