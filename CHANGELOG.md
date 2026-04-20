@@ -20,6 +20,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.23] - 2026-04-20
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+- Upgrade Claude Agent SDK to 0.2.114 for Zod 4 compatibility; bump zod to ^4.0.0 across the workspace
+- Expanded MCP error logging: onerror handler and top-level try/catch with tool name/args in all 7 MCP servers, prefixed `[MCP:server-name]` for easy grepping
+- Log canUseTool return values in ClaudeCodeProvider to diagnose SDK validation failures
+
+### Fixed
+- Silent Windows auto-updates so users no longer see the NSIS installer wizard
+- Prevent duplicate tool call entries in agent provider transcripts (claude-code, codex, opencode) by gating the legacy addMessage path to chat providers only
+- Migrate existing users' persisted Claude Code model list to include the Opus 4.6 variant so upgrading Windows users see it again in the Agent picker
+- Default Claude Code model list now includes Opus 4.6 for fresh installs
+- Restore actual release notes (from CHANGELOG.md) on internal GitHub Releases instead of the hardcoded boilerplate that had been used since Sep 2025
+- Restore package-lock.json optional flags that were stripped by npm install during the SDK upgrade, unblocking CI on Linux x64
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.57.22] - 2026-04-20
 
 
