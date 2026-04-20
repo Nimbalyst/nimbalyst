@@ -393,7 +393,7 @@
     "nsis": {
       "oneClick": false,
       "packElevateHelper": false,
-      "runAfterFinish": false
+      "runAfterFinish": true
     },
     "linux": {
       "target": "AppImage",
