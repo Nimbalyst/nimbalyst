@@ -310,7 +310,7 @@ export class AutoUpdaterService {
         AutoUpdaterService.isUpdating = true;
         app.removeAllListeners('before-quit');
         app.removeAllListeners('window-all-closed');
-        autoUpdater.quitAndInstall(false, true);
+        autoUpdater.quitAndInstall(true, true);
       } catch (error) {
         log.error('Failed to quit and install:', error);
         AutoUpdaterService.isUpdating = true;
