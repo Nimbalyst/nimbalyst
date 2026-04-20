@@ -609,6 +609,10 @@ function createSessionContextMcpServer(
     }
   );
 
+  server.onerror = (error) => {
+    console.error("[MCP:nimbalyst-session-context] Server error:", error);
+  };
+
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
       tools: [

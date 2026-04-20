@@ -271,6 +271,10 @@ function createSharedMcpServer(
     { capabilities: { tools: { listChanged: true } } }
   );
 
+  server.onerror = (error) => {
+    console.error("[MCP:nimbalyst-mcp] Server error:", error);
+  };
+
   // Register tool list handler
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     const currentDocState = sessionId
@@ -325,61 +329,67 @@ function createSharedMcpServer(
     // Strip MCP server prefix if present
     const toolName = name.replace(/^mcp__nimbalyst__/, "");
 
-    switch (toolName) {
-      case "applyDiff":
-        return handleApplyDiff(args);
+    try {
+      switch (toolName) {
+        case "applyDiff":
+          return handleApplyDiff(args);
 
-      case "streamContent":
-        return handleStreamContent(args);
+        case "streamContent":
+          return handleStreamContent(args);
 
-      case "open_workspace":
-        return handleOpenWorkspace(args);
+        case "open_workspace":
+          return handleOpenWorkspace(args);
 
-      case "capture_editor_screenshot":
-        return handleCaptureEditorScreenshot(args);
+        case "capture_editor_screenshot":
+          return handleCaptureEditorScreenshot(args);
 
-      case "display_to_user":
-        return handleDisplayToUser(args);
+        case "display_to_user":
+          return handleDisplayToUser(args);
 
-      case "voice_agent_speak":
-        return handleVoiceAgentSpeak(args);
+        case "voice_agent_speak":
+          return handleVoiceAgentSpeak(args);
 
-      case "voice_agent_stop":
-        return handleVoiceAgentStop();
+        case "voice_agent_stop":
+          return handleVoiceAgentStop();
 
-      case "AskUserQuestion":
-        return handleAskUserQuestion(args, sessionId, request);
+        case "AskUserQuestion":
+          return handleAskUserQuestion(args, sessionId, request);
 
-      case "get_session_edited_files":
-        return handleGetSessionEditedFiles(sessionId);
+        case "get_session_edited_files":
+          return handleGetSessionEditedFiles(sessionId);
 
-      case "developer_git_commit_proposal":
-      case "developer.git_commit_proposal":
-        return handleGitCommitProposal(args, sessionId, workspacePath, request);
+        case "developer_git_commit_proposal":
+        case "developer.git_commit_proposal":
+          return handleGitCommitProposal(args, sessionId, workspacePath, request);
 
-      case "tracker_list":
-        return handleTrackerList(args, workspacePath);
+        case "tracker_list":
+          return handleTrackerList(args, workspacePath);
 
-      case "tracker_get":
-        return handleTrackerGet(args, workspacePath);
+        case "tracker_get":
+          return handleTrackerGet(args, workspacePath);
 
-      case "tracker_create":
-        return handleTrackerCreate(args, workspacePath, sessionId);
+        case "tracker_create":
+          return handleTrackerCreate(args, workspacePath, sessionId);
 
-      case "tracker_update":
-        return handleTrackerUpdate(args, workspacePath, sessionId);
+        case "tracker_update":
+          return handleTrackerUpdate(args, workspacePath, sessionId);
 
-      case "tracker_link_session":
-        return handleTrackerLinkSession(args, sessionId, workspacePath);
+        case "tracker_link_session":
+          return handleTrackerLinkSession(args, sessionId, workspacePath);
 
-      case "tracker_link_file":
-        return handleTrackerLinkFile(args, sessionId, workspacePath);
+        case "tracker_link_file":
+          return handleTrackerLinkFile(args, sessionId, workspacePath);
 
-      case "tracker_add_comment":
-        return handleTrackerAddComment(args, workspacePath);
+        case "tracker_add_comment":
+          return handleTrackerAddComment(args, workspacePath);
 
-      default:
-        return handleExtensionTool(toolName, name, args, sessionId, workspacePath);
+        default:
+          return handleExtensionTool(toolName, name, args, sessionId, workspacePath);
+      }
+    } catch (error) {
+      console.error(`[MCP:nimbalyst-mcp] Tool "${name}" failed:`, error);
+      console.error(`[MCP:nimbalyst-mcp] Tool args:`, JSON.stringify(args).slice(0, 500));
+      throw error;
     }
   });
 

@@ -855,6 +855,10 @@ function createExtensionDevMcpServer(
     }
   );
 
+  server.onerror = (error) => {
+    console.error("[MCP:nimbalyst-extension-dev] Server error:", error);
+  };
+
   // Register tool definitions
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
@@ -1160,6 +1164,7 @@ function createExtensionDevMcpServer(
     // Strip MCP server prefix if present
     const toolName = name.replace(/^mcp__nimbalyst-extension-dev__/, "");
 
+    try {
     switch (toolName) {
       case "extension_build": {
         const extensionPath = args?.path as string;
@@ -2665,6 +2670,12 @@ ${script}
 
       default:
         throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
+    }
+    } catch (error) {
+      if (error instanceof McpError) throw error;
+      console.error(`[MCP:nimbalyst-extension-dev] Tool "${name}" failed:`, error);
+      console.error(`[MCP:nimbalyst-extension-dev] Tool args:`, JSON.stringify(args).slice(0, 500));
+      throw error;
     }
   });
 

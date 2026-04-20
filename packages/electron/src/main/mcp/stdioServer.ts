@@ -121,6 +121,10 @@ export async function startStdioMcpServer() {
     }
   );
 
+  server.onerror = (error) => {
+    console.error("[MCP:nimbalyst-stdio] Server error:", error);
+  };
+
   // Register tool listing handler
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     console.error('[MCP stdio] Listing tools');

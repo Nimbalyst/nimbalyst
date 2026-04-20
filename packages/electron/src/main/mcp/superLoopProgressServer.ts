@@ -233,6 +233,10 @@ function createSuperLoopProgressMcpServer(aiSessionId: string): Server {
     }
   );
 
+  server.onerror = (error) => {
+    console.error("[MCP:nimbalyst-super-loop-progress] Server error:", error);
+  };
+
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
       tools: [
@@ -318,6 +322,7 @@ function createSuperLoopProgressMcpServer(aiSessionId: string): Server {
       ""
     );
 
+    try {
     if (toolName === "super_loop_progress_update") {
       // Validate required fields
       const phase = args?.phase;
@@ -419,6 +424,12 @@ function createSuperLoopProgressMcpServer(aiSessionId: string): Server {
       }
     } else {
       throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
+    }
+    } catch (error) {
+      if (error instanceof McpError) throw error;
+      console.error(`[MCP:nimbalyst-super-loop-progress] Tool "${name}" failed:`, error);
+      console.error(`[MCP:nimbalyst-super-loop-progress] Tool args:`, JSON.stringify(args).slice(0, 500));
+      throw error;
     }
   });
 

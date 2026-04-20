@@ -2357,41 +2357,40 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       input: any,
       options: { signal: AbortSignal; suggestions?: any[]; toolUseID?: string }
     ): Promise<{ behavior: 'allow' | 'deny'; updatedInput?: any; message?: string }> => {
-      // Log all tool permission checks (verbose - uncomment for debugging)
-      // this.logSecurity('[canUseTool] Tool call received:', {
-      //   toolName,
-      //   workspacePath: workspacePath?.slice(-30),
-      //   permissionsPath: permissionsPath?.slice(-30),
-      // });
+      let result: { behavior: 'allow' | 'deny'; updatedInput?: any; message?: string };
 
-      const immediateDecision = await this.resolveImmediateToolDecision(
-        toolName,
-        input,
-        options,
-        sessionId,
-        pathForTrust
-      );
-      if (immediateDecision) {
-        return immediateDecision;
-      }
-
-      // The SDK has already evaluated settings.json rules.
-      // If we're here, it means the SDK needs user approval for this tool.
-
-      // Use ToolPermissionService if available, otherwise fall back to inline logic
-      if (this.permissionService && sessionId && workspacePath) {
-        return this.handleToolPermissionWithService(
+      try {
+        const immediateDecision = await this.resolveImmediateToolDecision(
           toolName,
           input,
           options,
           sessionId,
-          workspacePath,
-          permissionsPath,
-          teammateName
+          pathForTrust
         );
+        if (immediateDecision) {
+          result = immediateDecision;
+        } else if (this.permissionService && sessionId && workspacePath) {
+          result = await this.handleToolPermissionWithService(
+            toolName,
+            input,
+            options,
+            sessionId,
+            workspacePath,
+            permissionsPath,
+            teammateName
+          );
+        } else {
+          result = await this.handleToolPermissionFallback(toolName, input, options, sessionId, workspacePath);
+        }
+      } catch (error) {
+        console.error(`[canUseTool] Exception for tool "${toolName}":`, error);
+        throw error;
       }
 
-      return this.handleToolPermissionFallback(toolName, input, options, sessionId, workspacePath);
+      // Log the return value so SDK Zod validation failures are diagnosable
+      console.log(`[canUseTool] Tool "${toolName}" -> behavior=${result.behavior}, hasUpdatedInput=${result.updatedInput !== undefined}, hasMessage=${result.message !== undefined}`);
+
+      return result;
     };
   }
 

@@ -270,6 +270,10 @@ function createSessionNamingMcpServer(aiSessionId: string): Server {
     }
   );
 
+  server.onerror = (error) => {
+    console.error("[MCP:nimbalyst-session-naming] Server error:", error);
+  };
+
   // Register tool handlers with aiSessionId captured in closure
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     // Build dynamic tag description with existing workspace tags
@@ -354,6 +358,7 @@ function createSessionNamingMcpServer(aiSessionId: string): Server {
     // Strip MCP server prefix if present
     const toolName = name.replace(/^mcp__nimbalyst-session-naming__/, "");
 
+    try {
     if (toolName === "update_session_meta") {
       const sessionName = args?.name as string | undefined;
       const addTags = Array.isArray(args?.add) ? args.add as string[] : typeof args?.add === 'string' ? [args.add] : undefined;
@@ -517,6 +522,12 @@ function createSessionNamingMcpServer(aiSessionId: string): Server {
       };
     } else {
       throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
+    }
+    } catch (error) {
+      if (error instanceof McpError) throw error;
+      console.error(`[MCP:nimbalyst-session-naming] Tool "${name}" failed:`, error);
+      console.error(`[MCP:nimbalyst-session-naming] Tool args:`, JSON.stringify(args).slice(0, 500));
+      throw error;
     }
   });
 

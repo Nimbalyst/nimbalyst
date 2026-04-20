@@ -219,6 +219,10 @@ function createMetaAgentMcpServer(
     }
   );
 
+  server.onerror = (error) => {
+    console.error("[MCP:nimbalyst-meta-agent] Server error:", error);
+  };
+
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
       tools: [
@@ -461,9 +465,9 @@ function createMetaAgentMcpServer(
           throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
       }
     } catch (error) {
-      if (error instanceof McpError) {
-        throw error;
-      }
+      if (error instanceof McpError) throw error;
+      console.error(`[MCP:nimbalyst-meta-agent] Tool "${name}" failed:`, error);
+      console.error(`[MCP:nimbalyst-meta-agent] Tool args:`, JSON.stringify(args).slice(0, 500));
       const message = error instanceof Error ? error.message : String(error);
       return {
         content: [{ type: "text", text: `Error: ${message}` }],
