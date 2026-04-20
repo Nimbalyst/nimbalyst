@@ -66,10 +66,17 @@ export function extractFrontmatter(content: string): Record<string, any> | null 
 const LEGACY_KEY_TO_TYPE: Record<string, string> = {
   planStatus: 'plan',
   decisionStatus: 'decision',
-  automationStatus: 'automation',
   bugStatus: 'bug',
   taskStatus: 'task',
   ideaStatus: 'idea',
+};
+
+/**
+ * Extension-owned frontmatter keys that the tracker should detect but never flatten or rewrite.
+ * The owning extension manages these blocks; the tracker only reads `type` from their presence.
+ */
+const EXTENSION_OWNED_KEYS: Record<string, string> = {
+  automationStatus: 'automation',
 };
 
 /**
@@ -83,6 +90,20 @@ export function detectTrackerFromFrontmatter(content: string): TrackerFrontmatte
   const frontmatter = extractFrontmatter(content);
   if (!frontmatter) {
     return null;
+  }
+
+  // Extension-owned keys take priority -- their extension manages the nested block,
+  // so always read from it rather than stale top-level fields.
+  for (const [extKey, trackerType] of Object.entries(EXTENSION_OWNED_KEYS)) {
+    if (frontmatter[extKey] && typeof frontmatter[extKey] === 'object') {
+      const extData = frontmatter[extKey] as Record<string, any>;
+      const { [extKey]: _, trackerStatus: _ts, ...otherTopLevel } = frontmatter;
+      const merged = { ...extData, ...otherTopLevel, type: trackerType };
+      return {
+        type: trackerType,
+        data: resolveFieldData(trackerType, merged),
+      };
+    }
   }
 
   // Check for trackerStatus with type field (canonical format)
@@ -154,6 +175,41 @@ export function updateTrackerInFrontmatter(
   updates: Record<string, any>
 ): string {
   const frontmatter = extractFrontmatter(content) || {};
+
+  // Extension-owned keys are managed by their respective extensions -- don't touch them.
+  // Write only trackerStatus.type and timestamps; leave the nested block intact.
+  // Also clean up stale top-level duplicates of fields that belong in the nested block.
+  const extensionOwnedKey = Object.keys(EXTENSION_OWNED_KEYS).find(
+    key => frontmatter[key] && typeof frontmatter[key] === 'object'
+  );
+  if (extensionOwnedKey) {
+    const nestedData = frontmatter[extensionOwnedKey] as Record<string, any>;
+    const cleanedFrontmatter = { ...frontmatter };
+    for (const field of Object.keys(nestedData)) {
+      if (field in cleanedFrontmatter && field !== extensionOwnedKey) {
+        delete cleanedFrontmatter[field];
+      }
+    }
+    const now = formatLocalDateOnly(new Date());
+    const mergedUpdates: Record<string, any> = {};
+    for (const [key, value] of Object.entries(cleanedFrontmatter)) {
+      mergedUpdates[key] = value;
+    }
+    mergedUpdates.trackerStatus = { type: trackerType };
+    if (!cleanedFrontmatter.created) mergedUpdates.created = now;
+    mergedUpdates.updated = now;
+
+    const yamlContent = jsyaml.dump(mergedUpdates, {
+      indent: 2,
+      lineWidth: -1,
+      noRefs: true,
+    });
+    const frontmatterRegex = /^---\n[\s\S]*?\n---\n?/;
+    if (frontmatterRegex.test(content)) {
+      return content.replace(frontmatterRegex, `---\n${yamlContent}---\n`);
+    }
+    return `---\n${yamlContent}---\n${content}`;
+  }
 
   // Migrate: remove any legacy key, promote its fields to top level
   let legacyFields: Record<string, any> = {};
