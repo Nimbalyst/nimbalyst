@@ -2387,8 +2387,18 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         throw error;
       }
 
-      // Log the return value so SDK Zod validation failures are diagnosable
-      console.log(`[canUseTool] Tool "${toolName}" -> behavior=${result.behavior}, hasUpdatedInput=${result.updatedInput !== undefined}, hasMessage=${result.message !== undefined}`);
+      // Normalize the response to satisfy the native binary's Zod schema:
+      // - allow MUST have updatedInput (Record)
+      // - deny MUST have message (string)
+      if (result.behavior === 'allow' && result.updatedInput === undefined) {
+        console.warn(`[canUseTool] Tool "${toolName}": allow without updatedInput, defaulting to original input`);
+        result.updatedInput = input;
+      } else if (result.behavior === 'deny' && result.message === undefined) {
+        console.warn(`[canUseTool] Tool "${toolName}": deny without message, defaulting`);
+        result.message = 'Tool call denied';
+      }
+
+      // // console.log(`[canUseTool] Tool "${toolName}" -> behavior=${result.behavior}, hasUpdatedInput=${result.updatedInput !== undefined}, hasMessage=${result.message !== undefined}`);
 
       return result;
     };
