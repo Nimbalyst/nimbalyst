@@ -511,12 +511,32 @@ jobs:
             echo "New release with improvements and bug fixes." > release-files/PUBLIC_RELEASE_NOTES.md
           fi
 
+          # Build the body for the internal GitHub Release: CHANGELOG notes
+          # first, then commit history, then download instructions.
+          {
+            cat release-files/PUBLIC_RELEASE_NOTES.md
+            echo ""
+            echo "## Commits"
+            echo ""
+            git log --oneline -20 --pretty=format:"- %s" || echo "- Release build"
+            echo ""
+            echo ""
+            echo "## Downloads"
+            echo ""
+            echo "- **macOS**: Download the .dmg file"
+            echo "- **Windows**: Download the .exe file"
+            echo "- **Linux**: Download the .AppImage file"
+          } > release-files/GITHUB_RELEASE_BODY.md
+
           echo "Release notes generated"
           echo "=== Technical Release Notes (RELEASE_NOTES.md) ==="
           cat release-files/RELEASE_NOTES.md
           echo ""
           echo "=== Public Release Notes (PUBLIC_RELEASE_NOTES.md) ==="
           cat release-files/PUBLIC_RELEASE_NOTES.md
+          echo ""
+          echo "=== Internal GitHub Release Body (GITHUB_RELEASE_BODY.md) ==="
+          cat release-files/GITHUB_RELEASE_BODY.md
 
       # Upload to Cloudflare R2 (always happens for all releases)
       - name: Upload to Cloudflare R2
@@ -567,14 +587,7 @@ jobs:
           prerelease: false
           files: release-files/*
           generate_release_notes: false
-          body: |
-            ## What's Changed
-            See [commit history](https://github.com/nimbalyst/nimbalyst-code/commits/main) for details.
-
-            ## Downloads
-            - **macOS**: Download the .dmg file
-            - **Windows**: Download the .exe file
-            - **Linux**: Download the .AppImage file
+          body_path: release-files/GITHUB_RELEASE_BODY.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
