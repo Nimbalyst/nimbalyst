@@ -20,6 +20,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.24] - 2026-04-20
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+- Consolidate iOS CI from 3 sequential macOS jobs to 1, cutting roughly two-thirds of runner time by removing redundant npm ci/simulator boot/Xcode setup and no-op UI test plan check
+
+### Fixed
+- Restore login/logout after the Claude Agent SDK upgrade to native binary packaging: resolve the platform-specific binary path instead of the removed cli.js, run the binary directly instead of via ELECTRON_RUN_AS_NODE, and fall back to system-installed claude.exe on Windows
+- Normalize canUseTool response shape (updatedInput on allow, message on deny) in the ClaudeCodeProvider wrapper to satisfy the SDK native binary's Zod schema validation
+- Silence noisy auth/sync logs for unauthenticated users in collabDocuments, SyncManager, and iOS SyncManager/DocumentSyncManager so startup logs stay clean when signed out
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.57.23] - 2026-04-20
 
 
