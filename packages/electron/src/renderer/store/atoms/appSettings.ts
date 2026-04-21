@@ -1165,14 +1165,10 @@ function scheduleAIProviderPersist(settings: AIProviderSettings): void {
     aiProviderPersistTimer = null;
     if (typeof window !== 'undefined' && window.electronAPI) {
       try {
-        // Get current debug settings to preserve them
-        const currentSettings = await window.electronAPI.aiGetSettings();
         const sanitizedProviders = sanitizeProvidersForPersistence(settings.providers);
         await window.electronAPI.aiSaveSettings({
           apiKeys: settings.apiKeys,
           providerSettings: sanitizedProviders,
-          showToolCalls: currentSettings?.showToolCalls ?? false,
-          aiDebugLogging: currentSettings?.aiDebugLogging ?? false,
         });
       } catch (error) {
         console.error('[appSettings] Failed to save AI provider settings:', error);
