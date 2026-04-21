@@ -1304,7 +1304,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
           }
         }
         // Enrich the error message with stderr for the UI
-        if (stderrLines.length > 0 && error.message?.includes('exited with code')) {
+        if (stderrLines.length > 0) {
           const stderrSummary = stderrLines.join('').trim().slice(0, 500);
           if (stderrSummary) {
             error.message = `${error.message}\n\nProcess output:\n${stderrSummary}`;
