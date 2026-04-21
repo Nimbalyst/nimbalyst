@@ -20,9 +20,9 @@ IMPORTANT: Only use this tool when:
 Do NOT use this tool for generic commit requests like "commit this" or "make a commit".
 For those, use standard git commands (git add, git commit) instead.
 
-When using this tool, you MUST first:
-1. Call get_session_edited_files to get ALL files edited in this session
-2. Cross-reference with git status to find which session files have uncommitted changes
+When using this tool:
+1. If the prompt already contains a pre-fetched file list (from "Commit with AI" button), use those files directly
+2. Otherwise, call get_session_edited_files to get ALL files edited in this session, then cross-reference with git status
 3. Include ALL session-edited files that have changes - do not cherry-pick a subset
 
 This tool will present an interactive widget to the user where they can review

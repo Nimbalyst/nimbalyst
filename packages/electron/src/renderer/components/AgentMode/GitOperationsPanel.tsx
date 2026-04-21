@@ -370,43 +370,69 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
 
     // Handle smart commit (AI-assisted)
     const handleSmartCommit = useCallback(async () => {
-      // Send message to AI session to propose commit based on session work
-      if (window.electronAPI && sessionId && workspacePath) {
-        try {
-          // Build context-aware prompt based on workstream/worktree state
-          const isInWorkstream = childSessionIds && childSessionIds.length > 1;
-          const isInWorktree = !!worktreeId;
+      if (!window.electronAPI || !sessionId || !workspacePath) return;
 
-          let message = 'Use the developer_git_commit_proposal tool to create a commit.';
+      try {
+        const isInWorkstream = childSessionIds && childSessionIds.length > 1;
+        const isInWorktree = !!worktreeId;
 
+        // Pre-fetch commit context from main process
+        const commitContext = await window.electronAPI.invoke(
+          'git:get-commit-context',
+          workspacePath,
+          sessionId,
+          isInWorkstream ? childSessionIds : undefined
+        ) as {
+          success: boolean;
+          files: Array<{ path: string; status: 'added' | 'modified' | 'deleted' }>;
+          scenario: 'single' | 'workstream';
+          error?: string;
+        };
+
+        let message = 'Use the developer_git_commit_proposal tool to create a commit.';
+
+        if (commitContext.success && commitContext.files.length > 0) {
+          // Inject pre-fetched file list directly into the prompt
+          const scope = commitContext.scenario === 'workstream'
+            ? `across ${childSessionIds!.length} sessions in this workstream`
+            : 'in this session';
+          const fileList = commitContext.files
+            .map(f => `- ${f.path} (${f.status})`)
+            .join('\n');
+
+          message += `\n\nHere are the files edited ${scope} that have uncommitted changes:\n${fileList}`;
+          message += '\n\nCall developer_git_commit_proposal immediately with these files.';
+          message += '\nDo NOT call get_session_edited_files, get_workstream_edited_files, or git diff -- the data is already provided above.';
+        } else if (commitContext.success && commitContext.files.length === 0) {
+          message += '\n\nNo session-edited files have uncommitted changes. Check git status to see if there are any other uncommitted changes to commit.';
+        } else {
+          // Fallback: let the agent discover files the old way
           if (isInWorkstream) {
-            message += `\n\nThis session is part of a workstream with ${childSessionIds.length} sessions. ` +
-              'Use get_workstream_overview to understand the full scope of work across all sessions, ' +
-              'then use get_workstream_edited_files to find ALL files edited across the workstream. ' +
-              'Cross-reference with git status to include all workstream-edited files that have uncommitted changes. ' +
-              'The commit should represent the combined work across sessions, not just this one.';
+            message += `\n\nThis session is part of a workstream with ${childSessionIds!.length} sessions. ` +
+              'Use get_workstream_edited_files to find ALL files edited across the workstream. ' +
+              'Cross-reference with git status to include all workstream-edited files that have uncommitted changes.';
           } else {
             message += '\n\nFirst call get_session_edited_files to find all files edited, ' +
               'then cross-reference with git status to include all session-edited files that have uncommitted changes.';
           }
-
-          if (isInWorktree) {
-            message += `\n\nThis work is on a worktree branch. ` +
-              'Consider the full set of changes on this branch (vs the base branch) when writing the commit message, ' +
-              'as the user may want a single commit summarizing all the work done on this branch.';
-          }
-
-          const docContext = {
-            filePath: undefined,
-            content: undefined,
-            fileType: undefined,
-            attachments: undefined,
-            mode: 'agent',
-          };
-          await window.electronAPI.invoke('ai:sendMessage', message, docContext, sessionId, workspacePath);
-        } catch (error) {
-          console.error('[GitOperationsPanel] Failed to send smart commit message:', error);
         }
+
+        if (isInWorktree) {
+          message += '\n\nThis work is on a worktree branch. ' +
+            'Consider the full set of changes on this branch (vs the base branch) when writing the commit message, ' +
+            'as the user may want a single commit summarizing all the work done on this branch.';
+        }
+
+        const docContext = {
+          filePath: undefined,
+          content: undefined,
+          fileType: undefined,
+          attachments: undefined,
+          mode: 'agent',
+        };
+        await window.electronAPI.invoke('ai:sendMessage', message, docContext, sessionId, workspacePath);
+      } catch (error) {
+        console.error('[GitOperationsPanel] Failed to send smart commit message:', error);
       }
     }, [sessionId, workspacePath, childSessionIds, worktreeId]);
 

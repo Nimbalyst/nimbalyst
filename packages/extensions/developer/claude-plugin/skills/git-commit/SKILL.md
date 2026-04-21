@@ -17,10 +17,14 @@ This skill is for the "Commit with AI" feature which provides an interactive com
 
 ## Required Steps
 
-1. **Get session-edited files**
-   Call `mcp__nimbalyst-mcp__get_session_edited_files` to get ALL files you edited during this AI session.
+1. **Check if file context is already provided in the prompt**
+   When the user clicks "Commit with AI", the prompt includes a pre-fetched list of session-edited files with uncommitted changes. If you see a file list in the prompt (lines like `- path/to/file.ts (modified)`), skip step 2 and go directly to step 3 using those files.
 
-2. **Propose the commit**
+2. **Get session-edited files (fallback only)**
+   Only if no file list was provided in the prompt:
+   Call `mcp__nimbalyst-mcp__get_session_edited_files` to get ALL files you edited during this AI session, then cross-reference with git status.
+
+3. **Propose the commit**
    Call `mcp__nimbalyst-mcp__developer_git_commit_proposal` with:
    - `filesToStage`: ALL session-edited files that have changes (do not cherry-pick a subset)
    - `commitMessage`: A well-crafted commit message following the guidelines below

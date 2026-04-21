@@ -10,6 +10,7 @@ import { RateLimitWidget } from './RateLimitWidget';
 import { FullscreenModal } from './FullscreenModal';
 import { MaterialSymbol } from '../../icons/MaterialSymbol';
 import { formatToolDisplayName } from '../utils/toolNameFormatter';
+import { isCommitRequestMessage, parseCommitRequest, CommitRequestCard } from './CommitRequestCard';
 
 interface MessageSegmentProps {
   message: TranscriptViewMessage;
@@ -176,6 +177,17 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     // If it's a login-required message but we shouldn't show the widget, render nothing
     if (isLoginRequired && !isUser && !shouldShowLoginWidget) {
       return null;
+    }
+
+    // Render commit request user messages as a collapsible card
+    if (isUser) {
+      const strippedText = stripSystemMessage(message.text ?? '');
+      if (isCommitRequestMessage(strippedText)) {
+        const parsed = parseCommitRequest(strippedText);
+        if (parsed) {
+          return <CommitRequestCard request={parsed} />;
+        }
+      }
     }
 
     // Slight visual variation for system messages

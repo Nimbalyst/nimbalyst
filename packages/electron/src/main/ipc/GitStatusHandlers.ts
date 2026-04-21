@@ -1,3 +1,5 @@
+import { resolve, relative } from 'path';
+import { SessionFilesRepository } from '@nimbalyst/runtime';
 import { GitStatusService } from '../services/GitStatusService';
 import { safeHandle } from '../utils/ipcRegistry';
 
@@ -126,6 +128,84 @@ export function registerGitStatusHandlers(): void {
       };
     }
   });
+
+  /**
+   * Get commit context for a session: session-edited files cross-referenced with git status.
+   * Returns only files that were edited in the session AND still have uncommitted changes.
+   * Used by "Commit with AI" to pre-fetch context so the agent can skip discovery tool calls.
+   */
+  safeHandle(
+    'git:get-commit-context',
+    async (
+      _event,
+      workspacePath: string,
+      sessionId: string,
+      childSessionIds?: string[]
+    ): Promise<{
+      success: boolean;
+      files: Array<{ path: string; status: 'added' | 'modified' | 'deleted' }>;
+      scenario: 'single' | 'workstream';
+      error?: string;
+    }> => {
+      try {
+        const isWorkstream = childSessionIds && childSessionIds.length > 1;
+        const scenario = isWorkstream ? 'workstream' as const : 'single' as const;
+
+        // Get session-edited files
+        let editedFiles: Array<{ filePath: string }>;
+        if (isWorkstream) {
+          editedFiles = await SessionFilesRepository.getFilesBySessionMany(childSessionIds, 'edited');
+        } else {
+          editedFiles = await SessionFilesRepository.getFilesBySession(sessionId, 'edited');
+        }
+
+        if (editedFiles.length === 0) {
+          return { success: true, files: [], scenario };
+        }
+
+        // Get all uncommitted file statuses
+        const allStatuses = await gitStatusService.getAllFileStatuses(workspacePath);
+
+        // Cross-reference: only session-edited files that still have uncommitted changes
+        const seen = new Set<string>();
+        const files: Array<{ path: string; status: 'added' | 'modified' | 'deleted' }> = [];
+
+        for (const editedFile of editedFiles) {
+          const absPath = editedFile.filePath.startsWith('/')
+            ? editedFile.filePath
+            : resolve(workspacePath, editedFile.filePath);
+
+          if (seen.has(absPath)) continue;
+          seen.add(absPath);
+
+          const gitStatus = allStatuses[absPath];
+          if (!gitStatus) continue;
+
+          let status: 'added' | 'modified' | 'deleted';
+          if (gitStatus.status === 'untracked') {
+            status = 'added';
+          } else if (gitStatus.status === 'deleted') {
+            status = 'deleted';
+          } else {
+            status = 'modified';
+          }
+
+          const relPath = relative(workspacePath, absPath);
+          files.push({ path: relPath, status });
+        }
+
+        return { success: true, files, scenario };
+      } catch (error) {
+        console.error('[GitStatusHandlers] Failed to get commit context:', error);
+        return {
+          success: false,
+          files: [],
+          scenario: 'single',
+          error: error instanceof Error ? error.message : 'Failed to get commit context',
+        };
+      }
+    }
+  );
 
   /**
    * Clear the git status cache for a workspace
