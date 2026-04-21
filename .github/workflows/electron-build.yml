@@ -118,9 +118,10 @@ jobs:
       # packages/electron/, so binaries MUST end up in
       # packages/electron/node_modules/. In an npm-workspace repo, plain
       # `npm install` hoists to the root even when run from a child dir.
-      # Using --prefix with --install-strategy=nested bypasses workspace
-      # hoisting and forces the package into the target node_modules/.
-      # We then verify the binary actually exists -- fail fast if not.
+      # Install into a temp directory to avoid npm trying to resolve
+      # packages/electron's workspace dependencies (@nimbalyst/runtime etc.)
+      # from the public registry, then copy the binary into the electron
+      # node_modules where electron-builder expects it.
       - name: Install cross-arch native binaries
         if: (matrix.arch == 'x64' && runner.arch == 'ARM64') || (matrix.arch == 'arm64' && runner.arch == 'X64')
         shell: bash
@@ -135,14 +136,17 @@ jobs:
           esac
 
           ELECTRON_DIR="packages/electron"
+          TMPDIR=$(mktemp -d)
           echo "Cross-compiling for ${NPM_PLATFORM}-${TARGET_ARCH}, installing target-arch native binaries..."
 
           # Claude Agent SDK native binary
           CLAUDE_SDK_VERSION=$(node -e "console.log(require('./${ELECTRON_DIR}/node_modules/@anthropic-ai/claude-agent-sdk/package.json').version)")
           CLAUDE_PKG="@anthropic-ai/claude-agent-sdk-${NPM_PLATFORM}-${TARGET_ARCH}@${CLAUDE_SDK_VERSION}"
           BINARY_NAME=$( [ "$NPM_PLATFORM" = "win32" ] && echo "claude.exe" || echo "claude" )
-          echo "Installing ${CLAUDE_PKG} into ${ELECTRON_DIR}/"
-          npm install --no-save --force --install-strategy=nested --prefix "${ELECTRON_DIR}" "${CLAUDE_PKG}"
+          echo "Installing ${CLAUDE_PKG} into temp dir, then copying to ${ELECTRON_DIR}/"
+          npm install --no-save --force "${CLAUDE_PKG}" --prefix "$TMPDIR"
+          mkdir -p "${ELECTRON_DIR}/node_modules/@anthropic-ai"
+          cp -r "$TMPDIR/node_modules/@anthropic-ai/claude-agent-sdk-${NPM_PLATFORM}-${TARGET_ARCH}" "${ELECTRON_DIR}/node_modules/@anthropic-ai/"
 
           # Verify binary actually landed in the right place
           EXPECTED="${ELECTRON_DIR}/node_modules/@anthropic-ai/claude-agent-sdk-${NPM_PLATFORM}-${TARGET_ARCH}/${BINARY_NAME}"
@@ -156,9 +160,13 @@ jobs:
           # OpenAI Codex native binary
           CODEX_SPEC=$(node -e "console.log(require('./${ELECTRON_DIR}/node_modules/@openai/codex/package.json').optionalDependencies?.['@openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}'] || '')")
           if [ -n "$CODEX_SPEC" ]; then
-            echo "Installing @openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}@${CODEX_SPEC} into ${ELECTRON_DIR}/"
-            npm install --no-save --force --install-strategy=nested --prefix "${ELECTRON_DIR}" "@openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}@${CODEX_SPEC}"
+            echo "Installing @openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}@${CODEX_SPEC} into temp dir, then copying to ${ELECTRON_DIR}/"
+            npm install --no-save --force "@openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}@${CODEX_SPEC}" --prefix "$TMPDIR"
+            mkdir -p "${ELECTRON_DIR}/node_modules/@openai"
+            cp -r "$TMPDIR/node_modules/@openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}" "${ELECTRON_DIR}/node_modules/@openai/"
           fi
+
+          rm -rf "$TMPDIR"
 
       - name: Build extension-sdk
         working-directory: packages/extension-sdk
