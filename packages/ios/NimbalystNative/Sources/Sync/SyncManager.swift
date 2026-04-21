@@ -473,9 +473,15 @@ public final class SyncManager: ObservableObject {
             titleEncrypted: entry.encryptedTitle,
             titleIv: entry.titleIv,
             titleDecrypted: titleDecrypted,
-            provider: entry.provider,
-            model: entry.model,
-            mode: entry.mode,
+            // Preserve local provider/model/mode when the server omits them.
+            // Older server rows can be missing these fields, and overwriting
+            // with nil wipes the session's identity (e.g. the session-list
+            // badge would lose "Opus 4.7" because the incoming entry had a
+            // null model column). Matches the pattern used for every other
+            // field below.
+            provider: entry.provider ?? existing?.provider,
+            model: entry.model ?? existing?.model,
+            mode: entry.mode ?? existing?.mode,
             sessionType: entry.sessionType ?? existing?.sessionType,
             parentSessionId: entry.parentSessionId ?? existing?.parentSessionId,
             phase: clientMeta?.phase ?? existing?.phase,
@@ -634,9 +640,11 @@ public final class SyncManager: ObservableObject {
             titleEncrypted: entry.encryptedTitle,
             titleIv: entry.titleIv,
             titleDecrypted: titleDecrypted,
-            provider: entry.provider,
-            model: entry.model,
-            mode: entry.mode,
+            // See processServerSessionBackground for why these fall back to
+            // the existing values rather than overwriting with nil.
+            provider: entry.provider ?? existing?.provider,
+            model: entry.model ?? existing?.model,
+            mode: entry.mode ?? existing?.mode,
             sessionType: entry.sessionType ?? existing?.sessionType,
             parentSessionId: entry.parentSessionId ?? existing?.parentSessionId,
             phase: clientMeta?.phase ?? existing?.phase,

@@ -1141,56 +1141,24 @@ struct ProviderBadge: View {
     let model: String?
 
     var body: some View {
-        Text(displayName)
-            .font(.caption2)
-            .fontWeight(.medium)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(badgeColor.opacity(0.15))
-            .foregroundStyle(badgeColor)
-            .clipShape(Capsule())
-    }
-
-    private var displayName: String {
-        let prov = provider?.lowercased() ?? ""
-
-        if prov == "claude-code" {
-            return claudeCodeVariantLabel
-        }
-
-        switch prov {
-        case "claude": return "Claude"
-        case "openai": return "OpenAI"
-        case "lm-studio": return "LM Studio"
-        default:
-            if let provider = provider, !provider.isEmpty {
-                return provider
-            }
-            return "AI"
+        if let name = displayName {
+            Text(name)
+                .font(.caption2)
+                .fontWeight(.medium)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(badgeColor.opacity(0.15))
+                .foregroundStyle(badgeColor)
+                .clipShape(Capsule())
         }
     }
 
-    /// Extract Claude Code variant from model field and format as short label: "Opus", "Sonnet", etc.
-    private var claudeCodeVariantLabel: String {
-        guard let model = model?.lowercased() else { return "Sonnet" }
-
-        // Model can be "claude-code:opus", "claude-code:sonnet-1m", "opus", "sonnet", etc.
-        let variant: String
-        if model.contains(":") {
-            variant = String(model.split(separator: ":").last ?? "sonnet")
-        } else {
-            variant = model
-        }
-
-        // Strip suffixes like "-1m" for extended context
-        let baseVariant = variant.split(separator: "-").first.map(String.init) ?? variant
-
-        switch baseVariant {
-        case "opus": return "Opus"
-        case "sonnet": return "Sonnet"
-        case "haiku": return "Haiku"
-        default: return "Sonnet"
-        }
+    private var displayName: String? {
+        // Delegate to the shared model label helper so iOS stays in sync with
+        // the Electron-side tables in `packages/runtime/src/ai/modelConstants.ts`.
+        // Returns nil for unknown provider/model combos so the badge is hidden
+        // rather than showing a guessed label.
+        ModelLabel.shortLabel(provider: provider, model: model)
     }
 
     private var badgeColor: Color {

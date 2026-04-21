@@ -600,11 +600,17 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
               sessionsNeedingMessageSync.push(localSession.id);
             } else if (
               // Detect stale server metadata: desktop has fields the server doesn't.
-              // This happens after server schema migrations add new columns -- existing
-              // rows have NULL but the desktop has the real values.
+              // This happens after server schema migrations add new columns --
+              // existing rows have NULL but the desktop has the real values --
+              // and also when a session was pushed before a given field was
+              // wired into the publish path, leaving the server row permanently
+              // missing a value the desktop has.
               (localSession.worktreeId && !serverSession.worktreeId) ||
               (localSession.sessionType && !serverSession.sessionType) ||
-              (localSession.parentSessionId && !serverSession.parentSessionId)
+              (localSession.parentSessionId && !serverSession.parentSessionId) ||
+              (localSession.provider && !serverSession.provider) ||
+              (localSession.model && !serverSession.model) ||
+              (localSession.mode && !serverSession.mode)
             ) {
               sessionsNeedingIndexUpdate.push(localSession);
             }

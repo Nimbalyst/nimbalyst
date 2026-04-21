@@ -1,5 +1,17 @@
 /**
- * Model display utilities for renderer components
+ * Model display utilities for renderer components.
+ *
+ * IMPORTANT — keep the iOS Swift mirror in sync:
+ *   packages/ios/NimbalystNative/Sources/Utils/ModelLabel.swift
+ *
+ * When you add/rename/remove a Claude Code variant, a Claude API model, an
+ * OpenAI model, or change the provider switch in `parseModelInfo` /
+ * `getModelShortName`, apply the equivalent change to ModelLabel.swift and
+ * update its tests (`Tests/ModelLabelTests.swift`). The iOS session list
+ * badge depends on both sides producing the same short label for a given
+ * `(provider, model)` pair. Source-of-truth for the tables themselves is
+ * still `packages/runtime/src/ai/modelConstants.ts` — the Swift file mirrors
+ * the subset of that file it needs.
  */
 
 import {
