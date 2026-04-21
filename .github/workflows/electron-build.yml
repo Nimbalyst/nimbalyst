@@ -55,10 +55,8 @@ jobs:
           - os: macos-latest
             platform: mac
             arch: arm64
-          # Use a native Intel runner for x64 to avoid cross-arch binary
-          # resolution issues (SDK native binaries installed by npm for the
-          # host arch wouldn't match the target arch in cross-compiled builds).
-          - os: macos-13
+          # electron-builder can cross-compile x64 on arm64
+          - os: macos-latest
             platform: mac
             arch: x64
           - os: ubuntu-latest
@@ -110,6 +108,47 @@ jobs:
             npm run --workspace=@nimbalyst/electron postinstall
           else
             npm ci
+          fi
+
+      # When cross-compiling (e.g. macOS x64 on arm64 runner), npm only
+      # installs optional native binaries for the host architecture. We need
+      # the target arch binaries bundled in the app for the SDK CLIs to work.
+      #
+      # IMPORTANT: Install into packages/electron/node_modules/ (not root)
+      # because electron-builder's `files` patterns resolve relative to the
+      # electron package directory.
+      - name: Install cross-arch native binaries
+        if: (matrix.arch == 'x64' && runner.arch == 'ARM64') || (matrix.arch == 'arm64' && runner.arch == 'X64')
+        shell: bash
+        run: |
+          TARGET_ARCH="${{ matrix.arch }}"
+          PLATFORM="${{ matrix.platform }}"
+
+          # Map matrix platform to npm package platform names
+          case "$PLATFORM" in
+            mac) NPM_PLATFORM="darwin" ;;
+            win) NPM_PLATFORM="win32" ;;
+            linux) NPM_PLATFORM="linux" ;;
+          esac
+
+          echo "Cross-compiling for ${NPM_PLATFORM}-${TARGET_ARCH}, installing target-arch native binaries..."
+
+          # Claude Agent SDK native binary
+          # Install into packages/electron/ so electron-builder can find it
+          CLAUDE_SDK_VERSION=$(node -e "console.log(require('./packages/electron/node_modules/@anthropic-ai/claude-agent-sdk/package.json').version)")
+          CLAUDE_PKG="@anthropic-ai/claude-agent-sdk-${NPM_PLATFORM}-${TARGET_ARCH}@${CLAUDE_SDK_VERSION}"
+          echo "Installing ${CLAUDE_PKG} into packages/electron/"
+          cd packages/electron
+          npm install --no-save --force "${CLAUDE_PKG}"
+          cd ../..
+
+          # OpenAI Codex native binary
+          CODEX_SPEC=$(node -e "console.log(require('./packages/electron/node_modules/@openai/codex/package.json').optionalDependencies?.['@openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}'] || '')")
+          if [ -n "$CODEX_SPEC" ]; then
+            echo "Installing @openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}@${CODEX_SPEC} into packages/electron/"
+            cd packages/electron
+            npm install --no-save --force "@openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}@${CODEX_SPEC}"
+            cd ../..
           fi
 
       - name: Build extension-sdk
