@@ -16,10 +16,39 @@ If `{{arg1}}` contains "auto" (e.g., "patch auto"), run the entire process witho
 4. Update CHANGELOG.md
 5. Run `./scripts/release.sh [type]` (extract just patch/minor/major from arg1)
 6. Push to private repo automatically
-7. Show the public release notes at the end for reference
-8. Provide link to GitHub Actions
+7. Show the public release notes for reference
+8. **Monitor the GitHub Actions run until it completes**, then diagnose and fix any failure (see "MONITOR THE BUILD" below)
 
 Otherwise, follow the interactive workflow below:
+
+## MONITOR THE BUILD (auto mode)
+
+After pushing the tag, babysit the run instead of handing it back to the user:
+
+1. **Find the run ID** for the tag that was just pushed:
+   ```
+   gh run list --limit=5 --json databaseId,headBranch,status,conclusion,event \
+     | jq '[.[] | select(.event == "push" and .headBranch == "v[VERSION]")][0]'
+   ```
+
+2. **Watch the run to completion** with `gh run watch`. This blocks until the run finishes and exits non-zero on failure:
+   ```
+   gh run watch [RUN_ID] --exit-status --interval 30
+   ```
+   Use the Monitor tool so each progress line becomes a notification rather than sleeping and polling. If Monitor is unavailable, use ScheduleWakeup with **270-second** delays (stays inside the 5-minute prompt cache window -- do NOT use literal 5-minute sleeps since 300s+ drops out of cache and costs a full context re-read each tick).
+
+3. **On success**: announce the release shipped and show the public release notes.
+
+4. **On failure**:
+   - Pull failed-job logs: `gh run view [RUN_ID] --log-failed`
+   - Read the error and diagnose. Common past failures:
+     - Cross-arch native binary missing (SDK darwin-x64 not installed on arm64 runner)
+     - `npm install` stripping `peer: true` flags from package-lock.json
+     - electron-builder can't find SDK binaries (wrong node_modules location)
+   - Fix the root cause with a new commit on `main`
+   - Run `/release patch auto` again. The next release will automatically bundle the failed release's CHANGELOG notes with the new fix, since step 1 below covers "everything since the last SUCCESSFUL release"
+
+Do NOT release `/release-public` until the internal build is green.
 
 ## INTERNAL RELEASE WORKFLOW
 
