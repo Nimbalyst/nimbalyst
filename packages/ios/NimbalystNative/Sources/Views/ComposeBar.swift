@@ -99,6 +99,10 @@ public struct ComposeBar: View {
                 if isExecuting && canSend && onQueue != nil {
                     // Queue button: session is executing and user has typed text
                     Button {
+                        // Resign focus first so any in-flight keyboard dictation
+                        // commits to the binding before we clear it; otherwise
+                        // pending dictated text gets re-inserted after the clear.
+                        isFocused = false
                         let prompt = text.trimmingCharacters(in: .whitespacesAndNewlines)
                         let attachments = pendingAttachments
                         text = ""
@@ -122,6 +126,10 @@ public struct ComposeBar: View {
                     // Send button: session is idle
                     Button {
                         guard canSend else { return }
+                        // Resign focus first so any in-flight keyboard dictation
+                        // commits to the binding before we clear it; otherwise
+                        // pending dictated text gets re-inserted after the clear.
+                        isFocused = false
                         let prompt = text.trimmingCharacters(in: .whitespacesAndNewlines)
                         let attachments = pendingAttachments
                         text = ""
