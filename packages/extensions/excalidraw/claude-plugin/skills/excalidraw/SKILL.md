@@ -7,6 +7,21 @@ description: Create diagrams and visual drawings using Excalidraw (.excalidraw f
 
 Excalidraw is Nimbalyst's whiteboard-style diagram editor for creating flowcharts, architecture diagrams, system diagrams, and visual sketches.
 
+## STOP AFTER ONE PASS — Do Not Thrash
+
+The single biggest failure mode with this skill is agents creating a diagram, capturing a screenshot, noticing minor cosmetic imperfections, then clearing and rebuilding the diagram two, three, or four times without being asked. This is the wrong behavior. The user sees every rebuild, and iterations the user did not ask for are a waste of their time and attention.
+
+Follow these rules:
+
+1. **One-shot by default.** Build the diagram, capture a screenshot once, describe what you made, and stop. Do not iterate on visual polish unless the user explicitly asks for a change.
+2. **Never use `excalidraw.clear_all` followed by a rebuild as a way to "redo" the diagram.** `clear_all` is only for user-requested rebuilds. If you just produced a diagram, looked at it, and feel like starting over, don't — stop and hand control back to the user.
+3. **Minor imperfections are fine.** Excalidraw is a whiteboard / hand-drawn-style tool. Slight overlaps, arrows that route imperfectly, labels that aren't perfectly centered, and asymmetric spacing are all acceptable and expected. Do not rebuild to fix these. Do not re-run `import_mermaid` because the auto-layout isn't pixel-perfect.
+4. **Only one screenshot per diagram.** Capture once to verify the diagram exists and is roughly what you intended, then stop screenshotting. Repeated screenshots drive perfectionism loops.
+5. **If something is actually broken, make a targeted fix — not a rebuild.** Use `update_element`, `move_element`, `remove_element`, or `align_elements` on the specific problem. Do not wipe and restart.
+6. **"Good enough to convey the idea" is the bar.** The diagram's job is to communicate structure or flow to a human reader. Once it does that, you are done. Do not keep polishing.
+
+If you catch yourself about to call `clear_all` after just having built a diagram, or about to capture a second screenshot of the same diagram, stop. Report what you made and let the user decide whether changes are needed.
+
 ## When to Use Excalidraw
 
 - Flowcharts and process diagrams
@@ -65,8 +80,8 @@ The Excalidraw extension provides these MCP tools for diagram manipulation:
 
 1. **Create file** - Create a new `.excalidraw` file or open existing one
 2. **Use MCP tools** - Use the Excalidraw MCP tools to add/modify elements
-3. **Verify visually** - Use `mcp__nimbalyst-mcp__capture_editor_screenshot` to see the result
-4. **Iterate** - Make adjustments based on visual feedback
+3. **Verify visually (once)** - Use `mcp__nimbalyst-mcp__capture_editor_screenshot` a single time to confirm the diagram rendered
+4. **Stop** - Report what you made and hand control back. Do not iterate on polish unless the user asks for changes. See "STOP AFTER ONE PASS" above.
 
 ## Best Practices
 
