@@ -20,6 +20,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.26] - 2026-04-20
+
+
+### Added
+- canUseTool Zod schema compliance tests (43 tests) covering immediateToolDecision trust modes / team tools / MCP tools / delegation, toolAuthorization service and fallback permission flows, askUserQuestion answer/cancel/abort paths, and the canUseToolNormalization safety net
+
+### Changed
+- Opt GitHub Actions workflows into the Node.js 24 runtime (FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true) to silence deprecation warnings ahead of the forced default in June 2026
+
+### Fixed
+- Use `npm install --force` for the cross-arch native binary step so npm accepts platform-specific optional dependencies on the arm64 CI runner (was failing the CPU check and blocking the Intel Mac build fix from actually shipping)
+- Intel Mac builds now ship with the correct native binaries: CI installs target-arch Claude Agent SDK and OpenAI Codex packages when cross-compiling macOS x64 on an arm64 runner, resolving "CLI not found" errors
+- Windows agent mode input is focusable on the first session: guard auto-focus with an offsetParent visibility check and use IntersectionObserver to retry when the panel becomes visible
+- Windows auto-update relaunches the app after silent install (flip NSIS runAfterFinish to true) so the update flow matches macOS
+- Race condition in ElectronDocumentService where refreshWorkspaceData didn't set initializationPromise, letting listDocumentMetadata start a competing background scan that blocked subsequent refreshes via the isScanning guard
+- Remove stale ELECTRON_RUN_AS_NODE assertion in the claudeCodeEnvironment test (env var was intentionally removed during the native binary SDK upgrade)
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.57.25] - 2026-04-20
 
 
