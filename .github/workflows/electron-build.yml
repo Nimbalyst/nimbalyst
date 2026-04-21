@@ -140,7 +140,9 @@ jobs:
           echo "Cross-compiling for ${NPM_PLATFORM}-${TARGET_ARCH}, installing target-arch native binaries..."
 
           # Claude Agent SDK native binary
-          CLAUDE_SDK_VERSION=$(node -e "console.log(require('./${ELECTRON_DIR}/node_modules/@anthropic-ai/claude-agent-sdk/package.json').version)")
+          # The SDK may be hoisted to root node_modules/ by npm workspaces,
+          # so use require.resolve() which walks up the directory tree.
+          CLAUDE_SDK_VERSION=$(node -e "console.log(require(require.resolve('@anthropic-ai/claude-agent-sdk/package.json', { paths: ['./${ELECTRON_DIR}'] })).version)")
           CLAUDE_PKG="@anthropic-ai/claude-agent-sdk-${NPM_PLATFORM}-${TARGET_ARCH}@${CLAUDE_SDK_VERSION}"
           BINARY_NAME=$( [ "$NPM_PLATFORM" = "win32" ] && echo "claude.exe" || echo "claude" )
           echo "Installing ${CLAUDE_PKG} into temp dir, then copying to ${ELECTRON_DIR}/"
@@ -158,7 +160,7 @@ jobs:
           echo "Verified: ${EXPECTED} exists"
 
           # OpenAI Codex native binary
-          CODEX_SPEC=$(node -e "console.log(require('./${ELECTRON_DIR}/node_modules/@openai/codex/package.json').optionalDependencies?.['@openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}'] || '')")
+          CODEX_SPEC=$(node -e "try { console.log(require(require.resolve('@openai/codex/package.json', { paths: ['./${ELECTRON_DIR}'] })).optionalDependencies?.['@openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}'] || '') } catch(e) { console.log('') }")
           if [ -n "$CODEX_SPEC" ]; then
             echo "Installing @openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}@${CODEX_SPEC} into temp dir, then copying to ${ELECTRON_DIR}/"
             npm install --no-save --force "@openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}@${CODEX_SPEC}" --prefix "$TMPDIR"
