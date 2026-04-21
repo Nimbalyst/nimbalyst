@@ -482,17 +482,39 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   // Auto-focus input when session data loads
   // ============================================================
   const hasFocusedRef = useRef(false);
+  const visibilityObserverRef = useRef<IntersectionObserver | null>(null);
   useEffect(() => {
-    // Only focus once per session, and only after sessionData is available
     if (!sessionData || hasFocusedRef.current) return;
-    hasFocusedRef.current = true;
 
-    // Use setTimeout to ensure the DOM is ready after render
-    // (RAF can be cancelled by rapid re-renders before it executes)
-    setTimeout(() => {
-      // console.log('[SessionTranscript] Auto-focusing input, inputRef:', inputRef.current);
+    // Defer to next tick so the DOM is ready after render
+    const timerId = setTimeout(() => {
+      const el = inputRef.current?.textarea ?? inputRef.current as unknown as HTMLElement;
+      // If the element is inside a hidden container (display:none), focus()
+      // silently fails (especially on Windows). Use an IntersectionObserver
+      // to retry when the element becomes visible.
+      if (el && el.offsetParent === null) {
+        visibilityObserverRef.current?.disconnect();
+        visibilityObserverRef.current = new IntersectionObserver((entries) => {
+          if (entries[0]?.isIntersecting && !hasFocusedRef.current) {
+            hasFocusedRef.current = true;
+            inputRef.current?.focus();
+            visibilityObserverRef.current?.disconnect();
+            visibilityObserverRef.current = null;
+          }
+        });
+        visibilityObserverRef.current.observe(el);
+        return;
+      }
+
       inputRef.current?.focus();
+      hasFocusedRef.current = true;
     }, 0);
+
+    return () => {
+      clearTimeout(timerId);
+      visibilityObserverRef.current?.disconnect();
+      visibilityObserverRef.current = null;
+    };
   }, [sessionData]);
 
   // ============================================================
