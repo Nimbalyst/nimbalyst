@@ -102,6 +102,7 @@ import {
 import { ClaudeCodeDeps } from './claudeCode/dependencyInjection';
 import { buildSdkOptions } from './claudeCode/sdkOptionsBuilder';
 
+
 /**
  * SDK-native tools that are executed by the Claude Code SDK itself (not by Nimbalyst).
  * AskUserQuestion is included because we handle it in canUseTool (user input, not local execution).
@@ -2748,8 +2749,8 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   }
 
   /**
-   * Quick check if a Claude Code session exists
-   * Reads the history file to see if the session ID is present
+   * Quick check if a Claude Code session exists in ~/.claude/history.jsonl.
+   * Fails open (returns true) when the file is missing or unreadable.
    */
   private async checkSessionExists(sessionId: string): Promise<boolean> {
     try {

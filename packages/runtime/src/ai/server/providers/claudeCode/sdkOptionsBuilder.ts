@@ -11,7 +11,7 @@ import path from 'path';
 import { app } from 'electron';
 import { ClaudeCodeDeps } from './dependencyInjection';
 import { resolveClaudeAgentCliPath } from './cliPathResolver';
-import { setupClaudeCodeEnvironment, resolveNativeBinaryPath } from '../../../../electron/claudeCodeEnvironment';
+import { resolveNativeBinaryPath } from '../../../../electron/claudeCodeEnvironment';
 import { DEFAULT_EFFORT_LEVEL } from '../../effortLevels';
 
 type SessionMode = 'planning' | 'agent' | undefined;
@@ -228,11 +228,14 @@ export async function buildSdkOptions(
     env.CLAUDE_CODE_AGENT_TYPE = 'team-lead';
   }
 
-  // Production packaged build setup
+  // Production packaged build setup.
+  // The env built above already starts from process.env (with API keys stripped).
+  // The native binary only needs HOME/USERPROFILE (already in process.env) to
+  // find ~/.claude/. We no longer overlay setupClaudeCodeEnvironment() because
+  // it was designed for the old Node.js execution path and its Object.assign
+  // clobbered our sanitized env (re-introducing stripped API keys, rewriting
+  // PATH unnecessarily, etc.).
   if (app.isPackaged) {
-    const packagedEnv = setupClaudeCodeEnvironment();
-    Object.assign(env, packagedEnv);
-
     // Resolve native binary path for packaged builds.
     // The SDK resolves its own binary via require.resolve, but in asar-unpacked
     // builds that may not work. We resolve it explicitly and pass as override.
@@ -250,7 +253,7 @@ export async function buildSdkOptions(
 
     // Share packaged-build options with TeammateManager
     teammateManager.packagedBuildOptions = {
-      env: packagedEnv as Record<string, string | undefined>,
+      env: env as Record<string, string | undefined>,
       pathToClaudeCodeExecutable: ClaudeCodeDeps.customClaudeCodePath || options.pathToClaudeCodeExecutable,
     };
   }
