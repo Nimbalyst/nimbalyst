@@ -464,6 +464,10 @@ export class TeamDocumentRoom implements DurableObject {
           this.handleRequestKeyEnvelope(ws, connState);
           break;
 
+        case 'docSetMetadata':
+          this.handleDocSetMetadata(ws, connState, message.entries);
+          break;
+
         default:
           log.warn('Unknown message type:', (message as { type: string }).type);
           this.sendError(ws, 'unknown_message_type', 'Unknown message type');
@@ -888,6 +892,25 @@ export class TeamDocumentRoom implements DurableObject {
   }
 
   /**
+   * Handle docSetMetadata -- allows clients to set room-level metadata like TTL.
+   * Only specific keys are allowed to prevent abuse.
+   */
+  private handleDocSetMetadata(
+    _ws: WebSocket,
+    _connState: ConnectionState,
+    entries: Record<string, string>
+  ): void {
+    const ALLOWED_KEYS = new Set(['ttl_ms']);
+    for (const [key, value] of Object.entries(entries)) {
+      if (!ALLOWED_KEYS.has(key)) {
+        log.warn('docSetMetadata: rejected disallowed key:', key);
+        continue;
+      }
+      this.setMetadataValue(key, value);
+    }
+  }
+
+  /**
    * Broadcast message to all connections except sender.
    */
   private broadcast(message: DocServerMessage, exclude?: WebSocket): void {
@@ -960,11 +983,28 @@ export class TeamDocumentRoom implements DurableObject {
   }
 
   /**
+   * Read the configured TTL from metadata, falling back to the default 30-day TTL.
+   * Clients can set a custom TTL via `docSetMetadata` (e.g., tracker content uses 90 days).
+   */
+  private getConfiguredTtlMs(): number {
+    const sql = this.state.storage.sql;
+    const row = sql.exec<{ value: string }>(
+      `SELECT value FROM metadata WHERE key = 'ttl_ms'`
+    ).toArray()[0];
+    if (row) {
+      const parsed = parseInt(row.value, 10);
+      if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+    return DOCUMENT_TTL_MS;
+  }
+
+  /**
    * Schedule the TTL expiry alarm.
    */
   private async scheduleExpiryAlarm(): Promise<void> {
     if (this.connections.size > 0) return;
-    await this.state.storage.setAlarm(Date.now() + DOCUMENT_TTL_MS);
+    const ttlMs = this.getConfiguredTtlMs();
+    await this.state.storage.setAlarm(Date.now() + ttlMs);
   }
 
   /**
@@ -980,6 +1020,8 @@ export class TeamDocumentRoom implements DurableObject {
     }
 
     const sql = this.state.storage.sql;
+    const ttlMs = this.getConfiguredTtlMs();
+
     const row = sql.exec<{ value: string }>(
       `SELECT value FROM metadata WHERE key = 'updated_at'`
     ).toArray()[0];
@@ -987,8 +1029,8 @@ export class TeamDocumentRoom implements DurableObject {
     const lastActivity = row ? parseInt(row.value, 10) : 0;
     const elapsed = Date.now() - lastActivity;
 
-    if (elapsed < DOCUMENT_TTL_MS) {
-      const remaining = DOCUMENT_TTL_MS - elapsed;
+    if (elapsed < ttlMs) {
+      const remaining = ttlMs - elapsed;
       await this.state.storage.setAlarm(Date.now() + remaining);
       log.info('Alarm fired early, rescheduling for', remaining, 'ms');
       return;

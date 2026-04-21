@@ -603,7 +603,8 @@ export type DocClientMessage =
   | DocCompactMessage
   | DocAwarenessMessage
   | AddKeyEnvelopeMessage
-  | RequestKeyEnvelopeMessage;
+  | RequestKeyEnvelopeMessage
+  | DocSetMetadataMessage;
 
 /** Request document updates since a sequence number */
 export interface DocSyncRequestMessage {
@@ -650,6 +651,12 @@ export interface AddKeyEnvelopeMessage {
 /** Request the caller's key envelope */
 export interface RequestKeyEnvelopeMessage {
   type: 'requestKeyEnvelope';
+}
+
+/** Set room-level metadata (e.g., custom TTL). Only allowlisted keys are accepted. */
+export interface DocSetMetadataMessage {
+  type: 'docSetMetadata';
+  entries: Record<string, string>;
 }
 
 // ============================================================================

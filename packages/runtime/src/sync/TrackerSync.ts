@@ -524,6 +524,9 @@ export class TrackerSyncProvider {
         }
       } catch (err) {
         console.error('[TrackerSync] Failed to decrypt item:', encryptedItem.itemId, err);
+        if (this.config.onDecryptFailed) {
+          this.corruptItemIds.add(encryptedItem.itemId);
+        }
       }
     }
 
@@ -558,6 +561,8 @@ export class TrackerSyncProvider {
       console.log('[TrackerSync] Initial sync complete, now connected. Local items:', this.localItems.size);
       // Replay offline queue after initial sync
       await this.replayOfflineQueue();
+      // Repair any corrupt items encountered during sync
+      await this.repairCorruptItems();
     }
   }
 
@@ -597,6 +602,23 @@ export class TrackerSyncProvider {
       }
     } catch (err) {
       console.error('[TrackerSync] Failed to decrypt broadcast item:', msg.item.itemId, err);
+      if (this.config.onDecryptFailed) {
+        this.repairCorruptItem(msg.item.itemId);
+      }
+    }
+  }
+
+  /**
+   * After initial sync completes and the offline queue is replayed,
+   * repair any corrupt items we encountered during sync.
+   */
+  private async repairCorruptItems(): Promise<void> {
+    if (this.corruptItemIds.size === 0) return;
+    const ids = [...this.corruptItemIds];
+    this.corruptItemIds.clear();
+    console.log('[TrackerSync] Repairing', ids.length, 'corrupt items from local data');
+    for (const itemId of ids) {
+      await this.repairCorruptItem(itemId);
     }
   }
 
@@ -624,6 +646,30 @@ export class TrackerSyncProvider {
    */
   setConfig(key: string, value: string): void {
     this.send({ type: 'trackerSetConfig', key, value });
+  }
+
+  // --------------------------------------------------------------------------
+  // Corrupt Item Repair
+  // --------------------------------------------------------------------------
+
+  private repairedItemIds = new Set<string>();
+  private corruptItemIds = new Set<string>();
+
+  private async repairCorruptItem(itemId: string): Promise<void> {
+    if (this.repairedItemIds.has(itemId)) return;
+    this.repairedItemIds.add(itemId);
+
+    try {
+      const payload = await this.config.onDecryptFailed?.(itemId, null);
+      if (!payload) {
+        console.warn('[TrackerSync] No local data for corrupt item, cannot repair:', itemId);
+        return;
+      }
+      console.log('[TrackerSync] Repairing corrupt server item from local data:', itemId);
+      await this.upsertItem(payload);
+    } catch (err) {
+      console.error('[TrackerSync] Failed to repair corrupt item:', itemId, err);
+    }
   }
 
   // --------------------------------------------------------------------------

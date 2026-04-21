@@ -200,7 +200,7 @@ export class DocumentSyncProvider {
   private connecting = false;
 
   async connect(): Promise<void> {
-    if (this.destroyed) throw new Error('Provider has been destroyed');
+    if (this.destroyed) return;
     if (this.ws || this.connecting) return;
 
     this.suppressReconnect = false;
@@ -325,6 +325,14 @@ export class DocumentSyncProvider {
   /** Get the last known server sequence number. */
   getLastSeq(): number {
     return this.lastSeq;
+  }
+
+  /**
+   * Set room-level metadata on the server (e.g., custom TTL).
+   * Only allowlisted keys are accepted server-side.
+   */
+  setRoomMetadata(entries: Record<string, string>): void {
+    this.send({ type: 'docSetMetadata', entries });
   }
 
   /**

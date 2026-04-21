@@ -171,7 +171,8 @@ export type DocClientMessage =
   | { type: 'docCompact'; encryptedState: string; iv: string; replacesUpTo: number; orgKeyFingerprint?: string }
   | { type: 'docAwareness'; encryptedState: string; iv: string }
   | { type: 'addKeyEnvelope'; targetUserId: string; wrappedKey: string; iv: string; senderPublicKey: string }
-  | { type: 'requestKeyEnvelope' };
+  | { type: 'requestKeyEnvelope' }
+  | { type: 'docSetMetadata'; entries: Record<string, string> };
 
 /** Server -> Client messages */
 export type DocServerMessage =

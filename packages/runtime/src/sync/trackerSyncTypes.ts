@@ -48,6 +48,14 @@ export interface TrackerSyncConfig {
   onConfigChanged?: (config: TrackerRoomConfig) => void;
 
   /**
+   * Called when a remote item fails to decrypt. The caller can use this to
+   * re-encrypt and re-upload the item from local PGLite data, repairing
+   * corrupt server payloads. Return a valid payload to auto-repair, or null
+   * to skip. Repaired items are re-uploaded via upsertItem.
+   */
+  onDecryptFailed?: (itemId: string, error: unknown) => Promise<TrackerItemPayload | null>;
+
+  /**
    * Override the WebSocket URL construction.
    * Useful for integration tests with auth bypass.
    */

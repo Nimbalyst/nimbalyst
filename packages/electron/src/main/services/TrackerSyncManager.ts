@@ -52,15 +52,12 @@ const workspaceStates = new Map<string, WorkspaceSyncState>();
 type TrackerSyncStatusListener = (status: TrackerSyncStatus) => void;
 const statusListeners = new Set<TrackerSyncStatusListener>();
 
-async function uploadTrackerRows(
-  provider: import('@nimbalyst/runtime/sync').TrackerSyncProvider,
+function buildPayloadsFromRows(
   rows: any[],
   userId: string,
-): Promise<number> {
-  if (rows.length === 0) return 0;
-
+): TrackerItemPayload[] {
   const { trackerItemToPayload } = loadSyncModule();
-  const payloads: import('@nimbalyst/runtime/sync').TrackerItemPayload[] = [];
+  const payloads: TrackerItemPayload[] = [];
   for (const row of rows) {
     const data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
     const item = {
@@ -92,9 +89,6 @@ async function uploadTrackerRows(
       documentId: data.documentId,
       content: row.content != null ? row.content : undefined,
     };
-    // Pass through all extra JSONB data fields (activity, comments, kanbanSortOrder, etc.)
-    // as customFields so they survive the TrackerItem -> TrackerRecord -> Payload conversion.
-    // Uses the item object's own keys as the exclusion set -- no hardcoded list.
     const itemKeys = new Set(Object.keys(item));
     const extra: Record<string, any> = {};
     if (data) {
@@ -102,14 +96,22 @@ async function uploadTrackerRows(
         if (!itemKeys.has(k) && v !== undefined) extra[k] = v;
       }
     }
-    // Also merge any legacy nested customFields
     if (data.customFields && typeof data.customFields === 'object') {
       Object.assign(extra, data.customFields);
     }
     if (Object.keys(extra).length > 0) (item as any).customFields = extra;
     payloads.push(trackerItemToPayload(item as any, userId));
   }
+  return payloads;
+}
 
+async function uploadTrackerRows(
+  provider: import('@nimbalyst/runtime/sync').TrackerSyncProvider,
+  rows: any[],
+  userId: string,
+): Promise<number> {
+  if (rows.length === 0) return 0;
+  const payloads = buildPayloadsFromRows(rows, userId);
   await provider.batchUpsertItems(payloads);
   return payloads.length;
 }
@@ -389,6 +391,21 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
           workspacePath,
           config,
         });
+      },
+
+      onDecryptFailed: async (itemId: string): Promise<TrackerItemPayload | null> => {
+        try {
+          const result = await database.query<any>(
+            `SELECT * FROM tracker_items WHERE id = $1`,
+            [itemId]
+          );
+          if (result.rows.length === 0) return null;
+          const payloads = buildPayloadsFromRows(result.rows, userId);
+          return payloads[0] ?? null;
+        } catch (err) {
+          logger.main.error('[TrackerSyncManager] Failed to build repair payload for:', itemId, err);
+          return null;
+        }
       },
 
       onInitialSyncComplete: async (summary) => {

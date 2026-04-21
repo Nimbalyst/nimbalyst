@@ -20,6 +20,7 @@ import { UserAvatar } from '@nimbalyst/runtime/plugins/TrackerPlugin/components/
 import { trackerItemByIdAtom } from '@nimbalyst/runtime/plugins/TrackerPlugin/trackerDataAtoms';
 import { sessionRegistryAtom, type SessionMeta } from '../../store/atoms/sessions';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
+import { useTrackerContentCollab } from '../../hooks/useTrackerContentCollab';
 
 interface TrackerItemDetailProps {
   itemId: string;
@@ -249,9 +250,6 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
   const [contentLoaded, setContentLoaded] = useState(false);
   const getContentFnRef = useRef<(() => string) | null>(null);
   const contentSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Track local content saves to skip refetch (prevents cursor loss)
-  const lastLocalContentSaveRef = useRef<number>(0);
-  const [contentFetchTrigger, setContentFetchTrigger] = useState(0);
 
   // Reset local editing state when navigating to a different item.
   // We don't sync on item data changes (saves) to avoid clobbering in-progress text.
@@ -269,24 +267,14 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
     }
   }, [itemId]); // itemId only -- not item fields
 
-  // Load rich content from PGLite when item changes (only native items have embedded content).
-  // Also re-fetches when updatedAt changes from a remote sync, but skips if we just saved locally
-  // to prevent cursor loss / editor repaint.
+  // Load rich content from PGLite once when navigating to a new item.
+  // After initial load, the Lexical editor owns the content and saves via debounced saveContent.
+  // We intentionally do NOT re-fetch on updatedAt changes -- our own saves update updatedAt,
+  // and refetching would destroy/remount the editor, causing text to vanish mid-typing.
   useEffect(() => {
     if (!hasRichContent) {
       setContentLoaded(true);
       return;
-    }
-
-    // Defer refetch if a local content save happened recently (prevents cursor loss).
-    // Schedule a retry after the window expires so remote content updates aren't lost.
-    const sinceLastSave = Date.now() - lastLocalContentSaveRef.current;
-    if (contentLoaded && sinceLastSave < 3000) {
-      const retryTimer = setTimeout(() => {
-        lastLocalContentSaveRef.current = 0;
-        setContentFetchTrigger(n => n + 1);
-      }, 3000 - sinceLastSave + 100);
-      return () => clearTimeout(retryTimer);
     }
 
     let cancelled = false;
@@ -298,7 +286,6 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
       .then((result) => {
         if (cancelled) return;
         if (result.success && result.content != null) {
-          // Content is stored as markdown string in JSONB
           const markdown = typeof result.content === 'string'
             ? result.content
             : result.content?.markdown ?? '';
@@ -316,7 +303,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
       });
 
     return () => { cancelled = true; };
-  }, [item?.id, hasRichContent, item?.system?.updatedAt, contentFetchTrigger]);
+  }, [item?.id, hasRichContent]);
 
   // Escape to close
   useEffect(() => {
@@ -331,6 +318,27 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
     const tracker = globalRegistry.get(item?.primaryType ?? '');
     return tracker?.sync?.mode || 'local';
   }, [item?.primaryType]);
+
+  const contentMode = useMemo(() => {
+    if (!item || !isNativeItem(item)) return 'file-backed' as const;
+    if (syncMode === 'local') return 'local-pglite' as const;
+    return 'collaborative' as const;
+  }, [item, syncMode]);
+
+  // Collaborative content editing for team-synced items
+  const {
+    collaboration: collabConfig,
+    loading: collabLoading,
+    reviewState,
+    acceptRemoteChanges,
+    rejectRemoteChanges,
+  } = useTrackerContentCollab({
+    itemId,
+    workspacePath,
+    syncMode,
+    pgliteContent: contentMarkdown,
+    teamMemberCount: teamMembers.length,
+  });
 
   /** Save a field update -- routes to file-based save for file-backed items, DB for native */
   const saveField = useCallback(async (updates: Record<string, any>) => {
@@ -369,7 +377,6 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
     if (contentSaveTimerRef.current) clearTimeout(contentSaveTimerRef.current);
     contentSaveTimerRef.current = setTimeout(async () => {
       try {
-        lastLocalContentSaveRef.current = Date.now();
         await window.electronAPI.documentService.updateTrackerItemContent({
           itemId: item!.id,
           content: markdown,
@@ -488,9 +495,9 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
     }
   }, [handleTextFieldChange, handleImmediateFieldChange]);
 
-  /** Editor config for embedded Lexical editor (native items only) */
-  const editorConfig = useMemo((): EditorConfig | null => {
-    if (!hasRichContent || !contentLoaded) return null;
+  /** Editor config for local PGLite mode (non-team native items only) */
+  const localEditorConfig = useMemo((): EditorConfig | null => {
+    if (contentMode !== 'local-pglite' || !contentLoaded) return null;
     return {
       isRichText: true,
       editable: true,
@@ -509,7 +516,22 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
         }
       },
     };
-  }, [hasRichContent, contentLoaded, contentMarkdown, saveContent]);
+  }, [contentMode, contentLoaded, contentMarkdown, saveContent]);
+
+  /** Editor config for collaborative mode (team-synced native items) */
+  const collabEditorConfig = useMemo((): EditorConfig | null => {
+    if (contentMode !== 'collaborative' || !collabConfig || collabLoading) return null;
+    if (!contentLoaded) return null;
+    return {
+      isRichText: true,
+      editable: true,
+      showToolbar: false,
+      isCodeHighlighted: true,
+      hasLinkAttributes: true,
+      markdownOnly: true,
+      collaboration: collabConfig,
+    };
+  }, [contentMode, collabConfig, collabLoading, contentLoaded]);
 
   // Item deleted while panel was open (or not yet in atom — brief loading state)
   if (!item) {
@@ -703,15 +725,51 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
           <label className="text-[11px] font-medium text-nim-muted uppercase tracking-[0.5px] block mb-1">
             Content
           </label>
-          {hasRichContent && editorConfig ? (
+          {contentMode === 'local-pglite' && localEditorConfig ? (
             <div
               className="tracker-content-editor border border-nim rounded bg-nim min-h-[200px] overflow-hidden"
               data-testid="tracker-detail-content-editor"
             >
-              <StravuEditor key={item.id} config={editorConfig} />
+              <StravuEditor key={item.id} config={localEditorConfig} />
             </div>
-          ) : hasRichContent && !contentLoaded ? (
+          ) : contentMode === 'collaborative' && collabEditorConfig ? (
+            <div
+              className="tracker-content-editor border border-nim rounded bg-nim min-h-[200px] overflow-hidden"
+              data-testid="tracker-detail-content-editor"
+            >
+              {reviewState?.hasUnreviewed && (
+                <div
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs border-b border-nim"
+                  style={{ backgroundColor: 'var(--nim-bg-tertiary)' }}
+                  data-testid="tracker-content-review-banner"
+                >
+                  <MaterialSymbol icon="rate_review" size={14} className="text-nim-warning" />
+                  <span className="flex-1 text-nim-muted">
+                    {reviewState.unreviewedCount} pending change{reviewState.unreviewedCount !== 1 ? 's' : ''} from{' '}
+                    {reviewState.unreviewedAuthors.length > 0
+                      ? reviewState.unreviewedAuthors.join(', ')
+                      : 'collaborators'}
+                  </span>
+                  <button
+                    className="px-2 py-0.5 rounded text-[11px] font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"
+                    onClick={acceptRemoteChanges}
+                  >
+                    Accept
+                  </button>
+                  <button
+                    className="px-2 py-0.5 rounded text-[11px] font-medium text-nim-muted hover:text-nim hover:bg-nim-tertiary border border-nim transition-colors"
+                    onClick={rejectRemoteChanges}
+                  >
+                    Reject
+                  </button>
+                </div>
+              )}
+              <StravuEditor key={`collab-${item.id}`} config={collabEditorConfig} />
+            </div>
+          ) : (contentMode === 'local-pglite' || contentMode === 'collaborative') && !contentLoaded ? (
             <div className="text-sm text-nim-faint py-4 text-center">Loading...</div>
+          ) : contentMode === 'collaborative' && collabLoading ? (
+            <div className="text-sm text-nim-faint py-4 text-center">Connecting...</div>
           ) : item.system.documentPath ? (
             <div className="flex items-center gap-2 py-2">
               <span className="text-sm text-nim-muted flex-1 truncate font-mono">
