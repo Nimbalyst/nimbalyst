@@ -420,6 +420,12 @@ export const advancedSettingsAtom = atom<AdvancedSettings>(defaultAdvancedSettin
  * Debounce timer for advanced settings persistence.
  */
 let advancedPersistTimer: ReturnType<typeof setTimeout> | null = null;
+// Accumulate changed keys across debounced calls. Resetting the timer
+// without merging would drop the earlier call's keys (e.g. toggling
+// Extension Dev Tools then any other setting within the debounce window
+// would silently lose the first change).
+let pendingAdvancedChangedKeys = new Set<keyof AdvancedSettings>();
+let pendingAdvancedSettings: AdvancedSettings | null = null;
 const ADVANCED_PERSIST_DEBOUNCE_MS = 500;
 
 /**
@@ -431,57 +437,66 @@ function scheduleAdvancedPersist(
   settings: AdvancedSettings,
   changedKeys: (keyof AdvancedSettings)[]
 ): void {
+  for (const key of changedKeys) {
+    pendingAdvancedChangedKeys.add(key);
+  }
+  pendingAdvancedSettings = settings;
+
   if (advancedPersistTimer) {
     clearTimeout(advancedPersistTimer);
   }
   advancedPersistTimer = setTimeout(async () => {
     advancedPersistTimer = null;
-    if (typeof window === 'undefined' || !window.electronAPI) return;
+    const settingsToPersist = pendingAdvancedSettings;
+    const keysToPersist = Array.from(pendingAdvancedChangedKeys);
+    pendingAdvancedSettings = null;
+    pendingAdvancedChangedKeys = new Set();
 
-    // Only persist the settings that changed
-    for (const key of changedKeys) {
+    if (typeof window === 'undefined' || !window.electronAPI || !settingsToPersist) return;
+
+    for (const key of keysToPersist) {
       switch (key) {
         case 'releaseChannel':
-          await window.electronAPI.invoke('release-channel:set', settings.releaseChannel);
+          await window.electronAPI.invoke('release-channel:set', settingsToPersist.releaseChannel);
           break;
         case 'analyticsEnabled':
-          await window.electronAPI.invoke('analytics:set-enabled', settings.analyticsEnabled);
+          await window.electronAPI.invoke('analytics:set-enabled', settingsToPersist.analyticsEnabled);
           break;
         case 'extensionDevToolsEnabled':
-          await window.electronAPI.extensionDevTools.setEnabled(settings.extensionDevToolsEnabled);
+          await window.electronAPI.extensionDevTools.setEnabled(settingsToPersist.extensionDevToolsEnabled);
           break;
         case 'walkthroughsEnabled':
-          await window.electronAPI.invoke('walkthroughs:set-enabled', settings.walkthroughsEnabled);
+          await window.electronAPI.invoke('walkthroughs:set-enabled', settingsToPersist.walkthroughsEnabled);
           break;
         case 'maxHeapSizeMB':
-          await window.electronAPI.invoke('app-settings:set', 'maxHeapSizeMB', settings.maxHeapSizeMB);
+          await window.electronAPI.invoke('app-settings:set', 'maxHeapSizeMB', settingsToPersist.maxHeapSizeMB);
           break;
         case 'alphaFeatures':
-          await window.electronAPI.invoke('alpha-features:set', settings.alphaFeatures);
+          await window.electronAPI.invoke('alpha-features:set', settingsToPersist.alphaFeatures);
           break;
         case 'enableAllAlphaFeatures':
-          await window.electronAPI.invoke('alpha-features:set-enable-all', settings.enableAllAlphaFeatures);
+          await window.electronAPI.invoke('alpha-features:set-enable-all', settingsToPersist.enableAllAlphaFeatures);
           break;
         case 'betaFeatures':
-          await window.electronAPI.invoke('beta-features:set', settings.betaFeatures);
+          await window.electronAPI.invoke('beta-features:set', settingsToPersist.betaFeatures);
           break;
         case 'enableAllBetaFeatures':
-          await window.electronAPI.invoke('beta-features:set-enable-all', settings.enableAllBetaFeatures);
+          await window.electronAPI.invoke('beta-features:set-enable-all', settingsToPersist.enableAllBetaFeatures);
           break;
         case 'customPathDirs':
-          await window.electronAPI.invoke('app-settings:set', 'customPathDirs', settings.customPathDirs);
+          await window.electronAPI.invoke('app-settings:set', 'customPathDirs', settingsToPersist.customPathDirs);
           break;
         case 'historyMaxAgeDays':
-          await window.electronAPI.invoke('app-settings:set', 'historyMaxAgeDays', settings.historyMaxAgeDays);
+          await window.electronAPI.invoke('app-settings:set', 'historyMaxAgeDays', settingsToPersist.historyMaxAgeDays);
           break;
         case 'historyMaxSnapshots':
-          await window.electronAPI.invoke('app-settings:set', 'historyMaxSnapshots', settings.historyMaxSnapshots);
+          await window.electronAPI.invoke('app-settings:set', 'historyMaxSnapshots', settingsToPersist.historyMaxSnapshots);
           break;
         case 'preferredTerminalShell':
-          await window.electronAPI.invoke('app-settings:set', 'preferredTerminalShell', settings.preferredTerminalShell);
+          await window.electronAPI.invoke('app-settings:set', 'preferredTerminalShell', settingsToPersist.preferredTerminalShell);
           break;
         case 'spellcheckEnabled':
-          await window.electronAPI.invoke('spellcheck:set-enabled', settings.spellcheckEnabled);
+          await window.electronAPI.invoke('spellcheck:set-enabled', settingsToPersist.spellcheckEnabled);
           break;
         // walkthroughsViewedCount and walkthroughsTotalCount are read-only from main process
       }
@@ -1616,6 +1631,10 @@ export const developerFeatureSettingsAtom = atom<DeveloperFeatureSettings>(defau
  * Debounce timer for developer feature settings persistence.
  */
 let developerFeaturePersistTimer: ReturnType<typeof setTimeout> | null = null;
+// Accumulate changed keys so a second call inside the debounce window
+// doesn't drop keys queued by the first (same pattern as advanced settings).
+let pendingDeveloperFeatureChangedKeys = new Set<keyof DeveloperFeatureSettings>();
+let pendingDeveloperFeatureSettings: DeveloperFeatureSettings | null = null;
 const DEVELOPER_FEATURE_PERSIST_DEBOUNCE_MS = 500;
 
 /**
@@ -1626,20 +1645,30 @@ function scheduleDeveloperFeaturePersist(
   settings: DeveloperFeatureSettings,
   changedKeys: (keyof DeveloperFeatureSettings)[]
 ): void {
+  for (const key of changedKeys) {
+    pendingDeveloperFeatureChangedKeys.add(key);
+  }
+  pendingDeveloperFeatureSettings = settings;
+
   if (developerFeaturePersistTimer) {
     clearTimeout(developerFeaturePersistTimer);
   }
   developerFeaturePersistTimer = setTimeout(async () => {
     developerFeaturePersistTimer = null;
-    if (typeof window === 'undefined' || !window.electronAPI) return;
+    const settingsToPersist = pendingDeveloperFeatureSettings;
+    const keysToPersist = Array.from(pendingDeveloperFeatureChangedKeys);
+    pendingDeveloperFeatureSettings = null;
+    pendingDeveloperFeatureChangedKeys = new Set();
 
-    for (const key of changedKeys) {
+    if (typeof window === 'undefined' || !window.electronAPI || !settingsToPersist) return;
+
+    for (const key of keysToPersist) {
       switch (key) {
         case 'developerMode':
-          await window.electronAPI.invoke('developer-mode:set', settings.developerMode);
+          await window.electronAPI.invoke('developer-mode:set', settingsToPersist.developerMode);
           break;
         case 'developerFeatures':
-          await window.electronAPI.invoke('developer-features:set', settings.developerFeatures);
+          await window.electronAPI.invoke('developer-features:set', settingsToPersist.developerFeatures);
           break;
       }
     }
