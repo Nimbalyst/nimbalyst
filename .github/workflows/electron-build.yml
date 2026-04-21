@@ -140,9 +140,20 @@ jobs:
           echo "Cross-compiling for ${NPM_PLATFORM}-${TARGET_ARCH}, installing target-arch native binaries..."
 
           # Claude Agent SDK native binary
-          # The SDK may be hoisted to root node_modules/ by npm workspaces,
-          # so use require.resolve() which walks up the directory tree.
-          CLAUDE_SDK_VERSION=$(node -e "console.log(require(require.resolve('@anthropic-ai/claude-agent-sdk/package.json', { paths: ['./${ELECTRON_DIR}'] })).version)")
+          # The SDK may be hoisted to root node_modules/ by npm workspaces.
+          # require.resolve() with a subpath fails because the package's
+          # exports field doesn't expose ./package.json, so probe known
+          # locations with file existence and require() the absolute path
+          # (which bypasses exports resolution).
+          if [ -f "${ELECTRON_DIR}/node_modules/@anthropic-ai/claude-agent-sdk/package.json" ]; then
+            CLAUDE_PKG_JSON="${ELECTRON_DIR}/node_modules/@anthropic-ai/claude-agent-sdk/package.json"
+          elif [ -f "node_modules/@anthropic-ai/claude-agent-sdk/package.json" ]; then
+            CLAUDE_PKG_JSON="node_modules/@anthropic-ai/claude-agent-sdk/package.json"
+          else
+            echo "::error::Cannot find @anthropic-ai/claude-agent-sdk package.json in root or electron node_modules"
+            exit 1
+          fi
+          CLAUDE_SDK_VERSION=$(node -p "require(require('path').resolve('${CLAUDE_PKG_JSON}')).version")
           CLAUDE_PKG="@anthropic-ai/claude-agent-sdk-${NPM_PLATFORM}-${TARGET_ARCH}@${CLAUDE_SDK_VERSION}"
           BINARY_NAME=$( [ "$NPM_PLATFORM" = "win32" ] && echo "claude.exe" || echo "claude" )
           echo "Installing ${CLAUDE_PKG} into temp dir, then copying to ${ELECTRON_DIR}/"
@@ -159,8 +170,19 @@ jobs:
           fi
           echo "Verified: ${EXPECTED} exists"
 
-          # OpenAI Codex native binary
-          CODEX_SPEC=$(node -e "try { console.log(require(require.resolve('@openai/codex/package.json', { paths: ['./${ELECTRON_DIR}'] })).optionalDependencies?.['@openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}'] || '') } catch(e) { console.log('') }")
+          # OpenAI Codex native binary -- same exports-field workaround
+          if [ -f "${ELECTRON_DIR}/node_modules/@openai/codex/package.json" ]; then
+            CODEX_PKG_JSON="${ELECTRON_DIR}/node_modules/@openai/codex/package.json"
+          elif [ -f "node_modules/@openai/codex/package.json" ]; then
+            CODEX_PKG_JSON="node_modules/@openai/codex/package.json"
+          else
+            CODEX_PKG_JSON=""
+          fi
+          if [ -n "$CODEX_PKG_JSON" ]; then
+            CODEX_SPEC=$(node -p "require(require('path').resolve('${CODEX_PKG_JSON}')).optionalDependencies?.['@openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}'] || ''")
+          else
+            CODEX_SPEC=""
+          fi
           if [ -n "$CODEX_SPEC" ]; then
             echo "Installing @openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}@${CODEX_SPEC} into temp dir, then copying to ${ELECTRON_DIR}/"
             npm install --no-save --force "@openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}@${CODEX_SPEC}" --prefix "$TMPDIR"
