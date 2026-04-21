@@ -20,6 +20,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.27] - 2026-04-20
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+- Gate SDK prewarm behind `PREWARM_ENABLED=false` temporarily while the session resume and canUseTool plumbing bakes
+
+### Fixed
+- Mac x64 build switched to a native macos-13 Intel runner instead of cross-compiling on ARM64: SDK native binaries were landing in root `node_modules/` where electron-builder couldn't find them, causing "spawn ENOTDIR" on Intel Macs. The cross-arch install step is no longer needed.
+- Session resume silently starting fresh conversations after a Nimbalyst restart: `ai:prewarm` cached the Claude Code provider without calling `setProviderSessionData`, so `sessions.getSessionId()` returned undefined and the SDK spawned a brand-new session with no visible error. `setProviderSessionData` now runs on every `sendMessage`, the prewarm IPC handler also restores session data, and the restore is asserted against the DB. The stream now compares the SDK-reported `session_id` against `options.resume` for Claude Code, Codex threads, and managed teammates, throwing on mismatch so silent resume failures surface loudly.
+- canUseTool Zod errors on every tool call after prewarm: the prewarm stub returned `true`, which spread into `{toolUseID: ...}` with no `behavior`/`updatedInput`/`message` and failed the CLI's Zod schema. Replaced with a delegating shim backed by `warmCanUseToolRef`; the real session-bound handler is installed before the warm query is reused.
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.57.26] - 2026-04-20
 
 
