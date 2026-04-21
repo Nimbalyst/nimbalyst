@@ -236,12 +236,23 @@ function detectConfiguredAIProvider(): string | null {
  * that initiated the request no longer exists.
  */
 function safeSend(event: Electron.IpcMainInvokeEvent, channel: string, ...args: unknown[]): boolean {
-  if (event.sender.isDestroyed()) {
-    logger.main.debug(`[AIService] Skipping ${channel} - WebContents destroyed`);
-    return false;
+  if (!event.sender.isDestroyed()) {
+    event.sender.send(channel, ...args);
+    return true;
   }
-  event.sender.send(channel, ...args);
-  return true;
+
+  // Original webContents was destroyed (e.g., renderer reload / HMR).
+  // Fall back to the BrowserWindow's current webContents so that tool
+  // permission prompts and other events still reach the UI.
+  const win = BrowserWindow.getAllWindows().find(w => !w.isDestroyed());
+  if (win) {
+    logger.main.info(`[AIService] safeSend: original sender destroyed, falling back to window ${win.id} for ${channel}`);
+    win.webContents.send(channel, ...args);
+    return true;
+  }
+
+  logger.main.debug(`[AIService] Skipping ${channel} - no live windows`);
+  return false;
 }
 
 /**
