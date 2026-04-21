@@ -20,6 +20,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.32] - 2026-04-21
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+- Upgrade Claude Agent SDK 0.2.114 -> 0.2.116 (permission dialog crash fix, session resume perf, API 400 race condition fix) and `@anthropic-ai/sdk` 0.71.2 -> 0.81.0 (deduped with the agent SDK dependency)
+- Address 36 npm audit vulnerabilities including 2 critical: upgrade `simple-git` 3.30.0 -> 3.36.0 (command execution RCE fix), `mcp-remote` 0.1.37 -> 0.1.38, plus high-severity fixes in `vite`, `rollup`, `tar`, `picomatch`, `path-to-regexp`, `@hono/node-server`, `@xmldom/xmldom`, `undici`, and others. Remaining 30 are upstream/transitive with no fix available.
+
+### Fixed
+- Cross-arch SDK install step hitting `ERR_PACKAGE_PATH_NOT_EXPORTED`: `@anthropic-ai/claude-agent-sdk` and `@openai/codex` both have an `exports` field in `package.json` that doesn't expose `./package.json`, so `require.resolve('<pkg>/package.json', { paths: [...] })` fails regardless of the `paths` option. Probe the known `node_modules` locations with bash file existence, then `require()` the absolute path -- absolute paths bypass `exports` resolution and just read the file.
+- Restore typecheck after the `@types/node` bump pulled in by the npm audit fix: TypeScript 5.7+'s newer `Uint8Array<ArrayBufferLike>` / `Buffer<ArrayBufferLike>` definitions narrow `SharedArrayBuffer` out of `ArrayBuffer`, breaking ~13 `crypto.subtle.*`, `fetch`, and `new Blob()` call sites. Added `as BufferSource` / `as BodyInit` / `as BlobPart` casts at the boundaries in `ShareHandlers.ts`, `KeyRotationService.ts`, `OrgKeyService.ts`, `CollabAssetService.ts`, and the runtime sync providers (`DocumentSync.ts`, `ECDHKeyManager.ts`, `ProjectSyncProvider.ts`, `TeamSync.ts`, `TrackerSync.ts`). All heap-allocated `Uint8Array`s, so the casts are safe at runtime.
+- Intel Mac "spawn ENOTDIR" reproduced after the v0.57.29 attempt: running `npm install --prefix packages/electron/` makes npm read that workspace's `package.json`, which lists `@nimbalyst/runtime` and other workspace siblings as dependencies. Without workspace context npm tries to resolve those from the public registry and 404s. Install into a temp directory that has no workspace neighbors, then copy the binary into `packages/electron/node_modules/` where electron-builder can find it.
+- Tool permission prompts lost after renderer reload: `safeSend` silently dropped events when the original `webContents` was destroyed (e.g., HMR reload), so the pending permission promise never resolved and the SDK stream timed out with "Stream closed". Now falls back to any live `BrowserWindow`.
+- Always include subprocess stderr in error messages: previously stderr was only appended to errors containing "exited with code", losing diagnostic context for native binary crashes producing "Stream closed" or other errors.
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.57.31] - 2026-04-21
 
 
