@@ -1,206 +1,817 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-03-16T00:00:00Z",
+  "generatedAt": "2026-04-21T17:42:59.236Z",
   "extensions": [
     {
-      "id": "com.nimbalyst.http-client",
-      "name": "HTTP Client",
-      "description": "Send HTTP requests from .http files with AI-powered request generation. Supports GET, POST, PUT, DELETE with environment variables and response visualization.",
+      "id": "com.developer.nimbalyst-mindmap",
+      "name": "Nimbalyst Mindmap",
+      "description": "A freeform spatial mindmap editor with AI-assisted editing",
+      "version": "1.0.0",
+      "author": "Unknown",
+      "categories": [
+        "diagrams"
+      ],
+      "tags": [
+        "mindmap",
+        "brainstorming",
+        "spatial",
+        "canvas",
+        "hierarchy",
+        "knowledge-map"
+      ],
+      "icon": "account_tree",
+      "screenshots": [],
+      "downloads": 0,
+      "featured": false,
+      "permissions": [
+        "filesystem"
+      ],
+      "minimumAppVersion": "1.0.0",
+      "downloadUrl": "https://extensions.nimbalyst.com/dl/com.developer.nimbalyst-mindmap/1.0.0",
+      "checksum": "85e5a87e0a5b4aea9cc0ab5715ddecb4f91236ba067b6f0f594a49e605e49608",
+      "repositoryUrl": "",
+      "changelog": "",
+      "tagline": "Freeform spatial mindmap editor with AI-assisted editing",
+      "longDescription": "Create hierarchical mind maps on an infinite canvas. Add nodes, color-code branches, attach notes and tags, and use the AI to generate entire mind maps from a topic.",
+      "highlights": [
+        "Infinite canvas with keyboard-driven node creation",
+        "Color-coded branches, notes, tags, and status per node",
+        "AI generates complete mind maps from a topic description"
+      ],
+      "fileTypes": [
+        ".mindmap"
+      ]
+    },
+    {
+      "id": "com.developer.nimbalyst-slides",
+      "name": "Nimbalyst Slides",
+      "description": "Presentation editor with live reveal.js preview",
+      "version": "1.0.0",
+      "author": "Unknown",
+      "categories": [
+        "diagrams"
+      ],
+      "tags": [
+        "slides",
+        "presentation",
+        "reveal.js",
+        "markdown",
+        "deck",
+        "speaker-notes"
+      ],
+      "icon": "slideshow",
+      "screenshots": [],
+      "downloads": 0,
+      "featured": false,
+      "permissions": [
+        "filesystem"
+      ],
+      "minimumAppVersion": "1.0.0",
+      "downloadUrl": "https://extensions.nimbalyst.com/dl/com.developer.nimbalyst-slides/1.0.0",
+      "checksum": "93c8941d689f4a8baf1f553a94c59a12922e434c3fc9370440bf67637988bec5",
+      "repositoryUrl": "",
+      "changelog": "",
+      "tagline": "Presentation editor with live reveal.js preview",
+      "longDescription": "Create slide decks in markdown with a split-view editor. Write your content on the left, see the live reveal.js presentation on the right. Supports 12 themes, transitions, speaker notes, and fragments.",
+      "highlights": [
+        "Split-view markdown editor with live reveal.js preview",
+        "12 built-in themes including moon, dracula, and solarized",
+        "AI creates entire presentations from a topic or outline"
+      ],
+      "fileTypes": [
+        ".slides.md"
+      ]
+    },
+    {
+      "id": "com.nimbalyst.astro",
+      "name": "Astro",
+      "description": "Visually edit Astro website pages inline — changes write back to YAML data files",
+      "version": "0.2.0",
+      "author": "Unknown",
+      "categories": [
+        "developer-tools"
+      ],
+      "tags": [
+        "astro",
+        "website",
+        "visual-editor",
+        "yaml",
+        "wysiwyg",
+        "web-development"
+      ],
+      "icon": "language",
+      "screenshots": [],
+      "downloads": 0,
+      "featured": false,
+      "permissions": [
+        "filesystem",
+        "network"
+      ],
+      "minimumAppVersion": "1.0.0",
+      "downloadUrl": "https://extensions.nimbalyst.com/dl/com.nimbalyst.astro/0.2.0",
+      "checksum": "587646aba0215e39e7dcb88b6f60b8fe73eafb8fae914f65f725494ac24ab500",
+      "repositoryUrl": "",
+      "changelog": "",
+      "tagline": "Visual editor for Astro website pages",
+      "longDescription": "Open .astro files and see the rendered page from your dev server. Edit text directly on the page -- changes write back to the underlying YAML data files automatically.",
+      "highlights": [
+        "Live visual editing of rendered Astro pages via iframe",
+        "Inline text editing that writes back to YAML data files",
+        "AI tools to list and refresh editable content"
+      ],
+      "fileTypes": [
+        ".astro"
+      ]
+    },
+    {
+      "id": "com.nimbalyst.automations",
+      "name": "Automations",
+      "description": "Schedule recurring AI-powered tasks with file-based automation definitions",
       "version": "1.0.0",
       "author": "Nimbalyst",
-      "categories": ["developer-tools"],
-      "tags": ["http", "api", "rest", "requests", "testing"],
-      "icon": "",
+      "categories": [
+        "other"
+      ],
+      "tags": [],
+      "icon": "extension",
       "screenshots": [],
-      "downloads": 2340,
+      "downloads": 0,
+      "featured": false,
+      "permissions": [
+        "filesystem",
+        "ai"
+      ],
+      "minimumAppVersion": "1.0.0",
+      "downloadUrl": "https://extensions.nimbalyst.com/dl/com.nimbalyst.automations/1.0.0",
+      "checksum": "cf908719058e169afa2ebd8d95b7db2005f29067c155e9e1c5935a699d930d2d",
+      "repositoryUrl": "",
+      "changelog": "",
+      "tagline": "",
+      "longDescription": "",
+      "highlights": [],
+      "fileTypes": []
+    },
+    {
+      "id": "com.nimbalyst.csv-spreadsheet",
+      "name": "CSV Spreadsheet",
+      "description": "Edit CSV files with a spreadsheet interface and formula support",
+      "version": "1.0.0",
+      "author": "Nimbalyst",
+      "categories": [
+        "data"
+      ],
+      "tags": [
+        "csv",
+        "tsv",
+        "spreadsheet",
+        "data",
+        "table",
+        "formula"
+      ],
+      "icon": "table_chart",
+      "screenshots": [
+        {
+          "src": "https://extensions.nimbalyst.com/screenshots/com.nimbalyst.csv-spreadsheet/com.nimbalyst.csv-spreadsheet-0-dark.png",
+          "alt": "CSV spreadsheet editor with revenue data",
+          "srcLight": "https://extensions.nimbalyst.com/screenshots/com.nimbalyst.csv-spreadsheet/com.nimbalyst.csv-spreadsheet-0-light.png"
+        }
+      ],
+      "downloads": 0,
       "featured": true,
-      "permissions": ["network"],
-      "minimumAppVersion": "0.50.0",
-      "downloadUrl": "",
-      "checksum": "",
-      "repositoryUrl": "https://github.com/nimbalyst/ext-http-client",
-      "changelog": "### 1.0.0\n- Initial release\n- GET, POST, PUT, DELETE support\n- Environment variables\n- Response formatting"
+      "permissions": [
+        "filesystem"
+      ],
+      "minimumAppVersion": "1.0.0",
+      "downloadUrl": "https://extensions.nimbalyst.com/dl/com.nimbalyst.csv-spreadsheet/1.0.0",
+      "checksum": "8b6626ade806092de0315125c2686df399cdded2f84875fa4c9b39852795d96a",
+      "repositoryUrl": "",
+      "changelog": "",
+      "tagline": "Visual CSV editing with formulas and column formatting",
+      "longDescription": "Open CSV and TSV files in a full spreadsheet interface with formula support, column resizing, frozen rows/columns, and sortable headers. Edit data visually while the underlying CSV stays clean and git-friendly. Toggle to source mode to see and edit the raw text.",
+      "highlights": [
+        "Spreadsheet UI for CSV and TSV files",
+        "Formula support with cell references",
+        "Frozen rows and columns, sortable headers",
+        "Source mode toggle for raw CSV editing"
+      ],
+      "fileTypes": [
+        ".csv",
+        ".tsv"
+      ]
     },
     {
-      "id": "com.nimbalyst.json-editor",
-      "name": "JSON/YAML Visual Editor",
-      "description": "Interactive tree-view editor for JSON and YAML files with schema validation, search, and AI-powered transformations.",
-      "version": "1.2.0",
+      "id": "com.nimbalyst.datamodellm",
+      "name": "DatamodelLM",
+      "description": "AI-assisted data modeling with visual entity-relationship diagrams",
+      "version": "1.0.0",
       "author": "Nimbalyst",
-      "categories": ["data"],
-      "tags": ["json", "yaml", "editor", "tree-view", "schema"],
-      "icon": "",
-      "screenshots": [],
-      "downloads": 1850,
+      "categories": [
+        "data"
+      ],
+      "tags": [
+        "prisma",
+        "database",
+        "schema",
+        "erd",
+        "entity-relationship",
+        "data-model"
+      ],
+      "icon": "database",
+      "screenshots": [
+        {
+          "src": "https://extensions.nimbalyst.com/screenshots/com.nimbalyst.datamodellm/com.nimbalyst.datamodellm-0-dark.png",
+          "alt": "Visual entity-relationship diagram with User, Post, Comment, Tag, and Category models",
+          "srcLight": "https://extensions.nimbalyst.com/screenshots/com.nimbalyst.datamodellm/com.nimbalyst.datamodellm-0-light.png"
+        }
+      ],
+      "downloads": 0,
       "featured": true,
-      "permissions": [],
-      "minimumAppVersion": "0.50.0",
-      "downloadUrl": "",
-      "checksum": "",
-      "repositoryUrl": "https://github.com/nimbalyst/ext-json-editor",
-      "changelog": "### 1.2.0\n- Schema validation support\n- AI transformations\n### 1.1.0\n- YAML support\n### 1.0.0\n- Initial release"
+      "permissions": [
+        "filesystem",
+        "ai"
+      ],
+      "minimumAppVersion": "1.0.0",
+      "downloadUrl": "https://extensions.nimbalyst.com/dl/com.nimbalyst.datamodellm/1.0.0",
+      "checksum": "f8b6d7d0d67def3476a42a0323f1393e2060369a1668f85e7946907ef7ad4891",
+      "repositoryUrl": "",
+      "changelog": "",
+      "tagline": "Visual database schema design with Prisma syntax",
+      "longDescription": "Design database schemas visually as entity-relationship diagrams backed by real Prisma syntax. Drag entities around the canvas, define fields and relations, and switch to source mode to edit the Prisma schema directly. The AI can generate schemas from descriptions or modify existing ones.",
+      "highlights": [
+        "Visual ERD canvas backed by real Prisma schema files",
+        "AI generates and modifies database schemas from descriptions",
+        "Embed data models inline in markdown documents",
+        "Bidirectional editing between visual and source modes"
+      ],
+      "fileTypes": [
+        ".prisma"
+      ]
     },
     {
-      "id": "com.nimbalyst.catppuccin-theme",
-      "name": "Catppuccin Theme",
-      "description": "Popular pastel theme for Nimbalyst with four flavors: Latte (light), Frappe, Macchiato, and Mocha (dark).",
-      "version": "2.0.0",
+      "id": "com.nimbalyst.developer",
+      "name": "Developer Tools",
+      "description": "Advanced git operations and developer workflows",
+      "version": "1.0.0",
       "author": "Nimbalyst",
-      "categories": ["themes"],
-      "tags": ["theme", "dark", "light", "catppuccin", "pastel"],
-      "icon": "",
+      "categories": [
+        "other"
+      ],
+      "tags": [],
+      "icon": "extension",
       "screenshots": [],
-      "downloads": 5120,
+      "downloads": 0,
+      "featured": false,
+      "permissions": [
+        "filesystem",
+        "ai"
+      ],
+      "minimumAppVersion": "1.0.0",
+      "downloadUrl": "https://extensions.nimbalyst.com/dl/com.nimbalyst.developer/1.0.0",
+      "checksum": "d545db39b181c10bb8865751d2eec6c1589311ae4ba93a1adde9f46b347a2d32",
+      "repositoryUrl": "",
+      "changelog": "",
+      "tagline": "",
+      "longDescription": "",
+      "highlights": [],
+      "fileTypes": []
+    },
+    {
+      "id": "com.nimbalyst.excalidraw",
+      "name": "Excalidraw",
+      "description": "Excalidraw diagram editor with AI-assisted editing",
+      "version": "1.0.0",
+      "author": "Nimbalyst",
+      "categories": [
+        "diagrams"
+      ],
+      "tags": [
+        "excalidraw",
+        "diagram",
+        "flowchart",
+        "architecture",
+        "drawing",
+        "whiteboard"
+      ],
+      "icon": "brush",
+      "screenshots": [
+        {
+          "src": "https://extensions.nimbalyst.com/screenshots/com.nimbalyst.excalidraw/com.nimbalyst.excalidraw-0-dark.png",
+          "alt": "Architecture diagram with client, API server, cache, and database",
+          "srcLight": "https://extensions.nimbalyst.com/screenshots/com.nimbalyst.excalidraw/com.nimbalyst.excalidraw-0-light.png"
+        }
+      ],
+      "downloads": 0,
       "featured": true,
-      "permissions": [],
-      "minimumAppVersion": "0.50.0",
-      "downloadUrl": "",
-      "checksum": "",
-      "repositoryUrl": "https://github.com/nimbalyst/ext-catppuccin-theme",
-      "changelog": "### 2.0.0\n- All four flavors\n- Updated for latest --nim-* variables\n### 1.0.0\n- Mocha flavor only"
+      "permissions": [
+        "filesystem",
+        "ai"
+      ],
+      "minimumAppVersion": "1.0.0",
+      "downloadUrl": "https://extensions.nimbalyst.com/dl/com.nimbalyst.excalidraw/1.0.0",
+      "checksum": "022b07a9a3f8afae545c978416b11f3dafa6bca4c264e680b93eb1d0c6359f59",
+      "repositoryUrl": "",
+      "changelog": "",
+      "tagline": "Hand-drawn style diagrams with AI-assisted editing",
+      "longDescription": "Create architecture diagrams, flowcharts, wireframes, and freeform sketches using the Excalidraw canvas. The AI can create and modify diagrams from natural language descriptions, import Mermaid syntax, and lay out complex systems visually. Switch between the visual canvas and source mode for direct JSON editing.",
+      "highlights": [
+        "AI creates and modifies diagrams from natural language",
+        "Import Mermaid diagrams and convert to visual elements",
+        "Bidirectional editing with source mode toggle",
+        "Full Excalidraw toolset: shapes, arrows, text, frames, grouping"
+      ],
+      "fileTypes": [
+        ".excalidraw"
+      ]
     },
     {
-      "id": "com.nimbalyst.dracula-theme",
-      "name": "Dracula Theme",
-      "description": "Official Dracula color scheme for Nimbalyst. A dark theme with vibrant accent colors.",
+      "id": "com.nimbalyst.git",
+      "name": "Git",
+      "description": "Git log viewer with push, pull, and rebase support",
       "version": "1.0.0",
       "author": "Nimbalyst",
-      "categories": ["themes"],
-      "tags": ["theme", "dark", "dracula", "vibrant"],
-      "icon": "",
-      "screenshots": [],
-      "downloads": 3200,
+      "categories": [
+        "developer-tools"
+      ],
+      "tags": [
+        "git",
+        "version-control",
+        "log",
+        "commit",
+        "branch",
+        "diff"
+      ],
+      "icon": "call_split",
+      "screenshots": [
+        {
+          "src": "https://extensions.nimbalyst.com/screenshots/com.nimbalyst.git/com.nimbalyst.git-0-dark.png",
+          "alt": "Git log panel showing commit history with diffs and branch management",
+          "srcLight": "https://extensions.nimbalyst.com/screenshots/com.nimbalyst.git/com.nimbalyst.git-0-light.png"
+        }
+      ],
+      "downloads": 0,
       "featured": false,
-      "permissions": [],
-      "minimumAppVersion": "0.50.0",
-      "downloadUrl": "",
-      "checksum": "",
-      "repositoryUrl": "https://github.com/nimbalyst/ext-dracula-theme",
-      "changelog": "### 1.0.0\n- Initial release"
+      "permissions": [
+        "filesystem"
+      ],
+      "minimumAppVersion": "1.0.0",
+      "downloadUrl": "https://extensions.nimbalyst.com/dl/com.nimbalyst.git/1.0.0",
+      "checksum": "8519a3bb9f0b4f83638a37e4675cfa5bbad0b1fa659c2bb48afcc3a3ea3ae208",
+      "repositoryUrl": "",
+      "changelog": "",
+      "tagline": "Visual git log with push, pull, and branch management",
+      "longDescription": "Browse your commit history in a visual log panel, inspect diffs, push and pull changes, and manage branches. Integrates into the bottom panel with a keyboard shortcut for quick access.",
+      "highlights": [
+        "Visual commit history with diff inspection",
+        "Push, pull, and rebase from the panel",
+        "Branch management and switching",
+        "Keyboard shortcut (Ctrl+Shift+G) for quick access"
+      ],
+      "fileTypes": []
     },
     {
-      "id": "com.nimbalyst.mermaid-editor",
-      "name": "Mermaid WYSIWYG Editor",
-      "description": "Visual drag-and-drop editing of Mermaid diagrams. Bidirectional: edit visually and the code updates, edit code and the canvas updates. AI generates diagrams from descriptions.",
+      "id": "com.nimbalyst.image-generation",
+      "name": "Image Generation",
+      "description": "AI-powered image generation with support for sketches, diagrams, and illustrations",
       "version": "1.0.0",
       "author": "Nimbalyst",
-      "categories": ["diagrams"],
-      "tags": ["mermaid", "diagrams", "flowchart", "sequence", "visual"],
-      "icon": "",
+      "categories": [
+        "ai-tools"
+      ],
+      "tags": [
+        "image",
+        "generation",
+        "ai",
+        "sketch",
+        "illustration",
+        "diagram"
+      ],
+      "icon": "image",
+      "screenshots": [
+        {
+          "src": "https://extensions.nimbalyst.com/screenshots/com.nimbalyst.image-generation/com.nimbalyst.image-generation-0-dark.png",
+          "alt": "Image generation project with AI-generated sketches and style options",
+          "srcLight": "https://extensions.nimbalyst.com/screenshots/com.nimbalyst.image-generation/com.nimbalyst.image-generation-0-light.png"
+        }
+      ],
+      "downloads": 0,
+      "featured": false,
+      "permissions": [
+        "filesystem",
+        "ai",
+        "network"
+      ],
+      "minimumAppVersion": "1.0.0",
+      "downloadUrl": "https://extensions.nimbalyst.com/dl/com.nimbalyst.image-generation/1.0.0",
+      "checksum": "1d106a9d4e1228ad0deba574b1e735e632672f8f4851a5fbb49b73044cacbacb",
+      "repositoryUrl": "",
+      "changelog": "",
+      "tagline": "Generate images from text prompts with multiple style options",
+      "longDescription": "Create sketches, diagrams, illustrations, and other images by describing what you want. Manage multiple generations in a project file, compare variations, and iterate on prompts. Configurable style presets and generation settings.",
+      "highlights": [
+        "Generate images from natural language prompts",
+        "Multiple style presets: sketch, diagram, illustration",
+        "Project files to organize and compare generations",
+        "AI tool integration for generating images during conversations"
+      ],
+      "fileTypes": [
+        ".imgproj"
+      ]
+    },
+    {
+      "id": "com.nimbalyst.ios-dev",
+      "name": "iOS Development Tools",
+      "description": "Tools for iOS development including XcodeGen, simulator management, and deployment",
+      "version": "0.1.0",
+      "author": "Nimbalyst",
+      "categories": [
+        "other"
+      ],
+      "tags": [],
+      "icon": "extension",
       "screenshots": [],
-      "downloads": 980,
+      "downloads": 0,
+      "featured": false,
+      "permissions": [
+        "filesystem",
+        "ai"
+      ],
+      "minimumAppVersion": "1.0.0",
+      "downloadUrl": "https://extensions.nimbalyst.com/dl/com.nimbalyst.ios-dev/0.1.0",
+      "checksum": "39d8fc0a8473686e07ffead1d43caf2c81e4286138426fd34f4d490ce2e84509",
+      "repositoryUrl": "",
+      "changelog": "",
+      "tagline": "",
+      "longDescription": "",
+      "highlights": [],
+      "fileTypes": []
+    },
+    {
+      "id": "com.nimbalyst.mindmap",
+      "name": "Nimbalyst Mindmap",
+      "description": "A freeform spatial mindmap editor with AI-assisted editing",
+      "version": "1.0.1",
+      "author": "Nimbalyst",
+      "categories": [
+        "diagrams"
+      ],
+      "tags": [
+        "mindmap",
+        "brainstorming",
+        "spatial",
+        "canvas",
+        "hierarchy",
+        "knowledge-map"
+      ],
+      "icon": "account_tree",
+      "screenshots": [],
+      "downloads": 0,
+      "featured": false,
+      "permissions": [
+        "filesystem"
+      ],
+      "minimumAppVersion": "1.0.0",
+      "downloadUrl": "https://extensions.nimbalyst.com/dl/com.nimbalyst.mindmap/1.0.1",
+      "checksum": "450c16cda3545416bbae9b6cea35c072f66e233ccc0a5d3618c2080813686fd4",
+      "repositoryUrl": "",
+      "changelog": "",
+      "tagline": "Freeform spatial mindmap editor with AI-assisted editing",
+      "longDescription": "Create hierarchical mind maps on an infinite canvas. Add nodes, color-code branches, attach notes and tags, and use the AI to generate entire mind maps from a topic.",
+      "highlights": [
+        "Infinite canvas with keyboard-driven node creation",
+        "Color-coded branches, notes, tags, and status per node",
+        "AI generates complete mind maps from a topic description"
+      ],
+      "fileTypes": [
+        ".mindmap"
+      ]
+    },
+    {
+      "id": "com.nimbalyst.mockuplm",
+      "name": "MockupLM",
+      "description": "Visual UX mockup creation with HTML/CSS for planning and design",
+      "version": "1.0.0",
+      "author": "Nimbalyst",
+      "categories": [
+        "diagrams"
+      ],
+      "tags": [
+        "mockup",
+        "wireframe",
+        "ui",
+        "ux",
+        "design",
+        "prototype",
+        "html"
+      ],
+      "icon": "palette",
+      "screenshots": [
+        {
+          "src": "https://extensions.nimbalyst.com/screenshots/com.nimbalyst.mockuplm/com.nimbalyst.mockuplm-0-dark.png",
+          "alt": "Team dashboard mockup with stats cards and deployment table",
+          "srcLight": "https://extensions.nimbalyst.com/screenshots/com.nimbalyst.mockuplm/com.nimbalyst.mockuplm-0-light.png"
+        }
+      ],
+      "downloads": 0,
       "featured": true,
-      "permissions": ["ai"],
-      "minimumAppVersion": "0.50.0",
-      "downloadUrl": "",
-      "checksum": "",
-      "repositoryUrl": "https://github.com/nimbalyst/ext-mermaid-editor",
-      "changelog": "### 1.0.0\n- Flowchart support\n- Sequence diagram support\n- AI generation from descriptions"
+      "permissions": [
+        "filesystem",
+        "ai"
+      ],
+      "minimumAppVersion": "1.0.0",
+      "downloadUrl": "https://extensions.nimbalyst.com/dl/com.nimbalyst.mockuplm/1.0.0",
+      "checksum": "aa6ff20128dfa0e1cc2ef736c1391278ae98abdc25b5051a2e4fc4d39753bb8f",
+      "repositoryUrl": "",
+      "changelog": "",
+      "tagline": "AI-generated UI mockups rendered as live HTML/CSS",
+      "longDescription": "Design UI mockups by describing what you want in natural language. The AI generates complete HTML/CSS mockups that render as live previews in the editor. Iterate on designs visually or switch to source mode to hand-edit the HTML. Great for planning features, communicating designs, and rapid prototyping.",
+      "highlights": [
+        "AI generates complete HTML/CSS mockups from descriptions",
+        "Live rendered preview of your designs",
+        "Source mode for hand-editing HTML and CSS",
+        "Rapid iteration on UI concepts without design tools"
+      ],
+      "fileTypes": [
+        ".mockup.html",
+        ".mockupproject"
+      ]
     },
     {
-      "id": "com.nimbalyst.wiki-links",
-      "name": "Wiki Links & Backlinks",
-      "description": "Add [[wiki-style]] linking between documents with a backlinks panel. AI suggests relevant links as you write.",
+      "id": "com.nimbalyst.namenym",
+      "name": "Namenym",
+      "description": "AI-powered brand naming tool for Nimbalyst",
+      "version": "0.1.0",
+      "author": "Unknown",
+      "categories": [
+        "ai-tools"
+      ],
+      "tags": [
+        "naming",
+        "branding",
+        "domain",
+        "brainstorming",
+        "ai",
+        "creative"
+      ],
+      "icon": "lightbulb",
+      "screenshots": [],
+      "downloads": 0,
+      "featured": false,
+      "permissions": [
+        "filesystem",
+        "ai",
+        "network"
+      ],
+      "minimumAppVersion": "1.0.0",
+      "downloadUrl": "https://extensions.nimbalyst.com/dl/com.nimbalyst.namenym/0.1.0",
+      "checksum": "2c1e0e6c0fa88f09ea5b4fe9d3560fbbcf9a98193560613e12630dcf500384b2",
+      "repositoryUrl": "",
+      "changelog": "",
+      "tagline": "AI-powered brand naming and domain brainstorming",
+      "longDescription": "Generate creative brand names by combining concepts, synonyms, and mashups. Evaluate candidates with scoring, check domain availability across TLDs, and shortlist your favorites.",
+      "highlights": [
+        "AI generates concepts, synonyms, and creative mashup names",
+        "Scoring and evaluation for memorability and pronounceability",
+        "Domain availability checking across multiple TLDs"
+      ],
+      "fileTypes": [
+        ".namenym"
+      ]
+    },
+    {
+      "id": "com.nimbalyst.pdf-viewer",
+      "name": "PDF Viewer",
+      "description": "View PDF files directly in Nimbalyst",
+      "version": "1.0.0",
+      "author": "Nimbalyst Team",
+      "categories": [
+        "data"
+      ],
+      "tags": [
+        "pdf",
+        "viewer",
+        "document",
+        "reader"
+      ],
+      "icon": "picture_as_pdf",
+      "screenshots": [
+        {
+          "src": "https://extensions.nimbalyst.com/screenshots/com.nimbalyst.pdf-viewer/com.nimbalyst.pdf-viewer-0-dark.png",
+          "alt": "PDF document viewer showing a multi-page document with page navigation",
+          "srcLight": "https://extensions.nimbalyst.com/screenshots/com.nimbalyst.pdf-viewer/com.nimbalyst.pdf-viewer-0-light.png"
+        }
+      ],
+      "downloads": 0,
+      "featured": false,
+      "permissions": [
+        "filesystem"
+      ],
+      "minimumAppVersion": "1.0.0",
+      "downloadUrl": "https://extensions.nimbalyst.com/dl/com.nimbalyst.pdf-viewer/1.0.0",
+      "checksum": "30590618a48a6c2fb81d9ef218331aa0c9aae54680f59cef59a747c001609df9",
+      "repositoryUrl": "",
+      "changelog": "",
+      "tagline": "View PDF documents directly in the editor",
+      "longDescription": "Open and read PDF files without leaving Nimbalyst. Renders PDF pages with full fidelity, supporting multi-page documents, zoom, and page navigation.",
+      "highlights": [
+        "View PDF files inline without switching apps",
+        "Multi-page navigation and zoom",
+        "Keeps your workspace context while reading documents"
+      ],
+      "fileTypes": [
+        ".pdf"
+      ]
+    },
+    {
+      "id": "com.nimbalyst.planning",
+      "name": "Planning",
+      "description": "Structured planning and tracking with YAML frontmatter",
       "version": "1.0.0",
       "author": "Nimbalyst",
-      "categories": ["knowledge"],
-      "tags": ["wiki", "backlinks", "linking", "knowledge", "zettelkasten"],
-      "icon": "",
+      "categories": [
+        "other"
+      ],
+      "tags": [],
+      "icon": "extension",
       "screenshots": [],
-      "downloads": 1560,
+      "downloads": 0,
       "featured": false,
-      "permissions": ["ai"],
-      "minimumAppVersion": "0.50.0",
-      "downloadUrl": "",
-      "checksum": "",
-      "repositoryUrl": "https://github.com/nimbalyst/ext-wiki-links",
-      "changelog": "### 1.0.0\n- [[wiki link]] syntax\n- Backlinks panel\n- AI link suggestions"
+      "permissions": [
+        "filesystem",
+        "ai"
+      ],
+      "minimumAppVersion": "1.0.0",
+      "downloadUrl": "https://extensions.nimbalyst.com/dl/com.nimbalyst.planning/1.0.0",
+      "checksum": "8ff482436e283fcb312d6349b75ef306c58bb42de83dcd8a89317af5f4e30be6",
+      "repositoryUrl": "",
+      "changelog": "",
+      "tagline": "",
+      "longDescription": "",
+      "highlights": [],
+      "fileTypes": []
     },
     {
-      "id": "com.nimbalyst.ci-pipeline-editor",
-      "name": "CI/CD Pipeline Editor",
-      "description": "Visual editor for GitHub Actions, CircleCI, and GitLab CI workflows. Drag-and-drop pipeline steps with AI-assisted configuration.",
-      "version": "0.9.0",
+      "id": "com.nimbalyst.playwright",
+      "name": "Playwright",
+      "description": "Test runner, trace viewer, and screenshot automation for Playwright",
+      "version": "0.1.0",
       "author": "Nimbalyst",
-      "categories": ["developer-tools"],
-      "tags": ["ci", "cd", "github-actions", "pipeline", "devops"],
-      "icon": "",
+      "categories": [
+        "other"
+      ],
+      "tags": [],
+      "icon": "extension",
       "screenshots": [],
-      "downloads": 720,
+      "downloads": 0,
       "featured": false,
-      "permissions": ["ai"],
-      "minimumAppVersion": "0.50.0",
-      "downloadUrl": "",
-      "checksum": "",
-      "repositoryUrl": "https://github.com/nimbalyst/ext-ci-pipeline-editor",
-      "changelog": "### 0.9.0\n- Beta release\n- GitHub Actions support\n- Visual step editor"
+      "permissions": [
+        "filesystem",
+        "ai"
+      ],
+      "minimumAppVersion": "1.0.0",
+      "downloadUrl": "https://extensions.nimbalyst.com/dl/com.nimbalyst.playwright/0.1.0",
+      "checksum": "44de1a0cb540c8a496f3cbd603bc612f6da75dfff2b355fcb2400baf0ddf5d4e",
+      "repositoryUrl": "",
+      "changelog": "",
+      "tagline": "",
+      "longDescription": "",
+      "highlights": [],
+      "fileTypes": []
     },
     {
-      "id": "com.nimbalyst.slide-presenter",
-      "name": "Slide Deck Presenter",
-      "description": "Create presentations from markdown with speaker notes, transitions, and theme support. Present directly from Nimbalyst.",
+      "id": "com.nimbalyst.sqlite-browser",
+      "name": "SQLite Browser",
+      "description": "Browse and query SQLite databases with AI assistance",
       "version": "1.0.0",
       "author": "Nimbalyst",
-      "categories": ["writing"],
-      "tags": ["slides", "presentations", "markdown", "speaker-notes"],
-      "icon": "",
-      "screenshots": [],
-      "downloads": 890,
+      "categories": [
+        "data"
+      ],
+      "tags": [
+        "sqlite",
+        "database",
+        "sql",
+        "query",
+        "browser",
+        "db"
+      ],
+      "icon": "table_chart",
+      "screenshots": [
+        {
+          "src": "https://extensions.nimbalyst.com/screenshots/com.nimbalyst.sqlite-browser/com.nimbalyst.sqlite-browser-0-dark.png",
+          "alt": "SQLite database browser showing tables, schema, and query results",
+          "srcLight": "https://extensions.nimbalyst.com/screenshots/com.nimbalyst.sqlite-browser/com.nimbalyst.sqlite-browser-0-light.png"
+        }
+      ],
+      "downloads": 0,
       "featured": false,
-      "permissions": [],
-      "minimumAppVersion": "0.50.0",
-      "downloadUrl": "",
-      "checksum": "",
-      "repositoryUrl": "https://github.com/nimbalyst/ext-slide-presenter",
-      "changelog": "### 1.0.0\n- Markdown-to-slides conversion\n- Speaker notes\n- Multiple themes"
+      "permissions": [
+        "filesystem",
+        "ai"
+      ],
+      "minimumAppVersion": "1.0.0",
+      "downloadUrl": "https://extensions.nimbalyst.com/dl/com.nimbalyst.sqlite-browser/1.0.0",
+      "checksum": "6e55121e3432f5babb66af7dace7b3bd46aec5c2586670c1253a1fc6fe3249b9",
+      "repositoryUrl": "",
+      "changelog": "",
+      "tagline": "Browse and query SQLite databases with AI assistance",
+      "longDescription": "Open any SQLite database file and browse tables, run queries, and explore data visually. The AI can write SQL queries, analyze table structures, and help you understand your data. Supports .db, .sqlite, .sqlite3, and .db3 files.",
+      "highlights": [
+        "Visual table browser with data preview",
+        "AI writes and explains SQL queries",
+        "Schema introspection and table analysis",
+        "Works with .db, .sqlite, .sqlite3, and .db3 files"
+      ],
+      "fileTypes": [
+        ".db",
+        ".sqlite",
+        ".sqlite3",
+        ".db3"
+      ]
     },
     {
-      "id": "com.nimbalyst.session-analytics",
-      "name": "Session Analytics Dashboard",
-      "description": "Visualize your AI session patterns, token usage, cost tracking, and productivity metrics across all sessions.",
+      "id": "com.nimbalyst.three-d-editor",
+      "name": "3D Object Editor",
+      "description": "Design and edit 3D objects (OBJ/STL files) in a 3D space with AI assistance",
       "version": "1.0.0",
-      "author": "Nimbalyst",
-      "categories": ["ai-tools"],
-      "tags": ["analytics", "sessions", "tokens", "productivity", "dashboard"],
-      "icon": "",
+      "author": "Unknown",
+      "categories": [
+        "diagrams"
+      ],
+      "tags": [
+        "3d",
+        "obj",
+        "stl",
+        "modeling",
+        "three.js",
+        "cad",
+        "spatial"
+      ],
+      "icon": "deployed_code",
       "screenshots": [],
-      "downloads": 640,
+      "downloads": 0,
       "featured": false,
-      "permissions": ["ai"],
-      "minimumAppVersion": "0.50.0",
-      "downloadUrl": "",
-      "checksum": "",
-      "repositoryUrl": "https://github.com/nimbalyst/ext-session-analytics",
-      "changelog": "### 1.0.0\n- Token usage charts\n- Session duration tracking\n- Cost estimates"
-    },
-    {
-      "id": "com.nimbalyst.nord-theme",
-      "name": "Nord Theme",
-      "description": "Arctic, north-bluish color palette for Nimbalyst. Clean and minimal dark theme.",
-      "version": "1.0.0",
-      "author": "Nimbalyst",
-      "categories": ["themes"],
-      "tags": ["theme", "dark", "nord", "arctic", "minimal"],
-      "icon": "",
-      "screenshots": [],
-      "downloads": 2100,
-      "featured": false,
-      "permissions": [],
-      "minimumAppVersion": "0.50.0",
-      "downloadUrl": "",
-      "checksum": "",
-      "repositoryUrl": "https://github.com/nimbalyst/ext-nord-theme",
-      "changelog": "### 1.0.0\n- Initial release"
+      "permissions": [
+        "filesystem",
+        "ai"
+      ],
+      "minimumAppVersion": "1.0.0",
+      "downloadUrl": "https://extensions.nimbalyst.com/dl/com.nimbalyst.three-d-editor/1.0.0",
+      "checksum": "d8db83d1a53eb197c487651e4f228ebbb3a0ce14691ef03488912ea79037c707",
+      "repositoryUrl": "",
+      "changelog": "",
+      "tagline": "Design and edit 3D objects with AI assistance",
+      "longDescription": "Open and edit OBJ and STL files in a full 3D viewport. Add primitives, transform objects, and use AI tools to build 3D scenes programmatically.",
+      "highlights": [
+        "Full 3D viewport with orbit controls and grid",
+        "Add primitives (box, sphere, cylinder, cone, torus, plane)",
+        "Six AI tools for programmatic 3D scene building"
+      ],
+      "fileTypes": [
+        ".obj",
+        ".stl"
+      ]
     }
   ],
   "categories": [
-    { "id": "developer-tools", "name": "Developer Tools", "icon": "code" },
-    { "id": "diagrams", "name": "Diagrams & Visual Editing", "icon": "brush" },
-    { "id": "data", "name": "Data & Spreadsheets", "icon": "table_chart" },
-    { "id": "ai-tools", "name": "AI-Powered Tools", "icon": "auto_awesome" },
-    { "id": "themes", "name": "Themes", "icon": "palette" },
-    { "id": "writing", "name": "Writing & Documents", "icon": "edit_note" },
-    { "id": "knowledge", "name": "Knowledge Management", "icon": "psychology" },
-    { "id": "integrations", "name": "Integrations", "icon": "link" }
+    {
+      "id": "developer-tools",
+      "name": "Developer Tools",
+      "icon": "code"
+    },
+    {
+      "id": "diagrams",
+      "name": "Diagrams",
+      "icon": "brush"
+    },
+    {
+      "id": "data",
+      "name": "Data",
+      "icon": "table_chart"
+    },
+    {
+      "id": "ai-tools",
+      "name": "AI Tools",
+      "icon": "auto_awesome"
+    },
+    {
+      "id": "themes",
+      "name": "Themes",
+      "icon": "palette"
+    },
+    {
+      "id": "writing",
+      "name": "Writing",
+      "icon": "edit_note"
+    },
+    {
+      "id": "knowledge",
+      "name": "Knowledge",
+      "icon": "psychology"
+    },
+    {
+      "id": "integrations",
+      "name": "Integrations",
+      "icon": "link"
+    }
   ]
 }

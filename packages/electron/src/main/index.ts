@@ -91,7 +91,7 @@ import { claudeUsageService } from './services/ClaudeUsageService';
 import { registerCodexUsageHandlers } from './ipc/CodexUsageHandlers';
 import { codexUsageService } from './services/CodexUsageService';
 import { registerExtensionHandlers, getClaudePluginPaths, initializeExtensionFileTypes } from './ipc/ExtensionHandlers';
-import { registerExtensionMarketplaceHandlers } from './ipc/ExtensionMarketplaceHandlers';
+import { registerExtensionMarketplaceHandlers, runExtensionAutoUpdate } from './ipc/ExtensionMarketplaceHandlers';
 import { getRegisteredExtensions } from './extensions/RegisteredFileTypes';
 import { ClaudeCodeProvider, OpenAICodexProvider, OpenCodeProvider } from '@nimbalyst/runtime/ai/server';
 import { isMCPServerEnabledForProvider, MCP_PROVIDER_IDS } from '@nimbalyst/runtime/types/MCPServerConfig';
@@ -1665,6 +1665,9 @@ app.whenReady().then(async () => {
 
     // Mark boot as complete - all critical initialization is done
     markBootComplete();
+
+    // Auto-update marketplace extensions (fire-and-forget, don't block startup)
+    runExtensionAutoUpdate();
 
     // Log startup timing summary (in dev mode or when NIMBALYST_STARTUP_TIMING=true)
     logSummary();

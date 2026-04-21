@@ -503,6 +503,30 @@ function notifyExtensionUnloaded(extensionId: string): void {
 }
 
 /**
+ * Silently check for and apply extension updates.
+ * Intended to be called once on app startup (fire-and-forget).
+ */
+export async function runExtensionAutoUpdate(): Promise<void> {
+  try {
+    const updates = await checkForUpdates();
+    if (updates.length === 0) return;
+
+    const registry = await fetchRegistry();
+    for (const update of updates) {
+      const entry = registry.extensions.find(e => e.id === update.extensionId);
+      if (!entry?.downloadUrl) continue;
+
+      const result = await installFromUrl(update.extensionId, entry.downloadUrl, entry.checksum, entry.version);
+      if (result.success) {
+        logger.main.info(`[ExtMarketplace] Auto-updated ${update.extensionId}: ${update.currentVersion} -> ${update.availableVersion}`);
+      }
+    }
+  } catch (err) {
+    logger.main.warn('[ExtMarketplace] Auto-update check failed:', err);
+  }
+}
+
+/**
  * Register all marketplace IPC handlers.
  */
 export function registerExtensionMarketplaceHandlers(): void {
