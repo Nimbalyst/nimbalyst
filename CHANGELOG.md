@@ -20,6 +20,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.33] - 2026-04-21
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Intel Mac packaged build was missing the Claude Code x64 SDK binary due to three compounding issues:
+  - `afterPack.js` used `packager.arch` which was falsy for some arch values, falling through to `process.arch` (arm64 on the build machine). Pruning kept the arm64 binary and deleted the x64 one. Now uses `context.arch`.
+  - electron-builder's `files` patterns only include packages in the npm dependency tree. The `--no-save` cross-arch install isn't in the lock file, so `files` globs silently skipped it. Added `mac.extraResources` with the `${arch}` macro to copy the binary from root `node_modules` regardless of lock-file state.
+  - Simplified the CI cross-arch install to put the binary in root `node_modules/`, where `extraResources` reads from.
+- Added diagnostic logging and improved error messages when Claude Code binary resolution fails at runtime (shows which package and arch were expected).
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.57.32] - 2026-04-21
 
 
