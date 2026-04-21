@@ -744,6 +744,11 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
         if (stderrLines.length < MAX_STDERR_LINES) {
           stderrLines.push(data);
         }
+        // Log stderr in real-time for diagnostics (native binary crashes)
+        const trimmed = data.trim();
+        if (trimmed) {
+          console.warn(`[CLAUDE-CODE-STDERR] ${trimmed.substring(0, 300)}`);
+        }
       };
 
       const queryCallStart = Date.now();
@@ -845,6 +850,18 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
 
           const chunk = rawChunk as any;
           chunkCount++;
+
+          // Diagnostic: detect "Stream closed" at the raw chunk level
+          if (typeof chunk === 'object' && chunk !== null) {
+            const chunkJson = JSON.stringify(chunk);
+            if (chunkJson.includes('Stream closed')) {
+              console.error(`[CLAUDE-CODE] STREAM_CLOSED_RAW_CHUNK: chunkType="${chunk.type}" chunkSubtype="${chunk.subtype}" chunkCount=${chunkCount} turnElapsed=${Date.now() - queryStartTime}ms stderrLines=${stderrLines.length}`);
+              console.error(`[CLAUDE-CODE] STREAM_CLOSED_RAW_CHUNK: ${chunkJson.substring(0, 500)}`);
+              if (stderrLines.length > 0) {
+                console.error(`[CLAUDE-CODE] STREAM_CLOSED_RAW_CHUNK stderr: ${stderrLines.join('').trim().substring(0, 500)}`);
+              }
+            }
+          }
 
           // Log raw SDK chunks to database (non-blocking for streaming performance)
           // Extract SDK-provided uuid for deduplication in sync
@@ -949,6 +966,16 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
                 if (toolCall) {
                   const { isDuplicate } = applyToolResultToToolCall(toolCall, item.content, item.isError);
                   if (isDuplicate) break;
+
+                  // Diagnostic: detect "Stream closed" errors from the native binary
+                  const resultText = typeof item.content === 'string' ? item.content : JSON.stringify(item.content);
+                  if (item.isError && resultText.includes('Stream closed')) {
+                    console.error(`[CLAUDE-CODE] STREAM_CLOSED_DIAGNOSTIC: tool="${toolCall.name}" toolUseId="${item.toolUseId}" isError=${item.isError} stderrLines=${stderrLines.length} chunkCount=${chunkCount} turnElapsed=${Date.now() - queryStartTime}ms`);
+                    console.error(`[CLAUDE-CODE] STREAM_CLOSED_DIAGNOSTIC: resultText="${resultText.substring(0, 300)}"`);
+                    if (stderrLines.length > 0) {
+                      console.error(`[CLAUDE-CODE] STREAM_CLOSED_DIAGNOSTIC: stderr="${stderrLines.join('').trim().substring(0, 500)}"`);
+                    }
+                  }
 
                   this.processTeammateToolResult(sessionId, toolCall.name, toolCall.arguments, item.content, toolCall.isError === true, toolCall.id);
 
@@ -2402,11 +2429,17 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     // Use permissionsPath for trust checks (parent project for worktrees), workspacePath for everything else
     const pathForTrust = permissionsPath || workspacePath;
 
+    let canUseToolCallCount = 0;
+
     return async (
       toolName: string,
       input: any,
       options: { signal: AbortSignal; suggestions?: any[]; toolUseID?: string }
     ): Promise<{ behavior: 'allow' | 'deny'; updatedInput?: any; message?: string }> => {
+      const callNum = ++canUseToolCallCount;
+      const callStart = Date.now();
+      // console.log(`[canUseTool] #${callNum} ENTER tool="${toolName}" toolUseID=${options.toolUseID}`);
+
       let result: { behavior: 'allow' | 'deny'; updatedInput?: any; message?: string };
 
       try {
@@ -2433,7 +2466,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
           result = await this.handleToolPermissionFallback(toolName, input, options, sessionId, workspacePath);
         }
       } catch (error) {
-        console.error(`[canUseTool] Exception for tool "${toolName}":`, error);
+        console.error(`[canUseTool] #${callNum} EXCEPTION tool="${toolName}" after ${Date.now() - callStart}ms:`, error);
         throw error;
       }
 
@@ -2441,14 +2474,12 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       // - allow MUST have updatedInput (Record)
       // - deny MUST have message (string)
       if (result.behavior === 'allow' && result.updatedInput === undefined) {
-        console.warn(`[canUseTool] Tool "${toolName}": allow without updatedInput, defaulting to original input`);
         result.updatedInput = input;
       } else if (result.behavior === 'deny' && result.message === undefined) {
-        console.warn(`[canUseTool] Tool "${toolName}": deny without message, defaulting`);
         result.message = 'Tool call denied';
       }
 
-      // // console.log(`[canUseTool] Tool "${toolName}" -> behavior=${result.behavior}, hasUpdatedInput=${result.updatedInput !== undefined}, hasMessage=${result.message !== undefined}`);
+      console.log(`[canUseTool] #${callNum} EXIT tool="${toolName}" -> ${result.behavior} (${Date.now() - callStart}ms)`);
 
       return result;
     };
@@ -2728,15 +2759,15 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
 
       const historyPath = path.join(os.homedir(), '.claude', 'history.jsonl');
 
-      // Quick existence check
+      let content: string;
       try {
-        await fs.access(historyPath);
+        content = await fs.readFile(historyPath, 'utf-8');
       } catch {
-        return false; // No history file = no sessions
+        // File missing (e.g., Windows uses %APPDATA%\Claude, not ~/.claude) --
+        // we can't tell whether the session exists, so fail open.
+        return true;
       }
 
-      // Read file and search for session ID
-      const content = await fs.readFile(historyPath, 'utf-8');
       return content.includes(sessionId);
     } catch (error) {
       console.warn('[CLAUDE-CODE] Failed to check session existence:', error);
