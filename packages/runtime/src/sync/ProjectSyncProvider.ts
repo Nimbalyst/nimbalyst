@@ -446,7 +446,7 @@ export class ProjectSyncProvider {
   async initYjs(projectId: string, syncId: string, snapshot: Uint8Array): Promise<void> {
     const key = this.config.encryptionKey;
     const iv = crypto.getRandomValues(new Uint8Array(12));
-    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, snapshot);
+    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, snapshot as BufferSource);
 
     const msg: FileYjsInitMessage = {
       type: 'fileYjsInit',
@@ -460,7 +460,7 @@ export class ProjectSyncProvider {
   async pushYjsUpdate(projectId: string, syncId: string, update: Uint8Array): Promise<void> {
     const key = this.config.encryptionKey;
     const iv = crypto.getRandomValues(new Uint8Array(12));
-    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, update);
+    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, update as BufferSource);
 
     const msg: FileYjsUpdateMessage = {
       type: 'fileYjsUpdate',
@@ -474,7 +474,7 @@ export class ProjectSyncProvider {
   async compactYjs(projectId: string, syncId: string, snapshot: Uint8Array, replacesUpTo: number): Promise<void> {
     const key = this.config.encryptionKey;
     const iv = crypto.getRandomValues(new Uint8Array(12));
-    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, snapshot);
+    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, snapshot as BufferSource);
 
     const msg: FileYjsCompactMessage = {
       type: 'fileYjsCompact',

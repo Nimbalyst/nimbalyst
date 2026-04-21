@@ -69,7 +69,7 @@ async function encryptBinary(
   const ciphertext = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv },
     key,
-    data
+    data as BufferSource
   );
   return {
     encrypted: uint8ArrayToBase64(new Uint8Array(ciphertext)),
@@ -85,9 +85,9 @@ async function decryptBinary(
   const ciphertext = base64ToUint8Array(encrypted);
   const ivBytes = base64ToUint8Array(iv);
   const plaintext = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: ivBytes },
+    { name: 'AES-GCM', iv: ivBytes as BufferSource },
     key,
-    ciphertext
+    ciphertext as BufferSource
   );
   return new Uint8Array(plaintext);
 }

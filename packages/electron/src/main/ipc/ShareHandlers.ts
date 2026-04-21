@@ -336,7 +336,7 @@ export function registerShareHandlers() {
         const response = await net.fetch(`${serverUrl}/share`, {
           method: 'POST',
           headers,
-          body: encrypted,
+          body: encrypted as BodyInit,
         });
 
         if (!response.ok) {
@@ -571,7 +571,7 @@ export function registerShareHandlers() {
         const response = await net.fetch(`${serverUrl}/share`, {
           method: 'POST',
           headers,
-          body: encrypted,
+          body: encrypted as BodyInit,
         });
 
         if (!response.ok) {

@@ -230,9 +230,9 @@ export class ECDHKeyManager {
     // Unwrap the document key
     const documentKey = await crypto.subtle.unwrapKey(
       'raw',
-      base64ToUint8Array(envelope.wrappedKey),
+      base64ToUint8Array(envelope.wrappedKey) as BufferSource,
       wrappingKey,
-      { name: 'AES-GCM', iv: base64ToUint8Array(envelope.iv) },
+      { name: 'AES-GCM', iv: base64ToUint8Array(envelope.iv) as BufferSource },
       { name: 'AES-GCM', length: 256 },
       true, // extractable so it can be re-wrapped for other users
       ['encrypt', 'decrypt']

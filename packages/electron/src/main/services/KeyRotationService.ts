@@ -174,7 +174,7 @@ async function encryptBinary(
   const ciphertext = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv },
     key,
-    data
+    data as BufferSource
   );
   return {
     encrypted: uint8ArrayToBase64(new Uint8Array(ciphertext)),
@@ -190,9 +190,9 @@ async function decryptBinary(
   const ciphertext = base64ToUint8Array(encrypted);
   const ivBytes = base64ToUint8Array(iv);
   const plaintext = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: ivBytes },
+    { name: 'AES-GCM', iv: ivBytes as BufferSource },
     key,
-    ciphertext
+    ciphertext as BufferSource
   );
   return new Uint8Array(plaintext);
 }
@@ -206,7 +206,7 @@ async function encryptTitle(
   const ciphertext = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv },
     key,
-    plaintext
+    plaintext as BufferSource
   );
   return {
     encryptedTitle: uint8ArrayToBase64(new Uint8Array(ciphertext)),
@@ -222,9 +222,9 @@ async function decryptTitle(
   const ciphertext = base64ToUint8Array(encryptedTitle);
   const ivBytes = base64ToUint8Array(titleIv);
   const plaintext = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: ivBytes },
+    { name: 'AES-GCM', iv: ivBytes as BufferSource },
     key,
-    ciphertext
+    ciphertext as BufferSource
   );
   return new TextDecoder().decode(plaintext);
 }
@@ -623,7 +623,7 @@ async function reEncryptAsset(
   // Decrypt binary body with old key
   const ivBytes = base64ToUint8Array(asset.iv);
   const decryptedBody = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: ivBytes },
+    { name: 'AES-GCM', iv: ivBytes as BufferSource },
     oldKey,
     asset.encryptedBody
   );
@@ -642,9 +642,9 @@ async function reEncryptAsset(
   if (asset.encryptedMetadata && asset.metadataIv) {
     const metaIvBytes = base64ToUint8Array(asset.metadataIv);
     const decryptedMeta = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: metaIvBytes },
+      { name: 'AES-GCM', iv: metaIvBytes as BufferSource },
       oldKey,
-      base64ToUint8Array(asset.encryptedMetadata)
+      base64ToUint8Array(asset.encryptedMetadata) as BufferSource
     );
     const newMetaIvBytes = crypto.getRandomValues(new Uint8Array(12));
     const reEncMeta = await crypto.subtle.encrypt(
@@ -704,7 +704,7 @@ async function getLocalBackupKey(): Promise<CryptoKey | null> {
     const seed = safeStorage.encryptString('nimbalyst-backup-key-v1');
     // Use first 32 bytes of the encrypted seed as key material
     const keyMaterial = await crypto.subtle.importKey(
-      'raw', seed.subarray(0, 32), { name: 'HKDF' }, false, ['deriveKey']
+      'raw', seed.subarray(0, 32) as BufferSource, { name: 'HKDF' }, false, ['deriveKey']
     );
     return crypto.subtle.deriveKey(
       { name: 'HKDF', hash: 'SHA-256', salt: new TextEncoder().encode('nimbalyst-backup-v1'), info: new Uint8Array(0) },
@@ -726,7 +726,7 @@ async function getLocalBackupKey(): Promise<CryptoKey | null> {
 async function encryptForBackup(data: Uint8Array, backupKey: CryptoKey | null): Promise<Buffer> {
   if (!backupKey) return Buffer.from(data);
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, backupKey, data);
+  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, backupKey, data as BufferSource);
   // Format: 12 bytes IV + ciphertext
   const result = Buffer.alloc(12 + ciphertext.byteLength);
   result.set(iv, 0);

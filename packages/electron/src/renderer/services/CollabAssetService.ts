@@ -58,7 +58,7 @@ async function encryptBytes(
   key: CryptoKey
 ): Promise<{ ciphertext: Uint8Array; iv: string }> {
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, bytes);
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, bytes as BufferSource);
   return {
     ciphertext: new Uint8Array(encrypted),
     iv: uint8ArrayToBase64(iv),
@@ -71,7 +71,7 @@ async function decryptBytes(
   key: CryptoKey
 ): Promise<Uint8Array> {
   const iv = base64ToUint8Array(ivBase64);
-  const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
+  const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv as BufferSource }, key, ciphertext);
   return new Uint8Array(decrypted);
 }
 
@@ -97,7 +97,7 @@ async function decryptMetadata(
   }
 
   const ciphertext = base64ToUint8Array(encryptedMetadata);
-  const plaintext = await decryptBytes(ciphertext.buffer, metadataIv, key);
+  const plaintext = await decryptBytes(ciphertext.buffer as ArrayBuffer, metadataIv, key);
   return JSON.parse(new TextDecoder().decode(plaintext)) as AssetMetadataPayload;
 }
 
@@ -142,7 +142,7 @@ export class CollabAssetService {
         [HEADER_MIME]: mimeType,
         [HEADER_PLAINTEXT_SIZE]: String(plaintextBytes.byteLength),
       },
-      body: ciphertext,
+      body: ciphertext as BodyInit,
     });
 
     if (!response.ok) {
@@ -244,7 +244,7 @@ export class CollabAssetService {
     const plaintext = await decryptBytes(ciphertext, iv, this.config.documentKey);
 
     return {
-      blob: new Blob([plaintext], { type: mimeType }),
+      blob: new Blob([plaintext as BlobPart], { type: mimeType }),
       fileName: metadata?.name || `${parsed.assetId}.bin`,
       mimeType,
     };

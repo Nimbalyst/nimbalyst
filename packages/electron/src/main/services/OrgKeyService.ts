@@ -319,7 +319,7 @@ export async function getLatestArchivedOrgKey(orgId: string): Promise<{ key: Cry
   const keyBytes = base64ToUint8Array(latest.rawKeyBase64);
   const key = await crypto.subtle.importKey(
     'raw',
-    keyBytes,
+    keyBytes as BufferSource,
     { name: 'AES-GCM', length: 256 },
     true,
     ['encrypt', 'decrypt']
@@ -342,7 +342,7 @@ export async function getArchivedOrgKeyByFingerprint(orgId: string, fingerprint:
   const keyBytes = base64ToUint8Array(entry.rawKeyBase64);
   return crypto.subtle.importKey(
     'raw',
-    keyBytes,
+    keyBytes as BufferSource,
     { name: 'AES-GCM', length: 256 },
     true,
     ['encrypt', 'decrypt']
@@ -368,7 +368,7 @@ export async function getOrgKey(orgId: string): Promise<CryptoKey | null> {
   const keyBytes = base64ToUint8Array(entry.rawKeyBase64);
   return crypto.subtle.importKey(
     'raw',
-    keyBytes,
+    keyBytes as BufferSource,
     { name: 'AES-GCM', length: 256 },
     true, // extractable for wrapping
     ['encrypt', 'decrypt']

@@ -87,9 +87,9 @@ async function decryptTitle(
   const ciphertext = base64ToUint8Array(encryptedTitle);
   const ivBytes = base64ToUint8Array(titleIv);
   const plaintext = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: ivBytes },
+    { name: 'AES-GCM', iv: ivBytes as BufferSource },
     key,
-    ciphertext
+    ciphertext as BufferSource
   );
   return new TextDecoder().decode(plaintext);
 }
