@@ -2460,6 +2460,33 @@ export class AIService {
         provider.registerToolHandler(toolHandler);
       }
 
+      // CRITICAL: Restore provider session data unconditionally (even when the provider
+      // already exists in the factory cache). The `if (!provider)` block above only runs
+      // on first creation, but the provider can outlive its in-memory session ID mapping
+      // in several paths: prewarm creates the provider before setProviderSessionData runs
+      // (race with sendMessage), and Nimbalyst restarts restart the process with an empty
+      // map. Running this on every message guarantees `options.resume` is populated.
+      if (session.providerSessionId && (provider as any).setProviderSessionData) {
+        (provider as any).setProviderSessionData(session.id, {
+          providerSessionId: session.providerSessionId,
+          claudeSessionId: session.providerSessionId,
+          codexThreadId: session.providerSessionId,
+        });
+
+        // Fail loud if the restore didn't actually take effect. Prevents us from
+        // handing a resumable session to the provider with an empty in-memory map
+        // (which would silently start a fresh conversation on the SDK side).
+        const restored = (provider as any).getProviderSessionData?.(session.id);
+        const restoredId = restored?.providerSessionId ?? restored?.claudeSessionId;
+        if (restoredId !== session.providerSessionId) {
+          throw new Error(
+            `[AIService] Provider session restore failed for session ${session.id}: ` +
+            `DB has providerSessionId="${session.providerSessionId}" but provider reports ` +
+            `"${restoredId ?? 'undefined'}". Resume would silently start a fresh conversation.`
+          );
+        }
+      }
+
       // NOTE: No longer tracking provider per-window - each session has its own provider instance
 
       // Resolve the selected model's context window from the model registry.
@@ -4297,6 +4324,18 @@ export class AIService {
           const apiKey = this.getApiKeyForProvider('claude-code', workspacePath);
           const model = session.model || (session.providerConfig as any)?.model;
           await provider.initialize({ apiKey, model });
+        }
+
+        // Restore provider session data so the in-memory session ID mapping is populated
+        // before sendMessage runs. Without this, sendMessage skips its own restore block
+        // (because the provider already exists from prewarm) and options.resume never gets
+        // set, silently starting a fresh conversation on every message after a restart.
+        if (session.providerSessionId && (provider as any).setProviderSessionData) {
+          (provider as any).setProviderSessionData(session.id, {
+            providerSessionId: session.providerSessionId,
+            claudeSessionId: session.providerSessionId,
+            codexThreadId: session.providerSessionId,
+          });
         }
 
         await (provider as any).prewarm(workspacePath, sessionId);

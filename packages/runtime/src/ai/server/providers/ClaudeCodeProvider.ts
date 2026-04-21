@@ -150,6 +150,16 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   private prewarmSessionId: string | null = null;
   private prewarmModel: string | null = null;
   private prewarmInProgress: boolean = false;
+  // Mutable ref the prewarm stub canUseTool delegates to. We install the real
+  // session-bound handler here right before reusing the warm query, because the
+  // SDK binds canUseTool at Query construction and exposes no post-init setter.
+  private warmCanUseToolRef:
+    | ((
+        toolName: string,
+        input: any,
+        options: { signal: AbortSignal; suggestions?: any[]; toolUseID?: string },
+      ) => Promise<{ behavior: 'allow' | 'deny'; updatedInput?: any; message?: string }>)
+    | null = null;
 
   // Lead query reference for interruptWithMessage support
   private leadQuery: Query | null = null;
@@ -391,7 +401,13 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
    * and calls startup() to spawn the subprocess in the background.
    * The warm query is consumed by sendMessage() and discarded if the model changes.
    */
+  // Temporarily disabled: the warm subprocess currently interferes with session
+  // resume and requires the warmCanUseToolRef shim to keep tool permissions
+  // working. Flip to true to re-enable once both issues are sorted. See commit 14d94463f.
+  private static readonly PREWARM_ENABLED = false;
+
   async prewarm(workspacePath: string, sessionId?: string): Promise<void> {
+    if (!ClaudeCodeProvider.PREWARM_ENABLED) return;
     if (this.prewarmInProgress || this.warmQuery) return;
 
     const model = this.resolveModelVariant();
@@ -413,11 +429,25 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       // executable path, and model it will use for the actual query.
       // Hooks use no-ops since no tools execute during startup.
       const noopHook = () => ({});
+      // Delegate to warmCanUseToolRef so the real session-bound handler can
+      // be installed before the warm query is used for the user's message.
+      // If the warm query is reused without installing the ref, we deny to
+      // avoid returning a malformed PermissionResult and surfacing the bug.
+      const warmCanUseTool = async (
+        toolName: string,
+        input: any,
+        innerOptions: { signal: AbortSignal; suggestions?: any[]; toolUseID?: string },
+      ): Promise<{ behavior: 'allow' | 'deny'; updatedInput?: any; message?: string }> => {
+        const ref = this.warmCanUseToolRef;
+        if (ref) return ref(toolName, input, innerOptions);
+        console.error(`[CLAUDE-CODE] Warm canUseTool fired before real handler installed (tool=${toolName})`);
+        return { behavior: 'deny', message: 'Permission handler not initialized for warm subprocess' };
+      };
       const { options } = await buildSdkOptions(
         {
           resolveModelVariant: () => model,
           mcpConfigService: this.mcpConfigService,
-          createCanUseToolHandler: () => () => true,
+          createCanUseToolHandler: () => warmCanUseTool,
           toolHooksService: { createPreToolUseHook: noopHook, createPostToolUseHook: noopHook } as any,
           teammateManager: this.teammateManager,
           sessions: this.sessions,
@@ -724,6 +754,9 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       const currentModel = this.resolveModelVariant();
       if (this.warmQuery && this.prewarmModel === currentModel && !options.resume) {
         console.log(`[CLAUDE-CODE] Using prewarmed subprocess (model=${currentModel})`);
+        // Install the real canUseTool bound to this session's context. The warm
+        // query's SDK Query holds the stub from prewarm; the stub delegates here.
+        this.warmCanUseToolRef = options.canUseTool;
         leadQuery = this.warmQuery.query(promptInput as any);
         this.warmQuery = null;
         this.prewarmModel = null;
@@ -856,6 +889,23 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
                 break;
 
               case 'session_id':
+                // Fail loud if we asked the SDK to resume session X and it reports a
+                // different session Y. That means resume silently failed (the CLI
+                // couldn't find the transcript, the file was corrupt, the --resume
+                // flag never made it, etc.) and we'd otherwise happily start a new
+                // conversation on top of what the user thinks is an existing thread.
+                // Forked sessions are exempt: `forkSession: true` tells the CLI to
+                // intentionally emit a new session ID from the source conversation.
+                if (options.resume && !options.forkSession && item.id !== options.resume) {
+                  const mismatchError = new Error(
+                    `[CLAUDE-CODE] Session resume mismatch: requested resume of ` +
+                    `"${options.resume}" but SDK reported session "${item.id}". ` +
+                    `The prior conversation is not loaded. Aborting so the user sees ` +
+                    `the failure rather than silently starting a fresh session.`
+                  );
+                  console.error(mismatchError.message);
+                  throw mismatchError;
+                }
                 if (sessionId) this.sessions.captureSessionId(sessionId, item.id);
                 break;
 

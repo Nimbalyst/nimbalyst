@@ -1492,6 +1492,16 @@ export class TeammateManager {
     for await (const chunk of teammateQuery) {
       if (chunk.session_id && !capturedSessionId) {
         capturedSessionId = chunk.session_id;
+        // Fail loud if we asked the SDK to resume this teammate's session X and it
+        // reports a different session Y. Otherwise the teammate silently loses its
+        // prior conversation and the lead thinks it's continuing.
+        if (resumeSessionId && capturedSessionId !== resumeSessionId) {
+          throw new Error(
+            `[MANAGED-TEAMMATE] Session resume mismatch for "${agentId}": requested ` +
+            `resume of "${resumeSessionId}" but SDK reported session "${capturedSessionId}". ` +
+            `The teammate's prior conversation is not loaded.`
+          );
+        }
         console.log(`[MANAGED-TEAMMATE] Captured session ID for "${agentId}": ${capturedSessionId}`);
         const managed = this.managedTeammates.get(agentId);
         if (managed) {

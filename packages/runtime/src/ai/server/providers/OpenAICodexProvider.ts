@@ -940,6 +940,18 @@ export class OpenAICodexProvider extends BaseAgentProvider {
       // The protocol layer captures thread ID from thread.started event during streaming
       if (sessionId && session.id) {
         if (session.id !== existingSessionId) {
+          // If we asked the protocol to resume an existing thread and it handed us
+          // back a different one, the prior conversation was not loaded. Fail loud
+          // rather than silently overwriting the mapping and continuing on a fresh
+          // thread the user thinks is a continuation.
+          if (isResumedThread) {
+            throw new Error(
+              `[CODEX] Thread resume mismatch: requested resume of ` +
+              `"${existingSessionId}" but protocol returned thread "${session.id}". ` +
+              `The prior conversation is not loaded. Aborting so the user sees the ` +
+              `failure rather than silently starting a fresh thread.`
+            );
+          }
           console.log('[CODEX] Saving new thread ID:', {
             nimbalystSessionId: sessionId,
             codexThreadId: session.id
