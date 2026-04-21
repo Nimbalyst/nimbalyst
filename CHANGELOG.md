@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.29] - 2026-04-21
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Intel Mac "spawn ENOTDIR" still reproduced after v0.57.28: npm workspaces hoist packages to the root `node_modules/` even when `npm install` is run from a child directory, so the darwin-x64 SDK binaries kept landing where electron-builder couldn't find them. Use `--install-strategy=nested --prefix` to bypass workspace hoisting and force the binaries into `packages/electron/node_modules/`. Added a post-install verification step that fails the CI job immediately if the binary is missing at the expected path.
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.57.28] - 2026-04-20
 
 
