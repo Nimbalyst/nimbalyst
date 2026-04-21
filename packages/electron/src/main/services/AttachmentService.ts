@@ -50,9 +50,97 @@ export class AttachmentService {
     document: [
       'text/plain',
       'text/markdown',
+      'text/html',
+      'text/xml',
+      'text/css',
+      'text/csv',
+      'text/yaml',
+      'text/x-log',
       'application/json',
-      'text/csv'
+      'application/xml',
+      'application/javascript',
+      'application/typescript',
+      'application/x-yaml',
+      'application/toml',
+      'application/x-sh'
     ]
+  };
+
+  // Extension -> MIME type mapping for files where the browser reports empty or application/octet-stream
+  private static readonly EXTENSION_MIME_MAP: Record<string, string> = {
+    // Log files
+    '.log': 'text/x-log',
+    // Config / data
+    '.json': 'application/json',
+    '.yaml': 'text/yaml',
+    '.yml': 'text/yaml',
+    '.toml': 'application/toml',
+    '.xml': 'text/xml',
+    '.csv': 'text/csv',
+    '.ini': 'text/plain',
+    '.cfg': 'text/plain',
+    '.conf': 'text/plain',
+    '.env': 'text/plain',
+    '.properties': 'text/plain',
+    // Markup / docs
+    '.md': 'text/markdown',
+    '.markdown': 'text/markdown',
+    '.txt': 'text/plain',
+    '.rst': 'text/plain',
+    '.html': 'text/html',
+    '.htm': 'text/html',
+    '.css': 'text/css',
+    // Source code
+    '.js': 'application/javascript',
+    '.mjs': 'application/javascript',
+    '.cjs': 'application/javascript',
+    '.ts': 'application/typescript',
+    '.tsx': 'application/typescript',
+    '.jsx': 'application/javascript',
+    '.py': 'text/plain',
+    '.rb': 'text/plain',
+    '.rs': 'text/plain',
+    '.go': 'text/plain',
+    '.java': 'text/plain',
+    '.kt': 'text/plain',
+    '.swift': 'text/plain',
+    '.c': 'text/plain',
+    '.cpp': 'text/plain',
+    '.h': 'text/plain',
+    '.hpp': 'text/plain',
+    '.cs': 'text/plain',
+    '.php': 'text/plain',
+    '.lua': 'text/plain',
+    '.r': 'text/plain',
+    '.scala': 'text/plain',
+    '.clj': 'text/plain',
+    '.ex': 'text/plain',
+    '.exs': 'text/plain',
+    '.erl': 'text/plain',
+    '.hs': 'text/plain',
+    '.ml': 'text/plain',
+    '.sql': 'text/plain',
+    '.graphql': 'text/plain',
+    '.gql': 'text/plain',
+    '.proto': 'text/plain',
+    // Shell / scripts
+    '.sh': 'application/x-sh',
+    '.bash': 'application/x-sh',
+    '.zsh': 'application/x-sh',
+    '.fish': 'application/x-sh',
+    '.ps1': 'text/plain',
+    '.bat': 'text/plain',
+    '.cmd': 'text/plain',
+    // DevOps / CI
+    '.dockerfile': 'text/plain',
+    '.tf': 'text/plain',
+    '.hcl': 'text/plain',
+    // Data
+    '.tsv': 'text/csv',
+    '.ndjson': 'application/json',
+    '.jsonl': 'application/json',
+    // PDF
+    '.pdf': 'application/pdf',
   };
 
   // File size limits (in bytes)
@@ -79,28 +167,31 @@ export class AttachmentService {
     sessionId: string
   ): Promise<{ success: boolean; attachment?: ChatAttachment; error?: string }> {
     try {
+      // Resolve MIME type from extension if browser didn't provide one
+      const resolvedMimeType = AttachmentService.resolveMimeType(mimeType, originalName);
+
       // Validate the file
-      const validation = this.validateFile(fileBuffer.length, mimeType);
+      const validation = this.validateFile(fileBuffer.length, resolvedMimeType, originalName);
       if (!validation.valid) {
         return { success: false, error: validation.error };
       }
 
       // Compress image if applicable
       let finalBuffer = fileBuffer;
-      let finalMimeType = mimeType;
+      let finalMimeType = resolvedMimeType;
       let finalName = originalName;
 
-      const type = this.getAttachmentType(mimeType);
-      if (type === 'image' && shouldCompress(fileBuffer, mimeType)) {
+      const type = this.getAttachmentType(resolvedMimeType);
+      if (type === 'image' && shouldCompress(fileBuffer, resolvedMimeType)) {
         try {
-          const result = await compressImage(fileBuffer, mimeType);
+          const result = await compressImage(fileBuffer, resolvedMimeType);
 
           if (result.wasCompressed) {
             finalBuffer = result.buffer;
             finalMimeType = result.mimeType;
 
             // Update filename extension if format changed
-            if (result.mimeType !== mimeType) {
+            if (result.mimeType !== resolvedMimeType) {
               const ext = result.mimeType === 'image/jpeg' ? '.jpg' : '.png';
               finalName = this.changeExtension(originalName, ext);
             }
@@ -226,15 +317,31 @@ export class AttachmentService {
   }
 
   /**
+   * Resolve MIME type from file extension when browser-provided MIME is unhelpful.
+   * Browsers report "" or "application/octet-stream" for many text-based files.
+   */
+  static resolveMimeType(mimeType: string, filename: string): string {
+    if (mimeType && mimeType !== 'application/octet-stream') {
+      return mimeType;
+    }
+    const ext = extname(filename).toLowerCase();
+    return AttachmentService.EXTENSION_MIME_MAP[ext] ?? mimeType;
+  }
+
+  /**
    * Validate file type and size
    */
-  validateFile(fileSize: number, mimeType: string): AttachmentValidation {
+  validateFile(fileSize: number, mimeType: string, filename?: string): AttachmentValidation {
+    const resolvedMime = filename
+      ? AttachmentService.resolveMimeType(mimeType, filename)
+      : mimeType;
+
     // Check MIME type
-    const type = this.getAttachmentType(mimeType);
+    const type = this.getAttachmentType(resolvedMime);
     if (!type) {
       return {
         valid: false,
-        error: `Unsupported file type: ${mimeType}`
+        error: `Unsupported file type: ${resolvedMime || '(unknown)'}`
       };
     }
 

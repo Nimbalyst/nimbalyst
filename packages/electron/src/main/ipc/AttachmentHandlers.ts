@@ -190,10 +190,12 @@ export function registerAttachmentHandlers() {
    */
   safeHandle('attachment:validate', async (event, {
     fileSize,
-    mimeType
+    mimeType,
+    filename
   }: {
     fileSize: number;
     mimeType: string;
+    filename?: string;
   }) => {
     try {
       const window = BrowserWindow.fromWebContents(event.sender);
@@ -212,7 +214,7 @@ export function registerAttachmentHandlers() {
       }
 
       const service = getAttachmentService(state.workspacePath);
-      return service.validateFile(fileSize, mimeType);
+      return service.validateFile(fileSize, mimeType, filename);
     } catch (error) {
       console.error('[AttachmentHandlers] Validate file failed', error);
       return {

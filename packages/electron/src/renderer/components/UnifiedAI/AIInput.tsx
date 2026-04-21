@@ -885,7 +885,8 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       try {
         const validation = await window.electronAPI.invoke('attachment:validate', {
           fileSize: file.size,
-          mimeType: file.type
+          mimeType: file.type,
+          filename: file.name
         });
 
         if (!validation.valid) {
