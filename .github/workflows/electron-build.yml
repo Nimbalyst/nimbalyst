@@ -52,12 +52,13 @@ jobs:
     strategy:
       matrix:
         include:
-          # Both macOS builds run on arm64 runner (cheaper than Intel)
-          # electron-builder can cross-compile x64 on arm64
           - os: macos-latest
             platform: mac
             arch: arm64
-          - os: macos-latest
+          # Use a native Intel runner for x64 to avoid cross-arch binary
+          # resolution issues (SDK native binaries installed by npm for the
+          # host arch wouldn't match the target arch in cross-compiled builds).
+          - os: macos-13
             platform: mac
             arch: x64
           - os: ubuntu-latest
@@ -109,38 +110,6 @@ jobs:
             npm run --workspace=@nimbalyst/electron postinstall
           else
             npm ci
-          fi
-
-      # When cross-compiling (e.g. macOS x64 on arm64 runner), npm only
-      # installs optional native binaries for the host architecture. We need
-      # the target arch binaries bundled in the app for the SDK CLIs to work.
-      - name: Install cross-arch native binaries
-        if: (matrix.arch == 'x64' && runner.arch == 'ARM64') || (matrix.arch == 'arm64' && runner.arch == 'X64')
-        shell: bash
-        run: |
-          TARGET_ARCH="${{ matrix.arch }}"
-          PLATFORM="${{ matrix.platform }}"
-
-          # Map matrix platform to npm package platform names
-          case "$PLATFORM" in
-            mac) NPM_PLATFORM="darwin" ;;
-            win) NPM_PLATFORM="win32" ;;
-            linux) NPM_PLATFORM="linux" ;;
-          esac
-
-          echo "Cross-compiling for ${NPM_PLATFORM}-${TARGET_ARCH}, installing target-arch native binaries..."
-
-          # Claude Agent SDK native binary
-          CLAUDE_SDK_VERSION=$(node -e "console.log(require('./packages/electron/node_modules/@anthropic-ai/claude-agent-sdk/package.json').version)")
-          CLAUDE_PKG="@anthropic-ai/claude-agent-sdk-${NPM_PLATFORM}-${TARGET_ARCH}@${CLAUDE_SDK_VERSION}"
-          echo "Installing ${CLAUDE_PKG}"
-          npm install --no-save --force "${CLAUDE_PKG}"
-
-          # OpenAI Codex native binary (uses npm aliases like "npm:@openai/codex@0.121.0-darwin-x64")
-          CODEX_SPEC=$(node -e "console.log(require('./packages/electron/node_modules/@openai/codex/package.json').optionalDependencies?.['@openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}'] || '')")
-          if [ -n "$CODEX_SPEC" ]; then
-            echo "Installing @openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}@${CODEX_SPEC}"
-            npm install --no-save --force "@openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}@${CODEX_SPEC}"
           fi
 
       - name: Build extension-sdk
@@ -271,7 +240,7 @@ jobs:
           # Mark as official build for analytics tracking
           # This ensures PostHog only sends data from official GitHub release builds
           OFFICIAL_BUILD: 'true'
-          # Architecture for this build job (used for macOS cross-compilation)
+          # Architecture for this build job
           BUILD_ARCH: ${{ matrix.arch }}
         working-directory: packages/electron
         run: |
