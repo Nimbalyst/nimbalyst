@@ -23,7 +23,6 @@ export function resolveNativeBinaryPath(): string | undefined {
     try {
       return require.resolve(`${packageName}/${binaryName}`);
     } catch {
-      // Platform package may not be installed in dev (e.g., CI on different arch)
       return undefined;
     }
   }
@@ -39,6 +38,19 @@ export function resolveNativeBinaryPath(): string | undefined {
   if (fs.existsSync(binaryPath)) {
     return binaryPath;
   }
+
+  // Binary not found -- log diagnostics to help debug cross-arch packaging issues
+  console.error(`[resolveNativeBinaryPath] Binary not found at: ${binaryPath}`);
+  console.error(`[resolveNativeBinaryPath] platform=${platform} arch=${arch} appPath=${appPath}`);
+  try {
+    const anthropicDir = path.join(unpackedPath, 'node_modules', '@anthropic-ai');
+    if (fs.existsSync(anthropicDir)) {
+      const entries = fs.readdirSync(anthropicDir);
+      console.error(`[resolveNativeBinaryPath] Contents of ${anthropicDir}: ${entries.join(', ')}`);
+    } else {
+      console.error(`[resolveNativeBinaryPath] Directory does not exist: ${anthropicDir}`);
+    }
+  } catch { /* ignore */ }
 
   // Fallback: try require.resolve in case asar-unpacked layout differs
   try {

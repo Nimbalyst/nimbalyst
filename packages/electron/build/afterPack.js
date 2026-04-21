@@ -7,7 +7,9 @@ const fs = require('fs');
 exports.default = async function(context) {
   const { appOutDir, packager } = context;
 
-  const arch = packager.arch ? require('builder-util').Arch[packager.arch] : process.arch;
+  const { Arch } = require('builder-util');
+  const archNum = context.arch ?? packager.arch;
+  const arch = archNum != null ? Arch[archNum] : process.arch;
   // Map electron-builder platform names to Node.js platform names
   const platformMap = { mac: 'darwin', windows: 'win32', linux: 'linux' };
   const platformName = platformMap[packager.platform.name] || packager.platform.name;

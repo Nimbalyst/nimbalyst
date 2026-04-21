@@ -112,16 +112,15 @@ jobs:
 
       # When cross-compiling (e.g. macOS x64 on arm64 runner), npm only
       # installs optional native binaries for the host architecture. We need
-      # the target arch binaries bundled in the app for the SDK CLIs to work.
+      # the target arch binaries in node_modules/ so electron-builder's
+      # extraResources entries can copy them into the packaged app.
       #
-      # IMPORTANT: electron-builder's `files` patterns resolve relative to
-      # packages/electron/, so binaries MUST end up in
-      # packages/electron/node_modules/. In an npm-workspace repo, plain
-      # `npm install` hoists to the root even when run from a child dir.
-      # Install into a temp directory to avoid npm trying to resolve
-      # packages/electron's workspace dependencies (@nimbalyst/runtime etc.)
-      # from the public registry, then copy the binary into the electron
-      # node_modules where electron-builder expects it.
+      # electron-builder's `files` patterns only include packages that are
+      # in the npm dependency tree (lock file). Since we install with
+      # --no-save, the cross-arch binary isn't in the tree and `files`
+      # globs silently skip it. We use `extraResources` instead, which
+      # copies from the filesystem path directly -- no lock file needed.
+      # The binary goes to root node_modules/ (where npm naturally puts it).
       - name: Install cross-arch native binaries
         if: (matrix.arch == 'x64' && runner.arch == 'ARM64') || (matrix.arch == 'arm64' && runner.arch == 'X64')
         shell: bash
@@ -135,44 +134,38 @@ jobs:
             linux) NPM_PLATFORM="linux" ;;
           esac
 
-          ELECTRON_DIR="packages/electron"
-          TMPDIR=$(mktemp -d)
           echo "Cross-compiling for ${NPM_PLATFORM}-${TARGET_ARCH}, installing target-arch native binaries..."
 
           # Claude Agent SDK native binary
-          # The SDK may be hoisted to root node_modules/ by npm workspaces.
-          # require.resolve() with a subpath fails because the package's
-          # exports field doesn't expose ./package.json, so probe known
-          # locations with file existence and require() the absolute path
-          # (which bypasses exports resolution).
-          if [ -f "${ELECTRON_DIR}/node_modules/@anthropic-ai/claude-agent-sdk/package.json" ]; then
-            CLAUDE_PKG_JSON="${ELECTRON_DIR}/node_modules/@anthropic-ai/claude-agent-sdk/package.json"
+          # Resolve SDK version from wherever npm hoisted it. The exports
+          # field blocks require.resolve('./package.json'), so probe known
+          # locations and use an absolute require() which bypasses exports.
+          if [ -f "packages/electron/node_modules/@anthropic-ai/claude-agent-sdk/package.json" ]; then
+            CLAUDE_PKG_JSON="packages/electron/node_modules/@anthropic-ai/claude-agent-sdk/package.json"
           elif [ -f "node_modules/@anthropic-ai/claude-agent-sdk/package.json" ]; then
             CLAUDE_PKG_JSON="node_modules/@anthropic-ai/claude-agent-sdk/package.json"
           else
-            echo "::error::Cannot find @anthropic-ai/claude-agent-sdk package.json in root or electron node_modules"
+            echo "::error::Cannot find @anthropic-ai/claude-agent-sdk package.json"
             exit 1
           fi
           CLAUDE_SDK_VERSION=$(node -p "require(require('path').resolve('${CLAUDE_PKG_JSON}')).version")
           CLAUDE_PKG="@anthropic-ai/claude-agent-sdk-${NPM_PLATFORM}-${TARGET_ARCH}@${CLAUDE_SDK_VERSION}"
           BINARY_NAME=$( [ "$NPM_PLATFORM" = "win32" ] && echo "claude.exe" || echo "claude" )
-          echo "Installing ${CLAUDE_PKG} into temp dir, then copying to ${ELECTRON_DIR}/"
-          npm install --no-save --force "${CLAUDE_PKG}" --prefix "$TMPDIR"
-          mkdir -p "${ELECTRON_DIR}/node_modules/@anthropic-ai"
-          cp -r "$TMPDIR/node_modules/@anthropic-ai/claude-agent-sdk-${NPM_PLATFORM}-${TARGET_ARCH}" "${ELECTRON_DIR}/node_modules/@anthropic-ai/"
+          echo "Installing ${CLAUDE_PKG}"
+          npm install --no-save --force "${CLAUDE_PKG}"
 
-          # Verify binary actually landed in the right place
-          EXPECTED="${ELECTRON_DIR}/node_modules/@anthropic-ai/claude-agent-sdk-${NPM_PLATFORM}-${TARGET_ARCH}/${BINARY_NAME}"
+          # Verify binary exists where extraResources will look for it
+          EXPECTED="node_modules/@anthropic-ai/claude-agent-sdk-${NPM_PLATFORM}-${TARGET_ARCH}/${BINARY_NAME}"
           if [ ! -f "${EXPECTED}" ]; then
-            echo "::error::Cross-arch binary not found at ${EXPECTED} -- electron-builder will not package it"
-            ls -la "${ELECTRON_DIR}/node_modules/@anthropic-ai/" || true
+            echo "::error::Cross-arch binary not found at ${EXPECTED}"
+            ls -la "node_modules/@anthropic-ai/" || true
             exit 1
           fi
           echo "Verified: ${EXPECTED} exists"
 
-          # OpenAI Codex native binary -- same exports-field workaround
-          if [ -f "${ELECTRON_DIR}/node_modules/@openai/codex/package.json" ]; then
-            CODEX_PKG_JSON="${ELECTRON_DIR}/node_modules/@openai/codex/package.json"
+          # OpenAI Codex native binary
+          if [ -f "packages/electron/node_modules/@openai/codex/package.json" ]; then
+            CODEX_PKG_JSON="packages/electron/node_modules/@openai/codex/package.json"
           elif [ -f "node_modules/@openai/codex/package.json" ]; then
             CODEX_PKG_JSON="node_modules/@openai/codex/package.json"
           else
@@ -184,13 +177,9 @@ jobs:
             CODEX_SPEC=""
           fi
           if [ -n "$CODEX_SPEC" ]; then
-            echo "Installing @openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}@${CODEX_SPEC} into temp dir, then copying to ${ELECTRON_DIR}/"
-            npm install --no-save --force "@openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}@${CODEX_SPEC}" --prefix "$TMPDIR"
-            mkdir -p "${ELECTRON_DIR}/node_modules/@openai"
-            cp -r "$TMPDIR/node_modules/@openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}" "${ELECTRON_DIR}/node_modules/@openai/"
+            echo "Installing @openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}@${CODEX_SPEC}"
+            npm install --no-save --force "@openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}@${CODEX_SPEC}"
           fi
-
-          rm -rf "$TMPDIR"
 
       - name: Build extension-sdk
         working-directory: packages/extension-sdk

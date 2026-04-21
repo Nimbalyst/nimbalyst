@@ -331,6 +331,12 @@
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "artifactName": "${productName}-macOS-${arch}.${ext}",
+      "extraResources": [
+        {
+          "from": "../../node_modules/@anthropic-ai/claude-agent-sdk-darwin-${arch}",
+          "to": "app.asar.unpacked/node_modules/@anthropic-ai/claude-agent-sdk-darwin-${arch}"
+        }
+      ],
       "target": [
         {
           "target": "dmg",

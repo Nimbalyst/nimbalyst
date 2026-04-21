@@ -106,7 +106,8 @@ export function registerClaudeCodeHandlers() {
       analytics.sendEvent('do_claude_code_login', {platform: platform});
       const binaryPath = resolveNativeBinaryPath() ?? (platform === 'win32' ? findWindowsClaudeExecutable() : null);
       if (!binaryPath) {
-        throw new Error('Claude Agent SDK native binary not found. This is a build configuration issue.');
+        const expectedPkg = `@anthropic-ai/claude-agent-sdk-${platform}-${process.arch}`;
+        throw new Error(`Claude Agent SDK native binary not found (looking for ${expectedPkg}, arch=${process.arch}). Check main.log for details.`);
       }
 
       if (platform === 'darwin') {
@@ -165,7 +166,8 @@ end tell`;
       analytics.sendEvent('do_claude_code_logout', {platform: platform});
       const binaryPath = resolveNativeBinaryPath() ?? (platform === 'win32' ? findWindowsClaudeExecutable() : null);
       if (!binaryPath) {
-        throw new Error('Claude Agent SDK native binary not found. This is a build configuration issue.');
+        const expectedPkg = `@anthropic-ai/claude-agent-sdk-${platform}-${process.arch}`;
+        throw new Error(`Claude Agent SDK native binary not found (looking for ${expectedPkg}, arch=${process.arch}). Check main.log for details.`);
       }
 
       if (platform === 'darwin') {
