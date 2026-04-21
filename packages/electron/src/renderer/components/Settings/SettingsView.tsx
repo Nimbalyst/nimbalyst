@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
+import { store } from '@nimbalyst/runtime/store';
 import { SettingsSidebar, type SettingsCategory } from './SettingsSidebar';
 import { pushNavigationEntryAtom, isRestoringNavigationAtom } from '../../store';
 
@@ -35,6 +36,7 @@ import {
   setApiKeyAtom,
   setAvailableModelsAtom,
   releaseChannelAtom,
+  flushPendingAIProviderPersist,
   type ProviderConfig,
   type AIModel,
 } from '../../store/atoms/appSettings';
@@ -86,30 +88,33 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
   // Local setters that wrap atom updates for backward compatibility
   const setProviders = useCallback((updater: Record<string, ProviderConfig> | ((prev: Record<string, ProviderConfig>) => Record<string, ProviderConfig>)) => {
     if (typeof updater === 'function') {
-      const newProviders = updater(providers);
+      const latestProviders = store.get(aiProviderSettingsAtom).providers;
+      const newProviders = updater(latestProviders);
       updateAIProviderSettings({ providers: newProviders });
     } else {
       updateAIProviderSettings({ providers: updater });
     }
-  }, [providers, updateAIProviderSettings]);
+  }, [updateAIProviderSettings]);
 
   const setApiKeys = useCallback((updater: Record<string, string> | ((prev: Record<string, string>) => Record<string, string>)) => {
     if (typeof updater === 'function') {
-      const newApiKeys = updater(apiKeys);
+      const latestApiKeys = store.get(aiProviderSettingsAtom).apiKeys;
+      const newApiKeys = updater(latestApiKeys);
       updateAIProviderSettings({ apiKeys: newApiKeys });
     } else {
       updateAIProviderSettings({ apiKeys: updater });
     }
-  }, [apiKeys, updateAIProviderSettings]);
+  }, [updateAIProviderSettings]);
 
   const setAvailableModels = useCallback((updater: Record<string, Model[]> | ((prev: Record<string, Model[]>) => Record<string, Model[]>)) => {
     if (typeof updater === 'function') {
-      const newModels = updater(availableModels);
+      const latestModels = store.get(aiProviderSettingsAtom).availableModels as Record<string, Model[]>;
+      const newModels = updater(latestModels);
       updateAIProviderSettings({ availableModels: newModels });
     } else {
       updateAIProviderSettings({ availableModels: updater });
     }
-  }, [availableModels, updateAIProviderSettings]);
+  }, [updateAIProviderSettings]);
 
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -445,11 +450,11 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
           [selectedCategory]: { ...prev[selectedCategory], testStatus: 'testing', testMessage: undefined }
         }));
 
-        const settings = {
-          apiKeys,
-          providerSettings: providers
-        };
-        await window.electronAPI.aiSaveSettings(settings);
+        // Ensure any debounced provider/apiKey changes are saved before testing
+        // so the main process has the keys the user just typed. We flush the
+        // pending diff rather than sending the full atom -- sending the full
+        // atom was how stale defaults could clobber real stored settings.
+        await flushPendingAIProviderPersist();
 
         try {
           const result = await window.electronAPI.aiTestConnection(

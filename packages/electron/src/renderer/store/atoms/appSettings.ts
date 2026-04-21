@@ -18,6 +18,7 @@
 import { atom, type Atom } from 'jotai';
 import posthog from 'posthog-js';
 import { copyToClipboard } from '@nimbalyst/runtime';
+import { store } from '@nimbalyst/runtime/store';
 import { type EffortLevel, DEFAULT_EFFORT_LEVEL, parseEffortLevel } from '@nimbalyst/runtime/ai/server/effortLevels';
 import { AlphaFeatureTag } from '../../../shared/alphaFeatures';
 import { BetaFeatureTag } from '../../../shared/betaFeatures';
@@ -1144,6 +1145,22 @@ let aiProviderPersistTimer: ReturnType<typeof setTimeout> | null = null;
 const AI_PROVIDER_PERSIST_DEBOUNCE_MS = 500;
 
 /**
+ * Persists are gated on successful init (see initAIProviderSettings). Until the
+ * atom has been hydrated from real IPC data, every flush is dropped so a stale
+ * default-valued atom (e.g. from a transient IPC failure at startup) can never
+ * overwrite the real stored settings on disk.
+ */
+let aiProviderInitComplete = false;
+
+/**
+ * Accumulators for pending changes. Live at module scope so a second scheduled
+ * call within the debounce window can't drop earlier calls' keys -- see
+ * feedback_debounce_clobbered_keys.md.
+ */
+const pendingProviderIds = new Set<string>();
+const pendingApiKeyNames = new Set<string>();
+
+/**
  * Remove the `models` field from openai-codex provider config before persisting.
  * Codex uses dynamic model discovery from the API instead of user-configured model selections.
  */
@@ -1154,27 +1171,102 @@ function sanitizeProvidersForPersistence(providers: Record<string, ProviderConfi
 }
 
 /**
- * Persist AI provider settings to main process.
- * Debounced to avoid excessive IPC calls during rapid changes.
+ * Schedule a persist of only the changed provider / apiKey slices.
+ *
+ * Callers pass the providerIds and apiKeyNames they touched. The flush reads
+ * the latest atom snapshot and sends only those slices, so unrelated keys can
+ * never be clobbered by a stale full-object spread.
  */
-function scheduleAIProviderPersist(settings: AIProviderSettings): void {
+function scheduleAIProviderPersist(changes: { providerIds?: Iterable<string>; apiKeyNames?: Iterable<string> }): void {
+  if (changes.providerIds) {
+    for (const id of changes.providerIds) pendingProviderIds.add(id);
+  }
+  if (changes.apiKeyNames) {
+    for (const name of changes.apiKeyNames) pendingApiKeyNames.add(name);
+  }
+
+  if (pendingProviderIds.size === 0 && pendingApiKeyNames.size === 0) {
+    return;
+  }
+
   if (aiProviderPersistTimer) {
     clearTimeout(aiProviderPersistTimer);
   }
-  aiProviderPersistTimer = setTimeout(async () => {
-    aiProviderPersistTimer = null;
-    if (typeof window !== 'undefined' && window.electronAPI) {
-      try {
-        const sanitizedProviders = sanitizeProvidersForPersistence(settings.providers);
-        await window.electronAPI.aiSaveSettings({
-          apiKeys: settings.apiKeys,
-          providerSettings: sanitizedProviders,
-        });
-      } catch (error) {
-        console.error('[appSettings] Failed to save AI provider settings:', error);
+  aiProviderPersistTimer = setTimeout(flushAIProviderPersist, AI_PROVIDER_PERSIST_DEBOUNCE_MS);
+}
+
+async function flushAIProviderPersist(): Promise<void> {
+  aiProviderPersistTimer = null;
+
+  if (!aiProviderInitComplete) {
+    console.warn('[appSettings] Dropping AI provider persist: init not complete', {
+      providerIds: Array.from(pendingProviderIds),
+      apiKeyNames: Array.from(pendingApiKeyNames),
+    });
+    pendingProviderIds.clear();
+    pendingApiKeyNames.clear();
+    return;
+  }
+
+  if (typeof window === 'undefined' || !window.electronAPI) {
+    pendingProviderIds.clear();
+    pendingApiKeyNames.clear();
+    return;
+  }
+
+  const snapshot = store.get(aiProviderSettingsAtom);
+
+  const providerIdsToSend = Array.from(pendingProviderIds);
+  const apiKeyNamesToSend = Array.from(pendingApiKeyNames);
+  pendingProviderIds.clear();
+  pendingApiKeyNames.clear();
+
+  const payload: { providerSettings?: Record<string, ProviderConfig>; apiKeys?: Record<string, string> } = {};
+
+  if (providerIdsToSend.length > 0) {
+    const partialProviders: Record<string, ProviderConfig> = {};
+    for (const id of providerIdsToSend) {
+      const config = snapshot.providers[id];
+      if (config !== undefined) {
+        partialProviders[id] = config;
       }
     }
-  }, AI_PROVIDER_PERSIST_DEBOUNCE_MS);
+    payload.providerSettings = sanitizeProvidersForPersistence(partialProviders);
+  }
+
+  if (apiKeyNamesToSend.length > 0) {
+    const partialApiKeys: Record<string, string> = {};
+    for (const name of apiKeyNamesToSend) {
+      const value = snapshot.apiKeys[name];
+      if (value !== undefined) {
+        partialApiKeys[name] = value;
+      }
+    }
+    payload.apiKeys = partialApiKeys;
+  }
+
+  try {
+    await window.electronAPI.aiSaveSettings(payload);
+  } catch (error) {
+    console.error('[appSettings] Failed to save AI provider settings:', error);
+  }
+}
+
+/**
+ * Immediately flush any pending AI provider settings persist, bypassing the
+ * 500ms debounce. Callers that need the main process to see the latest
+ * provider / apiKey changes before making an IPC call (e.g. testing a
+ * connection) should await this first.
+ */
+export async function flushPendingAIProviderPersist(): Promise<void> {
+  if (aiProviderPersistTimer) {
+    clearTimeout(aiProviderPersistTimer);
+    aiProviderPersistTimer = null;
+  }
+  if (pendingProviderIds.size === 0 && pendingApiKeyNames.size === 0) {
+    return;
+  }
+  await flushAIProviderPersist();
 }
 
 // === Derived read-only atoms (slices) ===
@@ -1220,7 +1312,8 @@ export const getApiKeyAtom = (keyName: string) =>
 
 /**
  * Set AI provider settings (partial update).
- * Merges with existing settings and triggers persist.
+ * Merges with existing settings and schedules persistence of only the changed slices.
+ * Updates to `availableModels` are NOT persisted (they are fetched from APIs).
  */
 export const setAIProviderSettingsAtom = atom(
   null,
@@ -1236,7 +1329,10 @@ export const setAIProviderSettingsAtom = atom(
         : current.availableModels,
     };
     set(aiProviderSettingsAtom, newSettings);
-    scheduleAIProviderPersist(newSettings);
+    scheduleAIProviderPersist({
+      providerIds: updates.providers ? Object.keys(updates.providers) : undefined,
+      apiKeyNames: updates.apiKeys ? Object.keys(updates.apiKeys) : undefined,
+    });
   }
 );
 
@@ -1255,7 +1351,7 @@ export const setProviderConfigAtom = atom(
       },
     };
     set(aiProviderSettingsAtom, newSettings);
-    scheduleAIProviderPersist(newSettings);
+    scheduleAIProviderPersist({ providerIds: [providerId] });
   }
 );
 
@@ -1274,7 +1370,7 @@ export const setApiKeyAtom = atom(
       },
     };
     set(aiProviderSettingsAtom, newSettings);
-    scheduleAIProviderPersist(newSettings);
+    scheduleAIProviderPersist({ apiKeyNames: [keyName] });
   }
 );
 
@@ -1299,43 +1395,45 @@ export const setAvailableModelsAtom = atom(
 /**
  * Initialize AI provider settings from IPC.
  * Call this once at app startup.
+ *
+ * Throws on failure rather than returning defaults. If this silently returned
+ * defaults, the atom would hold `codex.enabled=false` etc., and the next
+ * setter call would persist that stale state -- silently flipping real saved
+ * settings off (NIM-801). The persist scheduler is gated on the success of
+ * this function via `aiProviderInitComplete`.
  */
 export async function initAIProviderSettings(): Promise<AIProviderSettings> {
   if (typeof window === 'undefined' || !window.electronAPI) {
-    return defaultAIProviderSettings;
+    throw new Error('initAIProviderSettings: electronAPI unavailable');
   }
 
-  try {
-    const settings = await window.electronAPI.aiGetSettings();
-    const providers = { ...defaultProviders };
-    const apiKeys = { ...defaultApiKeys };
+  const settings = await window.electronAPI.aiGetSettings();
+  const providers = { ...defaultProviders };
+  const apiKeys = { ...defaultApiKeys };
 
-    // Merge loaded provider settings
-    if (settings?.providerSettings) {
-      Object.entries(settings.providerSettings).forEach(([key, value]: [string, any]) => {
-        if (providers[key]) {
-          providers[key] = { ...providers[key], ...value };
-        }
-      });
-    }
-
-    const sanitizedProviders = sanitizeProvidersForPersistence(providers);
-
-    // Merge loaded API keys
-    if (settings?.apiKeys) {
-      Object.assign(apiKeys, settings.apiKeys);
-    }
-
-    return {
-      providers: sanitizedProviders,
-      apiKeys,
-      availableModels: {}, // Models are fetched separately, not persisted
-    };
-  } catch (error) {
-    console.error('[appSettings] Failed to load AI provider settings:', error);
+  // Merge loaded provider settings
+  if (settings?.providerSettings) {
+    Object.entries(settings.providerSettings).forEach(([key, value]: [string, any]) => {
+      if (providers[key]) {
+        providers[key] = { ...providers[key], ...value };
+      }
+    });
   }
 
-  return defaultAIProviderSettings;
+  const sanitizedProviders = sanitizeProvidersForPersistence(providers);
+
+  // Merge loaded API keys
+  if (settings?.apiKeys) {
+    Object.assign(apiKeys, settings.apiKeys);
+  }
+
+  aiProviderInitComplete = true;
+
+  return {
+    providers: sanitizedProviders,
+    apiKeys,
+    availableModels: {}, // Models are fetched separately, not persisted
+  };
 }
 
 // ============================================================================

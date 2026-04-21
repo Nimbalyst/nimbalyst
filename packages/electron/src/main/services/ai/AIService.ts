@@ -5207,7 +5207,7 @@ export class AIService {
     });
 
     safeHandle('ai:saveSettings', async (event, settings: any) => {
-      if (settings.defaultProvider) {
+      if (settings.defaultProvider !== undefined) {
         this.getSettingsStore().set('defaultProvider', settings.defaultProvider);
       }
 
@@ -5270,8 +5270,18 @@ export class AIService {
       }
 
       if (settings.providerSettings) {
+        // Renderer sends only the provider slices it touched; merge at the
+        // provider-id level so untouched providers are preserved on disk.
+        // Each incoming slice replaces the stored slice wholesale -- the
+        // renderer owns the full config for any provider it sends.
         this.cachedNormalizedProviderSettings = null;
-        this.getSettingsStore().set('providerSettings', this.normalizeProviderSettings(settings.providerSettings));
+        const currentProviderSettings = this.getNormalizedProviderSettings();
+        const mergedProviderSettings: Record<string, unknown> = {
+          ...currentProviderSettings,
+          ...(settings.providerSettings as Record<string, unknown>),
+        };
+
+        this.getSettingsStore().set('providerSettings', this.normalizeProviderSettings(mergedProviderSettings));
       }
 
       if (settings.showToolCalls !== undefined) {
