@@ -6,6 +6,7 @@ import {
   CLAUDE_MODELS,
   OPENAI_MODELS,
   CLAUDE_CODE_VARIANT_VERSIONS,
+  CLAUDE_CODE_MODEL_LABELS,
   type ClaudeCodeVariant,
 } from '@nimbalyst/runtime/ai/modelConstants';
 import { CLAUDE_CODE_VARIANTS, ModelIdentifier } from '@nimbalyst/runtime/ai/server/types';
@@ -47,7 +48,7 @@ export function extractClaudeCodeVariant(modelId?: string): ClaudeCodeVariant | 
 }
 
 function formatVariantLabel(variant: ClaudeCodeVariant): string {
-  return variant.charAt(0).toUpperCase() + variant.slice(1);
+  return CLAUDE_CODE_MODEL_LABELS[variant] ?? variant.charAt(0).toUpperCase() + variant.slice(1);
 }
 
 export function getClaudeCodeModelLabel(modelId?: string): string {
@@ -55,7 +56,7 @@ export function getClaudeCodeModelLabel(modelId?: string): string {
   const parsed = modelId ? ModelIdentifier.tryParse(modelId) : null;
   const version = CLAUDE_CODE_VARIANT_VERSIONS[variant];
   const suffix = parsed?.isExtendedContext ? ' (1M)' : '';
-  return `Claude Agent (${formatVariantLabel(variant)} ${version}${suffix})`;
+  return `Claude Agent · ${formatVariantLabel(variant)} ${version}${suffix}`;
 }
 
 export function getClaudeCodeModelShortLabel(modelId?: string): string {
