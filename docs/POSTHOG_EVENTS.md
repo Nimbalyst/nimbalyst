@@ -322,7 +322,7 @@ The `known_error` event uses an `errorId` property to identify specific error co
 | Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
 | --- | --- | --- | --- | --- | --- |
 | `user_created` | `index.ts:736` | Very first app launch only (launchCount === 1) - fires once per user | `$set_once: first_seen_version` | (pending release) |  |
-| `nimbalyst_session_start` | `AnalyticsService.ts:154` | Application starts (sent even for opted-out users) | `$session_id`<br/>`has_git_installed`<br/>`nimbalyst_version`<br/>`$set_once: is_dev_user`<br/>`$set_once: is_dev_install` | v0.45.25 (2025-11-14) |  |
+| `nimbalyst_session_start` | `AnalyticsService.ts:154` | Application starts (sent even for opted-out users) | `$session_id`<br/>`has_git_installed`<br/>`$set: nimbalyst_version`<br/>`$set: cpu_arch`<br/>`$set_once: is_dev_user`<br/>`$set_once: is_dev_install` | v0.45.25 (2025-11-14) |  |
 | `analytics_opt_out` | `AnalyticsService.ts:89` | User opts out of analytics in settings | None | v0.45.25 (2025-11-14) |  |
 | `first_launch_claude_check` | `index.ts:114` | Very first app launch only - checks if Claude Code is installed | `hasClaudeInstalled` (boolean) | v0.47.2 (2025-12-10) |  |
 | `quit_confirmation_shown` | `index.ts:757` | User attempts quit with active AI session | `reason` (active_ai_session) | v0.45.25 (2025-11-14) |  |
@@ -415,6 +415,7 @@ Person properties are attached to user profiles in PostHog via `posthog.people.s
 | `first_seen_version` | `string` | `index.ts` (first launch) | Set via `$set_once` - the app version when user first launched |
 | `is_dev_user` | `boolean` | `AnalyticsService.ts` | Set via `$set_once` - true for development/non-official builds |
 | `is_dev_install` | `boolean` | `AnalyticsService.ts` | Set via `$set_once` - true if installed from dev build |
+| `cpu_arch` | `string` | `AnalyticsService.ts` | `process.arch` value (`arm64`, `x64`, `ia32`, etc.) - set on each session start via `$set` |
 | `nimbalyst_mobile_version` | `string` | Mobile `main.tsx` | Mobile app version (iOS/Android) |
 
 ## Surveys

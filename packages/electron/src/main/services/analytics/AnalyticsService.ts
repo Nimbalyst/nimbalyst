@@ -145,6 +145,7 @@ export class AnalyticsService {
       'has_git_installed': isGitAvailable(),
       $set: {
         'nimbalyst_version': app.getVersion(),
+        'cpu_arch': process.arch,
       }
     };
 
