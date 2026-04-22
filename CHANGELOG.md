@@ -20,6 +20,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.40] - 2026-04-22
+
+
+### Added
+- Complete the marketplace extension deep link flow: queue install requests until the renderer is ready, then open Settings > Marketplace and focus the requested extension so users landing from an external link arrive on the matching detail view.
+
+### Fixed
+- Render custom tool widgets in Codex sessions: Codex reuses short per-turn item IDs (`item_1`, `item_2`, ...) across sessions, so the transcript transformer's `findByProviderToolCallId` queried globally and deduped a new session's `tool_call` against a same-named tool from a previous session, dropping the canonical event and hiding widgets like the git commit proposal. Scope the lookup to the current session by threading `sessionId` through the store interface, `processDescriptor`, the `ParseContext` wiring in `TranscriptTransformer` and `projectRawMessages`, and the `ToolCallMatcher` diff lookups. Adds a regression test covering two sessions that both call `mcp__nimbalyst-mcp__developer_git_commit_proposal` with `item_1`. Refs NIM-342.
+- Detect Windows Claude Code installs correctly: the detector only looked for `claude.exe`/`claude` on PATH and missed the npm-installed `claude.cmd` shim, so users with a working Claude Code install still saw the false "Claude Code not detected" setup warning. Recognize `claude.cmd` and add regression coverage for the Windows installation check alongside the related app-startup change.
+- Ship ripgrep on Windows ARM64 and the Claude Agent SDK native binary on Intel Mac: two silent `extraResources` failures caused broken release builds (ripgrep missing from Windows ARM64 installs with `spawn rg ENOENT`, and the `claude-agent-sdk` native binary missing from Intel Mac installs). Re-run `@vscode/ripgrep` postinstall explicitly after `npm ci --ignore-scripts` on `windows-11-arm` (the `--ignore-scripts` flag, added to dodge workerd's missing ARM64 prebuild, also skipped the rg.exe download); extend `validate-extra-resources` to walk `build.{mac,win,linux}.extraResources`, expand the `${arch}` macro via `BUILD_ARCH`, and assert the actual binary exists inside `@vscode/ripgrep/bin` and `@anthropic-ai/claude-agent-sdk-<platform>-<arch>`; extend `normalize-extra-resources` to handle platform-specific entries and self-heal npm hoisting in both directions; wire `validate:extra-resources` into `build:win` scripts (was only running for mac/linux).
+- Restore Electron typecheck for Windows Claude detection: remove the explicit `shell` option from the new Windows Claude version checks so the Electron package compiles cleanly again.
+
 ## [0.57.39] - 2026-04-22
 
 
