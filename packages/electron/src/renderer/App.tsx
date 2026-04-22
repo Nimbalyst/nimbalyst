@@ -380,6 +380,11 @@ export default function App() {
   const setSettingsInitialScope = useSetAtom(setSettingsInitialScopeAtom);
   const incrementSettingsKey = useSetAtom(incrementSettingsKeyAtom);
   const clearSettingsNavigation = useSetAtom(clearSettingsNavigationAtom);
+  const [marketplaceInstallRequest, setMarketplaceInstallRequest] = useState<{
+    extensionId: string;
+    requestedAt: string;
+    token: number;
+  } | null>(null);
 
   // Active extension panel (for sidebar or fullscreen panels from extensions)
   const [activeExtensionPanel, setActiveExtensionPanel] = useState<string | null>(null);
@@ -409,6 +414,26 @@ export default function App() {
   useEffect(() => {
     activeModeStateRef.current = activeMode;
   }, [activeMode]);
+
+  const openMarketplaceInstallRequest = useCallback((request: { extensionId: string; requestedAt?: string }) => {
+    if (!request.extensionId) return;
+
+    setMarketplaceInstallRequest({
+      extensionId: request.extensionId,
+      requestedAt: request.requestedAt || new Date().toISOString(),
+      token: Date.now(),
+    });
+    setSettingsInitialCategory('marketplace');
+    incrementSettingsKey();
+    setTimeout(() => setActiveMode('settings'), 0);
+  }, [incrementSettingsKey, setActiveMode, setSettingsInitialCategory]);
+
+  const clearMarketplaceInstallRequest = useCallback((token: number) => {
+    setMarketplaceInstallRequest((currentRequest) => {
+      if (!currentRequest || currentRequest.token !== token) return currentRequest;
+      return null;
+    });
+  }, []);
 
   // Unified navigation history (cross-mode back/forward)
   const goBack = useSetAtom(goBackAtom);
@@ -1016,6 +1041,26 @@ export default function App() {
       document.removeEventListener('auxclick', handleMouseButton);
     };
   }, [goBack, goForward]);
+
+  useEffect(() => {
+    if (!window.electronAPI?.on) return;
+
+    const handleInstallRequest = (request: { extensionId: string; requestedAt?: string }) => {
+      openMarketplaceInstallRequest(request);
+    };
+
+    const unsubscribe = window.electronAPI.on('extension-marketplace:install-request', handleInstallRequest);
+
+    void window.electronAPI.invoke('extension-marketplace:consume-pending-install-request').then((result) => {
+      if (result?.success && result.data?.extensionId) {
+        handleInstallRequest(result.data);
+      }
+    }).catch((error) => {
+      console.warn('[App] Failed to consume pending marketplace install request:', error);
+    });
+
+    return unsubscribe;
+  }, [openMarketplaceInstallRequest]);
 
   // Listen for IPC events from menu
   useEffect(() => {
@@ -2032,6 +2077,8 @@ export default function App() {
                   workspaceName={workspaceName}
                   initialCategory={settingsInitialCategory}
                   initialScope={settingsInitialScope}
+                  marketplaceInstallRequest={marketplaceInstallRequest}
+                  onMarketplaceInstallRequestHandled={clearMarketplaceInstallRequest}
                   onClose={() => {
                     setActiveMode('files');
                     // Clear initial settings state so next open uses defaults

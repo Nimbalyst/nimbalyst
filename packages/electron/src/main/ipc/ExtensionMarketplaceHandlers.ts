@@ -73,11 +73,18 @@ export interface RegistryData {
   categories: RegistryCategory[];
 }
 
+export interface PendingMarketplaceInstallRequest {
+  extensionId: string;
+  requestedAt: string;
+}
+
 interface InstallResult {
   success: boolean;
   error?: string;
   extensionId?: string;
 }
+
+let pendingMarketplaceInstallRequest: PendingMarketplaceInstallRequest | null = null;
 
 /**
  * Fetch registry data from the live Cloudflare Worker.
@@ -502,6 +509,19 @@ function notifyExtensionUnloaded(extensionId: string): void {
   }
 }
 
+export function queueMarketplaceInstallRequest(extensionId: string): void {
+  pendingMarketplaceInstallRequest = {
+    extensionId,
+    requestedAt: new Date().toISOString(),
+  };
+
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send('extension-marketplace:install-request', pendingMarketplaceInstallRequest);
+    }
+  }
+}
+
 /**
  * Silently check for and apply extension updates.
  * Intended to be called once on app startup (fire-and-forget).
@@ -551,6 +571,12 @@ export function registerExtensionMarketplaceHandlers(): void {
       const message = error instanceof Error ? error.message : 'Unknown error';
       return { success: false, error: message };
     }
+  });
+
+  safeHandle('extension-marketplace:consume-pending-install-request', async () => {
+    const request = pendingMarketplaceInstallRequest;
+    pendingMarketplaceInstallRequest = null;
+    return { success: true, data: request };
   });
 
   // Install from marketplace (download URL)

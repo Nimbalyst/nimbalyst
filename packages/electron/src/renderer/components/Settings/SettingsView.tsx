@@ -57,15 +57,31 @@ export interface Model {
 
 export type SettingsScope = 'user' | 'project';
 
+interface MarketplaceInstallRequest {
+  extensionId: string;
+  requestedAt: string;
+  token: number;
+}
+
 interface SettingsViewProps {
   workspacePath?: string | null;
   workspaceName?: string | null;
   onClose: () => void;
   initialCategory?: SettingsCategory;
   initialScope?: SettingsScope;
+  marketplaceInstallRequest?: MarketplaceInstallRequest | null;
+  onMarketplaceInstallRequestHandled?: (token: number) => void;
 }
 
-export function SettingsView({ workspacePath, workspaceName, onClose, initialCategory, initialScope }: SettingsViewProps) {
+export function SettingsView({
+  workspacePath,
+  workspaceName,
+  onClose,
+  initialCategory,
+  initialScope,
+  marketplaceInstallRequest = null,
+  onMarketplaceInstallRequestHandled,
+}: SettingsViewProps) {
   const posthog = usePostHog();
 
   const [selectedCategory, setSelectedCategory] = useState<SettingsCategory>(initialCategory || 'claude-code');
@@ -588,7 +604,12 @@ export function SettingsView({ workspacePath, workspaceName, onClose, initialCat
       case 'tracker-config':
         return <TrackerConfigPanel workspacePath={workspacePath ?? undefined} />;
       case 'marketplace':
-        return <ExtensionMarketplacePanel />;
+        return (
+          <ExtensionMarketplacePanel
+            installRequest={marketplaceInstallRequest}
+            onInstallRequestHandled={onMarketplaceInstallRequestHandled}
+          />
+        );
       default:
         return null;
     }

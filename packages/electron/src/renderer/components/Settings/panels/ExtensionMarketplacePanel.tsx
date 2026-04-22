@@ -53,6 +53,17 @@ interface MarketplaceInstallRecord {
 type ViewState = 'discover' | 'installed';
 type InstallStatus = 'idle' | 'installing' | 'installed' | 'error';
 
+interface ExtensionMarketplaceInstallRequest {
+  extensionId: string;
+  requestedAt: string;
+  token: number;
+}
+
+interface ExtensionMarketplacePanelProps {
+  installRequest?: ExtensionMarketplaceInstallRequest | null;
+  onInstallRequestHandled?: (token: number) => void;
+}
+
 // Category icon map (Material Symbols)
 const CATEGORY_ICONS: Record<string, string> = {
   'developer-tools': 'code',
@@ -65,7 +76,10 @@ const CATEGORY_ICONS: Record<string, string> = {
   'integrations': 'link',
 };
 
-export function ExtensionMarketplacePanel() {
+export function ExtensionMarketplacePanel({
+  installRequest = null,
+  onInstallRequestHandled,
+}: ExtensionMarketplacePanelProps) {
   const posthog = usePostHog();
   const { theme } = useTheme();
 
@@ -101,6 +115,30 @@ export function ExtensionMarketplacePanel() {
       posthog?.capture('extension_marketplace_viewed');
     }
   }, [hasAcceptedRisk]);
+
+  useEffect(() => {
+    if (!installRequest || !hasAcceptedRisk || !registry) return;
+
+    const requestedExtension = registry.extensions.find((extension) => extension.id === installRequest.extensionId);
+    if (!requestedExtension) {
+      setViewState('discover');
+      setStatusMessage(`Extension ${installRequest.extensionId} was not found in the marketplace`);
+      onInstallRequestHandled?.(installRequest.token);
+
+      const timeoutId = window.setTimeout(() => setStatusMessage(''), 5000);
+      return () => window.clearTimeout(timeoutId);
+    }
+
+    setViewState('discover');
+    setSelectedCategory(null);
+    setSearchQuery('');
+    setSelectedExtension(requestedExtension);
+    setStatusMessage(`Review ${requestedExtension.name} before installing it from the marketplace`);
+    onInstallRequestHandled?.(installRequest.token);
+
+    const timeoutId = window.setTimeout(() => setStatusMessage(''), 5000);
+    return () => window.clearTimeout(timeoutId);
+  }, [installRequest, hasAcceptedRisk, onInstallRequestHandled, registry]);
 
   const handleAcceptRisk = async () => {
     await window.electronAPI.invoke('app-settings:set', 'marketplaceRiskAccepted', true);
