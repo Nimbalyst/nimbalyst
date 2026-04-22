@@ -434,4 +434,33 @@ export function registerDocumentSyncHandlers(): void {
       return { success: false, error: err instanceof Error ? err.message : String(err) };
     }
   });
+
+  if (process.env.PLAYWRIGHT === '1') {
+    safeHandle('document-sync:open-test', async (_event, payload: {
+      serverUrl: string;
+      orgId: string;
+      userId: string;
+      documentId: string;
+      title?: string;
+      encryptionKeyBase64: string;
+    }) => {
+      try {
+        return {
+          success: true,
+          config: {
+            orgId: payload.orgId,
+            documentId: payload.documentId,
+            title: payload.title || payload.documentId,
+            orgKeyBase64: payload.encryptionKeyBase64,
+            serverUrl: payload.serverUrl,
+            userId: payload.userId,
+            userName: 'Test User',
+            userEmail: 'test@test.com',
+          },
+        };
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+  }
 }

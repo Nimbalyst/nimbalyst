@@ -63,6 +63,17 @@ export interface DocumentSyncConfig {
   onReviewStateChange?: (state: ReviewGateState) => void;
 
   /**
+   * Called once after the initial sync response from the server completes.
+   * `isEmpty` is true if the server had no existing content for this room.
+   *
+   * Hosts that may want to seed the Y.Doc from local persistence should gate
+   * their bootstrap on this callback: bootstrap only when `isEmpty` is true so
+   * stale local content does not CRDT-merge into a room that already has
+   * authoritative content from other collaborators.
+   */
+  onFirstSyncComplete?: (isEmpty: boolean) => void;
+
+  /**
    * Called when a key envelope is received from the server.
    * The consumer should verify `senderPublicKey` against the sender's
    * registered identity key (from TeamRoom) before using the envelope

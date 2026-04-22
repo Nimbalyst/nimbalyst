@@ -565,49 +565,59 @@ export class DocumentSyncProvider {
     } catch (err) {
       console.error('[DocumentSync] Error handling message:', err);
 
-      // OperationError from crypto.subtle.decrypt means the encryption key
-      // doesn't match the data on the server (wrong key, key rotated, data
-      // corrupted). Reconnecting will fail identically every time, so stop
-      // the reconnect loop and surface a clear error status.
-      if (
-        err instanceof DOMException &&
-        err.name === 'OperationError'
-      ) {
-        console.error(
-          '[DocumentSync] Decryption failed -- encryption key does not match server data. ' +
-          'The team admin may need to re-share the encryption key, or the document data may be corrupted.'
-        );
-        this.suppressReconnect = true;
-        if (this.ws) {
-          this.ws.close();
-          this.ws = null;
-        }
-        this.setStatus('error');
+      // Decryption failures are now handled per-payload inside each sub-
+      // handler (handleSyncResponse, handleUpdateBroadcast, handleAwareness-
+      // Broadcast). Any OperationError that reaches here is an unexpected
+      // escape; log it but never set suppressReconnect. A single bad payload
+      // must not permanently kill a room.
+      if (err instanceof DOMException && err.name === 'OperationError') {
+        console.warn('[DocumentSync] Uncaught OperationError at handleMessage scope -- dropping message.');
         return;
       }
     }
   }
 
   private async handleSyncResponse(msg: DocSyncResponseMessage): Promise<void> {
-    // Apply snapshot if present (covers the entire doc state up to replacesUpTo)
+    // Apply snapshot if present (covers the entire doc state up to replacesUpTo).
+    // If the snapshot can't be decrypted (stale key epoch, corruption), skip it
+    // and continue with the incremental updates -- a single broken payload
+    // must not kill the whole sync. If nothing decrypts, the Y.Doc stays
+    // empty and the host can bootstrap from local content, pushing a fresh
+    // authoritative update up to the server.
     if (msg.snapshot) {
-      const stateBytes = await decryptBinary(
-        msg.snapshot.encryptedState,
-        msg.snapshot.iv,
-        this.config.documentKey
-      );
-      Y.applyUpdate(this.ydoc, stateBytes, SNAPSHOT_ORIGIN);
+      try {
+        const stateBytes = await decryptBinary(
+          msg.snapshot.encryptedState,
+          msg.snapshot.iv,
+          this.config.documentKey
+        );
+        Y.applyUpdate(this.ydoc, stateBytes, SNAPSHOT_ORIGIN);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'OperationError') {
+          console.warn('[DocumentSync] Skipping undecryptable snapshot (likely stale key epoch); sync will continue.');
+        } else {
+          throw err;
+        }
+      }
       this.lastSeq = Math.max(this.lastSeq, msg.snapshot.replacesUpTo);
     }
 
-    // Apply incremental updates
+    // Apply incremental updates, per-update tolerant of decryption failures.
     for (const update of msg.updates) {
-      const updateBytes = await decryptBinary(
-        update.encryptedUpdate,
-        update.iv,
-        this.config.documentKey
-      );
-      Y.applyUpdate(this.ydoc, updateBytes, REMOTE_ORIGIN);
+      try {
+        const updateBytes = await decryptBinary(
+          update.encryptedUpdate,
+          update.iv,
+          this.config.documentKey
+        );
+        Y.applyUpdate(this.ydoc, updateBytes, REMOTE_ORIGIN);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'OperationError') {
+          console.warn(`[DocumentSync] Skipping undecryptable update at seq ${update.sequence} (likely stale key epoch).`);
+        } else {
+          throw err;
+        }
+      }
       this.lastSeq = Math.max(this.lastSeq, update.sequence);
     }
 
@@ -624,6 +634,14 @@ export class DocumentSyncProvider {
     // applies to new realtime updates from collaborators.
     if (!this.synced) {
       this.synced = true;
+
+      // Signal to the host whether the server had any content at all.
+      // Y.encodeStateAsUpdate encodes to ~2 bytes for a fully empty Y.Doc,
+      // so `byteLength > 2` reliably detects server content across paginated
+      // sync responses (checking just the last `msg` would miss earlier pages).
+      const serverIsEmpty = Y.encodeStateAsUpdate(this.ydoc).byteLength <= 2;
+      this.config.onFirstSyncComplete?.(serverIsEmpty);
+
       if (this.reviewGateEnabled) {
         this.reviewedStateVector = Y.encodeStateVector(this.ydoc);
       }
@@ -648,11 +666,22 @@ export class DocumentSyncProvider {
     // Skip our own updates (server echoes don't happen, but guard anyway)
     if (msg.senderId === this.config.userId) return;
 
-    const updateBytes = await decryptBinary(
-      msg.encryptedUpdate,
-      msg.iv,
-      this.config.documentKey
-    );
+    let updateBytes: Uint8Array;
+    try {
+      updateBytes = await decryptBinary(
+        msg.encryptedUpdate,
+        msg.iv,
+        this.config.documentKey
+      );
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'OperationError') {
+        console.warn(`[DocumentSync] Skipping undecryptable broadcast at seq ${msg.sequence} (likely stale key epoch).`);
+        this.lastSeq = Math.max(this.lastSeq, msg.sequence);
+        return;
+      }
+      throw err;
+    }
+
     Y.applyUpdate(this.ydoc, updateBytes, REMOTE_ORIGIN);
     this.lastSeq = Math.max(this.lastSeq, msg.sequence);
 

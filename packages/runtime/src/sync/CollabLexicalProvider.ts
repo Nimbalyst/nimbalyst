@@ -37,6 +37,26 @@ type AwarenessEventMap = {
  * <CollaborationPlugin providerFactory={() => provider} ... />
  * ```
  */
+export interface CollabLexicalProviderOptions {
+  /**
+   * When true, `on('sync', cb)` does NOT fire `cb(true)` immediately on
+   * listener registration. `sync(true)` will only fire after the underlying
+   * DocumentSyncProvider reaches the 'connected' status (i.e., after the
+   * server's initial sync response has been applied).
+   *
+   * Use this for hosts that are authoritative on the server side and must
+   * not bootstrap local content into the Y.Doc before the server state is
+   * known -- otherwise CRDT merge of the local bootstrap with remote data
+   * can resurrect deleted text or duplicate content.
+   *
+   * Default false: the offline-first behaviour (`sync(true)` fires
+   * immediately so CollaborationPlugin bootstraps without waiting on the
+   * WebSocket). This is correct for disk-backed markdown tabs where the
+   * local file is the source of truth.
+   */
+  deferInitialSync?: boolean;
+}
+
 export class CollabLexicalProvider implements Provider {
   private syncProvider: DocumentSyncProvider;
   private listeners: { [K in keyof EventMap]?: Set<EventMap[K]> } = {};
@@ -47,11 +67,13 @@ export class CollabLexicalProvider implements Provider {
   private userIdToClientId: Map<string, number> = new Map();
   private awarenessUnsubscribe: (() => void) | null = null;
   private statusUnsubscribe: (() => void) | null = null;
+  private deferInitialSync: boolean;
 
   awareness: ProviderAwareness;
 
-  constructor(syncProvider: DocumentSyncProvider) {
+  constructor(syncProvider: DocumentSyncProvider, options: CollabLexicalProviderOptions = {}) {
     this.syncProvider = syncProvider;
+    this.deferInitialSync = options.deferInitialSync ?? false;
 
     // Build the awareness adapter
     this.awareness = {
@@ -155,7 +177,16 @@ export class CollabLexicalProvider implements Provider {
     this.awarenessUnsubscribe = null;
     this.statusUnsubscribe?.();
     this.statusUnsubscribe = null;
-    this.syncProvider.disconnect();
+    // Intentionally do NOT disconnect the underlying DocumentSyncProvider.
+    // Lexical's CollaborationPlugin calls this disconnect() from its
+    // useEffect cleanup, which fires during React.StrictMode double-mounts
+    // and during HMR. Cascading into DocumentSyncProvider.disconnect() sets
+    // `suppressReconnect = true` on the sync provider, which blocks the
+    // post-remount reconnection and strands the editor offline.
+    //
+    // The DocumentSyncProvider's lifecycle is owned by the host hook --
+    // it calls `destroy()` at the correct time (when the editor unmounts
+    // permanently or the item changes). Here we only unwire this adapter.
   }
 
   // --------------------------------------------------------------------------
@@ -173,6 +204,19 @@ export class CollabLexicalProvider implements Provider {
       (this.listeners as any)[key] = new Set();
     }
     (this.listeners[key] as Set<any>).add(cb);
+
+    // The Y.Doc is local-first -- always usable regardless of network.
+    // Fire sync(true) immediately when the listener registers so
+    // CollaborationPlugin can bootstrap from initialEditorState without
+    // waiting for the WebSocket. Server content merges via CRDT later.
+    //
+    // Hosts that cannot tolerate bootstrap-before-server-sync (e.g. team-
+    // synced trackers where the server is authoritative) can pass
+    // `deferInitialSync: true` to suppress this firing; sync(true) will
+    // only fire via handleStatusChange('connected').
+    if (type === 'sync' && !this.deferInitialSync) {
+      (cb as (isSynced: boolean) => void)(true);
+    }
   }
 
   off(type: 'sync', cb: (isSynced: boolean) => void): void;

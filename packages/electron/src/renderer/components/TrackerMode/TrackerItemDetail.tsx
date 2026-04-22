@@ -11,6 +11,8 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useAtomValue } from 'jotai';
 import { StravuEditor, MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
 import type { EditorConfig } from '@nimbalyst/runtime/editor';
+import { $convertFromEnhancedMarkdownString, getEditorTransformers } from '@nimbalyst/runtime/editor';
+import { $getRoot } from 'lexical';
 import type { TrackerRecord } from '@nimbalyst/runtime/core/TrackerRecord';
 import { globalRegistry } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
 import type { FieldDefinition } from '@nimbalyst/runtime/plugins/TrackerPlugin/models/TrackerDataModel';
@@ -250,6 +252,13 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
   const [contentLoaded, setContentLoaded] = useState(false);
   const getContentFnRef = useRef<(() => string) | null>(null);
   const contentSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Baseline of what was last persisted to PGLite for THIS item. Used as a
+  // safety rail: if the collab editor mounts empty (e.g., because Lexical's
+  // `main` binding is empty while the server Y.Doc only has legacy bytes
+  // under `root`), onDirtyChange would otherwise save "" and clobber the
+  // real content in PGLite. We refuse any save that would shrink a
+  // known-non-empty baseline to empty.
+  const loadedBaselineRef = useRef<string | null>(null);
 
   // Reset local editing state when navigating to a different item.
   // We don't sync on item data changes (saves) to avoid clobbering in-progress text.
@@ -280,6 +289,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
     let cancelled = false;
     setContentLoaded(false);
     setContentMarkdown(null);
+    loadedBaselineRef.current = null;
     getContentFnRef.current = null;
 
     window.electronAPI.documentService.getTrackerItemContent({ itemId: item!.id })
@@ -290,8 +300,10 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
             ? result.content
             : result.content?.markdown ?? '';
           setContentMarkdown(markdown);
+          loadedBaselineRef.current = markdown;
         } else {
           setContentMarkdown('');
+          loadedBaselineRef.current = '';
         }
         setContentLoaded(true);
       })
@@ -329,16 +341,31 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
   const {
     collaboration: collabConfig,
     loading: collabLoading,
+    status: collabStatus,
     reviewState,
     acceptRemoteChanges,
     rejectRemoteChanges,
+    providerEpoch,
   } = useTrackerContentCollab({
     itemId,
     workspacePath,
     syncMode,
-    pgliteContent: contentMarkdown,
     teamMemberCount: teamMembers.length,
   });
+
+  // Track whether the collab provider has ever reached 'connected' for this
+  // item/provider lifecycle. We show a static loading indicator over the
+  // editor until then, because the editor may mount with an empty Y.Doc
+  // while the WebSocket sync is still in flight -- without this the user
+  // would see a blank editor and mistake it for "no content".
+  const [hasSyncedOnce, setHasSyncedOnce] = useState(false);
+  useEffect(() => {
+    // Reset when a fresh provider is created (new item or new session).
+    setHasSyncedOnce(false);
+  }, [providerEpoch]);
+  useEffect(() => {
+    if (collabStatus === 'connected') setHasSyncedOnce(true);
+  }, [collabStatus]);
 
   /** Save a field update -- routes to file-based save for file-backed items, DB for native */
   const saveField = useCallback(async (updates: Record<string, any>) => {
@@ -372,8 +399,28 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
     }, 500);
   }, [saveField]);
 
-  /** Debounced save for rich content */
-  const saveContent = useCallback((markdown: string) => {
+  /** Debounced save for rich content.
+   *
+   * `guardEmpty` is a collab-mode safety rail: if the collaborative editor
+   * mounts before the Y.Doc has been populated from the server, its initial
+   * onDirtyChange may fire with an empty markdown and would otherwise
+   * clobber the user's PGLite content. When true, an empty save is only
+   * allowed if the baseline was already empty (i.e., new items or
+   * intentional clears in collab mode require the user to make a real edit
+   * after content has rendered). Local-only editing does not need this
+   * guard -- its initialContent is fed synchronously, so onDirtyChange
+   * only fires on real user edits. */
+  const saveContent = useCallback((markdown: string, guardEmpty = false) => {
+    if (guardEmpty) {
+      const baseline = loadedBaselineRef.current;
+      if (markdown.trim() === '' && baseline != null && baseline.trim() !== '') {
+        console.warn(
+          '[TrackerItemDetail] Skipping save: collab editor reported empty before server sync populated content.',
+          { itemId: item?.id, baselineLen: baseline.length }
+        );
+        return;
+      }
+    }
     if (contentSaveTimerRef.current) clearTimeout(contentSaveTimerRef.current);
     contentSaveTimerRef.current = setTimeout(async () => {
       try {
@@ -381,6 +428,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
           itemId: item!.id,
           content: markdown,
         });
+        loadedBaselineRef.current = markdown;
       } catch (err) {
         console.error('[TrackerItemDetail] Failed to save content:', err);
       }
@@ -397,10 +445,19 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
 
   // Flush pending content save when item changes or component unmounts
   useEffect(() => {
+    const isCollabMode = contentMode === 'collaborative';
     return () => {
       if (contentSaveTimerRef.current && getContentFnRef.current) {
         clearTimeout(contentSaveTimerRef.current);
         const markdown = getContentFnRef.current();
+        if (isCollabMode) {
+          const baseline = loadedBaselineRef.current;
+          // Same collab-only data-loss guard as saveContent: don't let a
+          // mount-time empty editor state win the unmount race.
+          if (markdown.trim() === '' && baseline != null && baseline.trim() !== '') {
+            return;
+          }
+        }
         // Fire-and-forget final save
         window.electronAPI.documentService.updateTrackerItemContent({
           itemId: item!.id,
@@ -408,7 +465,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
         }).catch(() => {});
       }
     };
-  }, [item?.id]);
+  }, [item?.id, contentMode]);
 
   /** Handle immediate field change (selects, checkboxes) */
   const handleImmediateFieldChange = useCallback((fieldName: string, value: any) => {
@@ -522,6 +579,9 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
   const collabEditorConfig = useMemo((): EditorConfig | null => {
     if (contentMode !== 'collaborative' || !collabConfig || collabLoading) return null;
     if (!contentLoaded) return null;
+    const mdContent = contentMarkdown;
+    console.log('[TrackerItemDetail] Building collab editor config',
+      { itemId: item?.id, shouldBootstrap: collabConfig.shouldBootstrap, mdContentLen: mdContent?.length ?? 0 });
     return {
       isRichText: true,
       editable: true,
@@ -529,9 +589,32 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
       isCodeHighlighted: true,
       hasLinkAttributes: true,
       markdownOnly: true,
-      collaboration: collabConfig,
+      collaboration: {
+        ...collabConfig,
+        initialEditorState: mdContent
+          ? () => {
+              console.log('[TrackerItemDetail] initialEditorState fn CALLED',
+                { itemId: item?.id, mdContentLen: mdContent.length });
+              const root = $getRoot();
+              root.clear();
+              $convertFromEnhancedMarkdownString(mdContent, getEditorTransformers());
+              console.log('[TrackerItemDetail] seeded editor root, children:', root.getChildrenSize());
+            }
+          : undefined,
+      },
+      onGetContent: (getContentFn: () => string) => {
+        getContentFnRef.current = getContentFn;
+      },
+      onDirtyChange: (isDirty: boolean) => {
+        if (isDirty && getContentFnRef.current) {
+          const markdown = getContentFnRef.current();
+          // guardEmpty=true: protect against the collab editor reporting
+          // empty on mount before the Y.Doc sync has populated content.
+          saveContent(markdown, true);
+        }
+      },
     };
-  }, [contentMode, collabConfig, collabLoading, contentLoaded]);
+  }, [contentMode, collabConfig, collabLoading, contentLoaded, contentMarkdown, saveContent]);
 
   // Item deleted while panel was open (or not yet in atom — brief loading state)
   if (!item) {
@@ -734,9 +817,17 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
             </div>
           ) : contentMode === 'collaborative' && collabEditorConfig ? (
             <div
-              className="tracker-content-editor border border-nim rounded bg-nim min-h-[200px] overflow-hidden"
+              className="tracker-content-editor relative border border-nim rounded bg-nim min-h-[200px] overflow-hidden"
               data-testid="tracker-detail-content-editor"
             >
+              {!hasSyncedOnce && (
+                <div
+                  className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none bg-nim"
+                  data-testid="tracker-content-loading"
+                >
+                  <span className="text-sm text-nim-muted">Loading content...</span>
+                </div>
+              )}
               {reviewState?.hasUnreviewed && (
                 <div
                   className="flex items-center gap-2 px-3 py-1.5 text-xs border-b border-nim"
@@ -764,7 +855,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
                   </button>
                 </div>
               )}
-              <StravuEditor key={`collab-${item.id}`} config={collabEditorConfig} />
+              <StravuEditor key={`collab-${item.id}-${providerEpoch}`} config={collabEditorConfig} />
             </div>
           ) : (contentMode === 'local-pglite' || contentMode === 'collaborative') && !contentLoaded ? (
             <div className="text-sm text-nim-faint py-4 text-center">Loading...</div>
