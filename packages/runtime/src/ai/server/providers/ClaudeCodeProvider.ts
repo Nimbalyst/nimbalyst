@@ -1350,25 +1350,16 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       } else {
         console.error(`[CLAUDE-CODE] Error occurred`);
 
-        // If we were trying to resume a session, check if it's missing
+        // Diagnostic only: log whether the resumed session was in history.jsonl.
+        // We no longer mis-attribute arbitrary SDK errors to "session expired" --
+        // history.jsonl lookups race with SDK writes and may not reflect programmatic
+        // sessions, so a miss is not authoritative. The SDK's own error handling at
+        // the isExpiredSessionError branch above is the source of truth for real expiry.
         const resumeSessionId = sessionId ? this.sessions.getSessionId(sessionId) : null;
         if (resumeSessionId) {
           const sessionExists = await this.checkSessionExists(resumeSessionId);
           if (!sessionExists) {
-            console.error(`[CLAUDE-CODE] Session ${resumeSessionId} not found - user needs to create new session`);
-            this.sessions.deleteSession(sessionId!);
-
-            yield {
-              type: 'error',
-              error: 'Your previous conversation session has expired or been cleaned up. Please create a new session to continue.'
-            };
-
-            // CRITICAL: Always send completion after error to clean up UI state
-            await this.flushPendingWrites();
-            yield {
-              type: 'complete'
-            };
-            return;
+            console.warn(`[CLAUDE-CODE] Resume session ${resumeSessionId} not found in history.jsonl (soft signal -- not acting on it)`);
           }
         }
 
@@ -2749,8 +2740,10 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   }
 
   /**
-   * Quick check if a Claude Code session exists in ~/.claude/history.jsonl.
-   * Fails open (returns true) when the file is missing or unreadable.
+   * Soft diagnostic: checks whether a session ID appears in ~/.claude/history.jsonl.
+   * Not authoritative -- history.jsonl races with SDK writes and may not reflect
+   * programmatic sessions at all. Callers must treat a false result as a hint, not
+   * a decision. Fails open (returns true) when the file is missing or unreadable.
    */
   private async checkSessionExists(sessionId: string): Promise<boolean> {
     try {
