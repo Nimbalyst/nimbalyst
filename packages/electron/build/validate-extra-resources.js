@@ -134,12 +134,38 @@ for (const { entry, platformMacro } of allEntries) {
       fix: `npm install --no-save --force @anthropic-ai/claude-agent-sdk-${plat}-${buildArch}@<sdk-version>`,
     });
   }
+  // node-pty: the loadable native module must exist at one of three paths
+  // (build/Release, build/Debug, prebuilds/<platform>-<arch>) for the
+  // current build target. The upstream npm package only ships prebuilds
+  // for darwin and win32, so Linux builds must compile from source --
+  // electron-builder install-app-deps with buildFromSource=false silently
+  // skips that, producing a node-pty dir with no Linux binary inside.
+  if (rawFrom.endsWith('/node-pty')) {
+    const dir = path.resolve(packageDir, expandMacros(rawFrom, platformMacro));
+    const ptyTarget = `${targetPlatform}-${buildArch}`;
+    binaryChecks.push({
+      label: `node-pty (${ptyTarget})`,
+      dir,
+      candidatePaths: [
+        path.join(dir, 'build', 'Release', 'pty.node'),
+        path.join(dir, 'build', 'Debug', 'pty.node'),
+        path.join(dir, 'prebuilds', ptyTarget, 'pty.node'),
+      ],
+      cause: `no loadable pty.node found for ${ptyTarget}; @electron/rebuild ran with buildFromSource=false and the upstream npm package ships no prebuild for this platform`,
+      fix: `npx @electron/rebuild --force --module-dir node_modules/node-pty --types prod --version <electron-version>`,
+    });
+  }
 }
 
 const binaryFailures = [];
 for (const check of binaryChecks) {
-  const hasBinary = fs.existsSync(check.binDir)
-    && fs.readdirSync(check.binDir).some(check.accept);
+  let hasBinary;
+  if (check.candidatePaths) {
+    hasBinary = check.candidatePaths.some((p) => fs.existsSync(p));
+  } else {
+    hasBinary = fs.existsSync(check.binDir)
+      && fs.readdirSync(check.binDir).some(check.accept);
+  }
   if (!hasBinary) binaryFailures.push(check);
 }
 

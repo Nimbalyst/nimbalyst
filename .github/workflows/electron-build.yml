@@ -356,6 +356,37 @@ jobs:
           Write-Host "Populated ARM64 signtool directory:"
           Get-ChildItem $arm64Dir | ForEach-Object { Write-Host "  $($_.Name)" }
 
+      # Force a real source build of node-pty on Linux.
+      # The upstream node-pty@1.x npm package only ships prebuilds for
+      # darwin and win32. With electron-builder's install-app-deps running
+      # @electron/rebuild with buildFromSource=false (set by nodeGypRebuild
+      # and buildDependenciesFromSource in package.json), the Linux job
+      # silently skips rebuilding node-pty -- no pty.node lands at any of
+      # build/Release, build/Debug, or prebuilds/linux-x64. The packaged
+      # AppImage then crashes immediately on launch with
+      # "Failed to load native module: pty.node".
+      #
+      # Other platforms get prebuilds from upstream and don't need this.
+      # See NIM-354.
+      - name: Force node-pty source rebuild for Linux
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          ELECTRON_VERSION=$(node -p "require('./packages/electron/package.json').devDependencies.electron")
+          echo "Rebuilding node-pty from source against Electron ${ELECTRON_VERSION}"
+          npx --yes @electron/rebuild \
+            --force \
+            --module-dir node_modules/node-pty \
+            --types prod \
+            --version "${ELECTRON_VERSION}"
+          # Verify pty.node landed where node-pty's loader will find it.
+          if [ ! -f node_modules/node-pty/build/Release/pty.node ]; then
+            echo "::error::node-pty rebuild did not produce build/Release/pty.node"
+            ls -la node_modules/node-pty/build/Release/ 2>/dev/null || echo "(build/Release does not exist)"
+            exit 1
+          fi
+          echo "Verified: node_modules/node-pty/build/Release/pty.node exists"
+
       # Build Electron app
       - name: Build Electron app
         env:
