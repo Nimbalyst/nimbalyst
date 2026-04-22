@@ -112,6 +112,8 @@ async function triggerWorkspaceScan(): Promise<void> {
  */
 export function initTrackerSyncListeners(): () => void {
   const cleanups: Array<() => void> = [];
+  let disposed = false;
+  let initialScanTimer: ReturnType<typeof setTimeout> | null = null;
 
   // console.log('[trackerSyncListeners] Initializing tracker data listeners');
 
@@ -120,82 +122,98 @@ export function initTrackerSyncListeners(): () => void {
   // window, but a stray event from a buggy code path would still leak a
   // foreign item into our atoms and display it until the next refresh.
   let currentWorkspacePath: string | null = null;
-  window.electronAPI
+  void window.electronAPI
     .invoke('get-initial-state')
-    .then((state: { workspacePath?: string } | null) => {
-      currentWorkspacePath = state?.workspacePath ?? null;
+    .then(async (state: { mode?: string; workspacePath?: string } | null) => {
+      if (disposed) return;
+
+      // Only workspace windows have a main-process document service.
+      // Workspace manager / utility windows share the same renderer shell,
+      // so they must skip these IPC calls entirely.
+      if (state?.mode !== 'workspace' || !state.workspacePath) {
+        return;
+      }
+
+      currentWorkspacePath = state.workspacePath;
+
+      // Initial load from PGLite + frontmatter (shows cached data from previous session)
+      await loadAllTrackerItems();
+      if (disposed) return;
+
+      // Trigger a workspace scan to index new/changed files into PGLite.
+      // The DocumentService skips scanning on startup for performance,
+      // so without this, tracker items won't appear until an @ mention or file open.
+      // Delay slightly to avoid blocking app startup.
+      initialScanTimer = setTimeout(() => {
+        void triggerWorkspaceScan();
+      }, 3000);
+
+      // Subscribe to tracker item changes from ElectronDocumentService (local indexer changes)
+      // This is the subscription-based IPC: we send a 'watch' message, then receive events.
+      window.electronAPI.send('document-service:tracker-items-watch');
+
+      // Handle change events with granular atom updates
+      cleanups.push(
+        window.electronAPI.on(
+          'document-service:tracker-items-changed',
+          (change: TrackerItemChangeEvent) => {
+            // console.log('[trackerSyncListeners] Received tracker-items-changed:', {
+            //   added: change.added?.length || 0,
+            //   updated: change.updated?.length || 0,
+            //   removed: change.removed?.length || 0,
+            // });
+            // Defensive workspace filter: drop items that belong to a different
+            // workspace. If we don't know our own workspace yet (init race), pass
+            // through -- the main process already filters. Items without a
+            // `workspace` field (legacy / frontmatter) also pass through.
+            const belongsToThisWorkspace = (item: TrackerItem): boolean => {
+              if (!currentWorkspacePath) return true;
+              if (!item.workspace) return true;
+              return item.workspace === currentWorkspacePath;
+            };
+
+            // Apply granular updates to the atom map (convert to TrackerRecord)
+            if (change.added?.length) {
+              for (const item of change.added) {
+                if (!belongsToThisWorkspace(item)) continue;
+                store.set(upsertTrackerItemAtom, trackerItemToRecord(item));
+              }
+            }
+            if (change.updated?.length) {
+              for (const item of change.updated) {
+                if (!belongsToThisWorkspace(item)) continue;
+                store.set(upsertTrackerItemAtom, trackerItemToRecord(item));
+              }
+            }
+            if (change.removed?.length) {
+              for (const id of change.removed) {
+                store.set(removeTrackerItemAtom, id);
+              }
+            }
+          }
+        )
+      );
+
+      // Also subscribe to metadata changes (for full-document trackers like plans/decisions)
+      window.electronAPI.send('document-service:metadata-watch');
+
+      cleanups.push(
+        window.electronAPI.on('document-service:metadata-changed', () => {
+          // Full-document tracker items come from frontmatter metadata.
+          // Re-fetch all items (PGLite + frontmatter) when metadata changes.
+          void loadAllTrackerItems();
+        })
+      );
     })
     .catch(() => {
       currentWorkspacePath = null;
     });
 
-  // Initial load from PGLite + frontmatter (shows cached data from previous session)
-  loadAllTrackerItems();
-
-  // Trigger a workspace scan to index new/changed files into PGLite.
-  // The DocumentService skips scanning on startup for performance,
-  // so without this, tracker items won't appear until an @ mention or file open.
-  // Delay slightly to avoid blocking app startup.
-  setTimeout(() => triggerWorkspaceScan(), 3000);
-
-  // Subscribe to tracker item changes from ElectronDocumentService (local indexer changes)
-  // This is the subscription-based IPC: we send a 'watch' message, then receive events.
-  window.electronAPI.send('document-service:tracker-items-watch');
-
-  // Handle change events with granular atom updates
-  cleanups.push(
-    window.electronAPI.on(
-      'document-service:tracker-items-changed',
-      (change: TrackerItemChangeEvent) => {
-        // console.log('[trackerSyncListeners] Received tracker-items-changed:', {
-        //   added: change.added?.length || 0,
-        //   updated: change.updated?.length || 0,
-        //   removed: change.removed?.length || 0,
-        // });
-        // Defensive workspace filter: drop items that belong to a different
-        // workspace. If we don't know our own workspace yet (init race), pass
-        // through -- the main process already filters. Items without a
-        // `workspace` field (legacy / frontmatter) also pass through.
-        const belongsToThisWorkspace = (item: TrackerItem): boolean => {
-          if (!currentWorkspacePath) return true;
-          if (!item.workspace) return true;
-          return item.workspace === currentWorkspacePath;
-        };
-
-        // Apply granular updates to the atom map (convert to TrackerRecord)
-        if (change.added?.length) {
-          for (const item of change.added) {
-            if (!belongsToThisWorkspace(item)) continue;
-            store.set(upsertTrackerItemAtom, trackerItemToRecord(item));
-          }
-        }
-        if (change.updated?.length) {
-          for (const item of change.updated) {
-            if (!belongsToThisWorkspace(item)) continue;
-            store.set(upsertTrackerItemAtom, trackerItemToRecord(item));
-          }
-        }
-        if (change.removed?.length) {
-          for (const id of change.removed) {
-            store.set(removeTrackerItemAtom, id);
-          }
-        }
-      }
-    )
-  );
-
-  // Also subscribe to metadata changes (for full-document trackers like plans/decisions)
-  window.electronAPI.send('document-service:metadata-watch');
-
-  cleanups.push(
-    window.electronAPI.on('document-service:metadata-changed', () => {
-      // Full-document tracker items come from frontmatter metadata.
-      // Re-fetch all items (PGLite + frontmatter) when metadata changes.
-      loadAllTrackerItems();
-    })
-  );
-
   return () => {
+    disposed = true;
+    if (initialScanTimer) {
+      clearTimeout(initialScanTimer);
+    }
     cleanups.forEach((cleanup) => cleanup());
   };
 }
