@@ -20,14 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
-## [0.57.38] - 2026-04-22
+## [0.57.39] - 2026-04-22
 
 
 ### Changed
 - Release collabv3 0.1.63.
 - Increase maximum width for `TrackerMainView` component.
+- Bump `claude-agent-sdk` to 0.2.117, which ships Claude Code native binary 2.1.117 (built 2026-04-21). Picked up after observing a `hook_0 "Stream closed"` cascade on 2.1.116 in a non-Unknown-tool path (plain Bash, long turn, no user-facing hook configured) -- the cascade is binary-side, so the only lever on our side is the binary version. Also aligns `packages/electron/package.json` from `^0.2.114` to `^0.2.117` so all three declarations match (previously drifted during the 0.2.116 bump). Refs NIM-340.
 
 ### Fixed
+- Normalize hoisted `extraResources` before Mac packaging: the previous normalize step ran inline with validation but, on Mac cross-arch builds, the packaging invocation sidestepped the normalization and the validator still saw missing `@openai/codex-sdk` paths. Run the normalize step as a dedicated pre-step in the Electron mac build flow so symlinks are in place before `validate-extra-resources` and electron-builder start, preventing CI packaging failures when workspace dependencies are hoisted. Root cause of v0.57.38 failing to ship.
 - Normalize `extraResources` paths across npm hoisting layouts: npm's workspace hoisting isn't stable across platforms -- the same lockfile can place `@openai/codex-sdk` in `packages/electron/node_modules/` on one machine and in the repo root `node_modules/` on another. The electron-builder `extraResources` entries use literal paths, so when npm hoists differently the Linux CI build failed `validate-extra-resources`. Added a pre-validate normalize step that, for any entry whose electron-local path is missing but whose root-level equivalent exists, creates a symlink at the expected location. Entries are processed shallowest-first so one symlink (e.g. `@openai`) covers any nested entries (e.g. `@openai/codex-sdk`). No-op when hoisting already matches. Root cause of v0.57.37 failing to ship.
 - Restore bundled ripgrep via `@vscode/ripgrep`: the claude-agent-sdk upgrade to a native binary package stopped shipping the vendored ripgrep binary at `vendor/ripgrep/<arch>/rg`. `getRipgrepPath()` fell back to system `rg`, which most users don't have, so `findWorkspaceFiles` threw `spawn rg ENOENT`, the QuickOpen cache never built, and the `@` file-mention typeahead in AIInput had no options. Added `@vscode/ripgrep` as a direct dep (postinstall fetches the host-arch rg), rewrote `getRipgrepPath()` to resolve the binary in dev and packaged builds, bundled via `extraResources` into `app.asar.unpacked/node_modules/@vscode/ripgrep`, and extended the CI cross-arch install step to re-run postinstall with `npm_config_arch` so cross-compile jobs pack the correct binary.
 - Lock `@vscode/ripgrep` in package-lock.json so CI installs the same version used to bundle rg.
