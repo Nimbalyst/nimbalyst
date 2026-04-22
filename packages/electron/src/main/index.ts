@@ -91,7 +91,7 @@ import { claudeUsageService } from './services/ClaudeUsageService';
 import { registerCodexUsageHandlers } from './ipc/CodexUsageHandlers';
 import { codexUsageService } from './services/CodexUsageService';
 import { registerExtensionHandlers, getClaudePluginPaths, initializeExtensionFileTypes } from './ipc/ExtensionHandlers';
-import { registerExtensionMarketplaceHandlers, runExtensionAutoUpdate } from './ipc/ExtensionMarketplaceHandlers';
+import { queueMarketplaceInstallRequest, registerExtensionMarketplaceHandlers, runExtensionAutoUpdate } from './ipc/ExtensionMarketplaceHandlers';
 import { getRegisteredExtensions } from './extensions/RegisteredFileTypes';
 import { ClaudeCodeProvider, OpenAICodexProvider, OpenCodeProvider } from '@nimbalyst/runtime/ai/server';
 import { isMCPServerEnabledForProvider, MCP_PROVIDER_IDS } from '@nimbalyst/runtime/types/MCPServerConfig';
@@ -665,11 +665,7 @@ async function handleDeepLink(url: string): Promise<void> {
 
             if (extensionId) {
                 logger.main.info(`[DeepLink] Extension install request: ${extensionId}`);
-                // Send to renderer to show install confirmation in marketplace panel
-                const windows = BrowserWindow.getAllWindows();
-                if (windows.length > 0) {
-                    windows[0].webContents.send('extension-marketplace:install-request', { extensionId });
-                }
+                queueMarketplaceInstallRequest(extensionId);
             } else {
                 logger.main.warn('[DeepLink] Extension install missing extension ID');
             }

@@ -9,7 +9,7 @@ import { promisify } from 'util';
 import { simpleGit } from 'simple-git';
 import {AnalyticsService} from "./analytics/AnalyticsService.ts";
 import { getAppSetting } from '../utils/store';
-import { getEnhancedWindowsPath } from './WindowsPathResolver';
+import { findExecutableInWindowsPath, getEnhancedWindowsPath } from './WindowsPathResolver';
 
 const execAsync = promisify(exec);
 
@@ -362,18 +362,29 @@ export class CLIManager {
       return { isPlatformWindows: false };
     }
     const {gitVersion} = await this.checkGitInstallation();
+    const enhancedPath = this.getEnhancedPath();
 
-    // Check for claude executable in common locations
-    const claudeExePaths = [
-      path.join(os.homedir(), '.local', 'bin', 'claude.exe'), // native installer places it here
-      'claude.exe' // an older installation may be on the path
-    ];
+    // Check for Claude executable in common locations and on the enhanced PATH.
+    // Windows npm installs typically expose `claude.cmd`, not `claude.exe`.
+    const directExecutableCandidates = [
+      path.join(os.homedir(), '.local', 'bin', 'claude.exe'),
+      path.join(os.homedir(), '.local', 'bin', 'claude.cmd'),
+      path.join(process.env.APPDATA || '', 'npm', 'claude.cmd'),
+      path.join(os.homedir(), 'AppData', 'Roaming', 'npm', 'claude.cmd'),
+      findExecutableInWindowsPath(['claude.cmd', 'claude.exe'], enhancedPath) || undefined,
+      'claude',
+    ].filter((candidate): candidate is string => Boolean(candidate));
 
-    for (const claudePath of claudeExePaths) {
+    for (const claudePath of [...new Set(directExecutableCandidates)]) {
       try {
-        await fs.access(claudePath, fsSync.constants.X_OK);
-        // Found it, get version
-        const claudeCodeVersion = execSync(`"${claudePath}" --version`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+        const command = claudePath === 'claude' ? 'claude --version' : `"${claudePath}" --version`;
+        const claudeCodeVersion = execSync(command, {
+          encoding: 'utf8',
+          env: { ...process.env, PATH: enhancedPath },
+          shell: true,
+          stdio: ['pipe', 'pipe', 'pipe'],
+          windowsHide: true,
+        }).trim();
         return { isPlatformWindows: true, gitVersion, claudeCodeVersion };
       } catch (e) {
         // continue searching
@@ -391,7 +402,13 @@ export class CLIManager {
 
     // Also try to get the dynamic npm root
     try {
-      const globalNpmRoot = execSync('npm root -g', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+      const globalNpmRoot = execSync('npm root -g', {
+        encoding: 'utf8',
+        env: { ...process.env, PATH: enhancedPath },
+        shell: true,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        windowsHide: true,
+      }).trim();
       if (globalNpmRoot) {
         npmGlobalPaths.unshift(path.join(globalNpmRoot, '@anthropic-ai', 'claude-agent-sdk'));
         npmGlobalPaths.unshift(path.join(globalNpmRoot, '@anthropic-ai', 'claude-code'));
