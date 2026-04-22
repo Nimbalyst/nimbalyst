@@ -20,6 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.35] - 2026-04-22
+
+
+### Fixed
+- Shared/hybrid tracker types rendering blank in workspaces with no team: routed through the collaborative editor path which couldn't resolve a DocumentRoom, leaving the detail panel stuck on "No content". Now detects team membership as a tri-state (pending/no-team/team) in `TrackerItemDetail`, skips the document-sync IPC when no team exists (falls back to the local PGLite Lexical editor that already backs collab content), and holds the loading state while team detection is in flight so the editor doesn't briefly mount in the wrong mode.
+- electron-store failing to load in packaged builds with `Cannot find module 'p-try'`: the allowlist-style `build.files` array was missing `p-try`, which `pkg-up`'s nested `p-limit@2.3.0` requires. Broke the project move feature. Added `p-try` to the allowlist.
+- Unrelated SDK errors misreported as "session expired": the post-error fallback was using `~/.claude/history.jsonl` as authority for whether a resumed session still existed. When the lookup missed (write-timing races, programmatic sessions the SDK never logs to history), any unrelated SDK error was swapped for a "session expired" message and the session mapping deleted, forcing the user onto a fresh conversation. Demoted the check to a soft diagnostic and preserve the session mapping -- real expiry is still caught upstream via the SDK's own error signature.
+
 ## [0.57.34] - 2026-04-22
 
 
