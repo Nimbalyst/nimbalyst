@@ -95,6 +95,10 @@ jobs:
 
       - name: Install dependencies
         shell: bash
+        env:
+          # @vscode/ripgrep postinstall downloads rg from ripgrep-prebuilt
+          # GitHub releases; without auth, CI runners hit 403 rate limits.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ "${{ matrix.platform }}" == "win" ] && [ "${{ matrix.arch }}" == "arm64" ]; then
             # workerd (transitive via wrangler, used only by collabv3 and
@@ -124,6 +128,10 @@ jobs:
       - name: Install cross-arch native binaries
         if: (matrix.arch == 'x64' && runner.arch == 'ARM64') || (matrix.arch == 'arm64' && runner.arch == 'X64')
         shell: bash
+        env:
+          # Needed for @vscode/ripgrep postinstall to authenticate its
+          # GitHub release download (avoids 403 rate limits).
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TARGET_ARCH="${{ matrix.arch }}"
           PLATFORM="${{ matrix.platform }}"
