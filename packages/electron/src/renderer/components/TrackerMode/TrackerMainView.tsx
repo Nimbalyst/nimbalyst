@@ -588,7 +588,7 @@ const DetailPanelResizable: React.FC<{
   const startXRef = useRef(0);
   const startWidthRef = useRef(width);
   const MIN_WIDTH = 300;
-  const MAX_WIDTH = 700;
+  const MAX_WIDTH = 1200;
 
   useEffect(() => { setCurrentWidth(width); }, [width]);
 
