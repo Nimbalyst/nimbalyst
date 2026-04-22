@@ -29,7 +29,7 @@
     "build:mac:notarized": "npm run build && npm run build:extensions && node -r dotenv/config build/configure-build.js && REQUIRE_NOTARIZE=true node build/build-with-env.js --mac",
     "build:mac:local": "SKIP_NOTARIZE=true npm run build && npm run build:extensions && SKIP_NOTARIZE=true node -r dotenv/config build/configure-build.js && SKIP_NOTARIZE=true node build/build-with-env.js --mac --publish never",
     "build:mac:release": "npm run build && npm run build:extensions && node -r dotenv/config build/configure-build.js && REQUIRE_NOTARIZE=true node build/build-with-env.js --mac --publish always",
-    "validate:extra-resources": "node build/validate-extra-resources.js",
+    "validate:extra-resources": "node build/normalize-extra-resources.js && node build/validate-extra-resources.js",
     "validate:win-updater-config": "node build/validate-windows-updater-config.js",
     "build:win": "npm run build && npm run build:extensions && npm run validate:win-updater-config && electron-builder --win --x64",
     "build:win:arm64": "npm run build && npm run build:extensions && npm run validate:win-updater-config && electron-builder --win --arm64",
