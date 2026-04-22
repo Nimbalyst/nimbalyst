@@ -103,36 +103,24 @@ const BINARY_EXTENSIONS = new Set([
     '.node', '.wasm',
 ]);
 
-// Get the ripgrep binary path for the current platform
+// Get the ripgrep binary path for the current platform.
+// Resolves the rg bundled by the @vscode/ripgrep package at
+// node_modules/@vscode/ripgrep/bin/rg(.exe).
 function getRipgrepPath(): string {
     const platform = os.platform();
-    const arch = os.arch();
-    let rgBinaryDir = '';
-
-    if (platform === 'darwin') {
-        rgBinaryDir = arch === 'arm64' ? 'arm64-darwin' : 'x64-darwin';
-    } else if (platform === 'win32') {
-        // Windows ARM can run x64 binaries via emulation, and there's no arm64-win32 binary
-        rgBinaryDir = 'x64-win32';
-    } else if (platform === 'linux') {
-        rgBinaryDir = arch === 'arm64' ? 'arm64-linux' : 'x64-linux';
-    }
-
     const rgBinaryName = platform === 'win32' ? 'rg.exe' : 'rg';
     const isPackaged = app.isPackaged;
 
     // Use a variable to avoid Vite trying to resolve 'node_modules' as an identifier
     const NODE_MODULES_DIR = ['node', '_', 'modules'].join('');
+    const rgRelPath = path.join(NODE_MODULES_DIR, '@vscode', 'ripgrep', 'bin', rgBinaryName);
 
     const possibleRgPaths: string[] = [];
 
     if (isPackaged) {
         const resourcesPath = process.resourcesPath;
-        possibleRgPaths.push(
-            path.join(resourcesPath, 'app.asar.unpacked', NODE_MODULES_DIR, '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
-        );
+        possibleRgPaths.push(path.join(resourcesPath, 'app.asar.unpacked', rgRelPath));
     } else {
-        const rgRelPath = path.join(NODE_MODULES_DIR, '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName);
         possibleRgPaths.push(
             path.join(__dirname, '..', '..', rgRelPath),
             path.join(process.cwd(), rgRelPath),

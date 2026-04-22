@@ -65,6 +65,7 @@
     "@types/node-fetch": "^2.6.13",
     "@types/uuid": "^10.0.0",
     "@types/ws": "^8.18.1",
+    "@vscode/ripgrep": "^1.17.1",
     "abort-controller": "^3.0.0",
     "agentkeepalive": "^4.6.0",
     "chardet": "^2.1.1",
@@ -180,6 +181,7 @@
       "node_modules/@anthropic-ai/**/*",
       "node_modules/@openai/codex-*/*",
       "node_modules/@openai/codex-sdk/**/*",
+      "node_modules/@vscode/ripgrep/**/*",
       "node_modules/openai/**/*",
       "node_modules/heic-decode/**/*"
     ],
@@ -190,6 +192,7 @@
       "!node_modules/**/*",
       "node_modules/@anthropic-ai/claude-agent-sdk/**/*",
       "node_modules/@anthropic-ai/claude-agent-sdk-*/**/*",
+      "node_modules/@vscode/ripgrep/**/*",
       "node_modules/electron-store/**/*",
       "node_modules/conf/**/*",
       "node_modules/type-fest/**/*",
@@ -234,6 +237,10 @@
       {
         "from": "../../node_modules/@img",
         "to": "app.asar.unpacked/node_modules/@img"
+      },
+      {
+        "from": "../../node_modules/@vscode/ripgrep",
+        "to": "app.asar.unpacked/node_modules/@vscode/ripgrep"
       },
       {
         "from": "../../node_modules/heic-decode",

@@ -181,6 +181,31 @@ jobs:
             npm install --no-save --force "@openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}@${CODEX_SPEC}"
           fi
 
+          # @vscode/ripgrep bundles a single rg binary downloaded by its
+          # postinstall script using the host arch. For cross-compile we
+          # re-run postinstall with npm_config_arch set to the target arch
+          # and --force to overwrite the host-arch binary.
+          if [ -f "packages/electron/node_modules/@vscode/ripgrep/lib/postinstall.js" ]; then
+            RG_POSTINSTALL="packages/electron/node_modules/@vscode/ripgrep/lib/postinstall.js"
+          elif [ -f "node_modules/@vscode/ripgrep/lib/postinstall.js" ]; then
+            RG_POSTINSTALL="node_modules/@vscode/ripgrep/lib/postinstall.js"
+          else
+            echo "::error::Cannot find @vscode/ripgrep/lib/postinstall.js"
+            exit 1
+          fi
+          echo "Re-downloading ripgrep for ${TARGET_ARCH} via ${RG_POSTINSTALL}"
+          npm_config_arch="${TARGET_ARCH}" node "${RG_POSTINSTALL}" --force
+
+          RG_BINARY_NAME=$( [ "$NPM_PLATFORM" = "win32" ] && echo "rg.exe" || echo "rg" )
+          RG_DIR=$(dirname "$(dirname "${RG_POSTINSTALL}")")
+          RG_EXPECTED="${RG_DIR}/bin/${RG_BINARY_NAME}"
+          if [ ! -f "${RG_EXPECTED}" ]; then
+            echo "::error::Cross-arch ripgrep binary not found at ${RG_EXPECTED}"
+            ls -la "${RG_DIR}/bin/" || true
+            exit 1
+          fi
+          echo "Verified: ${RG_EXPECTED} exists"
+
       - name: Build extension-sdk
         working-directory: packages/extension-sdk
         env:
