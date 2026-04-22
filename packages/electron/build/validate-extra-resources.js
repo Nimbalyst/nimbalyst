@@ -23,6 +23,13 @@ const buildArch = process.env.BUILD_ARCH || process.arch;
 // claude-agent-sdk per-platform package name (e.g. darwin, win32, linux).
 const PLATFORM_MACROS = { mac: 'darwin', win: 'win32', linux: 'linux' };
 
+// Only validate the scope matching the current runner's platform. CI runs
+// `build:linux` on a Linux runner, `build:mac` on macOS, `build:win` on
+// Windows, and only installs the host-platform's per-platform packages --
+// walking every scope would flag other-platform binaries as missing even
+// though they are not needed for this build.
+const targetPlatform = process.env.BUILD_PLATFORM || process.platform;
+
 function expandMacros(str, platformMacro) {
   return str
     .replace(/\$\{arch\}/g, buildArch)
@@ -38,6 +45,7 @@ function collectEntries() {
     }
   }
   for (const [key, platformMacro] of Object.entries(PLATFORM_MACROS)) {
+    if (platformMacro !== targetPlatform) continue;
     const list = packageJson.build?.[key]?.extraResources;
     if (Array.isArray(list)) {
       for (const entry of list) {
