@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
-## [0.57.41] - 2026-04-22
+## [0.57.42] - 2026-04-22
 
 
 ### Added
@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Ship ripgrep on Windows ARM64 and the Claude Agent SDK native binary on Intel Mac: two silent `extraResources` failures caused broken release builds (ripgrep missing from Windows ARM64 installs with `spawn rg ENOENT`, and the `claude-agent-sdk` native binary missing from Intel Mac installs). Re-run `@vscode/ripgrep` postinstall explicitly after `npm ci --ignore-scripts` on `windows-11-arm` (the `--ignore-scripts` flag, added to dodge workerd's missing ARM64 prebuild, also skipped the rg.exe download); extend `validate-extra-resources` to walk `build.{mac,win,linux}.extraResources`, expand the `${arch}` macro via `BUILD_ARCH`, and assert the actual binary exists inside `@vscode/ripgrep/bin` and `@anthropic-ai/claude-agent-sdk-<platform>-<arch>`; extend `normalize-extra-resources` to handle platform-specific entries and self-heal npm hoisting in both directions; wire `validate:extra-resources` into `build:win` scripts (was only running for mac/linux).
 - Restore Electron typecheck for Windows Claude detection: remove the explicit `shell` option from the new Windows Claude version checks so the Electron package compiles cleanly again.
 - Scope `validate-extra-resources` to the current build platform: the v0.57.40 validator walked every `build.{mac,win,linux}.extraResources` block on every runner, so the Linux release job failed validation on `@anthropic-ai/claude-agent-sdk-darwin-x64` -- a package that isn't installed on a Linux runner and isn't needed for the Linux build output. Limit platform-scoped walking to entries whose macro matches `process.platform` (with a `BUILD_PLATFORM` override for future cross-platform scenarios); top-level `extraResources` still validate everywhere. Root cause of v0.57.40 failing to ship.
+- Combine cross-arch native binary installs into a single `npm install` invocation: v0.57.41's Intel Mac build ran two sequential `npm install --no-save --force` calls (one for `@anthropic-ai/claude-agent-sdk-darwin-x64`, then one for `@openai/codex-darwin-x64`). Because neither package is recorded in `package.json`, npm treated the SDK binary as extraneous on the second invocation and pruned it -- the Codex install logged `added 1 package, removed 1 package`, leaving only Codex on disk and tripping the new extraResources validator with a "missing `claude-agent-sdk-darwin-x64`" error. Pass both package specs to a single `npm install` so npm keeps both trees intact. Root cause of v0.57.41 failing to ship.
 
 ### Removed
 <!-- Removed features go here -->
