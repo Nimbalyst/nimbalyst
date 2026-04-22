@@ -249,6 +249,14 @@ export class WindowedTreeMatcher {
     const sourceMarkdown = sourceTexts.map((text, i) => `${text}\n`).join('');
     const targetMarkdown = targetTexts.map((text, i) => `${text}\n`).join('');
 
+    // When source and target blobs are identical (common during subtree diff of
+    // list children with unchanged text) createTwoFilesPatch produces a patch
+    // with zero hunks, which parseUnifiedDiff rejects. Short-circuit here so we
+    // don't invoke the diff library only to swallow its error.
+    if (sourceMarkdown === targetMarkdown) {
+      return guidePosts;
+    }
+
     try {
       // Generate unified diff
       const unifiedDiff = generateUnifiedDiff(sourceMarkdown, targetMarkdown);
