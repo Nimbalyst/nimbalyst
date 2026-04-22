@@ -110,6 +110,33 @@ jobs:
             # node-pty for ARM64).
             npm ci --ignore-scripts
             npm run --workspace=@nimbalyst/electron postinstall
+
+            # --ignore-scripts also skipped @vscode/ripgrep's postinstall,
+            # which is the only non-native-module postinstall we rely on:
+            # it downloads rg.exe from ripgrep-prebuilt GitHub releases
+            # into node_modules/@vscode/ripgrep/bin/. Without this the
+            # packaged app ships an empty bin/ directory and search/quick-
+            # open silently fall back to (missing) system rg. Run it here
+            # so ARM64 gets the same binary the x64 path gets for free.
+            if [ -f "packages/electron/node_modules/@vscode/ripgrep/lib/postinstall.js" ]; then
+              RG_POSTINSTALL="packages/electron/node_modules/@vscode/ripgrep/lib/postinstall.js"
+            elif [ -f "node_modules/@vscode/ripgrep/lib/postinstall.js" ]; then
+              RG_POSTINSTALL="node_modules/@vscode/ripgrep/lib/postinstall.js"
+            else
+              echo "::error::Cannot find @vscode/ripgrep/lib/postinstall.js"
+              exit 1
+            fi
+            echo "Running ripgrep postinstall at ${RG_POSTINSTALL}"
+            node "${RG_POSTINSTALL}" --force
+
+            RG_DIR=$(dirname "$(dirname "${RG_POSTINSTALL}")")
+            RG_EXPECTED="${RG_DIR}/bin/rg.exe"
+            if [ ! -f "${RG_EXPECTED}" ]; then
+              echo "::error::ripgrep binary not found at ${RG_EXPECTED}"
+              ls -la "${RG_DIR}/bin/" || true
+              exit 1
+            fi
+            echo "Verified: ${RG_EXPECTED} exists"
           else
             npm ci
           fi
