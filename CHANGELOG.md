@@ -20,6 +20,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.34] - 2026-04-22
+
+
+### Added
+- Collaborative tracker content editing via DocumentRoom: team-synced tracker items using Yjs with review gate, awareness cursors, and PGLite persistence. TrackerItemDetail now supports three content paths (file-backed, local-pglite, collaborative); review banner shows pending remote changes with accept/reject; server auto-repairs corrupt tracker items by re-encrypting from local PGLite data when decryption fails. 1MB content size limit enforced. Configurable TTL on DocumentRoom (tracker content rooms use 90-day TTL).
+- Extension marketplace update flow: auto-updates installed marketplace extensions silently on app launch, update indicators in Discover tab (cards + detail modal), per-extension Update button and Update All in Installed tab, new `/release-extension` command, bundled registry updated with mindmap v1.0.1.
+- Pre-fetch commit context to eliminate agent discovery latency: new `git:get-commit-context` IPC handler cross-references session-edited files with git status before sending to the agent. `handleSmartCommit` injects the pre-fetched file list into the prompt so the agent calls `developer_git_commit_proposal` immediately. New `CommitRequestCard` widget renders commit-request user messages as a collapsible card instead of raw prompt text.
+- Capture `cpu_arch` as PostHog person property so user base can be segmented by CPU architecture (arm64, x64) -- GitHub download counts lose this fidelity once pre-split generic assets are in the mix.
+
+### Fixed
+- Session resume failing in packaged builds: `setupClaudeCodeEnvironment()` was overlaying a synthetic env on top of the carefully sanitized `process.env`, clobbering it. Designed for the old Node.js execution path but the native binary doesn't need NODE_PATH/PATH rewrites -- just HOME. Removed the overlay so dev and packaged mode launch the binary with the same environment. Also: `checkSessionExists` fails open when `~/.claude/history.jsonl` is missing (fixes Windows where the CLI may store data elsewhere), stopping real SDK errors from being misdiagnosed as "session expired".
+- MIME type resolution for chat attachments: `.log`, `.ts`, `.py`, `.yaml`, and other text-based files were rejected as "unsupported file type" because browsers report empty or `application/octet-stream` MIME for those extensions. Added extension-to-MIME fallback map (~70 extensions), passed filename through to validation, and broadened supported document MIME list (html, xml, yaml, js, ts, etc.).
+- iOS compose bar clearing dictated text after keyboard voice input: dismiss focus before clearing the text binding on send/queue so any in-flight keyboard dictation commits first. Otherwise UIKit's pending dictation buffer re-inserted text after the clear, leaving the dictated message stuck.
+- Tracker content editor destroying/remounting on every save by removing `updatedAt` dependency from content load effect.
+- Model picker showing raw variant ID for pinned opus-4-6 on initial load: use `CLAUDE_CODE_MODEL_LABELS` map instead of naive first-char capitalization so `opus-4-6` displays as `Opus` not `Opus-4-6`. Matches server-side label format (dot separator).
+- `scheduleAIProviderPersist` re-sending stale debug settings: provider saves fetched `currentSettings` via `aiGetSettings()` and re-sent `showToolCalls`/`aiDebugLogging` alongside `apiKeys`/`providerSettings`. If a debug toggle changed while a provider save was in the 500ms debounce window, the older debug values were re-saved over the fresh ones. The `ai:saveSettings` handler guards every field with `!== undefined`, so dropping those keys preserves existing values. Last remaining holdout of the NIM-801 spread pattern.
+- Dropping advanced settings when debounce timer resets: toggling Extension Dev Tools (or any `changedKeys`-driven advanced setting) silently failed to persist when another setting mutated within the 500ms debounce window. The scheduler captured `changedKeys` in a `setTimeout` closure and cleared the pending timer on each call, losing the first call's keys entirely. Accumulate `changedKeys` into a module-level Set and capture the latest settings snapshot so the flushed timer sees every queued change. Same fix applied to `scheduleDeveloperFeaturePersist`.
+
+### Removed
+- Failing mermaid import exploration test (debugging artifact with `console.log` diagnostics whose subgraph case asserted on the `mermaid-to-excalidraw` library's internal fallback for inputs it throws on; consistently failing CI with no production code relying on the assertion).
+
 ## [0.57.33] - 2026-04-21
 
 
