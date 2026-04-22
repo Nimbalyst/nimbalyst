@@ -858,10 +858,20 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
           const chunk = rawChunk as any;
           chunkCount++;
 
-          // Diagnostic: detect "Stream closed" at the raw chunk level
-          if (typeof chunk === 'object' && chunk !== null) {
-            const chunkJson = JSON.stringify(chunk);
-            if (chunkJson.includes('Stream closed')) {
+          // Diagnostic: detect a "Stream closed" tool_result at the raw chunk level.
+          // Narrow match: only fires when the chunk is a user/tool_result with is_error=true
+          // AND the content string contains "Stream closed". Avoids false positives from
+          // successful Bash output that happens to contain the phrase (e.g., git log echoing
+          // a commit message about the stream-close fix).
+          if (typeof chunk === 'object' && chunk !== null && chunk.type === 'user' && Array.isArray(chunk.message?.content)) {
+            const hasStreamClosedError = chunk.message.content.some((item: any) =>
+              item?.type === 'tool_result'
+              && item.is_error === true
+              && typeof item.content === 'string'
+              && item.content.includes('Stream closed')
+            );
+            if (hasStreamClosedError) {
+              const chunkJson = JSON.stringify(chunk);
               console.error(`[CLAUDE-CODE] STREAM_CLOSED_RAW_CHUNK: chunkType="${chunk.type}" chunkSubtype="${chunk.subtype}" chunkCount=${chunkCount} turnElapsed=${Date.now() - queryStartTime}ms stderrLines=${stderrLines.length}`);
               console.error(`[CLAUDE-CODE] STREAM_CLOSED_RAW_CHUNK: ${chunkJson.substring(0, 500)}`);
               if (stderrLines.length > 0) {
