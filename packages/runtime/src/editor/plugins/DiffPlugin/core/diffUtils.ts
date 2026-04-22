@@ -1117,11 +1117,11 @@ export function $applyNodeDiff(
         // No live key found - check if this is a valid "append at end" case
         if (insertBeforeSourceIndex === sourceChildrenLength) {
           // Valid case: TreeMatcher determined this should be appended at document end
-          console.log(
-            `[ADD diff] Appending to end: sourceIndex=${insertBeforeSourceIndex}, ` +
-            `sourceChildrenLength=${sourceChildrenLength}, targetIndex=${diff.targetIndex}, ` +
-            `type=${newNode.getType()}`
-          );
+          // console.log(
+          //   `[ADD diff] Appending to end: sourceIndex=${insertBeforeSourceIndex}, ` +
+          //   `sourceChildrenLength=${sourceChildrenLength}, targetIndex=${diff.targetIndex}, ` +
+          //   `type=${newNode.getType()}`
+          // );
           liveRoot.append(newNode);
         } else if (insertBeforeSourceIndex > sourceChildrenLength) {
           // Invalid: sourceIndex is beyond document length
@@ -1407,10 +1407,10 @@ export function $applyChildNodeDiff(
 
       if (insertBeforeIndex >= liveChildren.length) {
         // Append to end - this is expected for adding new items at the end
-        console.log(
-          `[ChildDiff ADD] Appending to end: insertBeforeIndex=${insertBeforeIndex}, ` +
-          `liveChildren.length=${liveChildren.length}, type=${newNode.getType()}`
-        );
+        // console.log(
+        //   `[ChildDiff ADD] Appending to end: insertBeforeIndex=${insertBeforeIndex}, ` +
+        //   `liveChildren.length=${liveChildren.length}, type=${newNode.getType()}`
+        // );
         liveParentNode.append(newNode);
       } else if (insertBeforeIndex <= 0) {
         // Insert at the beginning
