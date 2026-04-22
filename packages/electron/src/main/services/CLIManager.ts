@@ -381,7 +381,6 @@ export class CLIManager {
         const claudeCodeVersion = execSync(command, {
           encoding: 'utf8',
           env: { ...process.env, PATH: enhancedPath },
-          shell: true,
           stdio: ['pipe', 'pipe', 'pipe'],
           windowsHide: true,
         }).trim();
@@ -405,7 +404,6 @@ export class CLIManager {
       const globalNpmRoot = execSync('npm root -g', {
         encoding: 'utf8',
         env: { ...process.env, PATH: enhancedPath },
-        shell: true,
         stdio: ['pipe', 'pipe', 'pipe'],
         windowsHide: true,
       }).trim();
