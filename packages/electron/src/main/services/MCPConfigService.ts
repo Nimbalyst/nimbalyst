@@ -156,7 +156,7 @@ export class MCPConfigService {
         }
       }
 
-      return { mcpServers: claudeConfig.mcpServers || {} };
+      return { mcpServers: this.normalizeServers(claudeConfig.mcpServers || {}) };
     } catch (error: any) {
       if (error.code === 'ENOENT') {
         // Primary file doesn't exist - try to migrate from legacy
@@ -263,6 +263,10 @@ export class MCPConfigService {
    */
   async writeUserMCPConfig(config: MCPConfig): Promise<void> {
     try {
+      // Normalize server entries so every server has an explicit `type` field.
+      // Claude Code 2.1.x rejects HTTP/SSE entries without `type` as an explicit discriminator.
+      config = { mcpServers: this.normalizeServers(config.mcpServers || {}) };
+
       // Validate config before writing
       this.validateConfig(config);
 
@@ -339,10 +343,10 @@ export class MCPConfigService {
 
     // Merge both sources: .mcp.json overrides ~/.claude.json projects
     return {
-      mcpServers: {
+      mcpServers: this.normalizeServers({
         ...claudeJsonServers,
         ...mcpJsonServers
-      }
+      })
     };
   }
 
@@ -354,6 +358,10 @@ export class MCPConfigService {
     if (!workspacePath) {
       throw new Error('workspacePath is required');
     }
+
+    // Normalize server entries so every server has an explicit `type` field.
+    // Claude Code 2.1.x rejects HTTP/SSE entries without `type` as an explicit discriminator.
+    config = { mcpServers: this.normalizeServers(config.mcpServers || {}) };
 
     // Validate config before writing
     this.validateConfig(config);
@@ -747,6 +755,42 @@ export class MCPConfigService {
     }
     const status = await checkMcpRemoteAuthStatus(serverConfig, options);
     return status.authorized;
+  }
+
+  /**
+   * Ensure every server entry has an explicit `type` field.
+   *
+   * Claude Code 2.1.x requires `type` as an explicit discriminator and rejects
+   * entries that omit it (e.g. `{ "url": "..." }` without `"type": "http"`).
+   * Older Nimbalyst versions and manually-authored configs may be missing it.
+   *
+   * Inference rules (only applied when `type` is missing):
+   * - Entry has `url` -> `http` (the modern remote transport)
+   * - Entry has `command` -> `stdio`
+   * - Otherwise: leave unchanged and let validation surface the issue
+   */
+  private normalizeServers(
+    mcpServers: Record<string, MCPServerConfig>
+  ): Record<string, MCPServerConfig> {
+    const result: Record<string, MCPServerConfig> = {};
+    for (const [name, serverConfig] of Object.entries(mcpServers)) {
+      if (!serverConfig || typeof serverConfig !== 'object') {
+        result[name] = serverConfig;
+        continue;
+      }
+      if (serverConfig.type) {
+        result[name] = serverConfig;
+        continue;
+      }
+      if (typeof serverConfig.url === 'string' && serverConfig.url) {
+        result[name] = { ...serverConfig, type: 'http' };
+      } else if (typeof serverConfig.command === 'string' && serverConfig.command) {
+        result[name] = { ...serverConfig, type: 'stdio' };
+      } else {
+        result[name] = serverConfig;
+      }
+    }
+    return result;
   }
 
   /**
