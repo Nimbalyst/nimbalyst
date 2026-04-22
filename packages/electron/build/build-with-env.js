@@ -7,12 +7,20 @@
 const path = require('path');
 const { execSync, spawn } = require('child_process');
 
-// Validate extraResources before building
+// Normalize then validate extraResources before building. Mac build scripts
+// go through this wrapper directly, so hoisted workspace deps must be linked
+// into packages/electron/node_modules here before validation runs.
 try {
-  execSync('node build/validate-extra-resources.js', {
-    cwd: path.join(__dirname, '..'),
-    stdio: 'inherit',
-  });
+  const cwd = path.join(__dirname, '..');
+  for (const command of [
+    'node build/normalize-extra-resources.js',
+    'node build/validate-extra-resources.js',
+  ]) {
+    execSync(command, {
+      cwd,
+      stdio: 'inherit',
+    });
+  }
 } catch {
   process.exit(1);
 }
