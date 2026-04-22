@@ -184,7 +184,7 @@ export function createTranscriptEventStore(
       return (rows[0]?.max_seq ?? -1) + 1;
     },
 
-    async findByProviderToolCallId(providerToolCallId): Promise<TranscriptEvent | null> {
+    async findByProviderToolCallId(providerToolCallId, sessionId): Promise<TranscriptEvent | null> {
       await ensureReady();
 
       // Order by id DESC to return the most recent event with this tool call ID.
@@ -192,13 +192,20 @@ export function createTranscriptEventStore(
       // (e.g., item_5 for both a command_execution and an mcp_tool_call),
       // so multiple events may share the same provider_tool_call_id.
       // The latest one is the event we want to update on completion.
+      //
+      // Scoped by session_id: Codex's short per-turn item IDs (e.g. item_1)
+      // collide across sessions. Without this filter, a matching tool name
+      // from a previous session causes processDescriptor to dedupe against
+      // that row and skip creating the canonical event in the current
+      // session -- which hides the custom tool widget (e.g. git commit
+      // proposal) entirely.
       const { rows } = await db.query<TranscriptEventRow>(
         `SELECT ${SELECT_COLS}
           FROM ai_transcript_events
-          WHERE provider_tool_call_id = $1
+          WHERE provider_tool_call_id = $1 AND session_id = $2
           ORDER BY id DESC
           LIMIT 1`,
-        [providerToolCallId],
+        [providerToolCallId, sessionId],
       );
 
       return rows.length > 0 ? rowToEvent(rows[0]) : null;

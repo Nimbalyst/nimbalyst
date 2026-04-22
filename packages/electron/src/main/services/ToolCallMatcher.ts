@@ -1211,7 +1211,7 @@ class ToolCallMatcherImpl {
       try {
         if (TranscriptEventRepository.hasStore() && lookup.toolCallItemId) {
           const store = TranscriptEventRepository.getStore();
-          const event = await store.findByProviderToolCallId(lookup.toolCallItemId);
+          const event = await store.findByProviderToolCallId(lookup.toolCallItemId, sessionId);
           if (event) {
             canonicalPayload = event.payload as unknown as ToolCallPayload;
           }
@@ -1918,7 +1918,7 @@ class ToolCallMatcherImpl {
       try {
         if (TranscriptEventRepository.hasStore() && toolCallItemId) {
           const store = TranscriptEventRepository.getStore();
-          const matchingEvent = await store.findByProviderToolCallId(toolCallItemId);
+          const matchingEvent = await store.findByProviderToolCallId(toolCallItemId, sessionId);
           if (matchingEvent) {
             canonicalPayload = matchingEvent.payload as unknown as ToolCallPayload;
             toolName = canonicalPayload.toolName;

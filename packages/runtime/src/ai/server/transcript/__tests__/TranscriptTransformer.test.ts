@@ -54,8 +54,12 @@ function createMockTranscriptStore(): ITranscriptEventStore & { getAll(): Transc
       return sequenceCounters.get(sessionId) ?? 0;
     },
 
-    async findByProviderToolCallId(providerToolCallId) {
-      return events.find((e) => e.providerToolCallId === providerToolCallId) ?? null;
+    async findByProviderToolCallId(providerToolCallId, sessionId) {
+      return (
+        events.find(
+          (e) => e.providerToolCallId === providerToolCallId && e.sessionId === sessionId,
+        ) ?? null
+      );
     },
 
     async getEventById(id) {
@@ -1403,6 +1407,60 @@ describe('TranscriptTransformer', () => {
       expect(toolEvents).toHaveLength(1);
       const payload = toolEvents[0].payload as any;
       expect(payload.result).toBe(mcpResult);
+    });
+
+    it('does not dedupe across sessions when Codex reuses item IDs', async () => {
+      // Codex resets item IDs (item_1, item_2, ...) per turn/session, so the
+      // same provider_tool_call_id appears in many sessions. A previous
+      // session's matching tool name must NOT cause the new session's
+      // tool_call_started descriptor to be dropped -- otherwise custom tool
+      // widgets (e.g. git commit proposal) never render in later sessions.
+      const SESSION_A = 'session-a';
+      const SESSION_B = 'session-b';
+      const TOOL_NAME = 'mcp__nimbalyst-mcp__developer_git_commit_proposal';
+
+      const buildItemStarted = (sessionId: string) =>
+        makeRawMessage({
+          id: sessionId === SESSION_A ? 1 : 2,
+          sessionId,
+          source: 'openai-codex',
+          direction: 'output',
+          content: JSON.stringify({
+            type: 'item.started',
+            item: {
+              id: 'item_1',
+              type: 'mcp_tool_call',
+              server: 'nimbalyst-mcp',
+              tool: 'developer_git_commit_proposal',
+              arguments: { commitMessage: 'first', filesToStage: ['a.ts'] },
+              status: 'in_progress',
+            },
+          }),
+        });
+
+      const rawStore = createMockRawStore([
+        buildItemStarted(SESSION_A),
+        buildItemStarted(SESSION_B),
+      ]);
+      const transformer = new TranscriptTransformer(rawStore, transcriptStore, metadataStore);
+
+      await transformer.ensureTransformed(SESSION_A, CODEX_PROVIDER);
+      await transformer.ensureTransformed(SESSION_B, CODEX_PROVIDER);
+
+      const eventsA = await transcriptStore.getSessionEvents(SESSION_A);
+      const eventsB = await transcriptStore.getSessionEvents(SESSION_B);
+
+      const toolA = eventsA.filter((e) => e.eventType === 'tool_call');
+      const toolB = eventsB.filter((e) => e.eventType === 'tool_call');
+
+      expect(toolA).toHaveLength(1);
+      expect(toolB).toHaveLength(1);
+      expect((toolA[0].payload as any).toolName).toBe(TOOL_NAME);
+      expect((toolB[0].payload as any).toolName).toBe(TOOL_NAME);
+      // Distinct events, not the SESSION_A row leaking into SESSION_B
+      expect(toolA[0].id).not.toBe(toolB[0].id);
+      expect(toolA[0].sessionId).toBe(SESSION_A);
+      expect(toolB[0].sessionId).toBe(SESSION_B);
     });
 
     it('preserves non-MCP Codex tool results as-is', async () => {

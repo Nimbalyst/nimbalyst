@@ -23,7 +23,11 @@ export interface ParseContext {
   hasToolCall(providerToolCallId: string): boolean;
   /** Check if a subagent with this ID has already been created in this batch */
   hasSubagent(subagentId: string): boolean;
-  /** Look up existing canonical event for tool matching on resume (DB lookup) */
+  /**
+   * Look up existing canonical event for tool matching on resume (DB lookup).
+   * Scoped to the current session so that providers that reuse short item IDs
+   * (e.g. Codex `item_1`) don't collide with events from other sessions.
+   */
   findByProviderToolCallId(id: string): Promise<TranscriptEvent | null>;
 }
 

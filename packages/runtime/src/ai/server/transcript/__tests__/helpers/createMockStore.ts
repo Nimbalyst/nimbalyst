@@ -56,8 +56,12 @@ export function createMockStore(): ITranscriptEventStore {
       return sequenceCounters.get(sessionId) ?? 0;
     },
 
-    async findByProviderToolCallId(providerToolCallId) {
-      return events.find((e) => e.providerToolCallId === providerToolCallId) ?? null;
+    async findByProviderToolCallId(providerToolCallId, sessionId) {
+      return (
+        events.find(
+          (e) => e.providerToolCallId === providerToolCallId && e.sessionId === sessionId,
+        ) ?? null
+      );
     },
 
     async getEventById(id) {

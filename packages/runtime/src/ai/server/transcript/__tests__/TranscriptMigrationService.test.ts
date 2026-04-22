@@ -44,8 +44,12 @@ function createMockTranscriptStore(): ITranscriptEventStore {
     async getNextSequence(sessionId) {
       return sequenceCounters.get(sessionId) ?? 0;
     },
-    async findByProviderToolCallId(providerToolCallId) {
-      return events.find((e) => e.providerToolCallId === providerToolCallId) ?? null;
+    async findByProviderToolCallId(providerToolCallId, sessionId) {
+      return (
+        events.find(
+          (e) => e.providerToolCallId === providerToolCallId && e.sessionId === sessionId,
+        ) ?? null
+      );
     },
     async getEventById(id) {
       return events.find((e) => e.id === id) ?? null;

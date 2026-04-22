@@ -214,7 +214,8 @@ export class TranscriptTransformer {
         return false;
       },
       hasSubagent: (id: string) => subagentEventIds.has(id),
-      findByProviderToolCallId: (id: string) => this.transcriptStore.findByProviderToolCallId(id),
+      findByProviderToolCallId: (id: string) =>
+        this.transcriptStore.findByProviderToolCallId(id, sessionId),
     };
 
     let lastRawMessageId = afterId;
@@ -369,7 +370,8 @@ export class TranscriptTransformer {
       sessionId,
       hasToolCall: (id: string) => toolEventIds.has(id),
       hasSubagent: (id: string) => subagentEventIds.has(id),
-      findByProviderToolCallId: (id: string) => this.transcriptStore.findByProviderToolCallId(id),
+      findByProviderToolCallId: (id: string) =>
+        this.transcriptStore.findByProviderToolCallId(id, sessionId),
     };
 
     for (const msg of messages) {

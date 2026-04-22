@@ -45,7 +45,7 @@ export async function processDescriptor(
 
     case 'tool_call_started': {
       if (desc.providerToolCallId && !toolEventIds.has(desc.providerToolCallId)) {
-        const existing = await store.findByProviderToolCallId(desc.providerToolCallId);
+        const existing = await store.findByProviderToolCallId(desc.providerToolCallId, sessionId);
         if (existing) {
           const existingPayload = existing.payload as Record<string, unknown>;
           if (existingPayload.toolName === desc.toolName) {
@@ -74,7 +74,7 @@ export async function processDescriptor(
     case 'tool_call_completed': {
       let eventId = toolEventIds.get(desc.providerToolCallId);
       if (!eventId) {
-        const existing = await store.findByProviderToolCallId(desc.providerToolCallId);
+        const existing = await store.findByProviderToolCallId(desc.providerToolCallId, sessionId);
         if (existing) {
           eventId = existing.id;
           toolEventIds.set(desc.providerToolCallId, eventId);

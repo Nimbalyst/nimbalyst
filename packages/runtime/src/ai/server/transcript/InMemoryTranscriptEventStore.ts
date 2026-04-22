@@ -69,10 +69,17 @@ export class InMemoryTranscriptEventStore implements ITranscriptEventStore {
     return this.sequenceBySession.get(sessionId) ?? 0;
   }
 
-  async findByProviderToolCallId(providerToolCallId: string): Promise<TranscriptEvent | null> {
+  async findByProviderToolCallId(
+    providerToolCallId: string,
+    sessionId: string,
+  ): Promise<TranscriptEvent | null> {
     for (let i = this.events.length - 1; i >= 0; i--) {
-      if (this.events[i].providerToolCallId === providerToolCallId) {
-        return this.events[i];
+      const event = this.events[i];
+      if (
+        event.providerToolCallId === providerToolCallId &&
+        event.sessionId === sessionId
+      ) {
+        return event;
       }
     }
     return null;

@@ -217,7 +217,10 @@ export interface ITranscriptEventStore {
     options?: { eventTypes?: TranscriptEventType[]; limit?: number; offset?: number; createdAfter?: Date; createdBefore?: Date },
   ): Promise<TranscriptEvent[]>;
   getNextSequence(sessionId: string): Promise<number>;
-  findByProviderToolCallId(providerToolCallId: string): Promise<TranscriptEvent | null>;
+  findByProviderToolCallId(
+    providerToolCallId: string,
+    sessionId: string,
+  ): Promise<TranscriptEvent | null>;
   getEventById(id: number): Promise<TranscriptEvent | null>;
   getChildEvents(parentEventId: number): Promise<TranscriptEvent[]>;
   getSubagentEvents(subagentId: string, sessionId: string): Promise<TranscriptEvent[]>;
