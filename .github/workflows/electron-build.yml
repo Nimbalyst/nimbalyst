@@ -186,19 +186,9 @@ jobs:
           CLAUDE_SDK_VERSION=$(node -p "require(require('path').resolve('${CLAUDE_PKG_JSON}')).version")
           CLAUDE_PKG="@anthropic-ai/claude-agent-sdk-${NPM_PLATFORM}-${TARGET_ARCH}@${CLAUDE_SDK_VERSION}"
           BINARY_NAME=$( [ "$NPM_PLATFORM" = "win32" ] && echo "claude.exe" || echo "claude" )
-          echo "Installing ${CLAUDE_PKG}"
-          npm install --no-save --force "${CLAUDE_PKG}"
 
-          # Verify binary exists where extraResources will look for it
-          EXPECTED="node_modules/@anthropic-ai/claude-agent-sdk-${NPM_PLATFORM}-${TARGET_ARCH}/${BINARY_NAME}"
-          if [ ! -f "${EXPECTED}" ]; then
-            echo "::error::Cross-arch binary not found at ${EXPECTED}"
-            ls -la "node_modules/@anthropic-ai/" || true
-            exit 1
-          fi
-          echo "Verified: ${EXPECTED} exists"
-
-          # OpenAI Codex native binary
+          # OpenAI Codex native binary version (resolved now so we can install
+          # it in the same `npm install` as the SDK binary -- see below).
           if [ -f "packages/electron/node_modules/@openai/codex/package.json" ]; then
             CODEX_PKG_JSON="packages/electron/node_modules/@openai/codex/package.json"
           elif [ -f "node_modules/@openai/codex/package.json" ]; then
@@ -211,10 +201,31 @@ jobs:
           else
             CODEX_SPEC=""
           fi
+
+          # Install both cross-arch native binaries in a SINGLE npm invocation.
+          # Running separate `npm install --no-save` calls causes npm to prune
+          # the previously-installed cross-arch dep as "extraneous" (it's not
+          # in package.json, and --no-save keeps it that way), so the second
+          # install reports "added 1 package, removed 1 package" and leaves
+          # only the most recent one on disk. Root cause of v0.57.40/v0.57.41
+          # failing to ship the Intel Mac build.
+          INSTALL_ARGS=("${CLAUDE_PKG}")
+          echo "Installing ${CLAUDE_PKG}"
           if [ -n "$CODEX_SPEC" ]; then
-            echo "Installing @openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}@${CODEX_SPEC}"
-            npm install --no-save --force "@openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}@${CODEX_SPEC}"
+            CODEX_PKG="@openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}@${CODEX_SPEC}"
+            INSTALL_ARGS+=("${CODEX_PKG}")
+            echo "Installing ${CODEX_PKG}"
           fi
+          npm install --no-save --force "${INSTALL_ARGS[@]}"
+
+          # Verify binary exists where extraResources will look for it
+          EXPECTED="node_modules/@anthropic-ai/claude-agent-sdk-${NPM_PLATFORM}-${TARGET_ARCH}/${BINARY_NAME}"
+          if [ ! -f "${EXPECTED}" ]; then
+            echo "::error::Cross-arch binary not found at ${EXPECTED}"
+            ls -la "node_modules/@anthropic-ai/" || true
+            exit 1
+          fi
+          echo "Verified: ${EXPECTED} exists"
 
           # @vscode/ripgrep bundles a single rg binary downloaded by its
           # postinstall script using the host arch. For cross-compile we
