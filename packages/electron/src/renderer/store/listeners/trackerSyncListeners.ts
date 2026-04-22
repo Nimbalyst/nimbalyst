@@ -115,6 +115,20 @@ export function initTrackerSyncListeners(): () => void {
 
   // console.log('[trackerSyncListeners] Initializing tracker data listeners');
 
+  // Track this window's workspace so we can defensively filter cross-project
+  // tracker events. The main-process broadcast is already scoped to the right
+  // window, but a stray event from a buggy code path would still leak a
+  // foreign item into our atoms and display it until the next refresh.
+  let currentWorkspacePath: string | null = null;
+  window.electronAPI
+    .invoke('get-initial-state')
+    .then((state: { workspacePath?: string } | null) => {
+      currentWorkspacePath = state?.workspacePath ?? null;
+    })
+    .catch(() => {
+      currentWorkspacePath = null;
+    });
+
   // Initial load from PGLite + frontmatter (shows cached data from previous session)
   loadAllTrackerItems();
 
@@ -138,14 +152,26 @@ export function initTrackerSyncListeners(): () => void {
         //   updated: change.updated?.length || 0,
         //   removed: change.removed?.length || 0,
         // });
+        // Defensive workspace filter: drop items that belong to a different
+        // workspace. If we don't know our own workspace yet (init race), pass
+        // through -- the main process already filters. Items without a
+        // `workspace` field (legacy / frontmatter) also pass through.
+        const belongsToThisWorkspace = (item: TrackerItem): boolean => {
+          if (!currentWorkspacePath) return true;
+          if (!item.workspace) return true;
+          return item.workspace === currentWorkspacePath;
+        };
+
         // Apply granular updates to the atom map (convert to TrackerRecord)
         if (change.added?.length) {
           for (const item of change.added) {
+            if (!belongsToThisWorkspace(item)) continue;
             store.set(upsertTrackerItemAtom, trackerItemToRecord(item));
           }
         }
         if (change.updated?.length) {
           for (const item of change.updated) {
+            if (!belongsToThisWorkspace(item)) continue;
             store.set(upsertTrackerItemAtom, trackerItemToRecord(item));
           }
         }

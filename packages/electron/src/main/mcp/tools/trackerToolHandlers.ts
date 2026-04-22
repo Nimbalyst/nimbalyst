@@ -178,46 +178,49 @@ function rowToTrackerItem(row: any): any {
 }
 
 /**
- * Broadcast a TrackerItemChangeEvent to all windows on the correct IPC channel.
+ * Send a TrackerItemChangeEvent on the correct IPC channel to the window whose
+ * workspace owns the tracker item. Scoping to a single window prevents items
+ * from leaking into other projects that happen to be open. `findWindowByWorkspace`
+ * is worktree-aware, so worktree rows are routed to the parent project window.
  * Uses the same channel and event shape that trackerSyncListeners.ts expects.
  */
-async function notifyTrackerItemAdded(workspacePath: string | undefined, itemId: string): Promise<void> {
+async function notifyTrackerItemAdded(_workspacePath: string | undefined, itemId: string): Promise<void> {
   const { getDatabase } = await import("../../database/initialize");
   const db = getDatabase();
   const result = await db.query<any>(`SELECT * FROM tracker_items WHERE id = $1`, [itemId]);
   if (result.rows.length === 0) return;
   const item = rowToTrackerItem(result.rows[0]);
 
-  const { BrowserWindow } = await import("electron");
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) {
-      win.webContents.send("document-service:tracker-items-changed", {
-        added: [item],
-        updated: [],
-        removed: [],
-        timestamp: new Date(),
-      });
-    }
+  if (!item.workspace) return;
+  const { findWindowByWorkspace } = await import("../../window/WindowManager");
+  const win = findWindowByWorkspace(item.workspace);
+  if (win && !win.isDestroyed()) {
+    win.webContents.send("document-service:tracker-items-changed", {
+      added: [item],
+      updated: [],
+      removed: [],
+      timestamp: new Date(),
+    });
   }
 }
 
-async function notifyTrackerItemUpdated(workspacePath: string | undefined, itemId: string): Promise<void> {
+async function notifyTrackerItemUpdated(_workspacePath: string | undefined, itemId: string): Promise<void> {
   const { getDatabase } = await import("../../database/initialize");
   const db = getDatabase();
   const result = await db.query<any>(`SELECT * FROM tracker_items WHERE id = $1`, [itemId]);
   if (result.rows.length === 0) return;
   const item = rowToTrackerItem(result.rows[0]);
 
-  const { BrowserWindow } = await import("electron");
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) {
-      win.webContents.send("document-service:tracker-items-changed", {
-        added: [],
-        updated: [item],
-        removed: [],
-        timestamp: new Date(),
-      });
-    }
+  if (!item.workspace) return;
+  const { findWindowByWorkspace } = await import("../../window/WindowManager");
+  const win = findWindowByWorkspace(item.workspace);
+  if (win && !win.isDestroyed()) {
+    win.webContents.send("document-service:tracker-items-changed", {
+      added: [],
+      updated: [item],
+      removed: [],
+      timestamp: new Date(),
+    });
   }
 }
 
@@ -920,7 +923,7 @@ export async function handleTrackerCreate(
       authorIdentity,
       createdByAgent: true,
     };
-    if (args.tags?.length) data[rf('tags', 'tags')] = args.tags;
+    if (Array.isArray(args.tags) && args.tags.length) data[rf('tags', 'tags')] = args.tags;
     if (args.description) data.description = args.description.replace(/\\n/g, '\n');
     if (args.owner) data[rf('assignee', 'owner')] = args.owner;
     if (args.dueDate) data[rf('dueDate', 'dueDate')] = args.dueDate;
