@@ -1123,6 +1123,10 @@ export async function handleTrackerUpdate(
 
     const changes: Record<string, { from: any; to: any }> = {};
 
+    if (args.tags !== undefined && !Array.isArray(args.tags)) {
+      args.tags = [];
+    }
+
     for (const [argName, role, fallback] of roleMap) {
       if (args[argName] !== undefined) {
         const fieldName = rf(role, fallback);

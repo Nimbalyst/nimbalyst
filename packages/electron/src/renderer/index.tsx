@@ -10,6 +10,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { Provider as JotaiProvider } from 'jotai';
 import App from './App';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import './index.css';
 import './styles/components.css';
 import posthog from "posthog-js";
@@ -213,11 +214,13 @@ window.electronAPI.on('ai:promptClaimed', (data: { sessionId: string; promptId: 
 
 root.render(
   <React.StrictMode>
-    <JotaiProvider store={store}>
-      <PostHogProvider client={posthogClient}>
-        <App />
-      </PostHogProvider>
-    </JotaiProvider>
+    <ErrorBoundary>
+      <JotaiProvider store={store}>
+        <PostHogProvider client={posthogClient}>
+          <App />
+        </PostHogProvider>
+      </JotaiProvider>
+    </ErrorBoundary>
   </React.StrictMode>
 );
 

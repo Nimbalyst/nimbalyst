@@ -14,7 +14,7 @@ import { EditToolResultCard } from './EditToolResultCard';
 import { TranscriptSearchBar } from './TranscriptSearchBar';
 import { formatToolDisplayName } from '../utils/toolNameFormatter';
 import { isToolLikeMessage } from '../utils/messageTypeHelpers';
-import { getCustomToolWidget, type ToolCallDiffResult } from './CustomToolWidgets';
+import { getCustomToolWidget, ToolWidgetErrorBoundary, type ToolCallDiffResult } from './CustomToolWidgets';
 import { ToolCallChanges } from './ToolCallChanges';
 import { setSessionIsAtBottom, getSessionIsAtBottom } from '../../../store/atoms/transcriptScroll';
 
@@ -1197,15 +1197,17 @@ export const RichTranscriptView = React.forwardRef<
           className={`rich-transcript-tool-container mb-2 ${depth > 0 ? 'nested ml-0' : ''}`}
           style={{ marginLeft: depth > 0 ? '1rem' : '0' }}
         >
-          <CustomWidget
-            message={toolMsg}
-            isExpanded={isExpanded}
-            onToggle={() => toggleToolExpand(toolId)}
-            workspacePath={workspacePath}
-            sessionId={sessionId}
-            readFile={readFile}
-            getToolCallDiffs={getToolCallDiffs}
-          />
+          <ToolWidgetErrorBoundary toolName={tool.toolName}>
+            <CustomWidget
+              message={toolMsg}
+              isExpanded={isExpanded}
+              onToggle={() => toggleToolExpand(toolId)}
+              workspacePath={workspacePath}
+              sessionId={sessionId}
+              readFile={readFile}
+              getToolCallDiffs={getToolCallDiffs}
+            />
+          </ToolWidgetErrorBoundary>
         </div>
       );
     }

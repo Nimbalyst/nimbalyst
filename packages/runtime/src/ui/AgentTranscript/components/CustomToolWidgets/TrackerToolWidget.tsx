@@ -363,7 +363,7 @@ const CreatedView: React.FC<{ data: StructuredCreated }> = ({ data }) => {
           </>
         )}
       </Row>
-      {item.tags && item.tags.length > 0 && (
+      {Array.isArray(item.tags) && item.tags.length > 0 && (
         <Row>
           <Label>Tags</Label>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
@@ -578,7 +578,7 @@ const RetrievedView: React.FC<{ data: StructuredRetrieved }> = ({ data }) => {
           </>
         )}
       </Row>
-      {item.tags && item.tags.length > 0 && (
+      {Array.isArray(item.tags) && item.tags.length > 0 && (
         <Row>
           <Label>Tags</Label>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
