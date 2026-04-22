@@ -115,7 +115,7 @@ const SDK_NATIVE_TOOLS: readonly string[] = [
   'WebFetch', 'WebSearch',
   'Task', 'Agent',  // Agent is the renamed Task tool (SDK 0.2.x+)
   'TaskOutput', 'TaskStop', 'ExitPlanMode', 'AskUserQuestion',
-  'EnterPlanMode', 'EnterWorktree', 'Skill',
+  'EnterPlanMode', 'EnterWorktree', 'ExitWorktree', 'Skill',
   'NotebookRead', 'NotebookEdit',
   'TodoRead', 'TodoWrite',
   'ToolSearch',
@@ -123,6 +123,12 @@ const SDK_NATIVE_TOOLS: readonly string[] = [
   'TaskCreate', 'TaskGet', 'TaskUpdate', 'TaskList',
   // Agent Teams tools (SDK-internal, executed by CLI subprocess)
   'TeammateTool', 'SendMessage', 'TeamCreate', 'TeamDelete',
+  // Claude Code 2.1.116+ additions (CLI-native, do NOT route through our toolHandler)
+  'Monitor', 'PushNotification', 'RemoteTrigger',
+  'CronCreate', 'CronDelete', 'CronList',
+  'ListMcpResources', 'ListMcpResourcesTool',
+  'ReadMcpResource', 'ReadMcpResourceTool',
+  'Config', 'Mcp',
 ];
 
 /**
@@ -945,11 +951,12 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
                 if (!toolName || isMcp || isSdkNativeTool || isSubagent) {
                   // Handled by SDK or is a subagent spawn
                 } else if (this.toolHandler) {
-                  try {
-                    await this.executeToolCall(toolName, args);
-                  } catch (error) {
-                    console.error('[CLAUDE-CODE] Tool execution failed:', error);
-                  }
+                  // Unknown, non-MCP, non-whitelisted tool. Almost always means Anthropic
+                  // added a new CLI-native tool we haven't added to SDK_NATIVE_TOOLS yet.
+                  // Log a warning and treat it as SDK-native rather than routing to our
+                  // toolHandler (which will throw "Unknown tool" and can leave the CLI's
+                  // control stream in a broken state -- see hook_0 "Stream closed" cascade).
+                  console.warn(`[CLAUDE-CODE] Unrecognized tool "${toolName}" not in SDK_NATIVE_TOOLS whitelist; assuming CLI-native and skipping local execution.`);
                 }
 
                 const toolCall = { id: toolId, name: toolName, arguments: args };
