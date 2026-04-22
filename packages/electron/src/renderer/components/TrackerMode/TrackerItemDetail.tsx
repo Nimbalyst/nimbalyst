@@ -185,26 +185,46 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
 
   const model = useMemo(() => globalRegistry.get(item?.primaryType ?? ''), [item?.primaryType]);
 
-  // Fetch team members for user picker dropdowns via IPC
-  const [teamMembers, setTeamMembers] = useState<TeamMemberOption[]>([]);
+  // Detect whether this workspace has a team. Result drives both the
+  // member-picker dropdown and the content editor mode (collab vs local).
+  // Tri-state: `undefined` = check pending, `{ orgId: null }` = confirmed
+  // no team, `{ orgId: '...' }` = team found.
+  const [teamInfo, setTeamInfo] = useState<{ orgId: string | null; members: TeamMemberOption[] } | undefined>(undefined);
   useEffect(() => {
-    if (!workspacePath) return;
+    if (!workspacePath) {
+      setTeamInfo({ orgId: null, members: [] });
+      return;
+    }
+    let cancelled = false;
+    setTeamInfo(undefined);
     (async () => {
       try {
         const teamResult = await window.electronAPI.invoke('team:find-for-workspace', workspacePath);
-        if (!teamResult?.success || !teamResult.team?.orgId) return;
-        const membersResult = await window.electronAPI.invoke('team:list-members', teamResult.team.orgId);
-        if (!membersResult?.success || !membersResult.members) return;
-        setTeamMembers(
-          membersResult.members
-            .filter((m: any) => m.email)
-            .map((m: any) => ({ email: m.email, name: m.name || undefined }))
-        );
+        if (cancelled) return;
+        const orgId: string | null = teamResult?.success && teamResult.team?.orgId
+          ? teamResult.team.orgId
+          : null;
+        if (!orgId) {
+          setTeamInfo({ orgId: null, members: [] });
+          return;
+        }
+        const membersResult = await window.electronAPI.invoke('team:list-members', orgId);
+        if (cancelled) return;
+        const members: TeamMemberOption[] = membersResult?.success && membersResult.members
+          ? membersResult.members
+              .filter((m: any) => m.email)
+              .map((m: any) => ({ email: m.email, name: m.name || undefined }))
+          : [];
+        setTeamInfo({ orgId, members });
       } catch {
-        // Not in a team context -- no dropdown
+        if (!cancelled) setTeamInfo({ orgId: null, members: [] });
       }
     })();
+    return () => { cancelled = true; };
   }, [workspacePath]);
+  const teamMembers = teamInfo?.members ?? [];
+  // `undefined` while pending, `null` when confirmed no team, string when found.
+  const teamOrgId: string | null | undefined = teamInfo === undefined ? undefined : teamInfo.orgId;
   const typeColor = TYPE_COLORS[item?.primaryType ?? ''] || '#6b7280';
   const icon = model?.icon || getTypeIcon(item?.primaryType ?? '');
 
@@ -334,10 +354,18 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
   const contentMode = useMemo(() => {
     if (!item || !isNativeItem(item)) return 'file-backed' as const;
     if (syncMode === 'local') return 'local-pglite' as const;
+    // Shared/hybrid trackers need a team for collaborative editing. Without
+    // one, content is purely local. While the team check is still pending
+    // (`teamOrgId === undefined`) stay in collaborative mode so the loading
+    // UI runs -- otherwise the local editor would mount and risk being
+    // clobbered if a team is then discovered.
+    if (teamOrgId === null) return 'local-pglite' as const;
     return 'collaborative' as const;
-  }, [item, syncMode]);
+  }, [item, syncMode, teamOrgId]);
 
-  // Collaborative content editing for team-synced items
+  // Collaborative content editing for team-synced items. Dormant unless the
+  // workspace actually has a team -- see useTrackerContentCollab for the
+  // teamOrgId tri-state contract.
   const {
     collaboration: collabConfig,
     loading: collabLoading,
@@ -351,6 +379,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
     workspacePath,
     syncMode,
     teamMemberCount: teamMembers.length,
+    teamOrgId,
   });
 
   // Track whether the collab provider has ever reached 'connected' for this

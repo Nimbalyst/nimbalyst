@@ -42,6 +42,16 @@ interface UseTrackerContentCollabOptions {
   syncMode: string;
   /** Number of team members -- enables review gate when > 1 */
   teamMemberCount: number;
+  /**
+   * orgId of the team that owns this workspace.
+   * - `undefined`: the parent is still resolving team membership; the hook
+   *   stays in `loading: true` so the UI shows a connecting state instead
+   *   of prematurely mounting the local editor.
+   * - `null`: the workspace has no team. The hook stays dormant -- callers
+   *   should fall back to local PGLite editing.
+   * - `string`: a team exists; collab setup proceeds as normal.
+   */
+  teamOrgId: string | null | undefined;
 }
 
 interface TrackerContentCollabResult {
@@ -80,11 +90,20 @@ export function useTrackerContentCollab({
   workspacePath,
   syncMode,
   teamMemberCount,
+  teamOrgId,
 }: UseTrackerContentCollabOptions): TrackerContentCollabResult {
   const isTeamSynced = syncMode !== 'local';
+  // Collab is only attempted for team-synced trackers in workspaces that
+  // actually have a team. Without a team there is nothing to collaborate
+  // with, so we skip the document-sync IPC entirely.
+  const isCollabActive = isTeamSynced && typeof teamOrgId === 'string';
+  // Pending: team-synced but the parent hasn't resolved the team yet.
+  // Stay in `loading: true` so the UI shows a connecting state instead of
+  // prematurely flipping to the local editor.
+  const isCollabPending = isTeamSynced && teamOrgId === undefined;
   const isMultiUser = teamMemberCount > 1;
   const [collabConfig, setCollabConfig] = useState<CollabDocumentConfig | null>(null);
-  const [loading, setLoading] = useState(isTeamSynced);
+  const [loading, setLoading] = useState(isCollabActive || isCollabPending);
   const [status, setStatus] = useState<DocumentSyncStatus>('disconnected');
   const [reviewState, setReviewState] = useState<ReviewGateState | null>(null);
   const [providerEpoch, setProviderEpoch] = useState(0);
@@ -92,9 +111,15 @@ export function useTrackerContentCollab({
   const collabProviderRef = useRef<CollabLexicalProvider | null>(null);
   const cursorColor = useMemo(() => randomCursorColor(), []);
 
-  // Resolve collab config from main process when item is team-synced
+  // Resolve collab config from main process when item is team-synced AND
+  // the workspace actually has a team. Without a team we never call the
+  // document-sync IPC -- there is no room to join.
   useEffect(() => {
-    if (!isTeamSynced || !workspacePath) {
+    if (isCollabPending) {
+      setLoading(true);
+      return;
+    }
+    if (!isCollabActive || !workspacePath) {
       setLoading(false);
       return;
     }
@@ -120,7 +145,7 @@ export function useTrackerContentCollab({
       });
 
     return () => { cancelled = true; };
-  }, [itemId, workspacePath, isTeamSynced]);
+  }, [itemId, workspacePath, isCollabActive, isCollabPending]);
 
   // Create providers when config is available. Note: we do NOT call
   // `syncProvider.connect()` here. CollaborationPlugin drives the connect
@@ -214,7 +239,9 @@ export function useTrackerContentCollab({
     };
   }, [collabConfig, cursorColor, providerEpoch]);
 
-  if (!isTeamSynced) {
+  // Local-only tracker, or team-synced tracker in a workspace with no team.
+  // Either way: no collab, parent should render the local PGLite editor.
+  if (!isCollabActive && !isCollabPending) {
     return {
       collaboration: null, loading: false, status: 'disconnected',
       syncProvider: null, reviewState: null,
