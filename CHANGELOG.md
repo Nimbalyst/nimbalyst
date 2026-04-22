@@ -20,6 +20,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.57.36] - 2026-04-22
+
+
+### Changed
+- Release collabv3 0.1.63.
+- Increase maximum width for `TrackerMainView` component.
+
+### Fixed
+- Restore bundled ripgrep via `@vscode/ripgrep`: the claude-agent-sdk upgrade to a native binary package stopped shipping the vendored ripgrep binary at `vendor/ripgrep/<arch>/rg`. `getRipgrepPath()` fell back to system `rg`, which most users don't have, so `findWorkspaceFiles` threw `spawn rg ENOENT`, the QuickOpen cache never built, and the `@` file-mention typeahead in AIInput had no options. Added `@vscode/ripgrep` as a direct dep (postinstall fetches the host-arch rg), rewrote `getRipgrepPath()` to resolve the binary in dev and packaged builds, bundled via `extraResources` into `app.asar.unpacked/node_modules/@vscode/ripgrep`, and extended the CI cross-arch install step to re-run postinstall with `npm_config_arch` so cross-compile jobs pack the correct binary.
+- Lock `@vscode/ripgrep` in package-lock.json so CI installs the same version used to bundle rg.
+- Silence `TreeMatcher` guidepost error on unchanged subtrees: when a list subtree is diffed and its children have identical text, the synthetic source/target markdown blobs match exactly and `createTwoFilesPatch` returns a patch with zero hunks, which `parseUnifiedDiff` rejects as invalid. The caller already swallows the error but logged noisily. Short-circuit `buildTextBasedGuidePosts` when the blobs are identical so the diff library is never invoked in this case.
+
 ## [0.57.35] - 2026-04-22
 
 
