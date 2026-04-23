@@ -112,22 +112,7 @@ export async function buildSdkOptions(
     settingSources = ['user', 'project', 'local'];
   }
 
-  // NIM-838 scope: the "let the SDK resolve the native binary" workaround
-  // shipped in v0.58.1 broke packaged macOS arm64 with `spawn ENOTDIR` because
-  // the SDK's require.resolve returns a path INSIDE app.asar, where the binary
-  // only exists under app.asar.unpacked. resolveNativeBinaryPath() handles that
-  // rewrite correctly, so we pre-resolve on every platform EXCEPT packaged
-  // Windows -- the original NIM-838 resume-mismatch symptoms came from Windows
-  // and the experiment of leaving pathToClaudeCodeExecutable undefined there is
-  // still open.
-  const skipPreResolve =
-    app.isPackaged
-    && !ClaudeCodeDeps.customClaudeCodePath
-    && process.platform === 'win32';
-
-  const resolvedBinaryPath = skipPreResolve
-    ? undefined
-    : await resolveClaudeAgentCliPath().catch(() => undefined);
+  const resolvedBinaryPath = await resolveClaudeAgentCliPath().catch(() => undefined);
 
   const options: any = {
     pathToClaudeCodeExecutable: ClaudeCodeDeps.customClaudeCodePath || resolvedBinaryPath,
@@ -267,16 +252,10 @@ export async function buildSdkOptions(
   if (app.isPackaged) {
     if (ClaudeCodeDeps.customClaudeCodePath) {
       helperMethod = 'custom';
-    } else if (skipPreResolve) {
-      console.log(`[ClaudeCodeProvider] Windows packaged build: letting SDK resolve native binary (NIM-838 experiment)`);
     } else {
       console.log(`[ClaudeCodeProvider] Pre-resolved native binary for packaged build: ${resolvedBinaryPath ?? '(resolveClaudeAgentCliPath returned undefined)'}`);
     }
 
-    // Share packaged-build options with TeammateManager so teammates spawn with
-    // the same binary + env as the lead. TeammateManager.ts guards on
-    // pathToClaudeCodeExecutable being truthy before overriding, so undefined
-    // (Windows NIM-838 experiment) flows through safely.
     teammateManager.packagedBuildOptions = {
       env: env as Record<string, string | undefined>,
       pathToClaudeCodeExecutable: ClaudeCodeDeps.customClaudeCodePath || resolvedBinaryPath,
