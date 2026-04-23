@@ -1,10 +1,8 @@
-# April 22 Release
+# April 23 Release
 
-## Fixes
-- Claude Agent session resume improvements
-- "Stream closed" failures reduced
-- Claude agent errors now show the actual problem instead of always blaming "session expired"
+### Fixed
 
-## Improvements
-- **Drop any text file into AI chat** — `.log`, `.ts`, `.py`, `.yaml`, and ~70 other extensions are now accepted without "unsupported file type" errors
-- **`@`**** file-mention typeahead works again** in the AI input
+- Multi-turn Claude Code sessions no longer break due to issue with resuming the existing session.
+- Changing the custom Claude Code binary path in Settings now takes effect immediately without restarting the app.
+- The app now shows a recoverable error screen instead of going completely blank when an unexpected error occurs.
+- Fixed an edge case where assistant messages could appear twice in the transcript.
