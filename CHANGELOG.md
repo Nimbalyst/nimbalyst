@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.58.1] - 2026-04-23
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Diagnose and work around Claude Code session resume mismatch (NIM-838): follow-up messages in Claude Code sessions fail on v0.57.33+ with "Session resume mismatch" because the native SDK binary (0.2.114+) mints a fresh `session_id` on every `--resume` attempt. Two platform-targeted workarounds plus broad diagnostic instrumentation: stop overriding `pathToClaudeCodeExecutable` in packaged mode so the SDK's own `require.resolve` picks the binary (dev mode unchanged); force `HOME=USERPROFILE` on Windows so the binary's home resolution is deterministic across turn boundaries; enable `DEBUG_CLAUDE_AGENT_SDK=1` on resume turns and bump stderr capture to a 200-line tail-biased ring buffer for the session-lookup fingerprint; `logResumeDiagnostic` walks every plausible home root from subprocess env (HOME, USERPROFILE, APPDATA, CLAUDE_CONFIG_DIR, `os.homedir()`), locates the session jsonl if it exists, and dumps the head of any `.claude/debug/sdk-*.txt` the SDK wrote, firing at preQuery, postMismatch, and +500ms/+2000ms post-turn-1 so we can separate "turn 1 never wrote" from "turn 2 reads elsewhere"; `ai_stream_interrupted` now carries `errorCategory` and `ai_request_failed.errorType` gains the same buckets so `resume_mismatch` and `stream_closed` can be split from the generic error bucket in PostHog. Full evidence chain, bare-SDK repro results, and alpha-build readiness checklist in `nimbalyst-local/plans/claude-code-resume-mismatch-investigation.md`.
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.58.0] - 2026-04-22
 
 
