@@ -11,7 +11,6 @@ import path from 'path';
 import { app } from 'electron';
 import { ClaudeCodeDeps } from './dependencyInjection';
 import { resolveClaudeAgentCliPath } from './cliPathResolver';
-import { resolveNativeBinaryPath } from '../../../../electron/claudeCodeEnvironment';
 import { DEFAULT_EFFORT_LEVEL } from '../../effortLevels';
 
 type SessionMode = 'planning' | 'agent' | undefined;
@@ -114,7 +113,13 @@ export async function buildSdkOptions(
   }
 
   const options: any = {
-    pathToClaudeCodeExecutable: ClaudeCodeDeps.customClaudeCodePath || await resolveClaudeAgentCliPath().catch(() => undefined),
+    // NIM-838: In packaged builds, don't pre-resolve the native binary path --
+    // let the SDK resolve it via its own require.resolve. Our explicit
+    // asar.unpacked override appears to be the divergence that causes --resume
+    // to fail for users while dev works. Dev mode keeps pre-resolution so our
+    // own workflow isn't disturbed.
+    pathToClaudeCodeExecutable: ClaudeCodeDeps.customClaudeCodePath
+      || (!app.isPackaged ? await resolveClaudeAgentCliPath().catch(() => undefined) : undefined),
     systemPrompt: isMetaAgent
       ? systemPrompt  // Plain string — fully replaces CC system prompt
       : {
@@ -212,6 +217,20 @@ export async function buildSdkOptions(
     }),
   };
 
+  // NIM-838: On Windows, force HOME to mirror USERPROFILE so the native binary
+  // resolves the same ~/.claude root on every spawn, regardless of whether its
+  // internal logic prefers HOME (Unix-style) or USERPROFILE. process.env on
+  // Windows usually has USERPROFILE but no HOME, leaving the binary to make a
+  // platform-specific choice; a mismatch between turn-1 write and turn-2 read
+  // would manifest exactly as the resume failures we're seeing.
+  if (process.platform === 'win32') {
+    const winHome = env.USERPROFILE || process.env.USERPROFILE;
+    if (winHome) {
+      env.HOME = winHome;
+      env.USERPROFILE = winHome;
+    }
+  }
+
   if (enableAgentTeams) {
     env.CLAUDE_CODE_ENABLE_TASKS = '1';
   }
@@ -233,28 +252,36 @@ export async function buildSdkOptions(
   // The native binary only needs HOME/USERPROFILE (already in process.env) to
   // find ~/.claude/. We no longer overlay setupClaudeCodeEnvironment() because
   // it was designed for the old Node.js execution path and its Object.assign
-  // clobbered our sanitized env (re-introducing stripped API keys, rewriting
-  // PATH unnecessarily, etc.).
+  // clobbered our sanitized env.
+  //
+  // NIM-838: We also no longer pre-resolve the native binary path here. The
+  // SDK's own require.resolve finds @anthropic-ai/claude-agent-sdk-<platform>-<arch>
+  // from app.asar.unpacked/node_modules, same as dev mode finds it from the
+  // local node_modules. Our explicit override was the leading suspect for
+  // --resume failing only in packaged builds.
   if (app.isPackaged) {
-    // Resolve native binary path for packaged builds.
-    // The SDK resolves its own binary via require.resolve, but in asar-unpacked
-    // builds that may not work. We resolve it explicitly and pass as override.
-    if (!ClaudeCodeDeps.customClaudeCodePath) {
-      const nativeBinaryPath = resolveNativeBinaryPath();
-      if (nativeBinaryPath) {
-        options.pathToClaudeCodeExecutable = nativeBinaryPath;
-        console.log(`[ClaudeCodeProvider] Using SDK native binary: ${nativeBinaryPath}`);
-      } else {
-        console.warn('[ClaudeCodeProvider] Native binary not found, SDK will attempt its own resolution');
-      }
-    } else {
+    if (ClaudeCodeDeps.customClaudeCodePath) {
       helperMethod = 'custom';
+    } else {
+      // NIM-838: we no longer override pathToClaudeCodeExecutable, but log what
+      // we WOULD have resolved so the alpha-build diagnostic can compare this
+      // reference path against whatever the binary itself reports in
+      // DEBUG_CLAUDE_AGENT_SDK stderr. Mismatch = binary-resolution divergence.
+      try {
+        const { resolveNativeBinaryPath } = await import('../../../../electron/claudeCodeEnvironment');
+        const expectedPath = resolveNativeBinaryPath();
+        console.log(`[ClaudeCodeProvider] Letting SDK resolve native binary (NIM-838); reference path would be: ${expectedPath ?? '(resolveNativeBinaryPath returned undefined)'}`);
+      } catch (err) {
+        console.log(`[ClaudeCodeProvider] Letting SDK resolve native binary (NIM-838); reference path lookup failed: ${(err as Error).message}`);
+      }
     }
 
-    // Share packaged-build options with TeammateManager
+    // Share packaged-build options with TeammateManager. pathToClaudeCodeExecutable
+    // is undefined unless the user configured a custom path; TeammateManager
+    // inherits the same "let the SDK resolve" behavior.
     teammateManager.packagedBuildOptions = {
       env: env as Record<string, string | undefined>,
-      pathToClaudeCodeExecutable: ClaudeCodeDeps.customClaudeCodePath || options.pathToClaudeCodeExecutable,
+      pathToClaudeCodeExecutable: ClaudeCodeDeps.customClaudeCodePath,
     };
   }
 
@@ -289,6 +316,14 @@ export async function buildSdkOptions(
         }
       }
     }
+  }
+
+  // NIM-838 diagnostic: enable SDK verbose stderr when resuming, so we can see
+  // what the native binary does with --resume on affected systems (Windows x64,
+  // macOS arm64). Gated to resume turns to avoid noise on every request.
+  // Remove once the resume regression is understood and fixed.
+  if (options.resume) {
+    env.DEBUG_CLAUDE_AGENT_SDK = '1';
   }
 
   // Build prompt input

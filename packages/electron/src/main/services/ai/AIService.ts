@@ -574,9 +574,18 @@ function formatCodexTestError(raw: string, hasApiKey: boolean): string {
   return raw;
 }
 
-// Helper function to categorize AI errors
+// Helper function to categorize AI errors. Accepts either an Error-like object
+// or a raw string (e.g. a chunk.error payload that the provider yielded rather
+// than threw).
 function categorizeAIError(error: any): string {
-  const message = error?.message?.toLowerCase() || String(error).toLowerCase();
+  const raw = typeof error === 'string' ? error : (error?.message || String(error ?? ''));
+  const message = raw.toLowerCase();
+  // NIM-838: dedicated buckets so we can measure resume-mismatch and stream-closed
+  // separately instead of collapsing them into 'unknown'. Check these first --
+  // the generic 'auth'/'network' substrings can false-positive against long
+  // concatenated error messages.
+  if (message.includes('session resume mismatch')) return 'resume_mismatch';
+  if (message.includes('stream closed')) return 'stream_closed';
   if (message.includes('network') || message.includes('econnrefused') || message.includes('fetch')) return 'network';
   if (message.includes('api key') || message.includes('unauthorized') || message.includes('authentication')) return 'auth';
   if (message.includes('timeout') || message.includes('timed out')) return 'timeout';
@@ -3529,11 +3538,14 @@ export class AIService {
               }
               console.error(`${logPrefix} Provider error:`, chunk.error || 'Unknown error');
 
-              // Track stream interruption due to error
+              // Track stream interruption due to error. errorCategory lets us
+              // split resume_mismatch / stream_closed / auth / ... instead of
+              // lumping every Claude Code failure into a single bucket.
               this.analytics.sendEvent('ai_stream_interrupted', {
                 provider: session.provider,
                 chunksReceived: chunkCount,
-                reason: 'error'
+                reason: 'error',
+                errorCategory: categorizeAIError(chunk.error),
               });
 
               // Detect Bedrock tool search error even if runtime didn't flag it

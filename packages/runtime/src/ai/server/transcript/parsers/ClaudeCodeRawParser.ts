@@ -205,6 +205,21 @@ export class ClaudeCodeRawParser implements IRawMessageParser {
           systemType: 'error',
           createdAt: msg.createdAt,
         });
+      } else if (
+        parsed.type === 'result'
+        && typeof parsed.result === 'string'
+        && parsed.result.trim().length > 0
+        && this.processedTextMessageIds.size === 0
+      ) {
+        // Slash command turns (e.g. unknown /foo) can produce ONLY a result chunk
+        // with the final text. For regular assistant turns the result chunk
+        // duplicates text already emitted via `type: 'assistant'` messages, so
+        // only backfill when no assistant text was seen this session.
+        descriptors.push({
+          type: 'assistant_message',
+          text: parsed.result,
+          createdAt: msg.createdAt,
+        });
       } else if (parsed.type === 'nimbalyst_tool_use') {
         const nimbalystDescriptors = await this.parseNimbalystToolUse(msg, parsed, context);
         descriptors.push(...nimbalystDescriptors);

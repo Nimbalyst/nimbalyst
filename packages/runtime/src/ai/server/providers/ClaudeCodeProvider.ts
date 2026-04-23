@@ -746,10 +746,16 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       );
 
       // Wire up stderr capture so process exit errors include diagnostic context.
-      const MAX_STDERR_LINES = 50;
+      // NIM-838: DEBUG_CLAUDE_AGENT_SDK=1 (which we set on resume turns) makes
+      // the binary emit verbose startup + session-lookup traces. The session
+      // lookup happens AFTER startup, so we keep the LAST 200 lines instead of
+      // the first -- startup is noise, the tail is where a failed `--resume`
+      // would leave its fingerprint.
+      const MAX_STDERR_LINES = 200;
       options.stderr = (data: string) => {
-        if (stderrLines.length < MAX_STDERR_LINES) {
-          stderrLines.push(data);
+        stderrLines.push(data);
+        if (stderrLines.length > MAX_STDERR_LINES) {
+          stderrLines.shift();
         }
         // Log stderr in real-time for diagnostics (native binary crashes)
         const trimmed = data.trim();
@@ -778,6 +784,10 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
           const reason = options.resume ? 'resuming existing session' : `model changed: ${this.prewarmModel} -> ${currentModel}`;
           console.log(`[CLAUDE-CODE] Discarding prewarmed subprocess (${reason})`);
           this.discardWarmQuery();
+        }
+        // NIM-838 diagnostic: log filesystem state before asking SDK to resume.
+        if (options.resume) {
+          await this.logResumeDiagnostic('preQuery', options.resume, options.cwd || '', options.env);
         }
         leadQuery = query({
           prompt: promptInput as any,
@@ -931,6 +941,20 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
                 // Forked sessions are exempt: `forkSession: true` tells the CLI to
                 // intentionally emit a new session ID from the source conversation.
                 if (options.resume && !options.forkSession && item.id !== options.resume) {
+                  // NIM-838 diagnostic: capture filesystem state at the moment the
+                  // binary returned a fresh session_id, and dump stderr lines so
+                  // we can see what the subprocess was doing. Logged before throw
+                  // so the info is visible even though the generic error path also
+                  // logs stderr later.
+                  await this.logResumeDiagnostic('postMismatch', options.resume, options.cwd || '', options.env);
+                  if (stderrLines.length > 0) {
+                    console.error(`[CLAUDE-CODE] RESUME_DIAGNOSTIC[postMismatch] subprocess stderr (${stderrLines.length} lines):`);
+                    for (const line of stderrLines) {
+                      console.error(`[CLAUDE-CODE-STDERR] ${line}`);
+                    }
+                  } else {
+                    console.error(`[CLAUDE-CODE] RESUME_DIAGNOSTIC[postMismatch] subprocess stderr: (none captured)`);
+                  }
                   const mismatchError = new Error(
                     `[CLAUDE-CODE] Session resume mismatch: requested resume of ` +
                     `"${options.resume}" but SDK reported session "${item.id}". ` +
@@ -940,7 +964,18 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
                   console.error(mismatchError.message);
                   throw mismatchError;
                 }
-                if (sessionId) this.sessions.captureSessionId(sessionId, item.id);
+                // Capture. If this is the first time we see an ID for this
+                // Nimbalyst session, schedule a delayed filesystem check to
+                // confirm the binary actually persisted the session on disk.
+                // This separates "turn 1 never wrote a session file" from
+                // "turn 2 looks in the wrong place" in the NIM-838 diagnostic.
+                if (sessionId) {
+                  const wasFirstCapture = !this.sessions.hasSession(sessionId);
+                  this.sessions.captureSessionId(sessionId, item.id);
+                  if (wasFirstCapture && !options.resume) {
+                    this.schedulePostTurn1Diagnostic(item.id, options.cwd || '', options.env);
+                  }
+                }
                 break;
 
               case 'usage':
@@ -2754,6 +2789,168 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       ...baseData,
       helperMethod: this.helperMethod
     };
+  }
+
+  /**
+   * NIM-838 diagnostic: on a resume turn, log what the native binary's session
+   * loader would find on disk. Read-only filesystem inspection.
+   *
+   * The binary resolves `~/.claude/` from its OWN process env, not ours. HOME /
+   * USERPROFILE / APPDATA / CLAUDE_CONFIG_DIR in options.env can all influence
+   * where it looks. We inspect every plausible root derived from both our Node
+   * `os.homedir()` and the subprocess env, so a Windows HOME-vs-USERPROFILE
+   * mismatch (or a CLAUDE_CONFIG_DIR override from shell env) is visible in the
+   * log instead of silently hidden.
+   *
+   * Plausible-dir matching (the "encoded cwd" guess) is a token heuristic, not
+   * a replication of the binary's encoding — if it doesn't match, treat that as
+   * "we couldn't guess" rather than "the dir doesn't exist." The authoritative
+   * signal is DEBUG_CLAUDE_AGENT_SDK=1 subprocess stderr.
+   */
+  private async logResumeDiagnostic(
+    phase: string,
+    resumeSessionId: string,
+    cwd: string,
+    subprocessEnv?: Record<string, string | undefined>
+  ): Promise<void> {
+    try {
+      const os = await import('os');
+      const fs = await import('fs/promises');
+      const path = await import('path');
+
+      const platform = process.platform;
+      const targetFile = `${resumeSessionId}.jsonl`;
+      const nodeHome = os.homedir();
+
+      // Collect every home/config candidate the binary might resolve. Env from
+      // the subprocess takes precedence in the binary's view, so log those
+      // values explicitly even if they match process.env.
+      const envHome = subprocessEnv?.HOME;
+      const envUserProfile = subprocessEnv?.USERPROFILE;
+      const envAppData = subprocessEnv?.APPDATA;
+      const envClaudeConfigDir = subprocessEnv?.CLAUDE_CONFIG_DIR;
+
+      console.log(
+        `[CLAUDE-CODE] RESUME_DIAGNOSTIC[${phase}] platform=${platform} ` +
+        `nodeHome="${nodeHome}" envHOME="${envHome ?? ''}" envUSERPROFILE="${envUserProfile ?? ''}" ` +
+        `envAPPDATA="${envAppData ?? ''}" envCLAUDE_CONFIG_DIR="${envClaudeConfigDir ?? ''}" ` +
+        `cwd="${cwd}" resumeId="${resumeSessionId}"`
+      );
+
+      // Candidate projects roots in the order a native binary might try them:
+      //   1. $CLAUDE_CONFIG_DIR/projects (explicit override)
+      //   2. <envHome>/.claude/projects   (Unix-style if HOME is set)
+      //   3. <envUserProfile>/.claude/projects (Windows default)
+      //   4. <nodeHome>/.claude/projects  (fallback if env is empty)
+      const rootCandidates = new Set<string>();
+      if (envClaudeConfigDir) rootCandidates.add(path.join(envClaudeConfigDir, 'projects'));
+      if (envHome) rootCandidates.add(path.join(envHome, '.claude', 'projects'));
+      if (envUserProfile) rootCandidates.add(path.join(envUserProfile, '.claude', 'projects'));
+      rootCandidates.add(path.join(nodeHome, '.claude', 'projects'));
+
+      // Token heuristic for plausibly-encoded-cwd dirs. Not a replication of the
+      // binary's encoding -- a hit tells us "that dir contains these cwd tokens",
+      // a miss means only "our heuristic didn't match" (the real dir may still exist
+      // under a different encoding). Trust DEBUG_CLAUDE_AGENT_SDK stderr for ground truth.
+      const cwdTokens = cwd.split(/[/\\:]/).filter(Boolean).slice(-2);
+
+      for (const projectsRoot of rootCandidates) {
+        let projectDirs: string[];
+        try {
+          projectDirs = await fs.readdir(projectsRoot);
+        } catch (err) {
+          const code = (err as NodeJS.ErrnoException).code;
+          console.log(`[CLAUDE-CODE] RESUME_DIAGNOSTIC[${phase}] root="${projectsRoot}" readdir_failed code=${code}`);
+          continue;
+        }
+
+        const matches: Array<{ dir: string; size: number }> = [];
+        for (const dir of projectDirs) {
+          const filePath = path.join(projectsRoot, dir, targetFile);
+          try {
+            const stat = await fs.stat(filePath);
+            if (stat.isFile()) {
+              matches.push({ dir, size: stat.size });
+            }
+          } catch { /* not found in this dir, continue */ }
+        }
+
+        if (matches.length === 0) {
+          console.log(`[CLAUDE-CODE] RESUME_DIAGNOSTIC[${phase}] root="${projectsRoot}" session_file_NOT_FOUND target="${targetFile}" searched_dirs=${projectDirs.length}`);
+        } else {
+          console.log(`[CLAUDE-CODE] RESUME_DIAGNOSTIC[${phase}] root="${projectsRoot}" session_file_found matches=${JSON.stringify(matches)}`);
+        }
+
+        // Heuristic plausible-dir listing (best-effort, may miss the true encoded dir).
+        const plausibleDirs = projectDirs.filter(d => cwdTokens.every(t => d.includes(t)));
+        for (const dir of plausibleDirs.slice(0, 3)) {
+          try {
+            const entries = await fs.readdir(path.join(projectsRoot, dir));
+            const jsonl = entries.filter(e => e.endsWith('.jsonl'));
+            console.log(`[CLAUDE-CODE] RESUME_DIAGNOSTIC[${phase}] root="${projectsRoot}" heuristic_plausible_dir="${dir}" jsonl_count=${jsonl.length} first5=${JSON.stringify(jsonl.slice(0, 5))}`);
+          } catch { /* ignore */ }
+        }
+        if (plausibleDirs.length === 0) {
+          console.log(`[CLAUDE-CODE] RESUME_DIAGNOSTIC[${phase}] root="${projectsRoot}" heuristic_plausible_dir=none (token-match guess, not authoritative)`);
+        }
+
+        // NIM-838: scan sibling debug/ dir for SDK log files the binary or SDK
+        // wrote. The binary doesn't always pipe everything to stderr, so these
+        // files can carry extra signal. Log the filenames and head of the most
+        // recently modified one.
+        const debugDir = path.join(path.dirname(projectsRoot), 'debug');
+        try {
+          const debugFiles = await fs.readdir(debugDir);
+          const sdkFiles = debugFiles.filter(f => f.startsWith('sdk-') && f.endsWith('.txt'));
+          if (sdkFiles.length > 0) {
+            const withMtime = await Promise.all(sdkFiles.slice(-10).map(async f => ({
+              f,
+              mtime: (await fs.stat(path.join(debugDir, f))).mtimeMs,
+            })));
+            withMtime.sort((a, b) => b.mtime - a.mtime);
+            console.log(`[CLAUDE-CODE] RESUME_DIAGNOSTIC[${phase}] debugDir="${debugDir}" sdk_log_count=${sdkFiles.length} latest=${JSON.stringify(withMtime.slice(0, 3).map(x => x.f))}`);
+            const latest = withMtime[0];
+            if (latest) {
+              try {
+                const head = await fs.readFile(path.join(debugDir, latest.f), 'utf-8');
+                const truncated = head.length > 2000 ? head.slice(0, 2000) + '\n...[truncated]' : head;
+                console.log(`[CLAUDE-CODE] RESUME_DIAGNOSTIC[${phase}] debugDir="${debugDir}" latest_file="${latest.f}" content:\n${truncated}`);
+              } catch { /* ignore */ }
+            }
+          }
+        } catch { /* no debug dir; ignore */ }
+      }
+    } catch (error) {
+      console.warn(`[CLAUDE-CODE] RESUME_DIAGNOSTIC[${phase}] failed:`, (error as Error).message);
+    }
+  }
+
+  /**
+   * NIM-838 diagnostic: after turn 1's session_id is captured, check the
+   * filesystem at 500ms and 2000ms to see whether the binary actually
+   * persisted the session under some `.claude/projects/<dir>/<id>.jsonl`.
+   *
+   * Separates the two failure modes we can't currently distinguish:
+   *  - turn 1 NEVER wrote a session file (binary persistSession silently broken)
+   *  - turn 1 wrote the file, then turn 2 looks under a different root/dir
+   *    (HOME vs USERPROFILE divergence, OneDrive cleanup, AV quarantine, etc.)
+   */
+  private schedulePostTurn1Diagnostic(
+    sessionId: string,
+    cwd: string,
+    subprocessEnv?: Record<string, string | undefined>
+  ): void {
+    const delays = [500, 2000];
+    for (const delay of delays) {
+      setTimeout(() => {
+        this.logResumeDiagnostic(
+          `postTurn1+${delay}ms`,
+          sessionId,
+          cwd,
+          subprocessEnv
+        ).catch(() => { /* swallow -- diagnostic must never crash anything */ });
+      }, delay).unref?.();
+    }
   }
 
   /**

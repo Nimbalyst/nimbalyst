@@ -381,6 +381,7 @@ export class ClaudeCodeTranscriptAdapter {
       && chunk.result.trim().length > 0
       && this.processedTextMessageIds.size === 0
     ) {
+      this.bus?.emit({ type: 'assistant_text', sessionId: this.sessionId, text: chunk.result });
       items.push({ kind: 'text', text: chunk.result });
     }
 

@@ -342,6 +342,57 @@ describe('ClaudeCodeRawParser', () => {
       });
     });
 
+    it('parses unknown slash command result as assistant message', async () => {
+      const parser = new ClaudeCodeRawParser();
+      const msg = makeRawMessage({
+        content: JSON.stringify({
+          type: 'result',
+          subtype: 'success',
+          is_error: false,
+          result: 'Unknown command: /fakecommand',
+        }),
+      });
+
+      const descriptors = await parser.parseMessage(msg, makeContext());
+
+      expect(descriptors).toHaveLength(1);
+      expect(descriptors[0]).toMatchObject({
+        type: 'assistant_message',
+        text: 'Unknown command: /fakecommand',
+      });
+    });
+
+    it('skips result chunk text when assistant text was already emitted this session', async () => {
+      const parser = new ClaudeCodeRawParser();
+
+      // First: an assistant chunk with text
+      await parser.parseMessage(
+        makeRawMessage({
+          content: JSON.stringify({
+            type: 'assistant',
+            message: { id: 'msg-1', content: [{ type: 'text', text: 'Hi' }] },
+          }),
+        }),
+        makeContext(),
+      );
+
+      // Then: a result chunk echoing the final text
+      const descriptors = await parser.parseMessage(
+        makeRawMessage({
+          id: 2,
+          content: JSON.stringify({
+            type: 'result',
+            subtype: 'success',
+            is_error: false,
+            result: 'Hi',
+          }),
+        }),
+        makeContext(),
+      );
+
+      expect(descriptors).toHaveLength(0);
+    });
+
     it('parses nimbalyst_tool_use', async () => {
       const parser = new ClaudeCodeRawParser();
       const msg = makeRawMessage({
