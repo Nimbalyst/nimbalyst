@@ -162,14 +162,25 @@ export async function buildSdkOptions(
     settingSources = ['user', 'project', 'local'];
   }
 
+  // NIM-838 scope: the "let the SDK resolve the native binary" workaround
+  // shipped in v0.58.1 broke packaged macOS arm64 with `spawn ENOTDIR` because
+  // the SDK's require.resolve returns a path INSIDE app.asar, where the binary
+  // only exists under app.asar.unpacked. resolveNativeBinaryPath() handles that
+  // rewrite correctly, so we pre-resolve on every platform EXCEPT packaged
+  // Windows -- the original NIM-838 resume-mismatch symptoms came from Windows
+  // and the experiment of leaving pathToClaudeCodeExecutable undefined there is
+  // still open.
+  const skipPreResolve =
+    app.isPackaged
+    && !ClaudeCodeDeps.customClaudeCodePath
+    && process.platform === 'win32';
+
+  const resolvedBinaryPath = skipPreResolve
+    ? undefined
+    : await resolveClaudeAgentCliPath().catch(() => undefined);
+
   const options: any = {
-    // NIM-838: In packaged builds, don't pre-resolve the native binary path --
-    // let the SDK resolve it via its own require.resolve. Our explicit
-    // asar.unpacked override appears to be the divergence that causes --resume
-    // to fail for users while dev works. Dev mode keeps pre-resolution so our
-    // own workflow isn't disturbed.
-    pathToClaudeCodeExecutable: ClaudeCodeDeps.customClaudeCodePath
-      || (!app.isPackaged ? await resolveClaudeAgentCliPath().catch(() => undefined) : undefined),
+    pathToClaudeCodeExecutable: ClaudeCodeDeps.customClaudeCodePath || resolvedBinaryPath,
     systemPrompt: isMetaAgent
       ? systemPrompt  // Plain string — fully replaces CC system prompt
       : {
@@ -303,35 +314,22 @@ export async function buildSdkOptions(
   // find ~/.claude/. We no longer overlay setupClaudeCodeEnvironment() because
   // it was designed for the old Node.js execution path and its Object.assign
   // clobbered our sanitized env.
-  //
-  // NIM-838: We also no longer pre-resolve the native binary path here. The
-  // SDK's own require.resolve finds @anthropic-ai/claude-agent-sdk-<platform>-<arch>
-  // from app.asar.unpacked/node_modules, same as dev mode finds it from the
-  // local node_modules. Our explicit override was the leading suspect for
-  // --resume failing only in packaged builds.
   if (app.isPackaged) {
     if (ClaudeCodeDeps.customClaudeCodePath) {
       helperMethod = 'custom';
+    } else if (skipPreResolve) {
+      console.log(`[ClaudeCodeProvider] Windows packaged build: letting SDK resolve native binary (NIM-838 experiment)`);
     } else {
-      // NIM-838: we no longer override pathToClaudeCodeExecutable, but log what
-      // we WOULD have resolved so the alpha-build diagnostic can compare this
-      // reference path against whatever the binary itself reports in
-      // DEBUG_CLAUDE_AGENT_SDK stderr. Mismatch = binary-resolution divergence.
-      try {
-        const { resolveNativeBinaryPath } = await import('../../../../electron/claudeCodeEnvironment');
-        const expectedPath = resolveNativeBinaryPath();
-        console.log(`[ClaudeCodeProvider] Letting SDK resolve native binary (NIM-838); reference path would be: ${expectedPath ?? '(resolveNativeBinaryPath returned undefined)'}`);
-      } catch (err) {
-        console.log(`[ClaudeCodeProvider] Letting SDK resolve native binary (NIM-838); reference path lookup failed: ${(err as Error).message}`);
-      }
+      console.log(`[ClaudeCodeProvider] Pre-resolved native binary for packaged build: ${resolvedBinaryPath ?? '(resolveClaudeAgentCliPath returned undefined)'}`);
     }
 
-    // Share packaged-build options with TeammateManager. pathToClaudeCodeExecutable
-    // is undefined unless the user configured a custom path; TeammateManager
-    // inherits the same "let the SDK resolve" behavior.
+    // Share packaged-build options with TeammateManager so teammates spawn with
+    // the same binary + env as the lead. TeammateManager.ts guards on
+    // pathToClaudeCodeExecutable being truthy before overriding, so undefined
+    // (Windows NIM-838 experiment) flows through safely.
     teammateManager.packagedBuildOptions = {
       env: env as Record<string, string | undefined>,
-      pathToClaudeCodeExecutable: ClaudeCodeDeps.customClaudeCodePath,
+      pathToClaudeCodeExecutable: ClaudeCodeDeps.customClaudeCodePath || resolvedBinaryPath,
     };
   }
 
