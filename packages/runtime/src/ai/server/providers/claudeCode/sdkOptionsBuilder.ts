@@ -54,10 +54,60 @@ export interface BuildSdkOptionsParams {
   isMetaAgent?: boolean;
 }
 
+/**
+ * Controls the lifetime of the prompt AsyncIterable so the SDK keeps the
+ * binary's stdin pipe open for the duration of the turn. Calling end() lets
+ * the generator return, which in turn lets the SDK close stdin normally.
+ *
+ * We always use an AsyncIterable prompt (never a bare string) so the SDK
+ * sets isSingleUserTurn=false and does NOT preemptively close stdin when
+ * `type: 'result'` arrives -- that forced close is the root cause of the
+ * "Tool permission request failed: Error: Stream closed" errors on turns
+ * where the binary emits a late can_use_tool after result.
+ */
+export interface PromptStreamController {
+  end(reason: string): void;
+  isEnded(): boolean;
+}
+
 export interface BuildSdkOptionsResult {
   options: any;
-  promptInput: string | AsyncIterable<SDKUserMessage>;
+  promptInput: AsyncIterable<SDKUserMessage>;
+  promptController: PromptStreamController;
   helperMethod: 'native' | 'custom';
+}
+
+function createPersistentPromptStream(
+  initialMessage: SDKUserMessage,
+): { iterable: AsyncIterable<SDKUserMessage>; controller: PromptStreamController } {
+  let ended = false;
+  let endResolve: (() => void) | null = null;
+  const endPromise = new Promise<void>((resolve) => {
+    endResolve = () => {
+      ended = true;
+      resolve();
+    };
+  });
+
+  async function* generator(): AsyncGenerator<SDKUserMessage> {
+    yield initialMessage;
+    // Keep the iterator open so the SDK doesn't call transport.endInput() and
+    // close the binary's stdin mid-turn. Returns only when end() is called.
+    await endPromise;
+  }
+
+  return {
+    iterable: generator(),
+    controller: {
+      end: (reason: string) => {
+        if (!ended && endResolve) {
+          console.log(`[CLAUDE-CODE] PromptStreamController.end(reason="${reason}")`);
+          endResolve();
+        }
+      },
+      isEnded: () => ended,
+    },
+  };
 }
 
 export async function buildSdkOptions(
@@ -326,29 +376,27 @@ export async function buildSdkOptions(
     env.DEBUG_CLAUDE_AGENT_SDK = '1';
   }
 
-  // Build prompt input
-  let promptInput: string | AsyncIterable<SDKUserMessage>;
+  // Build prompt input. Always use a persistent AsyncIterable (never a bare
+  // string) so isSingleUserTurn=false in the SDK -- this prevents the SDK
+  // from closing the binary's stdin pipe on `type: 'result'` and avoids the
+  // "Stream closed" tool permission errors on long turns.
   const hasAttachmentBlocks = imageContentBlocks.length > 0 || documentContentBlocks.length > 0;
+  const userContent: string | ContentBlockParam[] = hasAttachmentBlocks
+    ? [
+        ...imageContentBlocks,
+        ...documentContentBlocks,
+        { type: 'text', text: message } as TextBlockParam,
+      ]
+    : message;
 
-  if (hasAttachmentBlocks) {
-    const contentBlocks: ContentBlockParam[] = [
-      ...imageContentBlocks,
-      ...documentContentBlocks,
-      { type: 'text', text: message } as TextBlockParam
-    ];
+  const initialMessage: SDKUserMessage = {
+    type: 'user',
+    message: { role: 'user', content: userContent as any },
+    parent_tool_use_id: null,
+  };
 
-    async function* createStreamingInput(): AsyncGenerator<SDKUserMessage> {
-      yield {
-        type: 'user',
-        message: { role: 'user', content: contentBlocks },
-        parent_tool_use_id: null
-      };
-    }
+  const { iterable: promptInput, controller: promptController } =
+    createPersistentPromptStream(initialMessage);
 
-    promptInput = createStreamingInput();
-  } else {
-    promptInput = message;
-  }
-
-  return { options, promptInput, helperMethod };
+  return { options, promptInput, promptController, helperMethod };
 }
