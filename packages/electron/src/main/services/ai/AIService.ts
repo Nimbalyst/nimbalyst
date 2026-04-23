@@ -2483,9 +2483,8 @@ export class AIService {
       // CRITICAL: Restore provider session data unconditionally (even when the provider
       // already exists in the factory cache). The `if (!provider)` block above only runs
       // on first creation, but the provider can outlive its in-memory session ID mapping
-      // in several paths: prewarm creates the provider before setProviderSessionData runs
-      // (race with sendMessage), and Nimbalyst restarts restart the process with an empty
-      // map. Running this on every message guarantees `options.resume` is populated.
+      // across Nimbalyst restarts (process restart -> empty map). Running this on every
+      // message guarantees `options.resume` is populated.
       if (session.providerSessionId && (provider as any).setProviderSessionData) {
         (provider as any).setProviderSessionData(session.id, {
           providerSessionId: session.providerSessionId,
@@ -4333,39 +4332,6 @@ export class AIService {
 
     // Register the handler with IPC
     safeHandle('ai:sendMessage', this.sendMessageHandler);
-
-    // Pre-warm Claude Code subprocess when user starts typing
-    safeHandle('ai:prewarm', async (event, sessionId: string, workspacePath: string) => {
-      try {
-        const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
-        const session = await AISessionsRepository.get(sessionId);
-        if (!session || session.provider !== 'claude-code') return;
-
-        let provider = ProviderFactory.getProvider('claude-code', sessionId);
-        if (!provider) {
-          provider = ProviderFactory.createProvider('claude-code', sessionId);
-          const apiKey = this.getApiKeyForProvider('claude-code', workspacePath);
-          const model = session.model || (session.providerConfig as any)?.model;
-          await provider.initialize({ apiKey, model });
-        }
-
-        // Restore provider session data so the in-memory session ID mapping is populated
-        // before sendMessage runs. Without this, sendMessage skips its own restore block
-        // (because the provider already exists from prewarm) and options.resume never gets
-        // set, silently starting a fresh conversation on every message after a restart.
-        if (session.providerSessionId && (provider as any).setProviderSessionData) {
-          (provider as any).setProviderSessionData(session.id, {
-            providerSessionId: session.providerSessionId,
-            claudeSessionId: session.providerSessionId,
-            codexThreadId: session.providerSessionId,
-          });
-        }
-
-        await (provider as any).prewarm(workspacePath, sessionId);
-      } catch (error) {
-        console.warn('[AIService] Prewarm failed:', (error as Error).message);
-      }
-    });
 
     // Get session history (full session data with messages - slow)
     safeHandle('ai:getSessions', async (event, workspacePath?: string) => {

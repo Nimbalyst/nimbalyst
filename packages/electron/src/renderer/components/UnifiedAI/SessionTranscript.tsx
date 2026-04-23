@@ -363,21 +363,6 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     return () => clearTimeout(timeoutId);
   }, [sessionId, draftInput, workspacePath]);
 
-  // Prewarm SDK subprocess when user starts typing in a new Claude Code session.
-  // Triggers once per session when draftInput goes from empty to non-empty.
-  const prewarmTriggered = useRef(false);
-  useEffect(() => {
-    if (
-      !prewarmTriggered.current &&
-      draftInput.length > 0 &&
-      sessionData?.provider === 'claude-code' &&
-      workspacePath
-    ) {
-      prewarmTriggered.current = true;
-      window.electronAPI.aiPrewarm(sessionId, workspacePath).catch(() => {});
-    }
-  }, [draftInput, sessionData?.provider, sessionId, workspacePath]);
-
   // Prompt history navigation via Jotai atoms
   const navigateHistory = useSetAtom(navigateSessionHistoryAtom);
   const resetHistory = useSetAtom(resetSessionHistoryAtom);

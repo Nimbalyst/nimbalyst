@@ -208,7 +208,6 @@ interface ElectronAPI {
   aiInitialize: (provider?: string, apiKey?: string) => Promise<any>;
   aiCreateSession: (provider: 'claude' | 'claude-code' | 'openai' | 'openai-codex' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string, sessionType?: string, worktreeId?: string) => Promise<any>;
   aiSendMessage: (message: string, documentContext?: any, sessionId?: string, workspacePath?: string) => Promise<any>;
-  aiPrewarm: (sessionId: string, workspacePath: string) => Promise<void>;
   aiGetSessions: (workspacePath?: string) => Promise<any>;
   aiLoadSession: (sessionId: string, workspacePath?: string, trackAsResume?: boolean) => Promise<any>;
   aiClearSession: () => Promise<any>;

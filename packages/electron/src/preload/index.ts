@@ -476,8 +476,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   aiSendMessage: (message: string, documentContext?: any, sessionId?: string, workspacePath?: string) =>
     ipcRenderer.invoke('ai:sendMessage', message, documentContext, sessionId, workspacePath),
-  aiPrewarm: (sessionId: string, workspacePath: string) =>
-    ipcRenderer.invoke('ai:prewarm', sessionId, workspacePath),
   aiGetSessions: (workspacePath?: string) => ipcRenderer.invoke('ai:getSessions', workspacePath),
   aiLoadSession: (sessionId: string, workspacePath?: string, trackAsResume?: boolean) => ipcRenderer.invoke('ai:loadSession', sessionId, workspacePath, trackAsResume),
   aiClearSession: () => ipcRenderer.invoke('ai:clearSession'),
