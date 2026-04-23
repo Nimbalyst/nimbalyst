@@ -298,14 +298,6 @@ export async function buildSdkOptions(
     }
   }
 
-  // NIM-838 diagnostic: enable SDK verbose stderr when resuming, so we can see
-  // what the native binary does with --resume on affected systems (Windows x64,
-  // macOS arm64). Gated to resume turns to avoid noise on every request.
-  // Remove once the resume regression is understood and fixed.
-  if (options.resume) {
-    env.DEBUG_CLAUDE_AGENT_SDK = '1';
-  }
-
   // Build prompt input
   let promptInput: string | AsyncIterable<SDKUserMessage>;
   const hasAttachmentBlocks = imageContentBlocks.length > 0 || documentContentBlocks.length > 0;
