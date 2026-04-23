@@ -80,6 +80,13 @@ export const CLAUDE_MODELS: ModelDefinition[] = [
 
 export const OPENAI_MODELS: ModelDefinition[] = [
   {
+    id: 'gpt-5.5',
+    displayName: 'GPT-5.5',
+    shortName: '5.5',
+    maxTokens: 128000,
+    contextWindow: 400000,
+  },
+  {
     id: 'gpt-5.4',
     displayName: 'GPT-5.4',
     shortName: '5.4',

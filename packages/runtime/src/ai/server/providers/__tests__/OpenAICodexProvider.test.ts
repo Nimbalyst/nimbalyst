@@ -92,6 +92,10 @@ describe('OpenAICodexProvider', () => {
     expect(listModels).toHaveBeenCalledTimes(1);
     expect(models).toEqual(expect.arrayContaining([
       expect.objectContaining({
+        id: 'openai-codex:gpt-5.5',
+        provider: 'openai-codex',
+      }),
+      expect.objectContaining({
         id: 'openai-codex:gpt-5.4',
         provider: 'openai-codex',
       }),
@@ -117,7 +121,7 @@ describe('OpenAICodexProvider', () => {
         provider: 'openai-codex',
       }),
     ]));
-    expect(models).toHaveLength(6);
+    expect(models).toHaveLength(7);
   });
 
   it('preserves CLI auth when initialized without an API key', async () => {

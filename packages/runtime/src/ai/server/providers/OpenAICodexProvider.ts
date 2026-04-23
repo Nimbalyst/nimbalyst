@@ -59,6 +59,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     contextWindow: number;
     maxTokens: number;
   }> = [
+    { id: 'gpt-5.5', name: 'GPT-5.5', contextWindow: 400000, maxTokens: 128000 },
     { id: 'gpt-5.4', name: 'GPT-5.4', contextWindow: 400000, maxTokens: 128000 },
     { id: 'gpt-5.3-codex', name: 'GPT-5.3 Codex', contextWindow: 400000, maxTokens: 128000 },
     { id: 'gpt-5.2-codex', name: 'GPT-5.2 Codex', contextWindow: 400000, maxTokens: 128000 },
@@ -67,6 +68,7 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     { id: 'gpt-5.1-codex-mini', name: 'GPT-5.1 Codex Mini', contextWindow: 400000, maxTokens: 128000 },
   ];
   private static readonly MODEL_FALLBACK_PRIORITY: ReadonlyArray<string> = [
+    'gpt-5.5',
     'gpt-5.4',
     'gpt-5.3-codex',
     'gpt-5.2-codex',
