@@ -30,6 +30,19 @@ export class ClaudeCodeRawParser implements IRawMessageParser {
    */
   private processedTextMessageIds = new Set<string>();
 
+  /**
+   * When true, result chunk text is always suppressed.
+   * Set by the transformer when this parser handles a resume batch
+   * (afterId > 0), because prior batches may have already produced
+   * assistant_message events from assistant chunks. The result chunk
+   * echoes the same text and would create duplicates.
+   */
+  private suppressResultChunkText = false;
+
+  setSuppressResultChunkText(suppress: boolean): void {
+    this.suppressResultChunkText = suppress;
+  }
+
   async parseMessage(
     msg: RawMessage,
     context: ParseContext,
@@ -210,11 +223,13 @@ export class ClaudeCodeRawParser implements IRawMessageParser {
         && typeof parsed.result === 'string'
         && parsed.result.trim().length > 0
         && this.processedTextMessageIds.size === 0
+        && !this.suppressResultChunkText
       ) {
         // Slash command turns (e.g. unknown /foo) can produce ONLY a result chunk
         // with the final text. For regular assistant turns the result chunk
         // duplicates text already emitted via `type: 'assistant'` messages, so
-        // only backfill when no assistant text was seen this session.
+        // only backfill when no assistant text was seen IN THIS BATCH and no
+        // prior batch produced assistant text (suppressResultChunkText).
         descriptors.push({
           type: 'assistant_message',
           text: parsed.result,

@@ -214,6 +214,13 @@ export class TranscriptTransformer {
     const writer = new TranscriptWriter(this.transcriptStore, provider);
     const parser = this.createParser(provider);
 
+    // Incremental processing always resumes from a prior watermark, so
+    // suppress result chunk text to prevent duplicating assistant text
+    // that was processed in a previous batch.
+    if (afterId > 0 && parser instanceof ClaudeCodeRawParser) {
+      parser.setSuppressResultChunkText(true);
+    }
+
     const startSequence = await this.transcriptStore.getNextSequence(sessionId);
     writer.seedSequence(startSequence);
 
@@ -332,7 +339,7 @@ export class TranscriptTransformer {
         return false;
       }
 
-      const result = await this.transformMessages(sessionId, messages, provider);
+      const result = await this.transformMessages(sessionId, messages, provider, true);
 
       await this.metadataStore.updateTransformStatus(sessionId, {
         transformVersion: TranscriptTransformer.CURRENT_VERSION,
@@ -372,9 +379,19 @@ export class TranscriptTransformer {
     sessionId: string,
     messages: RawMessage[],
     provider: string,
+    isResume = false,
   ): Promise<{ lastRawMessageId: number; eventsWritten: number }> {
     const writer = new TranscriptWriter(this.transcriptStore, provider);
     const parser = this.createParser(provider);
+
+    // When resuming from a prior batch, suppress result chunk text emission.
+    // The result chunk always echoes the assistant text. If the assistant chunk
+    // was processed in a prior batch, this fresh parser instance doesn't know
+    // and would emit a duplicate assistant_message. Only slash-command-only
+    // turns need result text, and those are always in the first batch.
+    if (isResume && parser instanceof ClaudeCodeRawParser) {
+      parser.setSuppressResultChunkText(true);
+    }
 
     const startSequence = await this.transcriptStore.getNextSequence(sessionId);
     writer.seedSequence(startSequence);
