@@ -20,6 +20,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.58.3] - 2026-04-23
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Always pre-resolve the Claude Code binary path in packaged builds: the v0.58.2 "let SDK resolve" experiment (Workaround A for NIM-838) caused the SDK's `require.resolve` to return a path inside `app.asar` instead of `app.asar.unpacked`, producing `spawn ENOTDIR`. The SDK then silently fell back to the user's standalone Claude Code CLI, which ignores `--resume` and broke multi-turn sessions. Remove the `skipPreResolve` gate -- all platforms now pre-resolve via `resolveClaudeAgentCliPath()`, which correctly rewrites `app.asar` to `app.asar.unpacked`.
+- Ignore transient hook session IDs that caused false resume mismatch (NIM-838 root cause): SessionStart hooks (`hook_started`, `hook_response`) emit a transient pre-resume UUID before the init frame arrives with the real session ID. `parseSystemChunk` captured `session_id` from all system chunks, so the resume-mismatch guard aborted on the hook UUID before the init frame ever arrived. Only emit `session_id` from system chunks with `subtype: "init"`; hook frames are now ignored for session ID capture.
+- Hot-reload `customClaudeCodePath` without app restart: the custom Claude Code binary path was previously read once at startup and cached as a static string, so changing it in Settings had no effect until restart. Replace the static string with a loader function that reads fresh from the electron-store on each `sendMessage` call, and remove the redundant `setCustomClaudeCodePath` call from the save handler since the loader reads from the same store the save writes to. Follows the same lazy-loader pattern used by `mcpConfigLoader`, `claudeCodeSettingsLoader`, etc.
+- Prevent duplicate transcript events from concurrent `ensureUpToDate` calls: concurrent `ensureUpToDate`/`processNewMessages` calls could race on the same watermark and write duplicate canonical events. Add a per-session promise-chain lock to `TranscriptTransformer` so calls serialize instead. Also log the effective binary path on each `buildSdkOptions` call to confirm `customClaudeCodePath` changes take effect without restart.
+- Suppress result chunk text in resume batches to prevent duplicate assistant messages: the SDK's result chunk always echoes assistant text. When the assistant and result chunks land in separate transformer batches (observed 68ms apart, split by a throttled `ensureUpToDate`), the fresh parser's `processedTextMessageIds` is empty and the result text passes the guard. Add `suppressResultChunkText` flag to `ClaudeCodeRawParser`, set by the transformer on resume batches (`afterId > 0`) where prior batches already handled any assistant text. Slash-command-only turns still work because they're processed in the first batch.
+
+### Removed
+- NIM-838 diagnostic instrumentation: root cause (transient hook session IDs) has been found and fixed, so remove the temporary debugging infrastructure -- `DEBUG_CLAUDE_AGENT_SDK=1` env var injection on resume turns, `logResumeDiagnostic()`/`schedulePostTurn1Diagnostic()` methods, `RESUME_DIAGNOSTIC` filesystem/stderr dumps from the mismatch guard, and restore the stderr ring buffer from 200 back to 50 lines.
+
 ## [0.58.2] - 2026-04-23
 
 
