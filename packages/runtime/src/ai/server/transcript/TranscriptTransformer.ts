@@ -91,6 +91,13 @@ export class TranscriptTransformer {
    */
   private onEventWritten: OnCanonicalEventWritten | null = null;
 
+  /**
+   * Per-session lock to prevent concurrent ensureUpToDate/processNewMessages
+   * calls from reading the same watermark and writing duplicate canonical events.
+   * Each entry is a promise that resolves when the current processing completes.
+   */
+  private sessionLocks = new Map<string, Promise<unknown>>();
+
   constructor(
     private rawStore: IRawMessageStore,
     private transcriptStore: ITranscriptEventStore,
@@ -114,6 +121,10 @@ export class TranscriptTransformer {
    * any raw messages that haven't been transformed yet.
    */
   async ensureUpToDate(sessionId: string, provider: string): Promise<boolean> {
+    return this.withSessionLock(sessionId, () => this.ensureUpToDateLocked(sessionId, provider));
+  }
+
+  private async ensureUpToDateLocked(sessionId: string, provider: string): Promise<boolean> {
     const status = await this.metadataStore.getTransformStatus(sessionId);
 
     // Complete at current version -- resume to pick up any new raw messages
@@ -174,6 +185,13 @@ export class TranscriptTransformer {
    * Returns the canonical events that were written.
    */
   async processNewMessages(
+    sessionId: string,
+    provider: string,
+  ): Promise<TranscriptEvent[]> {
+    return this.withSessionLock(sessionId, () => this.processNewMessagesLocked(sessionId, provider));
+  }
+
+  private async processNewMessagesLocked(
     sessionId: string,
     provider: string,
   ): Promise<TranscriptEvent[]> {
@@ -435,5 +453,24 @@ export class TranscriptTransformer {
       toolEventIds,
       subagentEventIds,
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Per-session concurrency control
+  // ---------------------------------------------------------------------------
+
+  private async withSessionLock<T>(sessionId: string, fn: () => Promise<T>): Promise<T> {
+    const existing = this.sessionLocks.get(sessionId);
+    const ticket = (existing ?? Promise.resolve())
+      .catch(() => {})
+      .then(() => fn());
+    this.sessionLocks.set(sessionId, ticket);
+    try {
+      return await ticket;
+    } finally {
+      if (this.sessionLocks.get(sessionId) === ticket) {
+        this.sessionLocks.delete(sessionId);
+      }
+    }
   }
 }

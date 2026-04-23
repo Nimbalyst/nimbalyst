@@ -114,9 +114,11 @@ export async function buildSdkOptions(
 
   const resolvedBinaryPath = await resolveClaudeAgentCliPath().catch(() => undefined);
   const customPath = ClaudeCodeDeps.customClaudeCodePathLoader?.() || '';
+  const effectivePath = customPath || resolvedBinaryPath;
+  console.log(`[CLAUDE-CODE] Binary path: custom=${customPath || '(none)'} resolved=${resolvedBinaryPath ?? '(none)'} effective=${effectivePath ?? '(none)'}`);
 
   const options: any = {
-    pathToClaudeCodeExecutable: customPath || resolvedBinaryPath,
+    pathToClaudeCodeExecutable: effectivePath,
     systemPrompt: isMetaAgent
       ? systemPrompt  // Plain string — fully replaces CC system prompt
       : {
