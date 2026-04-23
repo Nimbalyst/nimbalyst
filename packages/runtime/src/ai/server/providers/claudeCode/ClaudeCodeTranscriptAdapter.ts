@@ -431,14 +431,17 @@ export class ClaudeCodeTranscriptAdapter {
   }
 
   private parseSystemChunk(chunk: any): ParsedItem[] {
-    // Session ID may appear on any system chunk
     const items: ParsedItem[] = [];
-    if (chunk.session_id) {
-      items.push({ kind: 'session_id', id: chunk.session_id });
-    }
 
     switch (chunk.subtype) {
       case 'init':
+        // Only trust session_id from the init frame. Hook frames
+        // (hook_started, hook_response) carry a transient pre-resume UUID
+        // that differs from the actual resumed session ID. Capturing it
+        // triggers a false resume-mismatch abort (NIM-838).
+        if (chunk.session_id) {
+          items.push({ kind: 'session_id', id: chunk.session_id });
+        }
         items.push({ kind: 'system_init', chunk });
         break;
       case 'task_started':
