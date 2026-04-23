@@ -113,9 +113,10 @@ export async function buildSdkOptions(
   }
 
   const resolvedBinaryPath = await resolveClaudeAgentCliPath().catch(() => undefined);
+  const customPath = ClaudeCodeDeps.customClaudeCodePathLoader?.() || '';
 
   const options: any = {
-    pathToClaudeCodeExecutable: ClaudeCodeDeps.customClaudeCodePath || resolvedBinaryPath,
+    pathToClaudeCodeExecutable: customPath || resolvedBinaryPath,
     systemPrompt: isMetaAgent
       ? systemPrompt  // Plain string — fully replaces CC system prompt
       : {
@@ -250,7 +251,7 @@ export async function buildSdkOptions(
   // it was designed for the old Node.js execution path and its Object.assign
   // clobbered our sanitized env.
   if (app.isPackaged) {
-    if (ClaudeCodeDeps.customClaudeCodePath) {
+    if (customPath) {
       helperMethod = 'custom';
     } else {
       console.log(`[ClaudeCodeProvider] Pre-resolved native binary for packaged build: ${resolvedBinaryPath ?? '(resolveClaudeAgentCliPath returned undefined)'}`);
@@ -258,7 +259,7 @@ export async function buildSdkOptions(
 
     teammateManager.packagedBuildOptions = {
       env: env as Record<string, string | undefined>,
-      pathToClaudeCodeExecutable: ClaudeCodeDeps.customClaudeCodePath || resolvedBinaryPath,
+      pathToClaudeCodeExecutable: customPath || resolvedBinaryPath,
     };
   }
 

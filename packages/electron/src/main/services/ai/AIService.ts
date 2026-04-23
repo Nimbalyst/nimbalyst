@@ -5284,7 +5284,6 @@ export class AIService {
 
       if (settings.customClaudeCodePath !== undefined) {
         this.getSettingsStore().set('customClaudeCodePath', settings.customClaudeCodePath);
-        ClaudeCodeProvider.setCustomClaudeCodePath(settings.customClaudeCodePath);
       }
 
       if (settings.autoCommitEnabled !== undefined) {

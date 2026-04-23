@@ -1472,12 +1472,11 @@ app.whenReady().then(async () => {
     const sessionRestored = shouldSkipSessionRestore ? false : await restoreSessionState();
     markEnd('session-restore');
 
-    // Initialize customClaudeCodePath from persisted store
-    // Allows overriding the SDK's native binary (e.g., for corporate SSO wrappers)
+    // Set up a loader that reads customClaudeCodePath fresh from the store on each query,
+    // so changes in the UI take effect without restarting the app.
     const { store } = await import('./utils/store');
-    const customClaudeCodePath = store.get('customClaudeCodePath', '') as string;
-    ClaudeCodeProvider.setCustomClaudeCodePath(customClaudeCodePath);
-    logger.main.info('[ClaudeCodeProvider] Initialized settings', { customClaudeCodePath: customClaudeCodePath ? '(set)' : '(empty)' });
+    ClaudeCodeProvider.setCustomClaudeCodePathLoader(() => store.get('customClaudeCodePath', '') as string);
+    logger.main.info('[ClaudeCodeProvider] Initialized customClaudeCodePath loader');
 
     // Close splash screen now that initialization is done and a real window is about to show.
     // The last restored window activates the app via its own ready-to-show handler.

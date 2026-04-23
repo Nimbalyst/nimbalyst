@@ -33,9 +33,9 @@ export type ExtensionFileTypesLoader = () => Set<string>;
 export const ClaudeCodeDeps = {
   // ---- Binary Configuration ----
 
-  // Custom Claude Code executable path (injected from electron main process)
-  // When set, overrides the SDK's native binary (e.g., for corporate SSO wrappers)
-  customClaudeCodePath: '' as string,
+  // Loader that reads the custom Claude Code executable path fresh from the settings store.
+  // Re-read on each query so changes in the UI take effect without restart.
+  customClaudeCodePathLoader: null as (() => string) | null,
 
   // ---- MCP Server Ports ----
 
@@ -112,8 +112,8 @@ export const ClaudeCodeDeps = {
   // ---- Setters ----
   // Called from electron main process at startup
 
-  setCustomClaudeCodePath(path: string): void {
-    this.customClaudeCodePath = path;
+  setCustomClaudeCodePathLoader(loader: (() => string) | null): void {
+    this.customClaudeCodePathLoader = loader;
   },
 
   setMcpServerPort(port: number | null): void {
