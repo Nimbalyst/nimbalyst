@@ -20,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.58.2] - 2026-04-23
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+- Remove Claude Code SDK prewarm end to end: prewarm was gated behind `PREWARM_ENABLED=false` after it was found to interfere with session resume and required a `canUseTool` shim to keep tool permissions working. Remove the dead path (provider fields, `prewarm`/`discardWarmQuery` methods, `ai:prewarm` IPC handler, preload bridge, type, and renderer `useEffect`), collapsing `sendMessage` to a single `query()` call and removing the warm-query shim entirely. Does not fix NIM-838 -- prewarm was already inert -- but shrinks the surface to reason about while chasing the real resume-mismatch bug.
+
+### Fixed
+- Restore Claude Code on packaged macOS/Linux (regression from v0.58.1): v0.58.1 shipped the NIM-838 workaround that passed `pathToClaudeCodeExecutable=undefined` in packaged mode so the SDK could resolve the binary itself. On packaged macOS arm64, the SDK's `require.resolve` returns a path inside `app.asar` where the binary only exists under `app.asar.unpacked`, producing `spawn ENOTDIR` on turn 1 and breaking Claude Code entirely for Mac users. Restore pre-resolution on every platform except packaged Windows, where the original NIM-838 resume-mismatch reports originated and the experiment remains open. `TeammateManager` now receives the same pre-resolved path so teammate spawns don't hit the same failure.
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.58.1] - 2026-04-23
 
 
