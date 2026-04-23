@@ -100,7 +100,7 @@ import {
   handleToolPermissionWithService as handleToolPermissionWithServiceHelper,
 } from './claudeCode/toolAuthorization';
 import { ClaudeCodeDeps } from './claudeCode/dependencyInjection';
-import { buildSdkOptions, type PromptStreamController } from './claudeCode/sdkOptionsBuilder';
+import { buildSdkOptions } from './claudeCode/sdkOptionsBuilder';
 
 
 /**
@@ -186,10 +186,6 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   // Resolve function to break the for-await loop immediately when interrupt is called.
   // Racing this against .next() lets us unblock without waiting for the SDK transport.
   private interruptResolve: (() => void) | null = null;
-  // Controller for the persistent prompt AsyncIterable. Ending it lets the
-  // SDK's streamInput generator return and close the binary's stdin pipe.
-  // Must be ended in the finally block of sendMessage and on abort.
-  private promptController: PromptStreamController | null = null;
 
   // Teammate management: spawning, messaging, lifecycle, config I/O
   private teammateManager: TeammateManager;
@@ -687,9 +683,8 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
           isMetaAgent,
         }
       );
-      const { options, promptInput, promptController } = sdkResult;
+      const { options, promptInput } = sdkResult;
       this.helperMethod = sdkResult.helperMethod;
-      this.promptController = promptController;
 
       // Meta-agent: override MCP config with meta-agent profile and apply tool restrictions
       if (isMetaAgent) {
@@ -814,12 +809,6 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       let firstChunkTime: number | undefined;
       let toolCallCount = 0;
       let receivedCompactBoundary = false;
-      // Timestamp of the first `type: 'result'` chunk from the SDK. Used to
-      // measure the delay between result and any subsequent "Stream closed"
-      // tool permission error -- a small delta confirms the binary is making
-      // post-result can_use_tool calls after stdin is closed.
-      let resultReceivedTime: number | null = null;
-      let resultReceivedChunkCount: number | null = null;
       // Track tool calls by ID so we can update them with results
       const toolCallsById: Map<string, any> = new Map();
       // Track usage data from the SDK (gets overwritten by cumulative result.usage)
@@ -879,17 +868,6 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
           const chunk = rawChunk as any;
           chunkCount++;
 
-          // Diagnostic: capture when the binary emits `type: 'result'` -- the
-          // signal the SDK uses to close stdin on single-turn queries. We now
-          // force isSingleUserTurn=false via the persistent prompt stream, so
-          // stdin should NOT close here, but we log it to verify the fix and
-          // to measure the delta to any subsequent STREAM_CLOSED_DIAGNOSTIC.
-          if (typeof chunk === 'object' && chunk !== null && chunk.type === 'result' && resultReceivedTime === null) {
-            resultReceivedTime = Date.now();
-            resultReceivedChunkCount = chunkCount;
-            console.log(`[CLAUDE-CODE] RESULT_MESSAGE_RECEIVED: turnElapsed=${resultReceivedTime - queryStartTime}ms chunkCount=${chunkCount} subtype="${chunk.subtype}" isError=${chunk.is_error === true}`);
-          }
-
           // Diagnostic: detect a "Stream closed" tool_result at the raw chunk level.
           // Narrow match: only fires when the chunk is a user/tool_result with is_error=true
           // AND the content string contains "Stream closed". Avoids false positives from
@@ -904,10 +882,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
             );
             if (hasStreamClosedError) {
               const chunkJson = JSON.stringify(chunk);
-              const timeSinceResult = resultReceivedTime !== null
-                ? `${Date.now() - resultReceivedTime}ms (result was chunk #${resultReceivedChunkCount})`
-                : 'result not yet received';
-              console.error(`[CLAUDE-CODE] STREAM_CLOSED_RAW_CHUNK: chunkType="${chunk.type}" chunkSubtype="${chunk.subtype}" chunkCount=${chunkCount} turnElapsed=${Date.now() - queryStartTime}ms stderrLines=${stderrLines.length} timeSinceResult=${timeSinceResult}`);
+              console.error(`[CLAUDE-CODE] STREAM_CLOSED_RAW_CHUNK: chunkType="${chunk.type}" chunkSubtype="${chunk.subtype}" chunkCount=${chunkCount} turnElapsed=${Date.now() - queryStartTime}ms stderrLines=${stderrLines.length}`);
               console.error(`[CLAUDE-CODE] STREAM_CLOSED_RAW_CHUNK: ${chunkJson.substring(0, 500)}`);
               if (stderrLines.length > 0) {
                 console.error(`[CLAUDE-CODE] STREAM_CLOSED_RAW_CHUNK stderr: ${stderrLines.join('').trim().substring(0, 500)}`);
@@ -1048,13 +1023,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
                   // Diagnostic: detect "Stream closed" errors from the native binary
                   const resultText = typeof item.content === 'string' ? item.content : JSON.stringify(item.content);
                   if (item.isError && resultText.includes('Stream closed')) {
-                    const timeSinceResult = resultReceivedTime !== null
-                      ? `${Date.now() - resultReceivedTime}ms (result was chunk #${resultReceivedChunkCount})`
-                      : 'result not yet received';
-                    const controllerState = this.promptController
-                      ? (this.promptController.isEnded() ? 'ended' : 'open')
-                      : 'null';
-                    console.error(`[CLAUDE-CODE] STREAM_CLOSED_DIAGNOSTIC: tool="${toolCall.name}" toolUseId="${item.toolUseId}" isError=${item.isError} stderrLines=${stderrLines.length} chunkCount=${chunkCount} turnElapsed=${Date.now() - queryStartTime}ms timeSinceResult=${timeSinceResult} promptController=${controllerState}`);
+                    console.error(`[CLAUDE-CODE] STREAM_CLOSED_DIAGNOSTIC: tool="${toolCall.name}" toolUseId="${item.toolUseId}" isError=${item.isError} stderrLines=${stderrLines.length} chunkCount=${chunkCount} turnElapsed=${Date.now() - queryStartTime}ms`);
                     console.error(`[CLAUDE-CODE] STREAM_CLOSED_DIAGNOSTIC: resultText="${resultText.substring(0, 300)}"`);
                     if (stderrLines.length > 0) {
                       console.error(`[CLAUDE-CODE] STREAM_CLOSED_DIAGNOSTIC: stderr="${stderrLines.join('').trim().substring(0, 500)}"`);
@@ -1477,13 +1446,6 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       this.abortController = null;
       this.wasInterrupted = false;
       this.interruptResolve = null;
-      // End the persistent prompt stream so the SDK's streamInput generator
-      // returns and closes the binary's stdin pipe cleanly. Safe to call
-      // multiple times -- idempotent inside the controller.
-      if (this.promptController) {
-        this.promptController.end('sendMessage-finally');
-        this.promptController = null;
-      }
       // Note: markMessagesAsHidden is reset at the START of sendMessage to prevent race conditions
 
       this.handlePostLeadTurnTeammateState(sessionId, hideMessages);
@@ -1500,13 +1462,6 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
     if (this.interruptResolve) {
       this.interruptResolve();
       this.interruptResolve = null;
-    }
-
-    // End the prompt stream so the SDK can close stdin; the finally block in
-    // sendMessage will also null this, but aborts can fire before we re-enter
-    // the finally (e.g. during a for-await iteration).
-    if (this.promptController) {
-      this.promptController.end('abort');
     }
 
     // Call base class abort (handles abortController and rejectAllPendingPermissions)
