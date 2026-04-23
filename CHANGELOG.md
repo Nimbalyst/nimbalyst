@@ -20,6 +20,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.58.0] - 2026-04-22
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Stop tracker items leaking across open projects (NIM-346): MCP tracker change broadcasts went to every BrowserWindow, so items created in one project transiently showed up in other open projects' tracker lists. Scope MCP broadcasts via `findWindowByWorkspace` so events only reach the owning workspace's window, and add a defensive workspace filter in the renderer listener so stray cross-project events are dropped before they touch the atom map.
+- Stop buggy tracker widget from white-screening the app (NIM-351): a malformed tracker result with non-array `tags` threw during `CreatedView`/`RetrievedView` render and unmounted the transcript. Guard both views against non-array `item.tags`, coerce `args.tags` to an array in `tracker_create`/`tracker_update` so bad shapes from the agent aren't persisted going forward, wrap custom tool widgets in `ToolWidgetErrorBoundary` so a crashing widget renders an inline fallback instead of bringing down the transcript, and wrap the renderer root in `ErrorBoundary` as a safety net so escaped errors show a recoverable screen instead of a white screen.
+- Avoid `document-service` IPC calls outside workspace windows: gate tracker sync startup on workspace-backed window state and prevent non-workspace windows (settings, help, etc.) from invoking `document-service` handlers, which produced errors and log spam when those windows were open.
+- Ship working `node-pty` in the Linux AppImage (NIM-354): the Linux AppImage crashed on launch because packaged `node_modules/node-pty` contained no loadable `pty.node` for `linux-x64` -- the upstream `node-pty@1.x` npm package ships prebuilds for darwin and win32 only, and electron-builder's `install-app-deps` runs `@electron/rebuild` with `buildFromSource=false` so the Linux job silently skipped rebuilding instead of falling back to node-gyp. Add a Linux-only CI step that runs `@electron/rebuild --force` against the target Electron version and verifies `build/Release/pty.node` actually landed, and extend `validate-extra-resources.js` with a `node-pty` binary check that fails the build when no `pty.node` exists for the current target (mirroring the existing ripgrep and claude-agent-sdk checks). Catches this class of silent-skip on any platform, not just Linux.
+- Remove console error when dropping a session onto itself: the drop is already a no-op but logged a noisy console error on every self-drop; now returns early without logging.
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.57.42] - 2026-04-22
 
 
