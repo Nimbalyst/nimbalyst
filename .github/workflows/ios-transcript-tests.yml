@@ -43,7 +43,7 @@ jobs:
       - name: Install dependencies
         run: |
           cd ../..
-          npm ci
+          npm ci --ignore-scripts
 
       - name: Build transcript bundle
         run: npx vite build --config vite.config.transcript.ts
