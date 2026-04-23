@@ -298,7 +298,7 @@ export const SessionListItem = memo<SessionListItemProps>(({
 
       // Validate not dropping on self
       if (sessionId === id) {
-        console.error('[SessionListItem] Cannot drop session on itself');
+        // console.error('[SessionListItem] Cannot drop session on itself');
         return;
       }
 
