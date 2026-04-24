@@ -7,11 +7,29 @@ struct DocumentListView: View {
     @EnvironmentObject var appState: AppState
     let project: Project
 
+    /// When non-nil, the List uses selection binding for NavigationSplitView sidebar mode.
+    /// When nil, NavigationLink push navigation is used (iPhone NavigationStack mode).
+    private var selectedDocument: Binding<SyncedDocument?>?
+
+    private var isIPadSidebar: Bool { selectedDocument != nil }
+
     @State private var documents: [SyncedDocument] = []
     @State private var cancellable: AnyDatabaseCancellable?
     @State private var searchText = ""
     @State private var isLoading = true
     @State private var expandedPaths: Set<String> = []
+
+    /// iPhone init: push navigation via NavigationLink.
+    init(project: Project) {
+        self.project = project
+        self.selectedDocument = nil
+    }
+
+    /// iPad init: selection binding drives NavigationSplitView detail column.
+    init(project: Project, selectedDocument: Binding<SyncedDocument?>) {
+        self.project = project
+        self.selectedDocument = selectedDocument
+    }
 
     private var filteredDocuments: [SyncedDocument] {
         if searchText.isEmpty { return documents }
@@ -50,24 +68,39 @@ struct DocumentListView: View {
     }
 
     private var documentTree: some View {
-        List {
-            ForEach(treeNodes) { node in
-                FileTreeRow(
-                    node: node,
-                    isExpanded: expandedPaths.contains(node.path),
-                    onToggle: { toggleExpansion(node.path) }
-                )
-                .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 16))
-                .listRowSeparator(.hidden)
+        Group {
+            if let binding = selectedDocument {
+                List(selection: binding) {
+                    documentTreeRows
+                }
+                .listStyle(.sidebar)
+            } else {
+                List {
+                    documentTreeRows
+                }
+                .listStyle(.plain)
+                #if canImport(UIKit)
+                .navigationDestination(for: SyncedDocument.self) { doc in
+                    DocumentEditorView(document: doc)
+                        .environmentObject(appState)
+                }
+                #endif
             }
         }
-        .listStyle(.plain)
-        #if canImport(UIKit)
-        .navigationDestination(for: SyncedDocument.self) { doc in
-            DocumentEditorView(document: doc)
-                .environmentObject(appState)
+    }
+
+    @ViewBuilder
+    private var documentTreeRows: some View {
+        ForEach(treeNodes) { node in
+            FileTreeRow(
+                node: node,
+                isExpanded: expandedPaths.contains(node.path),
+                useSelectionTag: isIPadSidebar,
+                onToggle: { toggleExpansion(node.path) }
+            )
+            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 16))
+            .listRowSeparator(.hidden)
         }
-        #endif
     }
 
     private var emptyState: some View {
@@ -300,12 +333,17 @@ private func emitNodes(
 struct FileTreeRow: View {
     let node: FileTreeNode
     let isExpanded: Bool
+    var useSelectionTag: Bool = false
     let onToggle: () -> Void
 
     var body: some View {
         if let doc = node.document {
-            NavigationLink(value: doc) {
-                rowContent
+            if useSelectionTag {
+                rowContent.tag(doc)
+            } else {
+                NavigationLink(value: doc) {
+                    rowContent
+                }
             }
         } else {
             Button(action: onToggle) {

@@ -342,6 +342,7 @@ struct IPadNavigationView: View {
     @EnvironmentObject var appState: AppState
     @State private var selectedProject: Project?
     @State private var selectedSession: Session?
+    @State private var selectedDocument: SyncedDocument?
     @State private var showProjectPicker = false
     @State private var projects: [Project] = []
     @State private var projectsCancellable: AnyDatabaseCancellable?
@@ -352,6 +353,7 @@ struct IPadNavigationView: View {
                 SessionListView(
                     project: project,
                     selectedSession: $selectedSession,
+                    selectedDocument: $selectedDocument,
                     onSwitchProject: { showProjectPicker = true }
                 )
                 .environmentObject(appState)
@@ -369,7 +371,16 @@ struct IPadNavigationView: View {
                 }
             }
         } detail: {
-            if let session = selectedSession {
+            if let doc = selectedDocument {
+                #if canImport(UIKit)
+                DocumentEditorView(document: doc)
+                    .environmentObject(appState)
+                    .id(doc.id)
+                #else
+                Text("Select a session")
+                    .foregroundStyle(.secondary)
+                #endif
+            } else if let session = selectedSession {
                 SessionDetailView(session: session)
                     .environmentObject(appState)
                     .id(session.id)
@@ -391,6 +402,7 @@ struct IPadNavigationView: View {
                 Button {
                     selectedProject = project
                     selectedSession = nil
+                    selectedDocument = nil
                     showProjectPicker = false
                     configureVoiceForProject(project)
                 } label: {

@@ -149,6 +149,9 @@ public struct SessionListView: View {
     /// When nil, NavigationLink push navigation is used (iPhone NavigationStack mode).
     private var selectedSession: Binding<Session?>?
 
+    /// Binding for iPad sidebar: selecting a file updates the NavigationSplitView detail column.
+    private var selectedDocument: Binding<SyncedDocument?>?
+
     /// Called when the user taps the project switcher button (iPad sidebar only).
     private var onSwitchProject: (() -> Void)?
 
@@ -164,13 +167,20 @@ public struct SessionListView: View {
     public init(project: Project) {
         self.project = project
         self.selectedSession = nil
+        self.selectedDocument = nil
         self.onSwitchProject = nil
     }
 
-    /// iPad init: selection binding drives NavigationSplitView detail column.
-    public init(project: Project, selectedSession: Binding<Session?>, onSwitchProject: @escaping () -> Void) {
+    /// iPad init: selection bindings drive NavigationSplitView detail column.
+    public init(
+        project: Project,
+        selectedSession: Binding<Session?>,
+        selectedDocument: Binding<SyncedDocument?>,
+        onSwitchProject: @escaping () -> Void
+    ) {
         self.project = project
         self.selectedSession = selectedSession
+        self.selectedDocument = selectedDocument
         self.onSwitchProject = onSwitchProject
     }
     @State private var searchText = ""
@@ -323,31 +333,37 @@ public struct SessionListView: View {
     }
 
     public var body: some View {
-        Group {
-            if isIPadSidebar {
-                // iPad sidebar: sessions only, no tab picker
-                sessionListContent
-            } else {
-                VStack(spacing: 0) {
-                    // Sessions | Files segmented control
-                    Picker("Tab", selection: $selectedTab) {
-                        ForEach(ProjectTab.allCases, id: \.self) { tab in
-                            Text(tab.rawValue).tag(tab)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-
-                    // Tab content
-                    switch selectedTab {
-                    case .sessions:
-                        sessionListContent
-                    case .files:
-                        DocumentListView(project: project)
-                            .environmentObject(appState)
-                    }
+        VStack(spacing: 0) {
+            // Sessions | Files segmented control
+            Picker("Tab", selection: $selectedTab) {
+                ForEach(ProjectTab.allCases, id: \.self) { tab in
+                    Text(tab.rawValue).tag(tab)
                 }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+
+            // Tab content
+            switch selectedTab {
+            case .sessions:
+                sessionListContent
+            case .files:
+                if let docBinding = selectedDocument {
+                    DocumentListView(project: project, selectedDocument: docBinding)
+                        .environmentObject(appState)
+                } else {
+                    DocumentListView(project: project)
+                        .environmentObject(appState)
+                }
+            }
+        }
+        .onChange(of: selectedTab) { _, newTab in
+            // Clear the other pane's selection so the detail column follows the active tab.
+            if newTab == .sessions {
+                selectedDocument?.wrappedValue = nil
+            } else {
+                selectedSession?.wrappedValue = nil
             }
         }
         .navigationTitle(project.name)
