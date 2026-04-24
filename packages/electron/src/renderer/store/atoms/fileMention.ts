@@ -132,6 +132,28 @@ async function ensureQuickOpenCache(workspacePath: string): Promise<void> {
 }
 
 /**
+ * Build a TypeaheadOption for a file from its absolute path.
+ */
+function fileToOption(absolutePath: string, workspacePath: string): TypeaheadOption {
+  const relativePath = getRelativePath(absolutePath, workspacePath);
+  const fileName = getFileName(relativePath);
+  const dirPath = getDirectoryPath(relativePath);
+  const truncatedPath = truncatePath(dirPath);
+
+  return {
+    id: relativePath,
+    label: fileName,
+    description: truncatedPath || undefined,
+    icon: getFileIcon(fileName, 18),
+    data: {
+      id: relativePath,
+      name: fileName,
+      path: relativePath,
+    }
+  };
+}
+
+/**
  * Convert search results to TypeaheadOption format.
  */
 function resultsToOptions(results: FileSearchResult[], workspacePath: string): TypeaheadOption[] {
@@ -157,21 +179,7 @@ function resultsToOptions(results: FileSearchResult[], workspacePath: string): T
       };
     }
 
-    const fileName = getFileName(relativePath);
-    const dirPath = getDirectoryPath(relativePath);
-    const truncatedPath = truncatePath(dirPath);
-
-    return {
-      id: relativePath,
-      label: fileName,
-      description: truncatedPath || undefined,
-      icon: getFileIcon(fileName, 18),
-      data: {
-        id: relativePath,
-        name: fileName,
-        path: relativePath,
-      }
-    };
+    return fileToOption(result.path, workspacePath);
   });
 }
 
@@ -192,6 +200,30 @@ export const searchFileMentionAtom = atom(
     set(documentsLoadingAtom(workspacePath), true);
 
     try {
+      // On empty query, show recently viewed files instead of the alphabetical
+      // top-level listing. Once the user types, fall back to ripgrep search.
+      if (!query && api.getRecentWorkspaceFiles) {
+        // Warm the ripgrep cache in the background so the first typed character is fast
+        void ensureQuickOpenCache(workspacePath);
+
+        try {
+          const recent: string[] = await api.getRecentWorkspaceFiles();
+          if (Array.isArray(recent) && recent.length > 0) {
+            const inWorkspace = recent.filter(p => p.startsWith(workspacePath + '/'));
+            if (inWorkspace.length > 0) {
+              set(
+                fileMentionOptionsAtom(workspacePath),
+                inWorkspace.map(p => fileToOption(p, workspacePath))
+              );
+              return;
+            }
+          }
+        } catch (err) {
+          console.error('[fileMention] Failed to load recent files:', err);
+          // Fall through to the ripgrep search below
+        }
+      }
+
       // Ensure the cache is built (no-op if already done)
       await ensureQuickOpenCache(workspacePath);
 
