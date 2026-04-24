@@ -190,6 +190,7 @@ const builtinTrackers: TrackerDataModel[] = [
       },
       { name: 'owner', type: 'user' },
       { name: 'description', type: 'text' },
+      { name: 'tags', type: 'array', itemType: 'string', displayInline: false },
     ],
     inlineTemplate: '{icon} {title} {status} {priority}',
     roles: {
@@ -197,6 +198,7 @@ const builtinTrackers: TrackerDataModel[] = [
       workflowStatus: 'status',
       priority: 'priority',
       assignee: 'owner',
+      tags: 'tags',
     },
   },
   {
@@ -234,6 +236,7 @@ const builtinTrackers: TrackerDataModel[] = [
       },
       { name: 'owner', type: 'user' },
       { name: 'description', type: 'text' },
+      { name: 'tags', type: 'array', itemType: 'string', displayInline: false },
     ],
     inlineTemplate: '{icon} {title} {status} {owner}',
     roles: {
@@ -241,6 +244,7 @@ const builtinTrackers: TrackerDataModel[] = [
       workflowStatus: 'status',
       priority: 'priority',
       assignee: 'owner',
+      tags: 'tags',
     },
   },
   {
@@ -266,11 +270,13 @@ const builtinTrackers: TrackerDataModel[] = [
           { value: 'rejected', label: 'Rejected', icon: 'thumb_down' },
         ],
       },
+      { name: 'tags', type: 'array', itemType: 'string', displayInline: false },
     ],
     inlineTemplate: '{icon} {title} {status}',
     roles: {
       title: 'title',
       workflowStatus: 'status',
+      tags: 'tags',
     },
   },
   {
@@ -310,6 +316,7 @@ const builtinTrackers: TrackerDataModel[] = [
       { name: 'description', type: 'text' },
       { name: 'releaseVersion', type: 'string', displayInline: true },
       { name: 'releaseNotes', type: 'text' },
+      { name: 'tags', type: 'array', itemType: 'string', displayInline: false },
     ],
     inlineTemplate: '{icon} {title} {status} {releaseVersion}',
     roles: {
@@ -317,6 +324,7 @@ const builtinTrackers: TrackerDataModel[] = [
       workflowStatus: 'status',
       priority: 'priority',
       assignee: 'owner',
+      tags: 'tags',
     },
   },
   {

@@ -115,6 +115,13 @@ export interface TrackerDataModel {
   /** Whether this type can be used as a primary type. Defaults to true. */
   primaryCapable?: boolean;
   /**
+   * Opt out of the auto-injected `tags` field/role. Defaults to true (tags supported).
+   * The registry adds a standard `tags` array field and declares the `tags` role
+   * when neither is already present, so every tracker type gets consistent tag
+   * behavior without each schema needing to restate it.
+   */
+  supportsTags?: boolean;
+  /**
    * Maps semantic roles to field names in this schema.
    * Allows the product to find e.g. "which field is the workflow status?"
    * without hardcoding field names like "status".
@@ -143,8 +150,9 @@ export class TrackerDataModelRegistry {
   private listeners: Set<() => void> = new Set();
 
   register(model: TrackerDataModel, builtin = false): void {
-    this.models.set(model.type, model);
-    if (builtin) this.builtinTypes.add(model.type);
+    const normalized = ensureTagsSupport(model);
+    this.models.set(normalized.type, normalized);
+    if (builtin) this.builtinTypes.add(normalized.type);
     this.listeners.forEach(fn => fn());
   }
 
@@ -284,6 +292,40 @@ export class TrackerDataModelRegistry {
 
 // Global registry instance
 export const globalRegistry = new TrackerDataModelRegistry();
+
+/**
+ * Standard shape of the auto-injected tags field. Kept here so every tracker
+ * type that doesn't opt out gets the exact same tags editor behavior.
+ */
+const TAGS_FIELD: FieldDefinition = {
+  name: 'tags',
+  type: 'array',
+  itemType: 'string',
+  displayInline: false,
+};
+
+/**
+ * Ensure a tracker model has tag support unless it explicitly opts out via
+ * `supportsTags: false`. Adds the `tags` field and/or the `tags` role if they
+ * aren't already declared. Returns the original model unchanged when nothing
+ * needs to be added, so models that already declare tags keep their exact
+ * field ordering and custom role target.
+ */
+export function ensureTagsSupport(model: TrackerDataModel): TrackerDataModel {
+  if (model.supportsTags === false) return model;
+  // If the schema already declares a tags role, the author has explicitly
+  // chosen where tags live (possibly under a different field name like
+  // `labels`). Respect that completely and don't inject anything.
+  if (model.roles?.tags != null) return model;
+
+  const hasTagsField = model.fields.some(f => f.name === 'tags');
+  const fields = hasTagsField ? model.fields : [...model.fields, TAGS_FIELD];
+  const roles: Partial<Record<TrackerSchemaRole, string>> = {
+    ...(model.roles ?? {}),
+    tags: 'tags',
+  };
+  return { ...model, fields, roles };
+}
 
 /**
  * Get the field name that fulfills a given role in a tracker data model.
