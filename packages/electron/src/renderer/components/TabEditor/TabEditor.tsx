@@ -1072,6 +1072,21 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           return;
         }
 
+        // Custom editor that declared no diff view: auto-accept so external edits flow
+        // through to the editor (via DocumentModel.notifyFileChanged after resolveDiff)
+        // instead of being swallowed by diff-mode routing.
+        if (isCustom && !customEditorSupportsDiffMode) {
+          contentRef.current = newContent;
+          initialContentRef.current = newContent;
+          lastSavedContentRef.current = newContent;
+          isDirtyRef.current = false;
+          onDirtyChange?.(false);
+          handle.resolveDiff(true).catch((err) => {
+            logger.ui.error('[TabEditor] Auto-accept diff failed for no-diff-view custom editor:', err);
+          });
+          return;
+        }
+
         // Built-in editors: apply diff mode
         isApplyingDiffRef.current = true;
         setPendingAIEditTag(tagInfo);

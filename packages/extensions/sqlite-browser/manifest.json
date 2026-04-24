@@ -38,7 +38,8 @@
         "filePatterns": ["*.db", "*.sqlite", "*.sqlite3", "*.db3"],
         "displayName": "SQLite Database",
         "component": "SQLiteEditor",
-        "priority": 10
+        "priority": 10,
+        "supportsDiffMode": false
       }
     ],
     "aiTools": [

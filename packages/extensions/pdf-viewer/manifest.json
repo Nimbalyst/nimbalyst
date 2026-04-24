@@ -36,7 +36,8 @@
       {
         "filePatterns": ["*.pdf"],
         "displayName": "PDF Viewer",
-        "component": "PDFViewerEditor"
+        "component": "PDFViewerEditor",
+        "supportsDiffMode": false
       }
     ],
     "fileIcons": {

@@ -41,7 +41,8 @@
         "filePatterns": ["*.imgproj"],
         "displayName": "Image Generation Project",
         "component": "ImageProjectEditor",
-        "supportsSourceMode": true
+        "supportsSourceMode": true,
+        "supportsDiffMode": false
       }
     ],
     "aiTools": [

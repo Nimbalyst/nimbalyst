@@ -40,7 +40,8 @@
         "filePatterns": ["*.excalidraw"],
         "displayName": "Excalidraw Editor",
         "component": "ExcalidrawEditor",
-        "supportsSourceMode": true
+        "supportsSourceMode": true,
+        "supportsDiffMode": false
       }
     ],
     "aiTools": [
