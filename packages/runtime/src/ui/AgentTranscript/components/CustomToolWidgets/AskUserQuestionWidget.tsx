@@ -9,9 +9,14 @@
  */
 
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { useAtomValue } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import type { CustomToolWidgetProps } from './index';
 import { interactiveWidgetHostAtom } from '../../../../store/atoms/interactiveWidgetHost';
+import {
+  askUserQuestionDraftAtom,
+  clearAskUserQuestionDraft,
+  EMPTY_ASK_USER_QUESTION_DRAFT,
+} from '../../../../store/atoms/askUserQuestionDraft';
 
 // ============================================================
 // Types
@@ -178,13 +183,22 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
   sessionId,
 }) => {
   const toolCall = message.toolCall;
-  if (!toolCall) return null;
+  const questionId = toolCall?.providerToolCallId || '';
+
+  // A question without a stable ID can't be submitted (host.askUserQuestionSubmit
+  // keys off it) and draft state would collide with other no-ID widgets. Fail loud
+  // rather than rendering a widget that can't do anything useful.
+  if (!toolCall || !questionId) {
+    if (toolCall && !questionId) {
+      console.warn('[AskUserQuestionWidget] missing providerToolCallId on tool call; skipping render');
+    }
+    return null;
+  }
 
   // Get host from atom (set by SessionTranscript)
   const host = useAtomValue(interactiveWidgetHostAtom(sessionId));
 
   const questions = parseQuestions(toolCall.arguments);
-  const questionId = toolCall.providerToolCallId || '';
 
   // Parse result to determine completion state
   const rawResult = toolCall.result;
@@ -199,49 +213,70 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
   const isCompleted = hasResult;
   const isPending = !isCompleted;
 
-  // Local state for selections
-  const [selections, setSelections] = useState<Record<string, string[]>>(() => {
-    // Initialize from parsed answers if available
-    const initial: Record<string, string[]> = {};
+  // Draft state lives in a jotai atomFamily keyed by questionId so it survives
+  // component unmount -- session switches and virtual-scroll churn no longer lose it.
+  const [draft, setDraft] = useAtom(askUserQuestionDraftAtom(questionId));
+  const { selections, otherSelected, otherText } = draft;
+
+  // Prime the draft from parsed answers the first time we see this tool call.
+  // Once primed we leave it alone so user edits aren't overwritten on re-render.
+  const primedRef = useRef(false);
+  useEffect(() => {
+    if (primedRef.current) return;
+    if (questions.length === 0) return;
+    // Only prime if the stored draft is still empty (i.e. first mount for this toolCallId).
+    const draftIsEmpty =
+      Object.keys(draft.selections).length === 0 &&
+      Object.keys(draft.otherSelected).length === 0 &&
+      Object.keys(draft.otherText).length === 0;
+    if (!draftIsEmpty) {
+      primedRef.current = true;
+      return;
+    }
+    const initialSelections: Record<string, string[]> = {};
     for (const q of questions) {
       const answer = parsedAnswers[q.question];
       if (answer) {
-        initial[q.question] = q.multiSelect ? answer.split(', ').filter(a => a.trim()) : [answer];
+        initialSelections[q.question] = q.multiSelect
+          ? answer.split(', ').filter(a => a.trim())
+          : [answer];
       } else {
-        initial[q.question] = [];
+        initialSelections[q.question] = [];
       }
     }
-    return initial;
-  });
+    setDraft(prev => ({ ...prev, selections: initialSelections }));
+    primedRef.current = true;
+  }, [questions, parsedAnswers, draft, setDraft]);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasResponded, setHasResponded] = useState(false);
   const [localResult, setLocalResult] = useState<{ answers: Record<string, string>; cancelled?: boolean } | null>(null);
-  const [otherSelected, setOtherSelected] = useState<Record<string, boolean>>({});
-  const [otherText, setOtherText] = useState<Record<string, string>>({});
   const otherInputRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
 
   // Handle option toggle
   const handleOptionToggle = useCallback((question: Question, optionLabel: string) => {
     if (!isPending || hasResponded) return;
 
-    // Deselect "Other" when picking a regular option (single-select only)
-    if (!question.multiSelect) {
-      setOtherSelected(prev => ({ ...prev, [question.question]: false }));
-    }
-
-    setSelections(prev => {
-      const current = prev[question.question] || [];
+    setDraft(prev => {
+      const current = prev.selections[question.question] || [];
+      let nextSelection: string[];
       if (question.multiSelect) {
-        if (current.includes(optionLabel)) {
-          return { ...prev, [question.question]: current.filter(o => o !== optionLabel) };
-        } else {
-          return { ...prev, [question.question]: [...current, optionLabel] };
-        }
+        nextSelection = current.includes(optionLabel)
+          ? current.filter(o => o !== optionLabel)
+          : [...current, optionLabel];
       } else {
-        return { ...prev, [question.question]: [optionLabel] };
+        nextSelection = [optionLabel];
       }
+      const nextOtherSelected = question.multiSelect
+        ? prev.otherSelected
+        : { ...prev.otherSelected, [question.question]: false };
+      return {
+        ...prev,
+        selections: { ...prev.selections, [question.question]: nextSelection },
+        otherSelected: nextOtherSelected,
+      };
     });
-  }, [isPending, hasResponded]);
+  }, [isPending, hasResponded, setDraft]);
 
   // Handle "Other" toggle
   const handleOtherToggle = useCallback((question: Question) => {
@@ -250,12 +285,14 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
     const questionKey = question.question;
     const isCurrentlyOther = otherSelected[questionKey];
 
-    if (!question.multiSelect) {
+    setDraft(prev => ({
+      ...prev,
       // Single-select: clear regular selections when picking Other
-      setSelections(prev => ({ ...prev, [questionKey]: [] }));
-    }
-
-    setOtherSelected(prev => ({ ...prev, [questionKey]: !isCurrentlyOther }));
+      selections: question.multiSelect
+        ? prev.selections
+        : { ...prev.selections, [questionKey]: [] },
+      otherSelected: { ...prev.otherSelected, [questionKey]: !isCurrentlyOther },
+    }));
 
     // Focus the input after toggling on
     if (!isCurrentlyOther) {
@@ -263,7 +300,14 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
         otherInputRefs.current[questionKey]?.focus();
       }, 0);
     }
-  }, [isPending, hasResponded, otherSelected]);
+  }, [isPending, hasResponded, otherSelected, setDraft]);
+
+  const handleOtherTextChange = useCallback((questionKey: string, value: string) => {
+    setDraft(prev => ({
+      ...prev,
+      otherText: { ...prev.otherText, [questionKey]: value },
+    }));
+  }, [setDraft]);
 
   // Handle submit
   const handleSubmit = useCallback(async () => {
@@ -303,6 +347,8 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
 
     try {
       await host.askUserQuestionSubmit(questionId, answers);
+      // Resolved: drop the draft atom so we don't leak memory for completed questions.
+      clearAskUserQuestionDraft(questionId);
     } catch (error) {
       console.error('[AskUserQuestionWidget] Failed to submit:', error);
       setLocalResult(null);
@@ -322,6 +368,7 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
 
     try {
       await host.askUserQuestionCancel(questionId);
+      clearAskUserQuestionDraft(questionId);
     } catch (error) {
       console.error('[AskUserQuestionWidget] Failed to cancel:', error);
     } finally {
@@ -589,7 +636,7 @@ export const AskUserQuestionWidget: React.FC<CustomToolWidgetProps> = ({
                         ref={(el) => { otherInputRefs.current[question.question] = el; }}
                         data-testid="ask-user-question-other-input"
                         value={otherText[question.question] || ''}
-                        onChange={(e) => setOtherText(prev => ({ ...prev, [question.question]: e.target.value }))}
+                        onChange={(e) => handleOtherTextChange(question.question, e.target.value)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' && !e.shiftKey && allAnswered) {
                             e.preventDefault();

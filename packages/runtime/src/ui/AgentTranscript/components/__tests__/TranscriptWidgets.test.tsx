@@ -694,6 +694,156 @@ describe('AskUserQuestionWidget', () => {
     );
     expect(container.innerHTML).toBe('');
   });
+
+  it('persists draft selections across unmount/remount via jotai atom', async () => {
+    // Bug: switching sessions or virtual-scroll churn unmounts the widget and
+    // user selections were lost. Draft state now lives in a per-toolCallId
+    // jotai atom so it survives remount when the same jotai store is reused.
+    const { interactiveWidgetHostAtom } = await import('../../../../store/atoms/interactiveWidgetHost');
+    const { askUserQuestionDraftAtom, clearAskUserQuestionDraft } = await import(
+      '../../../../store/atoms/askUserQuestionDraft'
+    );
+
+    const toolCallId = 'persist-test-tool-id';
+    const message = makeToolMessage(
+      'AskUserQuestion',
+      {
+        questions: [
+          {
+            question: 'Which framework?',
+            header: 'Framework',
+            options: [
+              { label: 'React', description: 'Component library' },
+              { label: 'Vue', description: 'Progressive framework' },
+            ],
+            multiSelect: false,
+          },
+        ],
+      },
+      undefined,
+      {
+        toolCall: {
+          toolName: 'AskUserQuestion',
+          toolDisplayName: 'AskUserQuestion',
+          status: 'running',
+          description: null,
+          arguments: {
+            questions: [
+              {
+                question: 'Which framework?',
+                header: 'Framework',
+                options: [
+                  { label: 'React', description: 'Component library' },
+                  { label: 'Vue', description: 'Progressive framework' },
+                ],
+                multiSelect: false,
+              },
+            ],
+          },
+          targetFilePath: null,
+          mcpServer: null,
+          mcpTool: null,
+          providerToolCallId: toolCallId,
+          progress: [],
+          result: undefined,
+        },
+      }
+    );
+
+    const testStore = createStore();
+    // Install a stub host so the widget renders the interactive UI (not the
+    // "Waiting..." fallback shown when no host is present).
+    const stubHost = {
+      sessionId: 'persist-session',
+      workspacePath: '/',
+      worktreeId: null,
+      askUserQuestionSubmit: vi.fn().mockResolvedValue(undefined),
+      askUserQuestionCancel: vi.fn().mockResolvedValue(undefined),
+      exitPlanModeApprove: vi.fn().mockResolvedValue(undefined),
+      exitPlanModeStartNewSession: vi.fn().mockResolvedValue(undefined),
+      exitPlanModeDeny: vi.fn().mockResolvedValue(undefined),
+      exitPlanModeCancel: vi.fn().mockResolvedValue(undefined),
+      toolPermissionSubmit: vi.fn().mockResolvedValue(undefined),
+      toolPermissionCancel: vi.fn().mockResolvedValue(undefined),
+      autoCommitEnabled: false,
+      setAutoCommitEnabled: vi.fn(),
+      gitCommit: vi.fn().mockResolvedValue({ success: true }),
+      gitCommitCancel: vi.fn().mockResolvedValue(undefined),
+      superLoopBlockedFeedback: vi.fn().mockResolvedValue({ success: true }),
+      openFile: vi.fn().mockResolvedValue(undefined),
+      trackEvent: vi.fn(),
+    };
+    testStore.set(interactiveWidgetHostAtom('persist-session'), stubHost);
+
+    // Ensure atom starts empty in case a previous test left state behind.
+    clearAskUserQuestionDraft(toolCallId);
+
+    const renderWidget = () =>
+      render(
+        <JotaiProvider store={testStore}>
+          <AskUserQuestionWidget
+            message={message}
+            isExpanded={false}
+            onToggle={() => {}}
+            sessionId="persist-session"
+          />
+        </JotaiProvider>
+      );
+
+    // Mount 1: pick "React".
+    const first = renderWidget();
+    const reactOption = first.getByText('React').closest('button');
+    expect(reactOption).not.toBeNull();
+    fireEvent.click(reactOption!);
+    expect(reactOption!.dataset.selected).toBe('true');
+
+    // Atom should now hold the selection.
+    const afterClick = testStore.get(askUserQuestionDraftAtom(toolCallId));
+    expect(afterClick.selections['Which framework?']).toEqual(['React']);
+
+    // Simulate session switch / virtual-scroll unmount.
+    first.unmount();
+
+    // Mount 2: selection should still be "React" without any user action.
+    const second = renderWidget();
+    const reactOptionAgain = second.getByText('React').closest('button');
+    expect(reactOptionAgain).not.toBeNull();
+    expect(reactOptionAgain!.dataset.selected).toBe('true');
+
+    second.unmount();
+    clearAskUserQuestionDraft(toolCallId);
+  });
+
+  it('returns null and warns when providerToolCallId is missing', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const message = makeToolMessage('AskUserQuestion', {
+      questions: [
+        {
+          question: 'Q?',
+          header: 'Q',
+          options: [{ label: 'A', description: '' }],
+          multiSelect: false,
+        },
+      ],
+    });
+    // Force providerToolCallId to empty.
+    if (message.toolCall) {
+      message.toolCall.providerToolCallId = '';
+    }
+    const { container } = render(
+      <Wrapper>
+        <AskUserQuestionWidget
+          message={message}
+          isExpanded={false}
+          onToggle={() => {}}
+          sessionId="no-id"
+        />
+      </Wrapper>
+    );
+    expect(container.innerHTML).toBe('');
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
 });
 
 // ============================================================================
