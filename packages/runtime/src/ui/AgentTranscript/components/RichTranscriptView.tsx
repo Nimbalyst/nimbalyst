@@ -348,9 +348,15 @@ const PromptAdditionsInline: React.FC<{
   );
 };
 
+const REMINDER_KIND_LABELS: Record<string, string> = {
+  session_naming: 'Session metadata reminder',
+};
+
 const SystemReminderCard: React.FC<{
   message: TranscriptViewMessage;
 }> = ({ message }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
   const content = (message.text ?? '')
     .replace(/^\s*<SYSTEM_REMINDER>/, '')
     .replace(/<\/SYSTEM_REMINDER>\s*$/, '')
@@ -361,18 +367,38 @@ const SystemReminderCard: React.FC<{
     return null;
   }
 
+  const reminderKind =
+    message.systemMessage?.reminderKind ??
+    (typeof message.metadata?.reminderKind === 'string'
+      ? (message.metadata.reminderKind as string)
+      : undefined);
+  const label =
+    (reminderKind && REMINDER_KIND_LABELS[reminderKind]) ?? 'System Reminder';
+
   return (
     <div className="rich-transcript-system-reminder ml-6 mb-2 rounded-md border border-[var(--nim-border)] bg-[var(--nim-bg-tertiary)] px-3 py-2">
-      <div className="mb-2 flex items-center gap-2 text-xs text-[var(--nim-text-muted)]">
+      <button
+        type="button"
+        onClick={() => setIsExpanded(v => !v)}
+        className="flex w-full items-center gap-2 text-left text-xs text-[var(--nim-text-muted)] hover:text-[var(--nim-text)]"
+        aria-expanded={isExpanded}
+      >
+        <MaterialSymbol
+          icon="chevron_right"
+          size={14}
+          className={`shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+        />
         <MaterialSymbol icon="notification_important" size={14} />
-        <span className="font-medium uppercase tracking-[0.08em]">System Reminder</span>
+        <span className="font-medium uppercase tracking-[0.08em]">{label}</span>
         <span className="ml-auto text-[10px] text-[var(--nim-text-faint)]">
           {formatMessageTime(message.createdAt?.getTime() ?? 0)}
         </span>
-      </div>
-      <p className="m-0 text-[0.875rem] leading-relaxed text-[var(--nim-text-muted)] whitespace-normal break-words">
-        {content}
-      </p>
+      </button>
+      {isExpanded && (
+        <p className="m-0 mt-2 text-[0.875rem] leading-relaxed text-[var(--nim-text-muted)] whitespace-normal break-words">
+          {content}
+        </p>
+      )}
     </div>
   );
 };

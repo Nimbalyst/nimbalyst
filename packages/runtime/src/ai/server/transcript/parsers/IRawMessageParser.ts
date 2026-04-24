@@ -59,6 +59,8 @@ export interface SystemMessageDescriptor {
   createdAt?: Date;
   /** Marks an authentication failure so the UI can render the login widget. */
   isAuthError?: boolean;
+  /** Classification for system-reminder messages (e.g. `session_naming`). */
+  reminderKind?: string;
 }
 
 export interface ToolCallStartedDescriptor {

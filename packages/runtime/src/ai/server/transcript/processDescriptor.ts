@@ -41,6 +41,7 @@ export async function processDescriptor(
         searchable: desc.searchable,
         createdAt: desc.createdAt,
         isAuthError: desc.isAuthError,
+        reminderKind: desc.reminderKind,
       });
     }
 

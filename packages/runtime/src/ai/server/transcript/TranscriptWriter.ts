@@ -93,6 +93,7 @@ export class TranscriptWriter {
       systemType?: SystemMessagePayload['systemType'];
       statusCode?: string;
       isAuthError?: boolean;
+      reminderKind?: string;
       searchable?: boolean;
       createdAt?: Date;
     },
@@ -101,6 +102,7 @@ export class TranscriptWriter {
       systemType: options?.systemType ?? 'status',
       ...(options?.statusCode ? { statusCode: options.statusCode } : {}),
       ...(options?.isAuthError ? { isAuthError: true } : {}),
+      ...(options?.reminderKind ? { reminderKind: options.reminderKind } : {}),
     };
 
     return this.insertEvent(sessionId, {

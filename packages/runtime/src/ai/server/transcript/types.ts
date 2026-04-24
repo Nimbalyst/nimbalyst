@@ -46,6 +46,11 @@ export interface SystemMessagePayload {
   statusCode?: string;
   /** Marks an authentication failure so the UI can render the login widget. */
   isAuthError?: boolean;
+  /**
+   * Classification for system-reminder messages (e.g. `session_naming`).
+   * Lets the UI pick a friendlier label than the raw reminder body.
+   */
+  reminderKind?: string;
 }
 
 export interface ToolCallPayload {

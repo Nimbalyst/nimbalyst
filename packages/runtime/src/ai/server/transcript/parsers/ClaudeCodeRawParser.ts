@@ -85,6 +85,7 @@ export class ClaudeCodeRawParser implements IRawMessageParser {
             type: 'system_message',
             text: parsed.prompt,
             systemType: 'status',
+            reminderKind: this.extractReminderKind(msg.metadata),
             createdAt: msg.createdAt,
           });
         } else {
@@ -113,6 +114,7 @@ export class ClaudeCodeRawParser implements IRawMessageParser {
               type: 'system_message',
               text: content,
               systemType: 'status',
+              reminderKind: this.extractReminderKind(msg.metadata),
               createdAt: msg.createdAt,
             });
           } else {
@@ -133,6 +135,7 @@ export class ClaudeCodeRawParser implements IRawMessageParser {
             type: 'system_message',
             text: content,
             systemType: 'status',
+            reminderKind: this.extractReminderKind(msg.metadata),
             createdAt: msg.createdAt,
           });
         } else {
@@ -441,5 +444,10 @@ export class ClaudeCodeRawParser implements IRawMessageParser {
       metadata?.promptType === 'system_reminder' ||
       /<SYSTEM_REMINDER>[\s\S]*<\/SYSTEM_REMINDER>/.test(content)
     );
+  }
+
+  private extractReminderKind(metadata?: Record<string, unknown>): string | undefined {
+    const kind = metadata?.reminderKind;
+    return typeof kind === 'string' ? kind : undefined;
   }
 }
