@@ -371,4 +371,35 @@ describe('TranscriptProjector', () => {
     expect(vm.messages[0].text).toBe('Session initialized');
     expect(vm.messages[0].systemMessage!.systemType).toBe('init');
   });
+
+  it('surfaces isAuthError from system_message payload', () => {
+    const events: TranscriptEvent[] = [
+      makeEvent({
+        eventType: 'system_message',
+        searchableText: 'Authentication failed. Please log in to continue.',
+        payload: { systemType: 'error', isAuthError: true },
+      }),
+    ];
+
+    const vm = TranscriptProjector.project(events);
+
+    expect(vm.messages).toHaveLength(1);
+    expect(vm.messages[0].isError).toBe(true);
+    expect(vm.messages[0].isAuthError).toBe(true);
+  });
+
+  it('leaves isAuthError undefined for non-auth error system messages', () => {
+    const events: TranscriptEvent[] = [
+      makeEvent({
+        eventType: 'system_message',
+        searchableText: 'Rate limit exceeded',
+        payload: { systemType: 'error' },
+      }),
+    ];
+
+    const vm = TranscriptProjector.project(events);
+
+    expect(vm.messages[0].isError).toBe(true);
+    expect(vm.messages[0].isAuthError).toBeUndefined();
+  });
 });

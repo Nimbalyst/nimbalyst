@@ -191,6 +191,9 @@ function projectEvent(
       if (p.systemType === 'error') {
         base.isError = true;
       }
+      if (p.isAuthError) {
+        base.isAuthError = true;
+      }
       break;
     }
     case 'tool_call': {

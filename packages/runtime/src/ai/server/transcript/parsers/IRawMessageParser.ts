@@ -57,6 +57,8 @@ export interface SystemMessageDescriptor {
   systemType?: 'status' | 'slash_command' | 'error' | 'init';
   searchable?: boolean;
   createdAt?: Date;
+  /** Marks an authentication failure so the UI can render the login widget. */
+  isAuthError?: boolean;
 }
 
 export interface ToolCallStartedDescriptor {

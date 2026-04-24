@@ -92,6 +92,7 @@ export class TranscriptWriter {
     options?: {
       systemType?: SystemMessagePayload['systemType'];
       statusCode?: string;
+      isAuthError?: boolean;
       searchable?: boolean;
       createdAt?: Date;
     },
@@ -99,6 +100,7 @@ export class TranscriptWriter {
     const payload: SystemMessagePayload = {
       systemType: options?.systemType ?? 'status',
       ...(options?.statusCode ? { statusCode: options.statusCode } : {}),
+      ...(options?.isAuthError ? { isAuthError: true } : {}),
     };
 
     return this.insertEvent(sessionId, {

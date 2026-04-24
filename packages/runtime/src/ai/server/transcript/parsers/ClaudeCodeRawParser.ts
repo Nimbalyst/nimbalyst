@@ -212,11 +212,14 @@ export class ClaudeCodeRawParser implements IRawMessageParser {
       } else if (parsed.type === 'error' && parsed.error) {
         const errorContent =
           typeof parsed.error === 'string' ? parsed.error : JSON.stringify(parsed.error);
+        const isAuthError =
+          parsed.is_auth_error === true || msg.metadata?.isAuthError === true;
         descriptors.push({
           type: 'system_message',
           text: errorContent,
           systemType: 'error',
           createdAt: msg.createdAt,
+          ...(isAuthError ? { isAuthError: true } : {}),
         });
       } else if (
         parsed.type === 'result'

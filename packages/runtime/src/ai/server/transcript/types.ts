@@ -44,6 +44,8 @@ export interface AssistantMessagePayload {
 export interface SystemMessagePayload {
   systemType: 'status' | 'slash_command' | 'error' | 'init';
   statusCode?: string;
+  /** Marks an authentication failure so the UI can render the login widget. */
+  isAuthError?: boolean;
 }
 
 export interface ToolCallPayload {

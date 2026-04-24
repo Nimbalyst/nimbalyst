@@ -340,6 +340,45 @@ describe('ClaudeCodeRawParser', () => {
         text: 'Something went wrong',
         systemType: 'error',
       });
+      expect((descriptors[0] as any).isAuthError).toBeUndefined();
+    });
+
+    it('marks auth errors from parsed is_auth_error flag', async () => {
+      const parser = new ClaudeCodeRawParser();
+      const msg = makeRawMessage({
+        content: JSON.stringify({
+          type: 'error',
+          error: 'Invalid API key',
+          is_auth_error: true,
+        }),
+      });
+
+      const [descriptor] = await parser.parseMessage(msg, makeContext());
+
+      expect(descriptor).toMatchObject({
+        type: 'system_message',
+        systemType: 'error',
+        isAuthError: true,
+      });
+    });
+
+    it('marks auth errors from metadata.isAuthError', async () => {
+      const parser = new ClaudeCodeRawParser();
+      const msg = makeRawMessage({
+        content: JSON.stringify({
+          type: 'error',
+          error: 'Authentication required',
+        }),
+        metadata: { isAuthError: true },
+      });
+
+      const [descriptor] = await parser.parseMessage(msg, makeContext());
+
+      expect(descriptor).toMatchObject({
+        type: 'system_message',
+        systemType: 'error',
+        isAuthError: true,
+      });
     });
 
     it('parses unknown slash command result as assistant message', async () => {

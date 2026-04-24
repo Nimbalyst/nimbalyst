@@ -40,6 +40,7 @@ export async function processDescriptor(
         systemType: desc.systemType,
         searchable: desc.searchable,
         createdAt: desc.createdAt,
+        isAuthError: desc.isAuthError,
       });
     }
 
@@ -160,7 +161,7 @@ export async function processDescriptor(
 }
 
 export function selectRawParser(provider: string): 'codex' | 'claude-code' {
-  if (provider === 'openai-codex' || provider === 'open-code') {
+  if (provider === 'openai-codex' || provider === 'open-code' || provider === 'copilot-cli') {
     return 'codex';
   }
   return 'claude-code';
