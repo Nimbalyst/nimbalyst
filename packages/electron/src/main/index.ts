@@ -93,7 +93,7 @@ import { codexUsageService } from './services/CodexUsageService';
 import { registerExtensionHandlers, getClaudePluginPaths, initializeExtensionFileTypes } from './ipc/ExtensionHandlers';
 import { queueMarketplaceInstallRequest, registerExtensionMarketplaceHandlers, runExtensionAutoUpdate } from './ipc/ExtensionMarketplaceHandlers';
 import { getRegisteredExtensions } from './extensions/RegisteredFileTypes';
-import { ClaudeCodeProvider, OpenAICodexProvider, OpenCodeProvider } from '@nimbalyst/runtime/ai/server';
+import { ClaudeCodeProvider, OpenAICodexProvider, OpenCodeProvider, CopilotCLIProvider } from '@nimbalyst/runtime/ai/server';
 import { isMCPServerEnabledForProvider, MCP_PROVIDER_IDS } from '@nimbalyst/runtime/types/MCPServerConfig';
 import type { MCPServerConfig } from '@nimbalyst/runtime/types/MCPServerConfig';
 import { logger, overrideConsole } from './utils/logger';
@@ -1159,6 +1159,28 @@ app.whenReady().then(async () => {
         }
         return enabledServers;
     });
+    CopilotCLIProvider.setMCPConfigLoader(async (workspacePath?: string) => {
+        if (!mcpConfigService) {
+            throw new Error('MCP config service not initialized');
+        }
+        const mergedConfig = await mcpConfigService.getMergedConfig(workspacePath);
+        const allServers = mergedConfig.mcpServers || {};
+
+        const enabledServers: Record<string, any> = {};
+        for (const [name, config] of Object.entries(allServers)) {
+            if (isMCPServerEnabledForProvider(config as MCPServerConfig, MCP_PROVIDER_IDS.COPILOT)) {
+                const isAuthorized = await mcpConfigService.isOAuthAuthorized(config as MCPServerConfig, {
+                    useMcpRemoteForNativeOAuth: true,
+                });
+                if (!isAuthorized) {
+                    logger.mcp.info(`[MCP] Skipping unauthorized OAuth server for Copilot: ${name}`);
+                    continue;
+                }
+                enabledServers[name] = mcpConfigService.processServerConfigForRuntime(config as any);
+            }
+        }
+        return enabledServers;
+    });
 
     // Inject extension plugins loader into ClaudeCodeProvider
     // This allows extensions to provide Claude SDK plugins with custom commands/agents
@@ -1190,11 +1212,17 @@ app.whenReady().then(async () => {
     ClaudeCodeProvider.setShellEnvironmentLoader(() => getShellEnvironment());
     OpenAICodexProvider.setShellEnvironmentLoader(() => getShellEnvironment());
     OpenCodeProvider.setShellEnvironmentLoader(() => getShellEnvironment());
+    CopilotCLIProvider.setShellEnvironmentLoader(() => getShellEnvironment());
 
     // Inject enhanced PATH loader so agents can access system tools
-    // (docker, homebrew, nvm, etc.) that are missing from Electron's GUI PATH
+    // (docker, homebrew, nvm, etc.) that are missing from Electron's GUI PATH.
+    // For Claude Code this is critical: the SDK spawns stdio MCP subprocesses
+    // (`npx`, `uvx`, ...) using options.env.PATH and fails with "Executable not
+    // found in $PATH: npx" otherwise when Nimbalyst is launched from Dock.
+    ClaudeCodeProvider.setEnhancedPathLoader(() => getEnhancedPath());
     OpenAICodexProvider.setEnhancedPathLoader(() => getEnhancedPath());
     OpenCodeProvider.setEnhancedPathLoader(() => getEnhancedPath());
+    CopilotCLIProvider.setEnhancedPathLoader(() => getEnhancedPath());
 
     // Inject SDK module loader for packaged builds where dynamic import('@openai/codex-sdk')
     // can't resolve the package from within app.asar.
@@ -1364,6 +1392,7 @@ app.whenReady().then(async () => {
         ClaudeCodeProvider.setMcpServerPort(result.port);
         OpenAICodexProvider.setMcpServerPort(result.port);
         OpenCodeProvider.setMcpServerPort(result.port);
+        CopilotCLIProvider.setMcpServerPort(result.port);
     } catch (error) {
             logger.mcp.error('Failed to start MCP SSE server:', error);
     }
@@ -1395,6 +1424,7 @@ app.whenReady().then(async () => {
         ClaudeCodeProvider.setSessionContextServerPort(result.port);
         OpenAICodexProvider.setSessionContextServerPort(result.port);
         OpenCodeProvider.setSessionContextServerPort(result.port);
+        CopilotCLIProvider.setSessionContextServerPort(result.port);
     } catch (error) {
         logger.mcp.error('Failed to start session context MCP server:', error);
     }
@@ -2088,6 +2118,7 @@ app.on('before-quit', async (event) => {
         ClaudeCodeProvider.setSessionContextServerPort(null);
         OpenAICodexProvider.setSessionContextServerPort(null);
         OpenCodeProvider.setSessionContextServerPort(null);
+        CopilotCLIProvider.setSessionContextServerPort(null);
         console.log('[QUIT] Session context MCP server shutdown complete');
     } catch (error) {
         console.error('[QUIT] Error closing session context MCP server:', error);

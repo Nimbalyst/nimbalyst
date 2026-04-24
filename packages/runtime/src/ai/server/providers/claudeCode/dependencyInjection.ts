@@ -77,6 +77,12 @@ export const ClaudeCodeDeps = {
   // Ensures env vars are available even when launched from Dock/Finder
   shellEnvironmentLoader: null as ShellEnvironmentLoader | null,
 
+  // Returns a PATH string that includes common CLI installation locations
+  // (Homebrew, nvm, volta, etc.). The Claude Code SDK spawns stdio MCP
+  // subprocesses (`npx`, `uvx`, `docker`) using options.env.PATH, and
+  // Dock/Finder-launched Electron has a minimal PATH that omits those dirs.
+  enhancedPathLoader: null as (() => string) | null,
+
   // Returns additional directories Claude should have access to based on workspace context
   // (e.g., SDK docs when working on an extension project)
   additionalDirectoriesLoader: null as AdditionalDirectoriesLoader | null,
@@ -158,6 +164,10 @@ export const ClaudeCodeDeps = {
 
   setShellEnvironmentLoader(loader: ShellEnvironmentLoader | null): void {
     this.shellEnvironmentLoader = loader;
+  },
+
+  setEnhancedPathLoader(loader: (() => string) | null): void {
+    this.enhancedPathLoader = loader;
   },
 
   setAdditionalDirectoriesLoader(loader: AdditionalDirectoriesLoader | null): void {

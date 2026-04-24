@@ -216,6 +216,17 @@ export async function buildSdkOptions(
     }),
   };
 
+  // NIM-376: Overlay enhanced PATH so the Claude Code SDK can find stdio MCP
+  // subprocess binaries (`npx`, `uvx`, `docker`, ...) when Nimbalyst is launched
+  // from Dock/Finder. GUI-launched Electron on macOS has a minimal PATH
+  // (/usr/bin:/bin:/usr/sbin:/sbin) that doesn't include Homebrew/nvm/volta,
+  // and CLIManager's cachedShellEnvironment deliberately strips PATH so
+  // shellEnv can't contribute it either.
+  const enhancedPath = ClaudeCodeDeps.enhancedPathLoader?.();
+  if (enhancedPath) {
+    env.PATH = enhancedPath;
+  }
+
   // NIM-838: On Windows, force HOME to mirror USERPROFILE so the native binary
   // resolves the same ~/.claude root on every spawn, regardless of whether its
   // internal logic prefers HOME (Unix-style) or USERPROFILE. process.env on
