@@ -174,19 +174,21 @@ interface InstallOptions {
   localInstall?: boolean;
 }
 
-type CLITool = 'claude-code' | 'openai-codex' | 'opencode';
+type CLITool = 'claude-code' | 'openai-codex' | 'opencode' | 'copilot-cli';
 
 // CLI commands and their npm packages
 const CLI_PACKAGES: Record<CLITool, string> = {
   'claude-code': '@anthropic-ai/claude-agent-sdk',  // Claude Agent SDK (renamed from claude-code)
   'openai-codex': '@openai/codex',                   // OpenAI Codex package (actual on npm!)
   'opencode': 'opencode-ai',                           // OpenCode open source agent (npm: opencode-ai, binary: opencode)
+  'copilot-cli': '@github/copilot',                       // GitHub Copilot CLI (npm: @github/copilot, binary: copilot)
 };
 
 const CLI_COMMANDS: Record<CLITool, string> = {
   'claude-code': 'claude',     // The actual command once installed
   'openai-codex': 'codex',     // The actual command once installed
   'opencode': 'opencode',      // The actual command once installed
+  'copilot-cli': 'copilot',    // The actual command once installed
 };
 
 export class CLIManager {

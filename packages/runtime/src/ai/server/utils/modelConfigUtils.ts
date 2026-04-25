@@ -22,8 +22,13 @@ export function omitModelsField<T extends { models?: any }>(
 }
 
 /**
+ * Providers that use dynamic model discovery and should not persist a `models` field.
+ */
+const DYNAMIC_MODEL_PROVIDERS = ['openai-codex', 'copilot-cli'] as const;
+
+/**
  * Normalizes provider configurations by removing the `models` field from
- * the 'openai-codex' provider if present.
+ * providers that use dynamic model discovery.
  */
 export function normalizeCodexProviderConfig<T extends Record<string, any>>(
   providers: T
@@ -32,15 +37,15 @@ export function normalizeCodexProviderConfig<T extends Record<string, any>>(
     return providers;
   }
 
-  const codexConfig = providers['openai-codex'];
-  if (!codexConfig || typeof codexConfig !== 'object' || !('models' in codexConfig)) {
-    return providers;
+  let result = providers;
+  for (const providerId of DYNAMIC_MODEL_PROVIDERS) {
+    const config = result[providerId];
+    if (config && typeof config === 'object' && 'models' in config) {
+      result = { ...result, [providerId]: omitModelsField(config) } as T;
+    }
   }
 
-  return {
-    ...providers,
-    'openai-codex': omitModelsField(codexConfig),
-  } as T;
+  return result;
 }
 
 /**

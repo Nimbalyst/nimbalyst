@@ -73,6 +73,12 @@ export const ALPHA_FEATURES: readonly AlphaFeatureDefinition[] = [
     description: 'Enable meta-agent sessions that orchestrate and delegate work to child sessions.',
     icon: 'hub',
   },
+  {
+    tag: 'copilot-cli',
+    name: 'GitHub Copilot Agent',
+    description: 'Enable GitHub Copilot CLI as an agent provider via ACP protocol.',
+    icon: 'code',
+  },
 ] as const;
 
 /**

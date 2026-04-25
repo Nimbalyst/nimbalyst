@@ -161,9 +161,15 @@ export async function processDescriptor(
   }
 }
 
-export function selectRawParser(provider: string): 'codex' | 'claude-code' {
-  if (provider === 'openai-codex' || provider === 'open-code' || provider === 'copilot-cli') {
+export function selectRawParser(provider: string): 'codex' | 'copilot' | 'claude-code' | 'opencode' {
+  if (provider === 'copilot-cli') {
+    return 'copilot';
+  }
+  if (provider === 'openai-codex') {
     return 'codex';
+  }
+  if (provider === 'open-code') {
+    return 'opencode';
   }
   return 'claude-code';
 }

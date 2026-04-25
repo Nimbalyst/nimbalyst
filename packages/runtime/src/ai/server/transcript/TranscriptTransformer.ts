@@ -19,6 +19,8 @@ import { TranscriptWriter } from './TranscriptWriter';
 import type { ITranscriptEventStore, TranscriptEvent } from './types';
 import { ClaudeCodeRawParser } from './parsers/ClaudeCodeRawParser';
 import { CodexRawParser } from './parsers/CodexRawParser';
+import { CopilotRawParser } from './parsers/CopilotRawParser';
+import { OpenCodeRawParser } from './parsers/OpenCodeRawParser';
 import type {
   IRawMessageParser,
   ParseContext,
@@ -365,8 +367,14 @@ export class TranscriptTransformer {
   // ---------------------------------------------------------------------------
 
   private createParser(provider: string): IRawMessageParser {
-    if (provider === 'openai-codex' || provider === 'open-code') {
+    if (provider === 'copilot-cli') {
+      return new CopilotRawParser();
+    }
+    if (provider === 'openai-codex') {
       return new CodexRawParser();
+    }
+    if (provider === 'open-code') {
+      return new OpenCodeRawParser();
     }
     return new ClaudeCodeRawParser();
   }

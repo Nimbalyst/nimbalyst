@@ -228,4 +228,5 @@ export const DEFAULT_MODELS = {
   'openai-codex': 'openai-codex:gpt-5.4',
   lmstudio: 'lmstudio:local-model',
   opencode: 'opencode:default',
+  'copilot-cli': 'copilot-cli:default',
 };

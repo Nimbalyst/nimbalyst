@@ -260,6 +260,15 @@ export async function startMcpHttpServer(
   return { httpServer, port };
 }
 
+/**
+ * Sanitize a tool name so it matches the Claude API pattern ^[a-zA-Z0-9_-]{1,128}$.
+ * Extension tools use dots as namespace separators (e.g. "automations.list"),
+ * which Claude API rejects. Replace dots with underscores.
+ */
+function sanitizeToolName(name: string): string {
+  return name.replace(/\./g, '_');
+}
+
 // ---- MCP Server Factory ----
 
 function createSharedMcpServer(
@@ -296,7 +305,7 @@ function createSharedMcpServer(
       currentFilePath
     );
     const extensionToolSchemas = extensionTools.map((tool) => ({
-      name: tool.name,
+      name: sanitizeToolName(tool.name),
       description: tool.description,
       inputSchema: tool.inputSchema,
     }));

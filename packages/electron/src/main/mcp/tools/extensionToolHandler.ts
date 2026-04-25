@@ -23,7 +23,21 @@ export async function handleExtensionTool(
     currentDocState?.filePath
   );
 
-  const extensionTool = extensionTools.find((t) => t.name === toolName);
+  // Tool names may have been sanitized (dots replaced with underscores) for
+  // providers that don't accept dots. Try the incoming name first, then
+  // fall back to reversing common sanitization patterns.
+  let extensionTool = extensionTools.find((t) => t.name === toolName);
+  if (!extensionTool) {
+    // Try matching with dots restored (e.g., "automations_list" -> "automations.list")
+    // Extension tools use "prefix.action" format, so try replacing the first
+    // underscore after a namespace-like prefix with a dot
+    for (const tool of extensionTools) {
+      if (tool.name.includes('.') && tool.name.replace(/\./g, '_') === toolName) {
+        extensionTool = tool;
+        break;
+      }
+    }
+  }
   if (!extensionTool) {
     throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${originalName}`);
   }
@@ -171,9 +185,11 @@ export async function handleExtensionTool(
       });
     });
 
-    // Send IPC to renderer to execute the tool
+    // Send IPC to renderer to execute the tool.
+    // Use the extension's original name (may contain dots) since the
+    // renderer matches against the name defined in extension code.
     targetWindow.webContents.send("mcp:executeExtensionTool", {
-      toolName,
+      toolName: extensionTool.name,
       args: args || {},
       resultChannel,
       context: {

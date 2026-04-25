@@ -66,6 +66,10 @@ export class ModelRegistry {
           const { LMStudioProvider } = await import('./providers/LMStudioProvider');
           models = await LMStudioProvider.getModels(baseUrl || 'http://127.0.0.1:1234');
           break;
+        case 'copilot-cli':
+          const { CopilotCLIProvider } = await import('./providers/CopilotCLIProvider');
+          models = await CopilotCLIProvider.getModels();
+          break;
         default:
           assertExhaustiveProvider(provider);
       }
@@ -102,6 +106,7 @@ export class ModelRegistry {
     if (shouldFetch('openai-codex')) promises.push(this.getModelsForProvider('openai-codex', apiKeys['openai']));
     if (shouldFetch('opencode')) promises.push(this.getModelsForProvider('opencode'));
     if (shouldFetch('lmstudio')) promises.push(this.getModelsForProvider('lmstudio', undefined, apiKeys['lmstudio_url']));
+    if (shouldFetch('copilot-cli')) promises.push(this.getModelsForProvider('copilot-cli'));
 
     const results = await Promise.allSettled(promises);
 
@@ -137,6 +142,9 @@ export class ModelRegistry {
       case 'lmstudio':
         const { LMStudioProvider } = await import('./providers/LMStudioProvider');
         return LMStudioProvider.getDefaultModel();
+      case 'copilot-cli':
+        const { CopilotCLIProvider: CLP } = await import('./providers/CopilotCLIProvider');
+        return CLP.getDefaultModel();
       default:
         assertExhaustiveProvider(provider);
     }

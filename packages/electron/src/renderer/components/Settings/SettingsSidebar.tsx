@@ -12,6 +12,7 @@ export type SettingsCategory =
   | 'openai'
   | 'openai-codex'
   | 'opencode'
+  | 'copilot-cli'
   | 'lmstudio'
   | 'notifications'
   | 'voice-mode'
@@ -60,7 +61,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
 }) => {
   // Get release channel and alpha/beta feature flags from Jotai atoms
   const releaseChannel = useAtomValue(releaseChannelAtom);
-  const alphaFeatures = useAlphaFeatures(['voice-mode', 'collaboration', 'opencode']);
+  const alphaFeatures = useAlphaFeatures(['voice-mode', 'collaboration', 'opencode', 'copilot-cli']);
   const getStatusDot = (providerId: string): 'success' | 'warning' | 'error' | undefined => {
     const status = providerStatus[providerId];
     if (!status) return undefined;
@@ -138,6 +139,13 @@ Best for complex coding tasks.`,
           icon: getProviderIcon('opencode', { size: 16 }),
           statusDot: getStatusDot('opencode'),
           hidden: !alphaFeatures['opencode'],
+        },
+        {
+          id: 'copilot-cli',
+          name: 'GitHub Copilot',
+          icon: <MaterialSymbol icon="terminal" size={16} />,
+          statusDot: getStatusDot('copilot-cli'),
+          hidden: !alphaFeatures['copilot-cli'],
         },
       ],
     },

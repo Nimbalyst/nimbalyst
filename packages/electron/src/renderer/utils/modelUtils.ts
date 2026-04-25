@@ -149,6 +149,7 @@ export function getProviderDisplayName(provider: string): string {
     case 'claude-code': return 'Claude Agent';
     case 'openai': return 'OpenAI';
     case 'lmstudio': return 'LMStudio';
+    case 'copilot-cli': return 'GitHub Copilot';
     default: return provider;
   }
 }

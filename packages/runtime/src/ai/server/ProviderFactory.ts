@@ -9,6 +9,7 @@ import { OpenAIProvider } from './providers/OpenAIProvider';
 import { OpenAICodexProvider } from './providers/OpenAICodexProvider';
 import { LMStudioProvider } from './providers/LMStudioProvider';
 import { OpenCodeProvider } from './providers/OpenCodeProvider';
+import { CopilotCLIProvider } from './providers/CopilotCLIProvider';
 import { ProviderConfig, AIProviderType, assertExhaustiveProvider } from './types';
 
 export class ProviderFactory {
@@ -66,6 +67,9 @@ export class ProviderFactory {
         break;
       case 'lmstudio':
         provider = new LMStudioProvider();
+        break;
+      case 'copilot-cli':
+        provider = new CopilotCLIProvider();
         break;
       default:
         assertExhaustiveProvider(type);

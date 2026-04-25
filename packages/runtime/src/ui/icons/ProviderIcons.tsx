@@ -6,6 +6,14 @@ interface IconProps {
   className?: string;
 }
 
+const PROVIDER_ICON_MAP: Record<string, string> = {
+  'copilot-cli': 'terminal',
+};
+
+function resolveProviderIcon(provider: string): string {
+  return PROVIDER_ICON_MAP[provider] ?? provider;
+}
+
 /**
  * Convenience component for rendering provider icons.
  * Uses MaterialSymbol under the hood - just pass the provider name.
@@ -15,7 +23,7 @@ export const ProviderIcon: React.FC<{ provider: string } & IconProps> = ({
   size = 20,
   className = ''
 }) => {
-  return <MaterialSymbol icon={provider} size={size} className={className} />;
+  return <MaterialSymbol icon={resolveProviderIcon(provider)} size={size} className={className} />;
 };
 
 /**
@@ -23,5 +31,5 @@ export const ProviderIcon: React.FC<{ provider: string } & IconProps> = ({
  * Uses MaterialSymbol under the hood.
  */
 export const getProviderIcon = (provider: string, props?: IconProps) => {
-  return <MaterialSymbol icon={provider} size={props?.size} className={props?.className} />;
+  return <MaterialSymbol icon={resolveProviderIcon(provider)} size={props?.size} className={props?.className} />;
 };

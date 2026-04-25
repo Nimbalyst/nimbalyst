@@ -1109,6 +1109,7 @@ const defaultProviders: Record<string, ProviderConfig> = {
   openai: { enabled: false, testStatus: 'idle' },
   'openai-codex': { enabled: false, testStatus: 'idle', installStatus: 'not-installed' },
   opencode: { enabled: false, testStatus: 'idle', installStatus: 'not-installed' },
+  'copilot-cli': { enabled: false, testStatus: 'idle', installStatus: 'not-installed' },
   lmstudio: { enabled: false, baseUrl: 'http://127.0.0.1:8234', testStatus: 'idle' },
 };
 

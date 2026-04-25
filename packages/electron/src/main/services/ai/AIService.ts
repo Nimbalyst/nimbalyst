@@ -1983,6 +1983,9 @@ export class AIService {
         case 'opencode':
           // OpenCode uses its own config, API key is optional
           break;
+        case 'copilot-cli':
+          // Copilot uses its own CLI auth (copilot auth login), no API key needed
+          break;
         case 'lmstudio':
           // LMStudio doesn't need an API key, just the base URL
           break;
@@ -2347,6 +2350,10 @@ export class AIService {
             break;
           case 'opencode':
             // OpenCode uses its own config, API key is optional
+            requiresApiKey = false;
+            break;
+          case 'copilot-cli':
+            // Copilot uses its own CLI auth, no API key needed
             requiresApiKey = false;
             break;
           case 'lmstudio':
@@ -5333,6 +5340,10 @@ export class AIService {
           // OpenCode: API key is optional, uses its own config
           apiKey = apiKeys['opencode'] || 'not-required';
           break;
+        case 'copilot-cli':
+          // Copilot uses its own CLI auth, no API key needed
+          apiKey = 'not-required';
+          break;
         case 'lmstudio':
           // LMStudio doesn't need an API key, just test the connection
           apiKey = 'not-required';
@@ -5605,6 +5616,10 @@ export class AIService {
         'opencode': {
           // OpenCode uses its own config, API key is optional
           enabled: providerSettings['opencode']?.enabled === true,
+        },
+        'copilot-cli': {
+          // Copilot uses its own CLI auth (copilot auth login), no API key needed
+          enabled: providerSettings['copilot-cli']?.enabled === true,
         },
         'lmstudio': {
           enabled: providerSettings['lmstudio']?.enabled === true,

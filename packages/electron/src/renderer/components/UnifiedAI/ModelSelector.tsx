@@ -125,6 +125,7 @@ export function ModelSelector({
       case 'openai':
       case 'openai-codex':
       case 'opencode':
+      case 'copilot-cli':
       case 'lmstudio':
         return provider;
       default:
@@ -165,6 +166,7 @@ export function ModelSelector({
       case 'openai': return 'OpenAI';
       case 'openai-codex': return 'OpenAI Codex';
       case 'opencode': return 'OpenCode';
+      case 'copilot-cli': return 'GitHub Copilot';
       case 'lmstudio': return 'LMStudio';
       default: return provider;
     }
