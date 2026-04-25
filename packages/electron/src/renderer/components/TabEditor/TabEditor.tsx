@@ -204,7 +204,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
   // Check if the custom editor supports source mode (from registry)
   const customEditorSupportsSourceMode = customEditorRegistration?.supportsSourceMode || false;
-  const customEditorSupportsDiffMode = customEditorRegistration?.supportsDiffMode !== false;
+  const customEditorSupportsDiffMode = customEditorRegistration?.supportsDiffMode === true;
   const customEditorShowsDocumentHeader = customEditorRegistration?.showDocumentHeader !== false;
 
   // Source mode state - unified for both markdown and custom editors

@@ -352,7 +352,7 @@ export interface CustomEditorContribution {
 
   /**
    * Whether this editor supports the host's AI diff review mode.
-   * Defaults to true when omitted for backward compatibility.
+   * Defaults to false - must be explicitly set to true to enable.
    */
   supportsDiffMode?: boolean;
 
