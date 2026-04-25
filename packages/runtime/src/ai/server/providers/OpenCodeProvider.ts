@@ -323,15 +323,22 @@ export class OpenCodeProvider extends BaseAgentProvider {
           throw new Error('Operation cancelled');
         }
 
-        // Store raw events for persistence
+        // Store raw OpenCode SSE events for transcript reconstruction.
+        // Stored content is the bare SSE event { type, properties } -- no
+        // outer wrapper -- so OpenCodeRawParser can JSON.parse it directly.
         if (sessionId && event.type === 'raw_event') {
-          const serialized = safeJSONSerialize(event.metadata);
-          const serializedStr = typeof serialized === 'string' ? serialized : JSON.stringify(serialized);
-          await this.logAgentMessageBestEffort(sessionId, 'output', serializedStr, {
-            metadata: { eventType: 'raw_event', openCodeProvider: true },
-            hidden: true,
-            searchable: false,
-          });
+          const rawSseEvent = (event.metadata as { rawEvent?: unknown } | undefined)?.rawEvent;
+          if (rawSseEvent !== undefined) {
+            const { content } = safeJSONSerialize(rawSseEvent);
+            const sseEventType = typeof (rawSseEvent as { type?: unknown }).type === 'string'
+              ? (rawSseEvent as { type: string }).type
+              : 'unknown';
+            await this.logAgentMessageBestEffort(sessionId, 'output', content, {
+              metadata: { eventType: sseEventType, openCodeProvider: true },
+              hidden: true,
+              searchable: false,
+            });
+          }
         }
 
         for (const item of transcriptAdapter.processEvent(event)) {
@@ -396,10 +403,10 @@ export class OpenCodeProvider extends BaseAgentProvider {
         }
       }
 
-      // Log output
-      if (sessionId && fullText) {
-        await this.logAgentMessageBestEffort(sessionId, 'output', fullText);
-      }
+      // No end-of-turn fullText write: canonical events derived from the
+      // stored raw SSE events (via OpenCodeRawParser) are the source of truth
+      // for transcript content. The fullText accumulator is kept only for
+      // OS notification body content, not for persistence.
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

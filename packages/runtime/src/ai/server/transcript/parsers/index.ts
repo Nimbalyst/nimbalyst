@@ -16,3 +16,4 @@ export type {
 } from './IRawMessageParser';
 export { ClaudeCodeRawParser } from './ClaudeCodeRawParser';
 export { CodexRawParser } from './CodexRawParser';
+export { OpenCodeRawParser } from './OpenCodeRawParser';

@@ -373,7 +373,7 @@ export class TranscriptTransformer {
     if (provider === 'openai-codex') {
       return new CodexRawParser();
     }
-    if (provider === 'open-code') {
+    if (provider === 'opencode') {
       return new OpenCodeRawParser();
     }
     return new ClaudeCodeRawParser();

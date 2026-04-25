@@ -386,6 +386,16 @@ export class OpenCodeSDKProtocol implements AgentProtocol {
           throw new Error('Operation cancelled');
         }
 
+        // The OpenCode SDK's SSE stream is server-wide -- it emits events
+        // for every active session on the local server. Skip anything that
+        // belongs to a different session so we don't bleed cross-session
+        // events into this session's raw log. Events without a session ID
+        // (e.g. server.connected) are treated as session-agnostic and kept.
+        const eventSessionId = extractEventSessionId(event);
+        if (eventSessionId && eventSessionId !== sessionId) {
+          continue;
+        }
+
         // Emit raw event for persistence
         yield {
           type: 'raw_event',
@@ -461,10 +471,10 @@ export class OpenCodeSDKProtocol implements AgentProtocol {
     const events: ProtocolEvent[] = [];
     const props = event.properties || {};
 
-    // Filter events by session ID if present
-    // sessionID may be at top level (session.idle, session.error) or inside part (message.part.updated)
-    const eventSessionId = (props.sessionID as string | undefined)
-      || ((props.part as Record<string, unknown> | undefined)?.sessionID as string | undefined);
+    // Defense in depth: the streaming loop already filters cross-session
+    // events before this is called, but if a new caller forgets, we still
+    // bail out here.
+    const eventSessionId = extractEventSessionId(event);
     if (eventSessionId && eventSessionId !== targetSessionId) {
       return events;
     }
@@ -643,4 +653,32 @@ export class OpenCodeSDKProtocol implements AgentProtocol {
   private getClientIfReady(): OpenCodeClientLike | null {
     return this.client;
   }
+}
+
+// Pulls the OpenCode session ID out of an SSE event so we can route events to
+// the right session. The ID lives in different places depending on the event
+// type:
+//   - Most events:                        properties.sessionID
+//   - message.part.* events:              properties.part.sessionID
+//   - message.updated:                    properties.info.sessionID
+//   - session.updated:                    properties.info.id (the session itself)
+// Returns undefined for session-agnostic events like server.connected.
+function extractEventSessionId(event: OpenCodeSSEEvent): string | undefined {
+  const props = event.properties;
+  if (!props) return undefined;
+
+  if (typeof props.sessionID === 'string') return props.sessionID;
+
+  const part = props.part as Record<string, unknown> | undefined;
+  if (part && typeof part.sessionID === 'string') return part.sessionID;
+
+  const info = props.info as Record<string, unknown> | undefined;
+  if (info) {
+    if (typeof info.sessionID === 'string') return info.sessionID;
+    if (event.type === 'session.updated' && typeof info.id === 'string') {
+      return info.id;
+    }
+  }
+
+  return undefined;
 }

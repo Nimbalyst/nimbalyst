@@ -17,15 +17,17 @@ import { TranscriptProjector, type TranscriptViewMessage } from './TranscriptPro
 import { InMemoryTranscriptEventStore } from './InMemoryTranscriptEventStore';
 import { ClaudeCodeRawParser } from './parsers/ClaudeCodeRawParser';
 import { CodexRawParser } from './parsers/CodexRawParser';
+import { OpenCodeRawParser } from './parsers/OpenCodeRawParser';
 import type { IRawMessageParser, ParseContext } from './parsers/IRawMessageParser';
 import type { RawMessage } from './TranscriptTransformer';
 import type { TranscriptEvent } from './types';
 import { processDescriptor, selectRawParser } from './processDescriptor';
 
 function createParser(provider: string): IRawMessageParser {
-  return selectRawParser(provider) === 'codex'
-    ? new CodexRawParser()
-    : new ClaudeCodeRawParser();
+  const kind = selectRawParser(provider);
+  if (kind === 'codex') return new CodexRawParser();
+  if (kind === 'opencode') return new OpenCodeRawParser();
+  return new ClaudeCodeRawParser();
 }
 
 /**

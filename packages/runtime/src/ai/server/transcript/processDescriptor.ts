@@ -168,7 +168,7 @@ export function selectRawParser(provider: string): 'codex' | 'copilot' | 'claude
   if (provider === 'openai-codex') {
     return 'codex';
   }
-  if (provider === 'open-code') {
+  if (provider === 'opencode') {
     return 'opencode';
   }
   return 'claude-code';
