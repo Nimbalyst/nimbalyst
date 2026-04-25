@@ -195,8 +195,22 @@ public struct SessionDetailView: View {
             }
 
             // Compose bar
+            //
+            // The text binding stamps `lastLocalEditAt` synchronously inside
+            // its setter rather than waiting for `onChange(of: composeText)`
+            // to fire. SwiftUI fires onChange handlers in declaration order
+            // within a single render pass, so a GRDB self-echo arriving in
+            // the same pass as a keystroke could otherwise see a stale
+            // `lastLocalEditAt`, fail the rejection guard below, and
+            // overwrite the just-typed character.
             ComposeBar(
-                text: $composeText,
+                text: Binding(
+                    get: { composeText },
+                    set: { newValue in
+                        composeText = newValue
+                        lastLocalEditAt = Int(Date().timeIntervalSince1970 * 1000)
+                    }
+                ),
                 isExecuting: displaySession.isExecuting,
                 commands: projectCommands,
                 onSend: sendPrompt,
@@ -249,6 +263,13 @@ public struct SessionDetailView: View {
             // next local keystroke will immediately override via the debounced push.
             let draft = newDraft ?? ""
             guard draft != composeText else { return }
+            // Defense-in-depth: if the local compose already contains the
+            // incoming draft as a prefix, the user is ahead of the remote
+            // (almost always a self-echo arriving after they kept typing).
+            // Don't ever overwrite their input with a shorter prefix.
+            if !draft.isEmpty && composeText.hasPrefix(draft) && composeText.count > draft.count {
+                return
+            }
             // Reject stale drafts: if the remote draftUpdatedAt is older than our
             // last submit, this is an echo of the pre-submit draft -- ignore it.
             if let remoteTs = liveSession?.draftUpdatedAt, !draft.isEmpty, remoteTs <= lastSubmitAt {
@@ -270,10 +291,12 @@ public struct SessionDetailView: View {
             resetTranscriptLoadState()
         }
         .onChange(of: composeText) { newText in
-            // Push draft changes back to sync (debounced)
+            // Push draft changes back to sync (debounced).
+            // `lastLocalEditAt` is stamped synchronously by the TextField's
+            // binding setter above, not here, to avoid a render-order race
+            // where a self-echo could otherwise overwrite a just-typed
+            // character.
             guard !isApplyingRemoteDraft else { return }
-            // Track local edit time so we can reject stale sync echoes
-            lastLocalEditAt = Int(Date().timeIntervalSince1970 * 1000)
             draftDebounceItem?.cancel()
             let item = DispatchWorkItem { [weak appState] in
                 appState?.syncManager?.updateDraftInput(
@@ -578,7 +601,16 @@ public struct SessionDetailView: View {
                     Button {
                         copyDebugInfo(error: error)
                     } label: {
-                        Label("Copy Debug Info", systemImage: "doc.on.clipboard")
+                        Label("Copy", systemImage: "doc.on.doc")
+                            .font(.subheadline)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.secondary)
+
+                    Button {
+                        dismissLoadError()
+                    } label: {
+                        Label("Dismiss", systemImage: "xmark")
                             .font(.subheadline)
                     }
                     .buttonStyle(.bordered)
@@ -680,6 +712,12 @@ public struct SessionDetailView: View {
         resetTranscriptLoadState()
         appState.syncManager?.leaveSessionRoom()
         appState.syncManager?.joinSessionRoom(sessionId: session.id)
+    }
+
+    private func dismissLoadError() {
+        loadError = nil
+        isTranscriptReady = true
+        timeoutWorkItem?.cancel()
     }
 
     // MARK: - Copy Debug Info
