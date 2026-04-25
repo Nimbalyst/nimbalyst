@@ -63,12 +63,27 @@ function postErrorToNative(error: Error | string, context?: string): void {
   });
 }
 
+function isBenignWindowErrorMessage(message: string): boolean {
+  return message === 'ResizeObserver loop completed with undelivered notifications.';
+}
+
 // Global error handler
 window.onerror = (message, _source, _lineno, _colno, error) => {
+  const normalizedMessage = error instanceof Error ? error.message : String(message);
+  if (isBenignWindowErrorMessage(normalizedMessage)) {
+    return true;
+  }
   postErrorToNative(error ?? String(message), 'window.onerror');
+  return false;
 };
 
 window.onunhandledrejection = (event) => {
+  const reason =
+    event.reason instanceof Error ? event.reason.message : String(event.reason);
+  if (isBenignWindowErrorMessage(reason)) {
+    event.preventDefault();
+    return;
+  }
   postErrorToNative(
     event.reason instanceof Error ? event.reason : String(event.reason),
     'unhandledrejection'

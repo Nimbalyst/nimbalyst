@@ -165,6 +165,10 @@ function postErrorToNative(label: string, error: unknown) {
   }
 }
 
+function isBenignWindowErrorMessage(message: string): boolean {
+  return message === 'ResizeObserver loop completed with undelivered notifications.';
+}
+
 // Detailed error capture -- runs BEFORE React mounts so we catch bundle-eval
 // errors too. Uses addEventListener (not window.onerror) so we co-exist with
 // the native-injected cross-origin-sanitizing handler and can read the real
@@ -173,9 +177,18 @@ try {
   window.addEventListener('error', (event) => {
     try {
       const err = event.error;
+      const messageText = err instanceof Error
+        ? err.message
+        : String(event.message || err || 'unknown');
+      if (isBenignWindowErrorMessage(messageText)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
+
       const msg = err instanceof Error
         ? `${err.message}\n${err.stack ?? ''}`
-        : String(event.message || err || 'unknown');
+        : messageText;
       (window as any).webkit?.messageHandlers?.bridge?.postMessage({
         type: 'js_error',
         message: `[window.error] ${msg}`,
@@ -191,11 +204,19 @@ try {
   window.addEventListener('unhandledrejection', (event) => {
     try {
       const reason: any = event.reason;
-      const msg = reason instanceof Error
-        ? `${reason.message}\n${reason.stack ?? ''}`
+      const reasonMessage = reason instanceof Error
+        ? reason.message
         : typeof reason === 'string'
           ? reason
           : (() => { try { return JSON.stringify(reason); } catch { return String(reason); } })();
+      if (isBenignWindowErrorMessage(reasonMessage)) {
+        event.preventDefault();
+        return;
+      }
+
+      const msg = reason instanceof Error
+        ? `${reason.message}\n${reason.stack ?? ''}`
+        : reasonMessage;
       (window as any).webkit?.messageHandlers?.bridge?.postMessage({
         type: 'js_error',
         message: `[unhandledrejection] ${msg}`,

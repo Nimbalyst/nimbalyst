@@ -53,7 +53,14 @@ public final class TranscriptWebViewPool {
         // Inject error handler (same as TranscriptWebView)
         let errorScript = WKUserScript(
             source: """
+            function isBenignWindowErrorMessage(message) {
+                return message === 'ResizeObserver loop completed with undelivered notifications.';
+            }
             window.onerror = function(msg, url, line, col, error) {
+                var messageText = error && error.message ? error.message : String(msg);
+                if (isBenignWindowErrorMessage(messageText)) {
+                    return true;
+                }
                 window.webkit.messageHandlers.bridge.postMessage({
                     type: 'js_error',
                     message: msg,

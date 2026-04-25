@@ -37,7 +37,10 @@ public struct DocumentEditorView: View {
         ZStack {
             EditorWebView(
                 document: resolvedDocument,
-                onReady: { isLoading = false },
+                onReady: {
+                    isLoading = false
+                    errorMessage = nil
+                },
                 onContentChanged: handleContentChanged,
                 onDirtyChanged: { isDirty = $0 },
                 onError: { errorMessage = $0 },
@@ -52,16 +55,51 @@ public struct DocumentEditorView: View {
             }
 
             if let error = errorMessage {
-                VStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.title)
-                        .foregroundStyle(.orange)
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
+                VStack {
+                    Spacer()
+
+                    VStack(spacing: 12) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.title2)
+                            .foregroundStyle(.orange)
+
+                        Text("Editor Error")
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+
+                        HStack(spacing: 12) {
+                            Button {
+                                copyError(error)
+                            } label: {
+                                Label("Copy", systemImage: "doc.on.doc")
+                            }
+                            .buttonStyle(.bordered)
+
+                            Button {
+                                errorMessage = nil
+                            } label: {
+                                Label("Dismiss", systemImage: "xmark")
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(NimbalystColors.primary)
+                        }
+                    }
+                    .padding(16)
+                    .frame(maxWidth: 420)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 20)
                 }
-                .padding()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .navigationTitle(document.displayName)
@@ -92,6 +130,19 @@ public struct DocumentEditorView: View {
             markdown: markdown,
             projectId: document.projectId
         )
+    }
+
+    private func copyError(_ error: String) {
+        #if canImport(UIKit)
+        UIPasteboard.general.string = [
+            "Document Editor Error",
+            "=====================",
+            "Document: \(document.displayName)",
+            "Document ID: \(document.id)",
+            "",
+            error,
+        ].joined(separator: "\n")
+        #endif
     }
 
     /// Subscribe to remote content updates for this document's syncId.
@@ -183,7 +234,14 @@ struct EditorWebView: UIViewRepresentable {
         // Inject error handler
         let errorScript = WKUserScript(
             source: """
+            function isBenignWindowErrorMessage(message) {
+                return message === 'ResizeObserver loop completed with undelivered notifications.';
+            }
             window.onerror = function(msg, url, line, col, error) {
+                var messageText = error && error.message ? error.message : String(msg);
+                if (isBenignWindowErrorMessage(messageText)) {
+                    return true;
+                }
                 window.webkit.messageHandlers.editorBridge.postMessage({
                     type: 'error',
                     message: msg + ' at ' + url + ':' + line + ':' + col,
@@ -281,6 +339,9 @@ struct EditorWebView: UIViewRepresentable {
 
             case "error":
                 let errorMsg = body["message"] as? String ?? "Unknown editor error"
+                if errorMsg.contains("ResizeObserver loop completed with undelivered notifications.") {
+                    return
+                }
                 logger.error("Editor error: \(errorMsg)")
                 DispatchQueue.main.async { [weak self] in
                     self?.onError(errorMsg)

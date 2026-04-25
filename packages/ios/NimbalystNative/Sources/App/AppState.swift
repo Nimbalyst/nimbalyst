@@ -3,6 +3,7 @@ import Combine
 import GRDB
 import os
 #if canImport(UIKit)
+import UIKit
 import WebKit
 #endif
 
@@ -65,9 +66,7 @@ public final class AppState: ObservableObject {
             // opens a session. Only worth doing when paired+authenticated (user can
             // navigate to sessions). Warming up at launch when unpaired causes the
             // WebContent process to hang and block gesture recognition on iPad.
-            #if canImport(UIKit)
-            TranscriptWebViewPool.shared.warmup()
-            #endif
+            warmupTranscriptWebViewIfAppropriate()
         }
 
         // Auto-connect when auth state changes
@@ -114,9 +113,7 @@ public final class AppState: ObservableObject {
         if authManager.isAuthenticated {
             setupManagers()
             connectIfReady()
-            #if canImport(UIKit)
-            TranscriptWebViewPool.shared.warmup()
-            #endif
+            warmupTranscriptWebViewIfAppropriate()
         }
     }
 
@@ -179,14 +176,25 @@ public final class AppState: ObservableObject {
                     AnalyticsManager.shared.capture("mobile_login_completed")
                     self.setupManagersIfNeeded()
                     self.connectIfReady()
-                    #if canImport(UIKit)
-                    if !TranscriptWebViewPool.shared.hasWarmWebView {
-                        TranscriptWebViewPool.shared.warmup()
-                    }
-                    #endif
+                    self.warmupTranscriptWebViewIfAppropriate()
                 }
             }
             .store(in: &cancellables)
+    }
+
+    private func warmupTranscriptWebViewIfAppropriate() {
+        #if canImport(UIKit)
+        #if os(iOS)
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            logger.info("Skipping transcript web view warmup on iPad")
+            return
+        }
+        #endif
+
+        if !TranscriptWebViewPool.shared.hasWarmWebView {
+            TranscriptWebViewPool.shared.warmup()
+        }
+        #endif
     }
 
     /// Set up managers if they haven't been initialized yet.

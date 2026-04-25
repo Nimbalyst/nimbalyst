@@ -108,7 +108,14 @@ public struct TranscriptWebView: UIViewRepresentable {
         // Inject error handler to catch JS errors before page scripts run
         let errorScript = WKUserScript(
             source: """
+            function isBenignWindowErrorMessage(message) {
+                return message === 'ResizeObserver loop completed with undelivered notifications.';
+            }
             window.onerror = function(msg, url, line, col, error) {
+                var messageText = error && error.message ? error.message : String(msg);
+                if (isBenignWindowErrorMessage(messageText)) {
+                    return true;
+                }
                 window.webkit.messageHandlers.bridge.postMessage({
                     type: 'js_error',
                     message: msg,
@@ -330,6 +337,9 @@ public struct TranscriptWebView: UIViewRepresentable {
 
             case "js_error":
                 let msg = body["message"] as? String ?? "unknown"
+                if msg.contains("ResizeObserver loop completed with undelivered notifications.") {
+                    return
+                }
                 let url = body["url"] as? String ?? ""
                 let line = body["line"] as? Int ?? 0
                 logger.error("JS error: \(msg) at \(url):\(line)")
