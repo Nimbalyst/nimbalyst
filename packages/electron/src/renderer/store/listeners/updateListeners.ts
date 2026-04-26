@@ -51,6 +51,7 @@ export function initUpdateListeners(): () => void {
     newVersion: string;
     releaseNotes?: string;
     releaseDate?: string;
+    releaseChannel?: string;
     isManualCheck?: boolean;
   }) => {
     console.log('[UpdateListeners] Update available:', data);
@@ -79,6 +80,20 @@ export function initUpdateListeners(): () => void {
         console.log('[UpdateListeners] Ignoring show-available after suppression check, state advanced to:', afterCheck.state);
         return;
       }
+    }
+
+    // Suppression checks passed; the toast is actually about to display.
+    // Track here (not in main) so we count real displays, not every
+    // electron-updater 'update-available' callback. Skip if we're already
+    // showing the toast for this same version (no re-display happening).
+    const latest = store.get(updateStateAtom);
+    const alreadyShowingSameVersion =
+      latest.state === 'available' && latest.updateInfo?.version === data.newVersion;
+    if (!alreadyShowingSameVersion) {
+      window.electronAPI.send('analytics:update-toast-shown', {
+        releaseChannel: data.releaseChannel ?? 'unknown',
+        newVersion: data.newVersion,
+      });
     }
 
     store.set(updateStateAtom, (prev) => ({

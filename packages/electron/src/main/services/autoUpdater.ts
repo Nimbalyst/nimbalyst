@@ -139,19 +139,17 @@ export class AutoUpdaterService {
         releaseDate: info.releaseDate
       };
 
-      // Send to frontmost window via toast system
+      // Send to frontmost window via toast system. The renderer fires
+      // `update_toast_shown` analytics after passing suppression checks --
+      // firing here would over-count by ~14x because update-available
+      // re-fires every hourly auto-check even when the toast is suppressed.
       this.sendToFrontmostWindow('update-toast:show-available', {
         currentVersion: app.getVersion(),
         newVersion: info.version,
         releaseNotes: releaseNotes,
         releaseDate: info.releaseDate,
+        releaseChannel: channel,
         isManualCheck: wasManualCheck
-      });
-
-      // Track update toast shown
-      AnalyticsService.getInstance().sendEvent('update_toast_shown', {
-        release_channel: channel,
-        new_version: info.version
       });
 
       this.sendToAllWindows('update-available', info);

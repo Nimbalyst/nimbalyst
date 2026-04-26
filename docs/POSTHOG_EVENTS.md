@@ -310,7 +310,7 @@ The `known_error` event uses an `errorId` property to identify specific error co
 
 | Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
 | --- | --- | --- | --- | --- | --- |
-| `update_toast_shown` | `autoUpdater.ts` | Update available toast displayed to user | `release_channel` (stable/alpha)<br/>`new_version` | (pending release) |  |
+| `update_toast_shown` | `updateListeners.ts` -> `AnalyticsHandlers.ts` | Update available toast actually displayed to user (after suppression checks pass). Fires from the renderer once per (version, display) -- not on every electron-updater 'update-available' callback, which re-fires hourly even when the toast is suppressed. | `release_channel` (stable/alpha)<br/>`new_version` | (pending release) | (pending release): Moved fire site from `autoUpdater.ts` (main) to `updateListeners.ts` (renderer) so the count reflects real toast displays instead of every hourly re-check. Drops volume by ~14x. |
 | `update_toast_action` | `UpdateToast.tsx` | User clicks button on update toast | `action` (download_clicked/release_notes_clicked/remind_later_clicked)<br/>`new_version` | (pending release) |  |
 | `update_download_started` | `autoUpdater.ts` | User initiates update download | `release_channel` (stable/alpha)<br/>`new_version` | (pending release) |  |
 | `update_download_completed` | `autoUpdater.ts` | Update download finishes successfully | `release_channel` (stable/alpha)<br/>`new_version`<br/>`duration_category` (fast/medium/slow) | (pending release) |  |

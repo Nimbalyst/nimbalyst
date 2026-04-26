@@ -47,4 +47,14 @@ export function registerAnalyticsHandlers() {
       daysSinceInstall: data.daysSinceInstall,
     });
   });
+
+  // Track update toast actually displayed. Fired from the renderer after
+  // suppression checks pass, so the count reflects real toast displays
+  // rather than every electron-updater 'update-available' callback.
+  safeOn("analytics:update-toast-shown", (_event, data: { releaseChannel: string; newVersion: string }) => {
+    analytics.sendEvent('update_toast_shown', {
+      release_channel: data.releaseChannel,
+      new_version: data.newVersion,
+    });
+  });
 }
