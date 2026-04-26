@@ -1,4 +1,7 @@
 import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react';
+import { DiffPeekPopover } from './DiffPeekPopover';
+import { useDiffCache } from '../hooks/useDiffCache';
+import { SessionsForFilePane } from './SessionsForFilePane';
 
 // Access the generic Electron IPC invoke
 const ipc = (window as unknown as {
@@ -6,6 +9,17 @@ const ipc = (window as unknown as {
     invoke: (channel: string, ...args: unknown[]) => Promise<unknown>;
   };
 }).electronAPI;
+
+interface RowKey {
+  path: string;
+  group: Group;
+}
+
+function rowKeysEqual(a: RowKey | null, b: RowKey | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.path === b.path && a.group === b.group;
+}
 
 interface WorkingFile {
   path: string;
@@ -184,19 +198,27 @@ function dirSelectionState(
   return 'some';
 }
 
+interface TreeRenderOptions {
+  selected: Set<string>;
+  toggleSelected: (path: string) => void;
+  bulkToggle: (paths: string[], select: boolean) => void;
+  focusedRow: RowKey | null;
+  pinnedRow: RowKey | null;
+  peekedRow: RowKey | null;
+  onRowClick: (key: RowKey, target: HTMLElement) => void;
+  registerRowEl: (key: RowKey, el: HTMLElement | null) => void;
+}
+
 function renderFileTree(
   node: DirNode,
   depth: number,
   group: Group,
-  selected: Set<string>,
-  toggleSelected: (path: string) => void,
-  bulkToggle: (paths: string[], select: boolean) => void,
-  onRowClick?: (path: string) => void,
+  opts: TreeRenderOptions,
 ): React.ReactNode {
   const subdirs = Array.from(node.subdirectories.values()).sort((a, b) => a.displayPath.localeCompare(b.displayPath));
   const sortedFiles = [...node.files].sort((a, b) => a.path.localeCompare(b.path));
   const childDepth = node.displayPath ? depth + 1 : depth;
-  const dirState = node.displayPath ? dirSelectionState(node, selected, group) : 'none';
+  const dirState = node.displayPath ? dirSelectionState(node, opts.selected, group) : 'none';
   const dirPaths = node.displayPath ? collectPaths(node) : [];
   const conflict = group === 'conflicted';
   return (
@@ -206,7 +228,7 @@ function renderFileTree(
           <Checkbox
             checked={dirState === 'all'}
             indeterminate={dirState === 'some'}
-            onChange={() => bulkToggle(dirPaths, dirState !== 'all')}
+            onChange={() => opts.bulkToggle(dirPaths, dirState !== 'all')}
             disabled={conflict}
           />
           <span className="git-changes-dir-name">{node.displayPath}/</span>
@@ -214,23 +236,35 @@ function renderFileTree(
       )}
       {subdirs.map(sub => (
         <React.Fragment key={sub.path}>
-          {renderFileTree(sub, childDepth, group, selected, toggleSelected, bulkToggle, onRowClick)}
+          {renderFileTree(sub, childDepth, group, opts)}
         </React.Fragment>
       ))}
       {sortedFiles.map(file => {
         const name = file.path.split('/').pop() ?? file.path;
-        const isSelected = selected.has(file.path);
+        const isSelected = opts.selected.has(file.path);
         const conflict = group === 'conflicted';
+        const rowKey: RowKey = { path: file.path, group };
+        const isFocused = rowKeysEqual(opts.focusedRow, rowKey);
+        const isPinned = rowKeysEqual(opts.pinnedRow, rowKey);
+        const isPeeked = rowKeysEqual(opts.peekedRow, rowKey);
+        const rowClasses = [
+          'git-changes-file-row',
+          conflict ? 'git-changes-file-row--conflict' : '',
+          isFocused ? 'git-changes-file-row--focused' : '',
+          isPinned ? 'git-changes-file-row--pinned' : '',
+          isPeeked ? 'git-changes-file-row--peeked' : '',
+        ].filter(Boolean).join(' ');
         return (
           <div
             key={file.path}
-            className={`git-changes-file-row${conflict ? ' git-changes-file-row--conflict' : ''}`}
+            ref={(el) => opts.registerRowEl(rowKey, el)}
+            className={rowClasses}
             style={{ paddingLeft: childDepth * 12 + 24 }}
-            onClick={() => onRowClick?.(file.path)}
+            onClick={(e) => opts.onRowClick(rowKey, e.currentTarget)}
           >
             <Checkbox
               checked={isSelected}
-              onChange={() => toggleSelected(file.path)}
+              onChange={() => opts.toggleSelected(file.path)}
               disabled={conflict}
             />
             <span
@@ -281,6 +315,47 @@ export function ChangesTab({
   const [selectedUnstaged, setSelectedUnstaged] = useState<Set<string>>(new Set());
   const [selectedUntracked, setSelectedUntracked] = useState<Set<string>>(new Set());
 
+  // Diff peek / pin / focus state. The popover renders for whichever of pinned or
+  // peeked is set (peek wins if both are set, since peek is the more recent intent).
+  const [pinnedRow, setPinnedRow] = useState<RowKey | null>(null);
+  const [peekedRow, setPeekedRow] = useState<RowKey | null>(null);
+  const [focusedRow, setFocusedRow] = useState<RowKey | null>(null);
+  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
+
+  // Token bumped whenever git status changes — invalidates the diff cache.
+  const [diffInvalidationToken, setDiffInvalidationToken] = useState(0);
+
+  // Persistent map of row keys -> DOM elements, for floating-ui anchoring + scroll-into-view.
+  const rowElsRef = useRef<Map<string, HTMLElement>>(new Map());
+  const rowKeyToString = (k: RowKey) => `${k.group}|${k.path}`;
+  const registerRowEl = useCallback((key: RowKey, el: HTMLElement | null) => {
+    const k = rowKeyToString(key);
+    if (el) rowElsRef.current.set(k, el);
+    else rowElsRef.current.delete(k);
+  }, []);
+
+  // Sessions pane open/closed state (persisted via workspace state IPC).
+  const [sessionsPaneOpen, setSessionsPaneOpen] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    ipc.invoke('workspace:get-state', workspacePath)
+      .then((state) => {
+        if (cancelled) return;
+        const stored = (state as { gitChanges?: { sessionsPaneOpen?: boolean } } | null)?.gitChanges?.sessionsPaneOpen;
+        if (typeof stored === 'boolean') setSessionsPaneOpen(stored);
+      })
+      .catch(() => { /* not fatal */ });
+    return () => { cancelled = true; };
+  }, [workspacePath]);
+  const toggleSessionsPane = useCallback(() => {
+    setSessionsPaneOpen(prev => {
+      const next = !prev;
+      ipc.invoke('workspace:update-state', workspacePath, { gitChanges: { sessionsPaneOpen: next } })
+        .catch(() => { /* not fatal */ });
+      return next;
+    });
+  }, [workspacePath]);
+
   // File mask (controlled by parent panel toolbar)
   const maskPatterns = useMemo(
     () => fileMaskEnabled ? parseFileMask(fileMaskInput) : [],
@@ -311,6 +386,7 @@ export function ChangesTab({
   useEffect(() => {
     return onWorkspaceEvent('git:status-changed', () => {
       loadChanges();
+      setDiffInvalidationToken(t => t + 1);
     });
   }, [onWorkspaceEvent, loadChanges]);
 
@@ -526,6 +602,132 @@ export function ChangesTab({
   const untrackedTree = useMemo(() => buildDirTree(filteredUntracked), [filteredUntracked]);
   const conflictedTree = useMemo(() => buildDirTree(filteredConflicted), [filteredConflicted]);
 
+  // Flat row list (in tree-display order) for ↑/↓ keyboard navigation.
+  const flatRows = useMemo(() => {
+    const out: RowKey[] = [];
+    const collect = (node: DirNode, group: Group) => {
+      const subdirs = Array.from(node.subdirectories.values()).sort((a, b) => a.displayPath.localeCompare(b.displayPath));
+      const sortedFiles = [...node.files].sort((a, b) => a.path.localeCompare(b.path));
+      for (const sub of subdirs) collect(sub, group);
+      for (const f of sortedFiles) out.push({ path: f.path, group });
+    };
+    if (!collapsedGroups.has('conflicted') && filteredConflicted.length > 0) collect(conflictedTree, 'conflicted');
+    if (!collapsedGroups.has('staged') && filteredStaged.length > 0) collect(stagedTree, 'staged');
+    if (!collapsedGroups.has('unstaged') && filteredUnstaged.length > 0) collect(unstagedTree, 'unstaged');
+    if (!collapsedGroups.has('untracked') && filteredUntracked.length > 0) collect(untrackedTree, 'untracked');
+    return out;
+  }, [stagedTree, unstagedTree, untrackedTree, conflictedTree, collapsedGroups, filteredStaged, filteredUnstaged, filteredUntracked, filteredConflicted]);
+
+  // The "active file" the popover and sessions pane display: pinned wins, then peeked, then focused.
+  const activeRow: RowKey | null = pinnedRow ?? peekedRow ?? focusedRow;
+
+  // Diff fetch is keyed off the popover target (peek wins over pinned for visual swap).
+  const popoverTarget: RowKey | null = peekedRow ?? pinnedRow;
+  const diffState = useDiffCache(workspacePath, popoverTarget, diffInvalidationToken);
+
+  const measureAnchor = useCallback((key: RowKey | null): DOMRect | null => {
+    if (!key) return null;
+    const el = rowElsRef.current.get(`${key.group}|${key.path}`);
+    return el ? el.getBoundingClientRect() : null;
+  }, []);
+
+  // Update anchor rect whenever the popover target changes or the row resizes.
+  useEffect(() => {
+    if (!popoverTarget) {
+      setAnchorRect(null);
+      return;
+    }
+    setAnchorRect(measureAnchor(popoverTarget));
+  }, [popoverTarget, measureAnchor]);
+
+  const closePopover = useCallback(() => {
+    setPeekedRow(null);
+    setPinnedRow(null);
+  }, []);
+
+  const promoteToPin = useCallback(() => {
+    setPeekedRow(prev => {
+      if (prev) {
+        setPinnedRow(prev);
+        return null;
+      }
+      return prev;
+    });
+  }, []);
+
+  const handleRowClick = useCallback((key: RowKey, target: HTMLElement) => {
+    setFocusedRow(key);
+    setPeekedRow(null);
+    setAnchorRect(target.getBoundingClientRect());
+    setPinnedRow(prev => (rowKeysEqual(prev, key) ? null : key));
+  }, []);
+
+  const togglePeek = useCallback((key: RowKey) => {
+    setPeekedRow(prev => {
+      if (rowKeysEqual(prev, key)) return null;
+      const el = rowElsRef.current.get(`${key.group}|${key.path}`);
+      if (el) setAnchorRect(el.getBoundingClientRect());
+      return key;
+    });
+  }, []);
+
+  const moveFocus = useCallback((delta: number) => {
+    if (flatRows.length === 0) return;
+    setFocusedRow(prev => {
+      let idx = prev ? flatRows.findIndex(r => rowKeysEqual(r, prev)) : -1;
+      if (idx === -1) idx = delta > 0 ? -1 : flatRows.length;
+      const next = flatRows[Math.max(0, Math.min(flatRows.length - 1, idx + delta))];
+      if (next) {
+        const el = rowElsRef.current.get(`${next.group}|${next.path}`);
+        el?.scrollIntoView({ block: 'nearest' });
+      }
+      return next ?? prev;
+    });
+  }, [flatRows]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    // Don't hijack typing in inputs (commit message textarea, etc.)
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      moveFocus(1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      moveFocus(-1);
+    } else if (e.key === ' ') {
+      if (focusedRow) {
+        e.preventDefault();
+        togglePeek(focusedRow);
+      }
+    } else if (e.key === 'Enter') {
+      if (peekedRow) {
+        e.preventDefault();
+        promoteToPin();
+      } else if (focusedRow && !pinnedRow) {
+        e.preventDefault();
+        const el = rowElsRef.current.get(`${focusedRow.group}|${focusedRow.path}`);
+        if (el) setAnchorRect(el.getBoundingClientRect());
+        setPinnedRow(focusedRow);
+      }
+    } else if (e.key === 'Escape') {
+      if (peekedRow || pinnedRow) {
+        e.preventDefault();
+        closePopover();
+      }
+    }
+  }, [focusedRow, peekedRow, pinnedRow, moveFocus, togglePeek, promoteToPin, closePopover]);
+
+  // Open the active file in the editor (used by the popover's "Open in editor" link).
+  const handleOpenInEditor = useCallback(() => {
+    const target = popoverTarget ?? activeRow;
+    if (!target) return;
+    ipc.invoke('workspace:open-file', { workspacePath, filePath: target.path }).catch((err) => {
+      console.error('[ChangesTab] workspace:open-file failed:', err);
+    });
+  }, [popoverTarget, activeRow, workspacePath]);
+
   if (loading) {
     return <div className="git-log-empty">Loading changes...</div>;
   }
@@ -555,8 +757,46 @@ export function ChangesTab({
   const unstagedSelState = groupSelectionState(selectedUnstaged, filteredUnstaged);
   const untrackedSelState = groupSelectionState(selectedUntracked, filteredUntracked);
 
+  const treeOptionsFor = (
+    selected: Set<string>,
+    setSelected: React.Dispatch<React.SetStateAction<Set<string>>>,
+  ): TreeRenderOptions => ({
+    selected,
+    toggleSelected: makeToggle(setSelected),
+    bulkToggle: makeBulkToggle(setSelected),
+    focusedRow,
+    pinnedRow,
+    peekedRow,
+    onRowClick: handleRowClick,
+    registerRowEl,
+  });
+
+  const conflictedTreeOptions: TreeRenderOptions = {
+    selected: new Set(),
+    toggleSelected: () => {},
+    bulkToggle: () => {},
+    focusedRow,
+    pinnedRow,
+    peekedRow,
+    onRowClick: handleRowClick,
+    registerRowEl,
+  };
+
   return (
-    <div className="git-changes-tab">
+    <div
+      className="git-changes-tab"
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+    >
+      <div className="git-changes-keyhint">
+        <span><kbd>↑↓</kbd> navigate</span>
+        <span className="git-changes-keyhint-sep">·</span>
+        <span><kbd>Space</kbd> peek</span>
+        <span className="git-changes-keyhint-sep">·</span>
+        <span><kbd>Enter</kbd> pin</span>
+        <span className="git-changes-keyhint-sep">·</span>
+        <span><kbd>Esc</kbd> close</span>
+      </div>
       {statusMessage && (
         <div
           className={`git-log-status-bar ${statusMessage.isError ? 'error' : 'success'}`}
@@ -598,7 +838,7 @@ export function ChangesTab({
                 <span className="git-changes-group-label">Conflicts ({filteredConflicted.length})</span>
               </div>
               {!collapsedGroups.has('conflicted') &&
-                renderFileTree(conflictedTree, 0, 'conflicted', new Set(), () => {}, () => {})}
+                renderFileTree(conflictedTree, 0, 'conflicted', conflictedTreeOptions)}
             </div>
           )}
 
@@ -622,7 +862,7 @@ export function ChangesTab({
                 </button>
               </div>
               {!collapsedGroups.has('staged') &&
-                renderFileTree(stagedTree, 0, 'staged', selectedStaged, makeToggle(setSelectedStaged), makeBulkToggle(setSelectedStaged))}
+                renderFileTree(stagedTree, 0, 'staged', treeOptionsFor(selectedStaged, setSelectedStaged))}
             </div>
           )}
 
@@ -654,7 +894,7 @@ export function ChangesTab({
                 </button>
               </div>
               {!collapsedGroups.has('unstaged') &&
-                renderFileTree(unstagedTree, 0, 'unstaged', selectedUnstaged, makeToggle(setSelectedUnstaged), makeBulkToggle(setSelectedUnstaged))}
+                renderFileTree(unstagedTree, 0, 'unstaged', treeOptionsFor(selectedUnstaged, setSelectedUnstaged))}
             </div>
           )}
 
@@ -678,10 +918,29 @@ export function ChangesTab({
                 </button>
               </div>
               {!collapsedGroups.has('untracked') &&
-                renderFileTree(untrackedTree, 0, 'untracked', selectedUntracked, makeToggle(setSelectedUntracked), makeBulkToggle(setSelectedUntracked))}
+                renderFileTree(untrackedTree, 0, 'untracked', treeOptionsFor(selectedUntracked, setSelectedUntracked))}
             </div>
           )}
         </div>
+
+        {/* Sessions pane */}
+        {sessionsPaneOpen && (
+          <SessionsForFilePane
+            workspacePath={workspacePath}
+            activeFile={activeRow}
+            onCollapse={toggleSessionsPane}
+          />
+        )}
+        {!sessionsPaneOpen && (
+          <button
+            type="button"
+            className="git-changes-sessions-pane-reopen"
+            onClick={toggleSessionsPane}
+            title="Show sessions that edited this file"
+          >
+            ◀
+          </button>
+        )}
 
         {/* Commit area */}
         <div className="git-changes-commit">
@@ -721,6 +980,21 @@ export function ChangesTab({
           </div>
         </div>
       </div>
+
+      {popoverTarget && anchorRect && (
+        <DiffPeekPopover
+          anchorRect={anchorRect}
+          filePath={popoverTarget.path}
+          mode={peekedRow ? 'peek' : 'pinned'}
+          diff={diffState.diff}
+          isBinary={diffState.isBinary}
+          loading={diffState.loading}
+          error={diffState.error}
+          onClose={closePopover}
+          onPin={promoteToPin}
+          onOpenInEditor={handleOpenInEditor}
+        />
+      )}
     </div>
   );
 }

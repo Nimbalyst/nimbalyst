@@ -743,6 +743,77 @@ export function registerGitHandlers(): void {
   );
 
   /**
+   * Get a typed diff for a single file scoped to a working-tree group.
+   * Cleanly separates staged vs unstaged vs untracked diffs (the legacy
+   * `git:diff` channel mixes them by diffing HEAD against the working tree).
+   */
+  safeHandle(
+    'git:file-diff',
+    async (
+      _event,
+      workspacePath: string,
+      args: { path: string; group: 'staged' | 'unstaged' | 'untracked' | 'conflicted' }
+    ): Promise<{
+      unifiedDiff: string;
+      isBinary: boolean;
+      truncated?: boolean;
+    }> => {
+      if (!workspacePath) throw new Error('workspacePath is required');
+      if (!args?.path) throw new Error('path is required');
+      if (!isGitRepository(workspacePath)) {
+        return { unifiedDiff: '', isBinary: false };
+      }
+
+      const git: SimpleGit = simpleGit(workspacePath);
+      const filePath = args.path;
+      const group = args.group;
+      const repoHasCommits = await hasCommits(git);
+
+      try {
+        if (group === 'staged') {
+          const diff = repoHasCommits
+            ? await git.diff(['--cached', '--', filePath])
+            : await git.diff(['--cached', '--', filePath]);
+          return { unifiedDiff: diff, isBinary: /\bBinary files\b/.test(diff) };
+        }
+
+        if (group === 'unstaged' || group === 'conflicted') {
+          const diff = await git.diff(['--', filePath]);
+          return { unifiedDiff: diff, isBinary: /\bBinary files\b/.test(diff) };
+        }
+
+        if (group === 'untracked') {
+          // Synthesize a unified diff from the working-tree file contents.
+          const absolute = isAbsolute(filePath) ? filePath : join(workspacePath, filePath);
+          if (!existsSync(absolute)) {
+            return { unifiedDiff: '', isBinary: false };
+          }
+          // Use git diff --no-index against /dev/null to produce a real unified diff
+          // for an untracked file. This handles binary detection naturally and respects
+          // the user's diff config (e.g. mnemonicPrefix).
+          try {
+            const diff = await git.raw(['diff', '--no-index', '--', '/dev/null', filePath]);
+            return { unifiedDiff: diff, isBinary: /\bBinary files\b/.test(diff) };
+          } catch (err) {
+            // git diff --no-index exits 1 when files differ; simple-git treats this as success
+            // but in case it doesn't, fall through to read the file manually.
+            const diff = (err as { stdout?: string })?.stdout ?? '';
+            if (diff) {
+              return { unifiedDiff: diff, isBinary: /\bBinary files\b/.test(diff) };
+            }
+            throw err;
+          }
+        }
+
+        return { unifiedDiff: '', isBinary: false };
+      } catch (error) {
+        log.error(`[git:file-diff] Failed for ${group}/${filePath}:`, error);
+        throw error;
+      }
+    }
+  );
+
+  /**
    * Execute git commit
    */
   ipcMain.handle(
