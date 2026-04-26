@@ -250,7 +250,14 @@ export class OpenCodeRawParser implements IRawMessageParser {
     part: Record<string, unknown>,
     context: ParseContext,
   ): CanonicalEventDescriptor[] {
-    const toolName = typeof part.tool === 'string' ? part.tool : 'unknown';
+    const rawToolName = typeof part.tool === 'string' ? part.tool : 'unknown';
+    // OpenCode names MCP tools as `<server>_<tool>` (single underscore),
+    // but every other provider in Nimbalyst -- and our widget registry --
+    // uses Claude/Codex's canonical `mcp__<server>__<tool>` format.
+    // Normalize here so a single canonical name flows through the rest of
+    // the system: tool widgets match, persistence is consistent, and the
+    // canonical event store doesn't have to know about provider quirks.
+    const toolName = normalizeOpenCodeToolName(rawToolName);
     const callId = (typeof part.callID === 'string' && part.callID)
       || (typeof part.id === 'string' && part.id)
       || `opencode-tool-${++this.toolIdCounter}`;
@@ -277,7 +284,13 @@ export class OpenCodeRawParser implements IRawMessageParser {
     if (typeof args.file_path === 'string') targetFilePath = args.file_path;
     else if (typeof args.path === 'string') targetFilePath = args.path;
 
-    if (status === 'running' || status === 'pending') {
+    // Skip pending events: OpenCode emits a tool part transition through
+    // pending -> running -> completed/error, and only by `running` is the
+    // tool's input populated. If we emit on pending we capture the empty
+    // input snapshot, and downstream `hasToolCall` dedup means the real
+    // arguments from the running event are never attached. Wait for running
+    // (or for a terminal state, handled below).
+    if (status === 'running') {
       if (!context.hasToolCall(callId)) {
         descriptors.push({
           type: 'tool_call_started',
@@ -291,6 +304,11 @@ export class OpenCodeRawParser implements IRawMessageParser {
           createdAt: msg.createdAt,
         });
       }
+      return descriptors;
+    }
+
+    if (status === 'pending') {
+      // Nothing to emit yet -- wait for `running`.
       return descriptors;
     }
 
@@ -515,4 +533,34 @@ function numericField(record: Record<string, unknown> | undefined, key: string):
   if (!record) return 0;
   const value = record[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+// MCP server names registered in OpenCode by McpConfigService. We match a
+// known-prefix list (rather than splitting on underscore) because both
+// server names and tool names can contain underscores, so a generic split
+// would mis-segment ambiguous cases.
+const KNOWN_MCP_SERVER_PREFIXES = [
+  'nimbalyst-mcp',
+  'nimbalyst-session-naming',
+  'nimbalyst-extension-dev',
+  'nimbalyst-session-context',
+  'nimbalyst-meta-agent',
+  'nimbalyst-extension-dev-kit',
+];
+
+// Converts OpenCode's `<server>_<tool>` MCP tool name format to the
+// canonical `mcp__<server>__<tool>` used everywhere else. Returns the
+// input unchanged if it doesn't look like an MCP tool from a known server.
+function normalizeOpenCodeToolName(toolName: string): string {
+  if (toolName.startsWith('mcp__')) return toolName;
+
+  for (const server of KNOWN_MCP_SERVER_PREFIXES) {
+    const prefix = `${server}_`;
+    if (toolName.startsWith(prefix)) {
+      const tool = toolName.slice(prefix.length);
+      if (tool) return `mcp__${server}__${tool}`;
+    }
+  }
+
+  return toolName;
 }

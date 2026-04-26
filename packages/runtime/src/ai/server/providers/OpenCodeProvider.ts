@@ -31,6 +31,7 @@ import { McpConfigService } from '../services/McpConfigService';
 import { MCPServerConfig } from '../../../types/MCPServerConfig';
 import { safeJSONSerialize } from '../../../utils/serialization';
 import { AgentProtocolTranscriptAdapter } from './agentProtocol/AgentProtocolTranscriptAdapter';
+import { TranscriptMigrationRepository } from '../../../storage/repositories/TranscriptMigrationRepository';
 
 interface OpenCodeProviderDeps {
   protocol?: OpenCodeSDKProtocol;
@@ -338,6 +339,12 @@ export class OpenCodeProvider extends BaseAgentProvider {
               hidden: true,
               searchable: false,
             });
+            // Drive incremental transcript transformation while the agent is
+            // still streaming. Without this, canonical events (and the
+            // widgets that render off them -- AskUserQuestion etc.) only
+            // appear after a session reload, which may not happen until the
+            // turn completes.
+            await this.processTranscriptMessages(sessionId);
           }
         }
 
@@ -420,6 +427,23 @@ export class OpenCodeProvider extends BaseAgentProvider {
       if (this.abortController === abortController) {
         this.abortController = null;
       }
+    }
+  }
+
+  // Drive the transcript transformer incrementally so that canonical events
+  // (and the widgets that key off them, like AskUserQuestion) appear in the
+  // UI while the OpenCode session is still streaming -- not only after the
+  // session finishes and a reload triggers ensureUpToDate.
+  private async processTranscriptMessages(sessionId: string): Promise<void> {
+    try {
+      if (TranscriptMigrationRepository.hasService()) {
+        await TranscriptMigrationRepository.getService().processNewMessages(
+          sessionId,
+          this.getProviderName(),
+        );
+      }
+    } catch {
+      // Best effort -- the next call (or end-of-turn ensureUpToDate) catches up.
     }
   }
 }

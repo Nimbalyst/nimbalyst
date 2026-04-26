@@ -493,6 +493,7 @@ async function attachMentionedFiles(
  * This enables diff visualization and persistence across app restarts
  */
 async function tagFileBeforeEdit(
+  workspacePath: string,
   filePath: string,
   sessionId: string,
   toolUseId: string
@@ -522,6 +523,7 @@ async function tagFileBeforeEdit(
     const content = fs.readFileSync(filePath, 'utf-8');
 
     await historyManager.createTag(
+      workspacePath,
       filePath,
       tagId,
       content,
@@ -3121,7 +3123,14 @@ export class AIService {
                     if (OPENCODE_EDIT_TOOLS.includes(trackToolName) && session.provider === 'opencode') {
                       const editFilePath = extractFilePath(trackArgs);
                       const watcherEntry = this.codexSessionWatchers.get(session.id);
-                      if (editFilePath && watcherEntry) {
+                      // Only create the pre-edit tag for paths inside the workspace —
+                      // OpenCode occasionally hands back paths the model invented outside
+                      // the workspace (e.g. `/foo.txt`), and the diff workflow only needs
+                      // to track edits to files we're actually watching.
+                      const isInWorkspace = editFilePath
+                        ? path.resolve(editFilePath).startsWith(path.resolve(effectiveWorkspacePath) + path.sep)
+                        : false;
+                      if (editFilePath && watcherEntry && isInWorkspace) {
                         try {
                           let beforeContent = await watcherEntry.cache.getBeforeState(editFilePath);
                           if (beforeContent === null) {
@@ -3132,6 +3141,7 @@ export class AIService {
                           const editToolUseId = toolUseId || `opencode-edit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
                           const tagId = `ai-edit-pending-${session.id}-${editToolUseId}`;
                           await historyManager.createTag(
+                            effectiveWorkspacePath,
                             editFilePath,
                             tagId,
                             beforeContent,
@@ -3301,6 +3311,7 @@ export class AIService {
                             : `codex-file-change-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
                         const tagId = `ai-edit-pending-${session.id}-${toolUseId}`;
                         await historyManager.createTag(
+                          effectiveWorkspacePath,
                           change.path,
                           tagId,
                           beforeContent,
@@ -3392,7 +3403,7 @@ export class AIService {
                     // This enables diff visualization and persistence across app restarts
                     if (documentContext?.filePath) {
                       const toolUseId = chunk.toolCall.id || `diff-${Date.now()}`;
-                      await tagFileBeforeEdit(documentContext.filePath, session.id, toolUseId);
+                      await tagFileBeforeEdit(effectiveWorkspacePath, documentContext.filePath, session.id, toolUseId);
                     }
 
                     const edit = {
@@ -3479,7 +3490,7 @@ export class AIService {
               if (documentContext?.filePath && session.provider !== 'claude-code') {
                 // Generate a tool use ID based on session and timestamp
                 const streamToolUseId = `stream-${Date.now()}`;
-                await tagFileBeforeEdit(documentContext.filePath, session.id, streamToolUseId);
+                await tagFileBeforeEdit(effectiveWorkspacePath, documentContext.filePath, session.id, streamToolUseId);
               }
 
               // Forward streaming edit start event to renderer
@@ -6408,6 +6419,7 @@ export class AIService {
       // instead of creating a new tag (defense-in-depth for Fix 2)
       if (existingTag && existingTag.content.length === 0 && resolvedBeforeContent.length > 0) {
         await historyManager.createTag(
+          effectivePath,
           filePath,
           existingTag.id,
           resolvedBeforeContent,
@@ -6425,6 +6437,7 @@ export class AIService {
       const tagId = `ai-edit-pending-${session.id}-${toolUseId}`;
 
       await historyManager.createTag(
+        effectivePath,
         filePath,
         tagId,
         resolvedBeforeContent,

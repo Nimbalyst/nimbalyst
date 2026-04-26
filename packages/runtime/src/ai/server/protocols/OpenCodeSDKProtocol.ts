@@ -47,6 +47,11 @@ export interface OpenCodeClientLike {
       stream: AsyncIterable<OpenCodeSSEEvent>;
     }>;
   };
+  mcp: {
+    add: (options?: Record<string, unknown>) => Promise<unknown>;
+    status?: (options?: Record<string, unknown>) => Promise<unknown>;
+    disconnect?: (options?: Record<string, unknown>) => Promise<unknown>;
+  };
 }
 
 /**
@@ -286,6 +291,7 @@ export class OpenCodeSDKProtocol implements AgentProtocol {
     await serverManager.ensureRunning(options.workspacePath, options.env);
 
     const client = await this.getClient(serverManager.baseUrl);
+    await this.registerMcpServers(client, options);
     const result = await client.session.create({
       body: {},
       query: { directory: options.workspacePath },
@@ -311,6 +317,9 @@ export class OpenCodeSDKProtocol implements AgentProtocol {
     const serverManager = OpenCodeServerManager.getInstance();
     await serverManager.ensureRunning(options.workspacePath, options.env);
 
+    const client = await this.getClient(serverManager.baseUrl);
+    await this.registerMcpServers(client, options);
+
     console.log('[OPENCODE-PROTOCOL] Resuming session:', sessionId);
 
     return {
@@ -322,6 +331,64 @@ export class OpenCodeSDKProtocol implements AgentProtocol {
         resume: true,
       },
     };
+  }
+
+  // Pushes MCP servers from SessionOptions into the OpenCode server's
+  // dynamic registration via POST /mcp. Without this, OpenCode never sees
+  // any of Nimbalyst's internal MCP tools (AskUserQuestion, tracker_*,
+  // capture_editor_screenshot, etc.) because the SDK has no per-session
+  // MCP config -- registration is workspace-scoped at the server level.
+  //
+  // Nimbalyst hands us configs in SSE shape ({ type: 'sse', url, headers? }).
+  // OpenCode wants HTTP/remote shape ({ type: 'remote', url, headers? }),
+  // so we translate. Idempotent calls -- if the server is already
+  // registered with the same name, the add is a no-op or replaces in place.
+  private async registerMcpServers(client: OpenCodeClientLike, options: SessionOptions): Promise<void> {
+    if (!options.mcpServers) return;
+
+    for (const [name, rawConfig] of Object.entries(options.mcpServers)) {
+      const config = this.toOpenCodeMcpConfig(rawConfig as Record<string, unknown>);
+      if (!config) continue;
+
+      try {
+        await client.mcp.add({
+          body: { name, config },
+          query: { directory: options.workspacePath },
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        // Treat already-registered as a no-op; everything else is logged but
+        // non-fatal so a single bad server doesn't kill the whole session.
+        if (/already|exists|conflict/i.test(msg)) continue;
+        console.warn(`[OPENCODE-PROTOCOL] Failed to register MCP server "${name}":`, msg);
+      }
+    }
+  }
+
+  private toOpenCodeMcpConfig(raw: Record<string, unknown> | undefined): Record<string, unknown> | null {
+    if (!raw) return null;
+
+    const transport = (raw.transport as string | undefined) || (raw.type as string | undefined);
+    const url = raw.url as string | undefined;
+    const command = raw.command as string | string[] | undefined;
+    const args = raw.args as string[] | undefined;
+
+    if ((transport === 'sse' || transport === 'http' || transport === 'remote') && url) {
+      const remote: Record<string, unknown> = { type: 'remote', url };
+      if (raw.headers) remote.headers = raw.headers;
+      return remote;
+    }
+
+    if (command) {
+      const commandArray = Array.isArray(command)
+        ? command
+        : [command, ...(args ?? [])];
+      const local: Record<string, unknown> = { type: 'local', command: commandArray };
+      if (raw.env) local.environment = raw.env;
+      return local;
+    }
+
+    return null;
   }
 
   /**

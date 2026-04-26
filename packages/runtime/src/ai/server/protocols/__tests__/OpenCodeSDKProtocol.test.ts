@@ -51,6 +51,8 @@ function createMockSdkModule(sseEvents: OpenCodeSSEEvent[]) {
     stream: createAsyncEventStream(sseEvents),
   }));
 
+  const mcpAddFn = vi.fn(async () => ({}));
+
   const mockClient: OpenCodeClientLike = {
     session: {
       create: createFn,
@@ -63,6 +65,9 @@ function createMockSdkModule(sseEvents: OpenCodeSSEEvent[]) {
     },
     event: {
       subscribe: subscribeFn,
+    },
+    mcp: {
+      add: mcpAddFn,
     },
   };
 
