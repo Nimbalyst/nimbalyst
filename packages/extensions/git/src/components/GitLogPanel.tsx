@@ -135,6 +135,22 @@ export function GitLogPanel({ host }: PanelHostProps) {
   const [activeTab, setActiveTab] = useState<GitTab>('log');
   const { entries: logEntries, clearLog, withLog } = useOperationLog();
 
+  // Changes tab: file mask filter (per-workspace persistence)
+  const [fileMaskEnabled, setFileMaskEnabled] = useState<boolean>(
+    () => host.storage.get<boolean>('changesFileMaskEnabled') ?? false
+  );
+  const [fileMaskInput, setFileMaskInput] = useState<string>(
+    () => host.storage.get<string>('changesFileMask') ?? ''
+  );
+  const updateFileMaskEnabled = useCallback((enabled: boolean) => {
+    setFileMaskEnabled(enabled);
+    void host.storage.set('changesFileMaskEnabled', enabled);
+  }, [host.storage]);
+  const updateFileMaskInput = useCallback((value: string) => {
+    setFileMaskInput(value);
+    void host.storage.set('changesFileMask', value);
+  }, [host.storage]);
+
   const handleDetailResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     detailResizeRef.current = { startX: e.clientX, startWidth: detailWidth };
@@ -620,6 +636,39 @@ export function GitLogPanel({ host }: PanelHostProps) {
             />
           </div>
         )}
+
+        {/* Changes-specific filters (only shown on changes tab) */}
+        {activeTab === 'changes' && (
+          <div className="git-log-toolbar-filters">
+            <label className="git-changes-mask-toggle" title="Filter visible files by glob patterns">
+              <input
+                type="checkbox"
+                checked={fileMaskEnabled}
+                onChange={e => updateFileMaskEnabled(e.target.checked)}
+              />
+              <span>File mask:</span>
+            </label>
+            <input
+              className="git-log-input git-log-input--search"
+              type="text"
+              placeholder="*.ts,*.tsx"
+              value={fileMaskInput}
+              onChange={e => updateFileMaskInput(e.target.value)}
+              onFocus={() => { if (!fileMaskEnabled) updateFileMaskEnabled(true); }}
+              spellCheck={false}
+            />
+            {fileMaskInput && (
+              <button
+                type="button"
+                className="git-changes-mask-clear"
+                onClick={() => updateFileMaskInput('')}
+                title="Clear mask"
+              >
+                &#10005;
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Status message (visible on all tabs) */}
@@ -764,6 +813,8 @@ export function GitLogPanel({ host }: PanelHostProps) {
           withLog={withLog}
           onWorkspaceEvent={(event, handler) => host.onWorkspaceEvent(event, handler)}
           onShowOutput={() => setActiveTab('output')}
+          fileMaskEnabled={fileMaskEnabled}
+          fileMaskInput={fileMaskInput}
         />
       )}
 

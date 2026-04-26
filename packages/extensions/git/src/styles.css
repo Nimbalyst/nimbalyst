@@ -941,96 +941,129 @@
 .git-changes-file-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   padding: 2px 8px;
   font-size: 12px;
   line-height: 1.7;
+  cursor: default;
 }
 
 .git-changes-file-row:hover {
   background: var(--nim-bg-tertiary);
 }
 
-.git-changes-file-row:hover .git-changes-file-actions {
-  opacity: 1;
-}
-
-.git-changes-badge {
-  font-size: 10px;
-  font-weight: 600;
-  width: 14px;
-  height: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 3px;
-  flex-shrink: 0;
-}
-
-.git-changes-badge--modified { color: var(--nim-primary, #60a5fa); }
-.git-changes-badge--added    { color: var(--nim-success, #4ade80); }
-.git-changes-badge--deleted  { color: var(--nim-error, #ef4444); }
-.git-changes-badge--untracked { color: var(--nim-text-faint); }
-
-.git-changes-file-path {
+.git-changes-file-name {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--nim-font-mono, monospace);
-  font-size: 11px;
-}
-
-.git-changes-file-dir {
-  color: var(--nim-text-faint);
-}
-
-.git-changes-file-name {
   color: var(--nim-text);
-}
-
-.git-changes-file-actions {
-  display: flex;
-  gap: 2px;
-  flex-shrink: 0;
-  opacity: 0;
-  transition: opacity 0.1s;
-}
-
-.git-changes-action-btn {
-  background: var(--nim-bg-tertiary);
-  border: 1px solid var(--nim-border);
-  color: var(--nim-text-muted);
-  border-radius: 3px;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
   font-size: 12px;
-  line-height: 1;
-  padding: 0;
+  font-weight: 500;
 }
 
-.git-changes-action-btn:hover:not(:disabled) {
-  background: var(--nim-bg-active);
-  color: var(--nim-text);
-  border-color: var(--nim-primary);
-}
+.git-changes-name--modified  { color: var(--nim-file-edited, var(--nim-primary, #60a5fa)); }
+.git-changes-name--added     { color: var(--nim-file-new, var(--nim-success, #4ade80)); }
+.git-changes-name--deleted   { color: var(--nim-file-deleted, var(--nim-error, #ef4444)); }
+.git-changes-name--untracked { color: var(--nim-file-new, var(--nim-success, #4ade80)); }
+.git-changes-name--conflict  { color: var(--nim-error, #ef4444); }
 
-.git-changes-action-btn--danger:hover:not(:disabled) {
-  border-color: var(--nim-error, #ef4444);
-  color: var(--nim-error, #ef4444);
-}
-
-.git-changes-action-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
+.git-changes-file-name--strike {
+  text-decoration: line-through;
+  opacity: 0.85;
 }
 
 .git-changes-file-row--conflict {
   background: color-mix(in srgb, var(--nim-error, #ef4444) 6%, transparent);
+}
+
+/* Checkbox (matches FilesEditedSidebar style) */
+.git-changes-checkbox {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1.5px solid var(--nim-text-faint);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.1s, border-color 0.1s;
+  color: #fff;
+  outline: none;
+}
+
+.git-changes-checkbox:hover:not(.git-changes-checkbox--disabled) {
+  border-color: var(--nim-text-muted);
+}
+
+.git-changes-checkbox:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--nim-primary) 40%, transparent);
+}
+
+.git-changes-checkbox--checked {
+  background: var(--nim-file-edited, var(--nim-primary, #60a5fa));
+  border-color: var(--nim-file-edited, var(--nim-primary, #60a5fa));
+}
+
+.git-changes-checkbox--indeterminate {
+  background: var(--nim-file-edited, var(--nim-primary, #60a5fa));
+  border-color: var(--nim-file-edited, var(--nim-primary, #60a5fa));
+  opacity: 0.7;
+}
+
+.git-changes-checkbox--disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.git-changes-checkbox-dash {
+  display: block;
+  width: 7px;
+  height: 1.5px;
+  background: #fff;
+  border-radius: 1px;
+}
+
+/* File mask (lives in the panel toolbar; see git-log-toolbar-filters) */
+.git-changes-mask-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--nim-text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.git-changes-mask-toggle input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+.git-changes-mask-clear {
+  background: none;
+  border: none;
+  color: var(--nim-text-faint);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+.git-changes-mask-clear:hover {
+  color: var(--nim-text);
+  background: var(--nim-bg-tertiary);
+}
+
+/* Group action danger variant (Discard) */
+.git-changes-group-action--danger {
+  color: var(--nim-error, #ef4444);
+}
+
+.git-changes-group-action--danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--nim-error, #ef4444) 15%, transparent);
 }
 
 .git-changes-conflict-label {
