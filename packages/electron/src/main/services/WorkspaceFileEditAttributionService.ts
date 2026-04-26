@@ -263,6 +263,7 @@ class WorkspaceFileEditAttributionServiceImpl {
       } else {
         const tagId = `ai-edit-pending-${winner.sessionId}-${toolUseId}`;
         await historyManager.createTag(
+          event.workspacePath,
           event.filePath,
           tagId,
           event.beforeContent,

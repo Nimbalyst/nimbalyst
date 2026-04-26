@@ -331,15 +331,16 @@ test('accepting diff applies changes and saves to disk', async () => {
   const tagId = `test-tag-${Date.now()}`;
   const sessionId = `test-session-${Date.now()}`;
 
-  await page.evaluate(async ({ filePath, tagId, sessionId, originalContent }) => {
+  await page.evaluate(async ({ workspacePath, filePath, tagId, sessionId, originalContent }) => {
     await window.electronAPI.history.createTag(
+      workspacePath,
       filePath,
       tagId,
       originalContent,
       sessionId,
       'test-tool-use'
     );
-  }, { filePath: tsxPath, tagId, sessionId, originalContent });
+  }, { workspacePath: workspaceDir, filePath: tsxPath, tagId, sessionId, originalContent });
 
   // Write modified content to disk (triggers file watcher)
   await fs.writeFile(tsxPath, modifiedContent, 'utf8');
@@ -420,15 +421,16 @@ test('rejecting diff reverts to original content', async () => {
   const tagId = `test-tag-${Date.now()}`;
   const sessionId = `test-session-${Date.now()}`;
 
-  await page.evaluate(async ({ filePath, tagId, sessionId, originalContent }) => {
+  await page.evaluate(async ({ workspacePath, filePath, tagId, sessionId, originalContent }) => {
     await window.electronAPI.history.createTag(
+      workspacePath,
       filePath,
       tagId,
       originalContent,
       sessionId,
       'test-tool-use'
     );
-  }, { filePath: tsxPath, tagId, sessionId, originalContent });
+  }, { workspacePath: workspaceDir, filePath: tsxPath, tagId, sessionId, originalContent });
 
   // Write modified content to disk (triggers file watcher)
   await fs.writeFile(tsxPath, modifiedContent, 'utf8');

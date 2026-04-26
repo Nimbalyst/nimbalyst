@@ -162,7 +162,7 @@ interface ElectronAPI {
     loadSnapshot: (filePath: string, timestamp: string) => Promise<string>;
     deleteSnapshot: (filePath: string, timestamp: string) => Promise<void>;
     getPendingTags: (filePath?: string) => Promise<HistoryTag[]>;
-    createTag: (filePath: string, tagId: string, content: string, sessionId: string, toolUseId: string) => Promise<void>;
+    createTag: (workspacePath: string, filePath: string, tagId: string, content: string, sessionId: string, toolUseId: string) => Promise<void>;
     getTag: (filePath: string, tagId: string) => Promise<HistoryTag | null>;
     updateTagStatus: (filePath: string, tagId: string, status: string, workspacePath?: string) => Promise<void>;
     updateTagContent: (filePath: string, tagId: string, content: string) => Promise<void>;

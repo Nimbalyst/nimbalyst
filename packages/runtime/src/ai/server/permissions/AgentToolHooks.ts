@@ -133,7 +133,7 @@ export interface AgentToolHooksOptions {
       metadata?: any
     ) => Promise<void>;
     getPendingTags: (filePath: string) => Promise<Array<{ id: string; createdAt: Date; sessionId?: string }>>;
-    tagFile: (filePath: string, tagType: string, content: string, metadata?: any) => Promise<void>;
+    tagFile: (workspacePath: string, filePath: string, tagId: string, content: string, metadata?: any) => Promise<void>;
     updateTagStatus: (filePath: string, tagId: string, status: string) => Promise<void>;
   };
 }
@@ -179,7 +179,7 @@ export class AgentToolHooks {
   private readonly historyManager?: {
     createSnapshot: (filePath: string, content: string, snapshotType: string, message: string, metadata?: any) => Promise<void>;
     getPendingTags: (filePath: string) => Promise<Array<{ id: string; createdAt: Date; sessionId?: string }>>;
-    tagFile: (filePath: string, tagType: string, content: string, metadata?: any) => Promise<void>;
+    tagFile: (workspacePath: string, filePath: string, tagId: string, content: string, metadata?: any) => Promise<void>;
     updateTagStatus: (filePath: string, tagId: string, status: string) => Promise<void>;
   };
 
@@ -450,6 +450,7 @@ export class AgentToolHooks {
         const content = isNewFile ? '' : fs.readFileSync(filePath, 'utf-8');
 
         await this.historyManager.tagFile(
+          this.workspacePath,
           filePath,
           tagId,
           content,

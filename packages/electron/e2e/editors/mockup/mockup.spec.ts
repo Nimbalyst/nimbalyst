@@ -100,15 +100,16 @@ test.describe('Mockup Diff', () => {
     const tagId = `test-tag-accept-${Date.now()}`;
     const sessionId = `test-session-accept-${Date.now()}`;
 
-    await page.evaluate(async ({ filePath, tagId, sessionId, originalContent }) => {
+    await page.evaluate(async ({ workspacePath, filePath, tagId, sessionId, originalContent }) => {
       await window.electronAPI.history.createTag(
+        workspacePath,
         filePath,
         tagId,
         originalContent,
         sessionId,
         'test-tool-use'
       );
-    }, { filePath: mockupPath, tagId, sessionId, originalContent });
+    }, { workspacePath: workspaceDir, filePath: mockupPath, tagId, sessionId, originalContent });
 
     // Close and reopen the file to trigger pending tag check
     await page.keyboard.press('Meta+w');
@@ -174,15 +175,16 @@ test.describe('Mockup Diff', () => {
     const tagId = `test-tag-reject-${Date.now()}`;
     const sessionId = `test-session-reject-${Date.now()}`;
 
-    await page.evaluate(async ({ filePath, tagId, sessionId, originalContent }) => {
+    await page.evaluate(async ({ workspacePath, filePath, tagId, sessionId, originalContent }) => {
       await window.electronAPI.history.createTag(
+        workspacePath,
         filePath,
         tagId,
         originalContent,
         sessionId,
         'test-tool-use'
       );
-    }, { filePath: mockupPath, tagId, sessionId, originalContent });
+    }, { workspacePath: workspaceDir, filePath: mockupPath, tagId, sessionId, originalContent });
 
     // Close and reopen the file to trigger pending tag check
     await page.keyboard.press('Meta+w');

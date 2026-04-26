@@ -342,10 +342,10 @@ test.describe('Consecutive Edits via File Watcher', () => {
     // Read original content and create pre-edit tag
     const originalContent = await fs.readFile(filePath, 'utf8');
     await page.evaluate(
-      async ([fp, content]) => {
-        await window.electronAPI.history.createTag(fp, 'test-tag-1', content, 'test-session', 'tool-1');
+      async ([wp, fp, content]) => {
+        await window.electronAPI.history.createTag(wp, fp, 'test-tag-1', content, 'test-session', 'tool-1');
       },
-      [filePath, originalContent]
+      [workspaceDir, filePath, originalContent]
     );
     await page.waitForTimeout(200);
 

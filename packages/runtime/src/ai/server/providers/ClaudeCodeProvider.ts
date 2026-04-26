@@ -319,8 +319,9 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
           sessionId: tag.sessionId
         }));
       },
-      tagFile: async (filePath: string, tagId: string, content: string, metadata?: any) => {
+      tagFile: async (workspacePath: string, filePath: string, tagId: string, content: string, metadata?: any) => {
         await historyManager.createTag(
+          workspacePath,
           filePath,
           tagId,
           content,

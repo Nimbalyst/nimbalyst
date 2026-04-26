@@ -378,8 +378,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('history:delete-snapshot', filePath, timestamp),
     getPendingTags: (filePath?: string) =>
       ipcRenderer.invoke('history:get-pending-tags', filePath),
-    createTag: (filePath: string, tagId: string, content: string, sessionId: string, toolUseId: string) =>
-      ipcRenderer.invoke('history:create-tag', filePath, tagId, content, sessionId, toolUseId),
+    createTag: (workspacePath: string, filePath: string, tagId: string, content: string, sessionId: string, toolUseId: string) =>
+      ipcRenderer.invoke('history:create-tag', workspacePath, filePath, tagId, content, sessionId, toolUseId),
     getTag: (filePath: string, tagId: string) =>
       ipcRenderer.invoke('history:get-tag', filePath, tagId),
     updateTagStatus: (filePath: string, tagId: string, status: string, workspacePath?: string) =>

@@ -388,6 +388,7 @@ export class HistoryManager {
    * Tags are permanent records that mark specific document states
    */
   async createTag(
+    workspacePath: string,
     filePath: string,
     tagId: string,
     content: string,
@@ -403,12 +404,7 @@ export class HistoryManager {
       const now = Date.now();
       const compressed = await gzip(Buffer.from(content, 'utf-8'));
 
-      // Determine workspace ID
-      let workspaceId: string | null = null;
-      const dirPath = path.dirname(filePath);
-      if (dirPath !== '/' && dirPath !== path.parse(dirPath).root) {
-        workspaceId = dirPath;
-      }
+      const workspaceId = workspacePath;
 
       // If the SAME session already has a pending tag for this file, keep it.
       // The original pre-edit baseline is the correct one for cumulative diffs.
@@ -516,9 +512,7 @@ export class HistoryManager {
       }
 
       // Emit pending count changed event
-      if (workspaceId) {
-        this.emitPendingCountChanged(workspaceId);
-      }
+      this.emitPendingCountChanged(workspaceId);
     } catch (error: any) {
       logger.main.warn('[HistoryManager] createTag encountered error:', {
         filePath,

@@ -47,8 +47,8 @@ export async function registerHistoryHandlers() {
     });
 
     // PHASE 5: Create tag (for testing)
-    safeHandle('history:create-tag', async (event, filePath: string, tagId: string, content: string, sessionId: string, toolUseId: string) => {
-        await historyManager.createTag(filePath, tagId, content, sessionId, toolUseId);
+    safeHandle('history:create-tag', async (event, workspacePath: string, filePath: string, tagId: string, content: string, sessionId: string, toolUseId: string) => {
+        await historyManager.createTag(workspacePath, filePath, tagId, content, sessionId, toolUseId);
     });
 
     // PHASE 5: Get tag (for testing)

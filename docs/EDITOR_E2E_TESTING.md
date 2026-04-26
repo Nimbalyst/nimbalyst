@@ -256,15 +256,16 @@ test('accepting diff applies changes and clears indicators', async () => {
   const tagId = `test-tag-${Date.now()}`;
   const sessionId = `test-session-${Date.now()}`;
 
-  await page.evaluate(async ({ filePath, tagId, sessionId, originalContent }) => {
+  await page.evaluate(async ({ workspacePath, filePath, tagId, sessionId, originalContent }) => {
     await window.electronAPI.history.createTag(
+      workspacePath,
       filePath,
       tagId,
       originalContent,
       sessionId,
       'test-tool-use'
     );
-  }, { filePath, tagId, sessionId, originalContent });
+  }, { workspacePath: workspaceDir, filePath, tagId, sessionId, originalContent });
 
   await fs.writeFile(filePath, modifiedContent, 'utf8');
 

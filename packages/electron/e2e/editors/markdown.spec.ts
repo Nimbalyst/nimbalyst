@@ -295,15 +295,16 @@ test('accepting diff applies changes and saves to disk', async () => {
   const tagId = `test-tag-${Date.now()}`;
   const sessionId = `test-session-${Date.now()}`;
 
-  await page.evaluate(async ({ filePath, tagId, sessionId, originalContent }) => {
+  await page.evaluate(async ({ workspacePath, filePath, tagId, sessionId, originalContent }) => {
     await window.electronAPI.history.createTag(
+      workspacePath,
       filePath,
       tagId,
       originalContent,
       sessionId,
       'test-tool-use'
     );
-  }, { filePath: mdPath, tagId, sessionId, originalContent });
+  }, { workspacePath: workspaceDir, filePath: mdPath, tagId, sessionId, originalContent });
 
   // Close and reopen the file to trigger pending tag check
   await page.keyboard.press('Meta+w');
@@ -379,15 +380,16 @@ test('rejecting diff reverts to original content', async () => {
   const tagId = `test-tag-${Date.now()}`;
   const sessionId = `test-session-${Date.now()}`;
 
-  await page.evaluate(async ({ filePath, tagId, sessionId, originalContent }) => {
+  await page.evaluate(async ({ workspacePath, filePath, tagId, sessionId, originalContent }) => {
     await window.electronAPI.history.createTag(
+      workspacePath,
       filePath,
       tagId,
       originalContent,
       sessionId,
       'test-tool-use'
     );
-  }, { filePath: mdPath, tagId, sessionId, originalContent });
+  }, { workspacePath: workspaceDir, filePath: mdPath, tagId, sessionId, originalContent });
 
   // Close and reopen the file to trigger pending tag check
   await page.keyboard.press('Meta+w');
