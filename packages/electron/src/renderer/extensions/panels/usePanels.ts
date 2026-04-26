@@ -68,6 +68,7 @@ export function useExtensionGutterButtons(): Array<{
   label: string;
   placement: 'sidebar' | 'fullscreen';
   order: number;
+  isAlpha: boolean;
 }> {
   const [buttons, setButtons] = useState<Array<{
     id: string;
@@ -75,6 +76,7 @@ export function useExtensionGutterButtons(): Array<{
     label: string;
     placement: 'sidebar' | 'fullscreen';
     order: number;
+    isAlpha: boolean;
   }>>([]);
 
   useEffect(() => {
@@ -88,6 +90,7 @@ export function useExtensionGutterButtons(): Array<{
           label: p.title,
           placement: p.placement as 'sidebar' | 'fullscreen',
           order: p.order,
+          isAlpha: p.requiredReleaseChannel === 'alpha',
         }));
 
       setButtons(gutterButtons);
@@ -109,12 +112,14 @@ export function useExtensionBottomPanelButtons(): Array<{
   icon: string;
   label: string;
   order: number;
+  isAlpha: boolean;
 }> {
   const [buttons, setButtons] = useState<Array<{
     id: string;
     icon: string;
     label: string;
     order: number;
+    isAlpha: boolean;
   }>>([]);
 
   useEffect(() => {
@@ -127,6 +132,7 @@ export function useExtensionBottomPanelButtons(): Array<{
           icon: p.icon,
           label: p.title,
           order: p.order,
+          isAlpha: p.requiredReleaseChannel === 'alpha',
         }));
 
       setButtons(bottomButtons);

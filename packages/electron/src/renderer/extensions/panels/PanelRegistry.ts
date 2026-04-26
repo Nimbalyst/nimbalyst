@@ -39,6 +39,12 @@ export interface RegisteredPanel {
   order: number;
 
   /**
+   * Release channel this extension requires. When 'alpha', the gutter button
+   * gets an alpha badge so users can tell it's not a stable feature.
+   */
+  requiredReleaseChannel?: 'stable' | 'alpha';
+
+  /**
    * Help tooltip from the panel contribution.
    * Injected into the HelpContent system automatically.
    */
@@ -129,7 +135,15 @@ function syncPanels(): void {
     }
   }
 
-  registeredPanels = loadedPanels.map(convertToRegisteredPanel);
+  // Build a map of extensionId -> requiredReleaseChannel for badge rendering
+  const channelByExtension = new Map<string, 'stable' | 'alpha' | undefined>();
+  for (const ext of loader.getLoadedExtensions()) {
+    channelByExtension.set(ext.manifest.id, ext.manifest.requiredReleaseChannel);
+  }
+
+  registeredPanels = loadedPanels.map(p =>
+    convertToRegisteredPanel(p, channelByExtension.get(p.extensionId))
+  );
 
   // Auto-register panel toggle commands for new panels
   for (const panel of registeredPanels) {
@@ -162,7 +176,10 @@ function syncPanels(): void {
   console.log(`[PanelRegistry] Synced ${registeredPanels.length} panel(s)`);
 }
 
-function convertToRegisteredPanel(loaded: LoadedPanel): RegisteredPanel {
+function convertToRegisteredPanel(
+  loaded: LoadedPanel,
+  requiredReleaseChannel: 'stable' | 'alpha' | undefined
+): RegisteredPanel {
   return {
     id: loaded.id,
     extensionId: loaded.extensionId,
@@ -171,6 +188,7 @@ function convertToRegisteredPanel(loaded: LoadedPanel): RegisteredPanel {
     placement: loaded.contribution.placement,
     aiSupported: loaded.contribution.aiSupported ?? false,
     order: loaded.contribution.order ?? 100,
+    requiredReleaseChannel,
     tooltip: loaded.contribution.tooltip,
     component: loaded.component,
     gutterButton: loaded.gutterButton,

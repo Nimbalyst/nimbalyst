@@ -8,6 +8,9 @@ import { providersAtom } from '../../store/atoms/appSettings';
 import { setWindowModeAtom } from '../../store/atoms/windowMode';
 import { navigateToSettingsAtom } from '../../store/atoms/settingsNavigation';
 import type { SettingsCategory } from '../Settings/SettingsSidebar';
+import { AlphaBadge } from '../common/AlphaBadge';
+
+const ALPHA_PROVIDERS = new Set(['opencode', 'copilot-cli']);
 
 interface Model {
   id: string;
@@ -229,7 +232,8 @@ export function ModelSelector({
                     <div key={provider} className="model-selector-provider-group mb-1">
                       <div className="model-selector-provider-header flex items-center gap-1.5 px-2 py-1 text-[11px] font-medium text-[var(--nim-text-muted)]">
                         {getProviderIcon(provider, { size: 12 })}
-                        {getProviderLabel(provider)}
+                        <span>{getProviderLabel(provider)}</span>
+                        {ALPHA_PROVIDERS.has(provider) && <AlphaBadge size="xs" />}
                       </div>
                       {providerModels.map(model => {
                         const isCurrent = model.id === currentModel;

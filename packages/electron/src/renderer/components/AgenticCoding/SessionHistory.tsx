@@ -42,6 +42,7 @@ import type { SuperLoop } from '../../../shared/types/superLoop';
 import { store } from '@nimbalyst/runtime/store';
 import { createMetaAgentSession } from '../../utils/metaAgentUtils';
 import { HelpTooltip } from '../../help';
+import { AlphaBadge } from '../common/AlphaBadge';
 import { defaultAgentModelAtom } from '../../store/atoms/appSettings';
 import { usePostHog } from 'posthog-js/react';
 import { WorkspaceSummaryHeader, generateWorkspaceAccentColor } from '../WorkspaceSummaryHeader';
@@ -2925,10 +2926,10 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       <div className="session-history-filters flex items-center px-3 py-2 border-b border-[var(--nim-border)] gap-1.5 shrink-0">
         {isCardModeEnabled && (
           <button
-            className={`session-history-view-toggle flex items-center justify-center px-1.5 py-1 text-xs rounded border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] text-[var(--nim-text-faint)] cursor-pointer transition-all duration-150 outline-none hover:bg-[var(--nim-bg-tertiary)] hover:border-[var(--nim-primary)] hover:text-[var(--nim-text)] [&_svg]:block ${viewMode === 'card' ? 'bg-[var(--nim-primary)] border-[var(--nim-primary)] text-white hover:opacity-90' : ''}`}
+            className={`session-history-view-toggle relative flex items-center justify-center px-1.5 py-1 text-xs rounded border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] text-[var(--nim-text-faint)] cursor-pointer transition-all duration-150 outline-none hover:bg-[var(--nim-bg-tertiary)] hover:border-[var(--nim-primary)] hover:text-[var(--nim-text)] [&_svg]:block ${viewMode === 'card' ? 'bg-[var(--nim-primary)] border-[var(--nim-primary)] text-white hover:opacity-90' : ''}`}
             onClick={() => setViewMode(viewMode === 'list' ? 'card' : 'list')}
-            title={viewMode === 'list' ? 'Switch to card view' : 'Switch to list view'}
-            aria-label={viewMode === 'list' ? 'Switch to card view' : 'Switch to list view'}
+            title={viewMode === 'list' ? 'Switch to card view (alpha)' : 'Switch to list view (alpha)'}
+            aria-label={viewMode === 'list' ? 'Switch to card view (alpha feature)' : 'Switch to list view (alpha feature)'}
           >
             {viewMode === 'list' ? (
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -2944,6 +2945,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                 <rect x="2" y="11" width="12" height="2" rx="0.5" fill="currentColor"/>
               </svg>
             )}
+            <AlphaBadge size="dot" className="absolute -top-1 -right-1 pointer-events-none" />
           </button>
         )}
         <button
@@ -3726,7 +3728,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           )}
           {onNewBlitz && (
             <button
-              className={`session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1 ${!isGitRepo ? 'opacity-50 cursor-not-allowed hover:bg-transparent' : ''}`}
+              className={`session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] ${!isGitRepo ? 'opacity-50 cursor-not-allowed hover:bg-transparent' : ''}`}
               data-testid="new-blitz-button"
               onClick={() => { if (isGitRepo) { onNewBlitz(); setNewDropdownOpen(false); setNewDropdownPosition(null); } }}
               disabled={!isGitRepo}
@@ -3735,7 +3737,8 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M9 2L4 9h4l-1 5 5-7H8l1-5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
-              <span>New Blitz</span>
+              <span className="flex-1">New Blitz</span>
+              <AlphaBadge size="xs" />
             </button>
           )}
           {onNewTerminal && (
@@ -3753,7 +3756,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           )}
           {isSuperLoopsAvailable && (
             <button
-              className={`session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1 ${!isGitRepo ? 'opacity-50 cursor-not-allowed hover:bg-transparent' : ''}`}
+              className={`session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] ${!isGitRepo ? 'opacity-50 cursor-not-allowed hover:bg-transparent' : ''}`}
               data-testid="new-super-loop-button"
               onClick={() => { if (isGitRepo) { openSuperLoopDialog(); setNewDropdownOpen(false); setNewDropdownPosition(null); } }}
               disabled={!isGitRepo}
@@ -3763,17 +3766,19 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                 <path d="M13 5.5H9.5M13 5.5L10.5 3M13 5.5L10.5 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                 <path d="M3 10.5H6.5M3 10.5L5.5 8M3 10.5L5.5 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
-              <span>New Super Loop</span>
+              <span className="flex-1">New Super Loop</span>
+              <AlphaBadge size="xs" />
             </button>
           )}
           {isMetaAgentEnabled && (
             <button
-              className="session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1"
+              className="session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)]"
               data-testid="new-meta-agent-button"
               onClick={() => { void handleNewMetaAgent(); setNewDropdownOpen(false); setNewDropdownPosition(null); }}
             >
               <MaterialSymbol icon="hub" size={14} />
-              <span>New Meta Agent</span>
+              <span className="flex-1">New Meta Agent</span>
+              <AlphaBadge size="xs" />
             </button>
           )}
         </div>

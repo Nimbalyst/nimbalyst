@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ProviderConfig } from '../../Settings/SettingsView';
 import { SettingsToggle } from '../SettingsToggle';
+import { AlphaBadge } from '../../common/AlphaBadge';
 
 interface OpenCodePanelProps {
   config: ProviderConfig;
@@ -63,7 +64,10 @@ export function OpenCodePanel({
   return (
     <div className="provider-panel flex flex-col">
       <div className="provider-panel-header mb-6 pb-4 border-b border-[var(--nim-border)]">
-        <h3 className="provider-panel-title text-xl font-semibold leading-tight mb-2 text-[var(--nim-text)]">OpenCode</h3>
+        <h3 className="provider-panel-title text-xl font-semibold leading-tight mb-2 text-[var(--nim-text)] flex items-center gap-2">
+          OpenCode
+          <AlphaBadge size="sm" />
+        </h3>
         <p className="provider-panel-description text-sm leading-relaxed text-[var(--nim-text-muted)]">
           Open source coding agent with multi-model support. Works with Claude, OpenAI, Gemini,
           and local models through a unified interface.

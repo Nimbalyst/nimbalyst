@@ -7,6 +7,7 @@ import type { TrackerDataModel } from '@nimbalyst/runtime/plugins/TrackerPlugin/
 import type { TrackerFilterChip } from '../../store/atoms/trackers';
 import type { ViewMode } from './TrackerMainView';
 import { WorkspaceSummaryHeader } from '../WorkspaceSummaryHeader';
+import { AlphaBadge } from '../common/AlphaBadge';
 
 interface TrackerSidebarProps {
   workspacePath?: string;
@@ -66,15 +67,16 @@ export const TrackerSidebar: React.FC<TrackerSidebarProps> = ({
                     <MaterialSymbol icon="table_rows" size={16} />
                   </button>
                   <button
-                    className={`flex items-center justify-center w-7 h-6 border-l border-nim transition-colors ${
+                    className={`relative flex items-center justify-center w-7 h-6 border-l border-nim transition-colors ${
                       viewMode === 'kanban'
                         ? 'bg-nim-active text-nim'
                         : 'bg-nim-secondary text-nim-muted hover:text-nim'
                     }`}
                     onClick={() => onViewModeChange('kanban')}
-                    title="Kanban view"
+                    title="Kanban view (alpha)"
                   >
                     <MaterialSymbol icon="view_kanban" size={16} />
+                    <AlphaBadge size="dot" className="absolute -top-1 -right-1 pointer-events-none" />
                   </button>
                 </div>
             </>

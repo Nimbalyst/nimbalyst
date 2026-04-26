@@ -4,6 +4,8 @@ import { useAtomValue } from 'jotai';
 import { MaterialSymbol, getProviderIcon } from '@nimbalyst/runtime';
 import { releaseChannelAtom } from '../../store/atoms/appSettings';
 import { useAlphaFeatures } from '../../hooks/useAlphaFeature';
+import { AlphaBadge } from '../common/AlphaBadge';
+import type { AlphaFeatureTag } from '../../../shared/alphaFeatures';
 
 export type SettingsCategory =
   | 'agent-permissions'
@@ -40,6 +42,7 @@ interface CategoryItem {
   name: string;
   icon: React.ReactNode;
   badge?: string | number;
+  alphaTag?: AlphaFeatureTag;
   statusDot?: 'success' | 'warning' | 'error';
   hidden?: boolean;
 }
@@ -98,6 +101,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
           id: 'voice-mode',
           name: 'Voice Mode',
           icon: <MaterialSymbol icon="mic" size={16} />,
+          alphaTag: 'voice-mode',
           hidden: !alphaFeatures['voice-mode'], // Only visible when feature is enabled
         },
         {
@@ -138,6 +142,7 @@ Best for complex coding tasks.`,
           name: 'OpenCode',
           icon: getProviderIcon('opencode', { size: 16 }),
           statusDot: getStatusDot('opencode'),
+          alphaTag: 'opencode',
           hidden: !alphaFeatures['opencode'],
         },
         {
@@ -145,6 +150,7 @@ Best for complex coding tasks.`,
           name: 'GitHub Copilot',
           icon: <MaterialSymbol icon="terminal" size={16} />,
           statusDot: getStatusDot('copilot-cli'),
+          alphaTag: 'copilot-cli',
           hidden: !alphaFeatures['copilot-cli'],
         },
       ],
@@ -194,11 +200,13 @@ Best for quick edits and tasks that do not require multi-file operations.`,
           id: 'team' as SettingsCategory,
           name: 'Team',
           icon: <MaterialSymbol icon="group" size={16} />,
+          alphaTag: 'collaboration' as AlphaFeatureTag,
         },
         {
           id: 'tracker-config' as SettingsCategory,
           name: 'Trackers',
           icon: <MaterialSymbol icon="assignment" size={16} />,
+          alphaTag: 'collaboration' as AlphaFeatureTag,
         },
       ],
     }] : []),
@@ -288,6 +296,7 @@ Best for quick edits and tasks that do not require multi-file operations.`,
                 >
                   <span className="settings-sidebar-item-icon flex items-center justify-center w-5 h-5 shrink-0 text-[var(--nim-text-muted)]">{item.icon}</span>
                   <span className="settings-sidebar-item-name flex-1 truncate">{item.name}</span>
+                  {item.alphaTag && <AlphaBadge size="xs" />}
                   {item.badge && (
                     <span className="settings-sidebar-item-badge text-[10px] font-medium px-1.5 py-0.5 rounded bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)]">
                       {item.badge}

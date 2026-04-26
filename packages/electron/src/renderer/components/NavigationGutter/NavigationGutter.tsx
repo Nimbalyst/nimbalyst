@@ -20,6 +20,7 @@ import { setActiveSessionAtom } from '../../store';
 import { terminalFeatureAvailableAtom, syncEnabledAtom, syncEnabledProjectsAtom } from '../../store/atoms/appSettings';
 import { workspaceHasTeamAtom } from '../../store/atoms/collabDocuments';
 import { useAlphaFeature } from '../../hooks/useAlphaFeature';
+import { AlphaBadge } from '../common/AlphaBadge';
 import { UserMenuPopover } from './UserMenuPopover';
 import { GutterContextMenu } from './GutterContextMenu';
 import { type HideableGutterButton, hiddenGutterButtonsAtom } from '../../store/atoms/projectState';
@@ -369,6 +370,10 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
                     size={20}
                     fill={contentMode === button.contentMode && !activeExtensionPanel}
                   />
+                  <AlphaBadge
+                    size="dot"
+                    className="absolute top-0 right-0.5 pointer-events-none"
+                  />
                 </button>
               </HelpTooltip>
             );
@@ -404,6 +409,9 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
                   size={20}
                   fill={activeExtensionPanel === panel.id}
                 />
+                {panel.isAlpha && (
+                  <AlphaBadge size="dot" className="absolute top-0 right-0.5 pointer-events-none" />
+                )}
               </button>
             ))}
         </div>
@@ -459,6 +467,9 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
                   size={20}
                   fill={activeExtensionPanel === panel.id}
                 />
+                {panel.isAlpha && (
+                  <AlphaBadge size="dot" className="absolute top-0 right-0.5 pointer-events-none" />
+                )}
               </button>
             ))}
         </div>
@@ -512,6 +523,9 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
                 data-panel-id={panel.id}
               >
                 <MaterialSymbol icon={panel.icon} size={20} fill={isActive} />
+                {panel.isAlpha && (
+                  <AlphaBadge size="dot" className="absolute top-0 right-0.5 pointer-events-none" />
+                )}
               </button>
             </HelpTooltip>
           );

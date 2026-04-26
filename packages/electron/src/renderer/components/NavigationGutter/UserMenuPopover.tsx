@@ -4,6 +4,7 @@ import { useAlphaFeature } from '../../hooks/useAlphaFeature';
 import type { SettingsCategory } from '../Settings/SettingsSidebar';
 import type { SettingsScope } from '../Settings/SettingsView';
 import { useFloatingMenu, FloatingPortal } from '../../hooks/useFloatingMenu';
+import { AlphaBadge } from '../common/AlphaBadge';
 
 interface StytchAuthState {
   isAuthenticated: boolean;
@@ -91,6 +92,7 @@ export function UserMenuPopover({ onNavigateSettings, onClose, isProjectConnecte
     ...(isProjectConnected && isCollaborationEnabled ? [{
       label: 'Team Settings',
       icon: 'group' as const,
+      alpha: true,
       onClick: () => {
         onNavigateSettings('project', 'team');
         onClose();
@@ -126,7 +128,8 @@ export function UserMenuPopover({ onNavigateSettings, onClose, isProjectConnecte
               data-testid={`user-menu-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
             >
               <MaterialSymbol icon={item.icon} size={18} className="text-nim-muted shrink-0" />
-              <span>{item.label}</span>
+              <span className="flex-1">{item.label}</span>
+              {'alpha' in item && item.alpha && <AlphaBadge size="xs" />}
             </button>
           ))}
         </div>
