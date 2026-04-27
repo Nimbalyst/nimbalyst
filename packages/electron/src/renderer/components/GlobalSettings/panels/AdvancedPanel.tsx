@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
+import { MaterialSymbol } from '@nimbalyst/runtime';
 import { SettingsToggle } from '../SettingsToggle';
 import { HelpTooltip } from '../../../help';
 import {
@@ -23,7 +24,6 @@ import {
   type ExternalEditorType,
   type PreferredTerminalShell,
 } from '../../../store/atoms/appSettings';
-import { ALPHA_FEATURES, areAllAlphaFeaturesEnabled, enableAllAlphaFeatures as enableAllAlphaFeaturesUtil, disableAllAlphaFeatures } from '../../../../shared/alphaFeatures';
 import {
   autoCommitEnabledAtom,
   setAutoCommitEnabledAtom,
@@ -142,8 +142,6 @@ export function AdvancedPanel() {
     walkthroughsViewedCount,
     walkthroughsTotalCount,
     maxHeapSizeMB,
-    alphaFeatures,
-    enableAllAlphaFeatures,
     customPathDirs,
     spellcheckEnabled,
     historyMaxAgeDays,
@@ -151,7 +149,6 @@ export function AdvancedPanel() {
     preferredTerminalShell,
   } = settings;
   const isDevelopment = import.meta.env.DEV;
-  const [showReleaseChannel, setShowReleaseChannel] = useState(false);
   const [showFeaturesMenu, setShowFeaturesMenu] = useState(false);
 
   // Fetch enhanced PATH when user clicks to show it
@@ -197,12 +194,6 @@ export function AdvancedPanel() {
     terminalShellOptions.push({ value: provider, label });
   }
 
-  const handleTitleClick = (e: React.MouseEvent) => {
-    if (e.metaKey || e.ctrlKey) {
-      setShowReleaseChannel(true);
-    }
-  };
-
   const handleModeClick = (e: React.MouseEvent) => {
     if (e.metaKey || e.ctrlKey) {
       setShowFeaturesMenu(prev => !prev);
@@ -212,11 +203,7 @@ export function AdvancedPanel() {
   return (
     <div className="provider-panel flex flex-col">
       <div className="provider-panel-header mb-6 pb-4 border-b border-[var(--nim-border)]">
-        <h3
-          className="provider-panel-title text-xl font-semibold leading-tight mb-2 text-[var(--nim-text)] cursor-pointer"
-          onClick={handleTitleClick}
-          title="Command/Ctrl-click to reveal release channel options"
-        >
+        <h3 className="provider-panel-title text-xl font-semibold leading-tight mb-2 text-[var(--nim-text)]">
           Advanced Settings
         </h3>
         <p className="provider-panel-description text-sm leading-relaxed text-[var(--nim-text-muted)]">
@@ -231,144 +218,58 @@ export function AdvancedPanel() {
             Choose between a simplified experience or full developer features for this project.
           </p>
 
-          <div className="mode-selection" style={{ display: 'flex', flexDirection: 'row', gap: '16px', marginTop: '12px' }}>
+          <div className="mode-selection flex flex-row gap-4 mt-3">
             <label
-              className={`mode-option ${!developerMode ? 'selected' : ''}`}
+              className={`mode-option flex flex-1 items-start p-0 rounded-xl cursor-pointer transition-all relative border-2 ${
+                !developerMode
+                  ? 'selected bg-nim-hover border-nim-primary shadow-[0_0_0_3px_rgba(88,166,255,0.15)]'
+                  : 'bg-nim-secondary border-nim'
+              }`}
               onClick={() => handleDeveloperModeChange(false)}
-              style={{
-                display: 'flex',
-                flex: 1,
-                alignItems: 'flex-start',
-                padding: 0,
-                background: !developerMode ? 'var(--surface-hover)' : 'var(--surface-secondary)',
-                border: `2px solid ${!developerMode ? 'var(--primary-color)' : 'var(--border-primary)'}`,
-                borderRadius: '12px',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-                position: 'relative',
-                boxShadow: !developerMode ? '0 0 0 3px rgba(88, 166, 255, 0.15)' : 'none',
-              }}
             >
               <input
                 type="radio"
                 name="mode"
                 checked={!developerMode}
                 onChange={() => handleDeveloperModeChange(false)}
-                style={{
-                  position: 'absolute',
-                  top: '12px',
-                  right: '12px',
-                  margin: 0,
-                  cursor: 'pointer',
-                  width: '18px',
-                  height: '18px',
-                  accentColor: 'var(--primary-color)',
-                }}
+                className="absolute top-3 right-3 m-0 cursor-pointer w-[18px] h-[18px] accent-[var(--nim-primary)]"
               />
-              <div style={{
-                padding: '16px',
-                width: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                textAlign: 'center',
-              }}>
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '8px',
-                  marginBottom: '8px',
-                }}>
-                  <span className="material-symbols-outlined" style={{
-                    fontSize: '32px',
-                    color: 'var(--primary-color)',
-                  }}>
+              <div className="p-4 w-full flex flex-col items-center text-center">
+                <div className="flex flex-col items-center gap-2 mb-2">
+                  <span className="material-symbols-outlined text-nim-primary text-[32px]">
                     edit_note
                   </span>
-                  <span style={{
-                    fontSize: '16px',
-                    fontWeight: 600,
-                    color: 'var(--text-primary)',
-                  }}>Standard Mode</span>
+                  <span className="text-base font-semibold text-nim">Standard Mode</span>
                 </div>
-                <p style={{
-                  margin: 0,
-                  fontSize: '13px',
-                  color: 'var(--text-secondary)',
-                  lineHeight: 1.4,
-                }}>
+                <p className="m-0 text-[13px] leading-snug text-nim-muted">
                   Simplified interface focused on writing, editing, and AI assistance
                 </p>
               </div>
             </label>
 
             <label
-              className={`mode-option ${developerMode ? 'selected' : ''}`}
+              className={`mode-option flex flex-1 items-start p-0 rounded-xl cursor-pointer transition-all relative border-2 ${
+                developerMode
+                  ? 'selected bg-nim-hover border-nim-primary shadow-[0_0_0_3px_rgba(88,166,255,0.15)]'
+                  : 'bg-nim-secondary border-nim'
+              }`}
               onClick={() => handleDeveloperModeChange(true)}
-              style={{
-                display: 'flex',
-                flex: 1,
-                alignItems: 'flex-start',
-                padding: 0,
-                background: developerMode ? 'var(--surface-hover)' : 'var(--surface-secondary)',
-                border: `2px solid ${developerMode ? 'var(--primary-color)' : 'var(--border-primary)'}`,
-                borderRadius: '12px',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-                position: 'relative',
-                boxShadow: developerMode ? '0 0 0 3px rgba(88, 166, 255, 0.15)' : 'none',
-              }}
             >
               <input
                 type="radio"
                 name="mode"
                 checked={developerMode}
                 onChange={() => handleDeveloperModeChange(true)}
-                style={{
-                  position: 'absolute',
-                  top: '12px',
-                  right: '12px',
-                  margin: 0,
-                  cursor: 'pointer',
-                  width: '18px',
-                  height: '18px',
-                  accentColor: 'var(--primary-color)',
-                }}
+                className="absolute top-3 right-3 m-0 cursor-pointer w-[18px] h-[18px] accent-[var(--nim-primary)]"
               />
-              <div style={{
-                padding: '16px',
-                width: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                textAlign: 'center',
-              }}>
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '8px',
-                  marginBottom: '8px',
-                }}>
-                  <span className="material-symbols-outlined" style={{
-                    fontSize: '32px',
-                    color: 'var(--primary-color)',
-                  }}>
+              <div className="p-4 w-full flex flex-col items-center text-center">
+                <div className="flex flex-col items-center gap-2 mb-2">
+                  <span className="material-symbols-outlined text-nim-primary text-[32px]">
                     terminal
                   </span>
-                  <span style={{
-                    fontSize: '16px',
-                    fontWeight: 600,
-                    color: 'var(--text-primary)',
-                  }}>Developer Mode</span>
+                  <span className="text-base font-semibold text-nim">Developer Mode</span>
                 </div>
-                <p style={{
-                  margin: 0,
-                  fontSize: '13px',
-                  color: 'var(--text-secondary)',
-                  lineHeight: 1.4,
-                }}>
+                <p className="m-0 text-[13px] leading-snug text-nim-muted">
                   Full development environment with git worktrees, terminal access, development specific features
                 </p>
               </div>
@@ -460,129 +361,46 @@ export function AdvancedPanel() {
         </div>
       )}
 
-      {showReleaseChannel && (
-        <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
-          <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Release Channel</h4>
-          <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-4">
-            Choose which release channel to receive updates from.
-          </p>
+      {/* ── Release Channel ── */}
+      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">Release Channel</h4>
+        <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-4">
+          Choose which release stream Nimbalyst pulls auto-updates from. Alpha and beta features are configured separately on each feature&apos;s settings page.
+        </p>
 
-          <div className="setting-item py-3">
-            <div className="setting-text flex flex-col gap-0.5">
-              <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Update Channel</span>
-              <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
-                <strong>Stable:</strong> Production-ready releases from GitHub (recommended for most users).<br/>
-                <strong>Alpha:</strong> Early access to new features for internal testing. May be unstable.
-              </span>
-            </div>
-            <select
-              value={releaseChannel}
-              onChange={(e) => {
-                const newChannel = e.target.value as ReleaseChannel;
-                if (newChannel === 'alpha') {
-                  // Auto-enable all alpha features when switching to alpha channel
-                  updateSettings({
-                    releaseChannel: newChannel,
-                    enableAllAlphaFeatures: true,
-                    alphaFeatures: enableAllAlphaFeaturesUtil(),
-                  });
-                  posthog?.capture('alpha_feature_toggled', {
-                    feature_tag: 'all',
-                    enabled: true,
-                    source: 'channel_switch',
-                  });
-                } else {
-                  // Disable all alpha features when switching back to stable
-                  updateSettings({
-                    releaseChannel: newChannel,
-                    enableAllAlphaFeatures: false,
-                    alphaFeatures: disableAllAlphaFeatures(),
-                  });
-                  posthog?.capture('alpha_feature_toggled', {
-                    feature_tag: 'all',
-                    enabled: false,
-                    source: 'channel_switch',
-                  });
-                }
-              }}
-              className="setting-select mt-2 w-full py-2 px-3 pr-9 rounded-md text-sm bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] outline-none appearance-none bg-[url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M3%204.5L6%207.5L9%204.5%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_12px_center] focus:border-[var(--nim-primary)]"
-            >
-              <option value="stable">Stable</option>
-              <option value="alpha">Alpha (Internal Testing)</option>
-            </select>
+        <div className="setting-item py-3">
+          <div className="setting-text flex flex-col gap-0.5">
+            <span className="setting-name text-sm font-medium text-[var(--nim-text)]">Update Channel</span>
+            <span className="setting-description text-xs leading-relaxed text-[var(--nim-text-muted)]">
+              <strong>Stable:</strong> Production-ready releases (recommended for most users).<br/>
+              <strong>Alpha:</strong> Frequent, rough developer releases. Expect bugs and breaking changes between updates.
+            </span>
           </div>
-
-          {releaseChannel === 'alpha' && (
-            <>
-              <div className="mt-4 p-3 bg-nim-secondary rounded-md border border-nim">
-                {/* "All Alpha Features" master toggle */}
-                <div className="setting-item mb-3 pb-3 border-b border-nim">
-                  <label className="setting-label">
-                    <input
-                      type="checkbox"
-                      checked={enableAllAlphaFeatures}
-                      onChange={(e) => {
-                        const enabled = e.target.checked;
-                        const newFeatures = enabled ? enableAllAlphaFeaturesUtil() : disableAllAlphaFeatures();
-                        updateSettings({
-                          enableAllAlphaFeatures: enabled,
-                          alphaFeatures: newFeatures
-                        });
-                        posthog?.capture('alpha_feature_toggled', {
-                          feature_tag: 'all',
-                          enabled,
-                          source: 'toggle',
-                        });
-                      }}
-                      className="setting-checkbox"
-                    />
-                    <div className="setting-text">
-                      <span className="setting-name">Enable All Alpha Features</span>
-                      <span className="setting-description">
-                        Automatically enable all current and future alpha features. Individual features can still be toggled below.
-                      </span>
-                    </div>
-                  </label>
-                </div>
-
-                {ALPHA_FEATURES.map((feature) => (
-                  <div
-                    key={feature.tag}
-                    className={`setting-item ${enableAllAlphaFeatures ? 'opacity-60 pointer-events-none' : ''}`}
-                  >
-                    <label className="setting-label">
-                      <input
-                        type="checkbox"
-                        checked={alphaFeatures[feature.tag] ?? false}
-                        onChange={(e) => {
-                        updateSettings({ alphaFeatures: { ...alphaFeatures, [feature.tag]: e.target.checked } });
-                        posthog?.capture('alpha_feature_toggled', {
-                          feature_tag: feature.tag,
-                          enabled: e.target.checked,
-                          source: 'toggle',
-                        });
-                      }}
-                        className="setting-checkbox"
-                        disabled={enableAllAlphaFeatures}
-                      />
-                      <div className="setting-text">
-                        <span className="setting-name">{feature.name}</span>
-                        <span className="setting-description">
-                          {feature.description}
-                        </span>
-                      </div>
-                    </label>
-                  </div>
-                ))}
-              </div>
-
-              <p className="mt-3 p-2 text-[13px] text-nim-error bg-nim-secondary rounded border border-nim">
-                You may need to restart Nimbalyst for these changes to take effect.
-              </p>
-            </>
-          )}
+          <select
+            value={releaseChannel}
+            onChange={(e) => {
+              const newChannel = e.target.value as ReleaseChannel;
+              updateSettings({ releaseChannel: newChannel });
+              posthog?.capture('release_channel_changed', {
+                channel: newChannel,
+              });
+            }}
+            className="setting-select mt-2 w-full py-2 px-3 pr-9 rounded-md text-sm bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] outline-none appearance-none bg-[url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M3%204.5L6%207.5L9%204.5%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_12px_center] focus:border-[var(--nim-primary)]"
+          >
+            <option value="stable">Stable</option>
+            <option value="alpha">Alpha (Developer Releases)</option>
+          </select>
         </div>
-      )}
+
+        {releaseChannel === 'alpha' && (
+          <div className="mt-3 flex items-start gap-2 p-3 rounded border border-[var(--nim-warning)]/30 bg-[var(--nim-warning)]/10">
+            <MaterialSymbol icon="warning" size={16} className="text-[var(--nim-warning)] shrink-0 mt-0.5" />
+            <p className="m-0 text-[13px] text-[var(--nim-text)] leading-snug">
+              The alpha channel ships rough developer releases that may be unstable or contain unfinished work. Switch back to Stable if you encounter problems.
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* ── General ── */}
       <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">

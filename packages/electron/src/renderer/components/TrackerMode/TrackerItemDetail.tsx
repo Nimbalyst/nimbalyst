@@ -715,8 +715,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
               })}
             {isNativeItem(item) && (
               <span
-                className="text-[10px] font-medium px-1.5 py-0.5 rounded flex items-center gap-0.5"
-                style={{ backgroundColor: '#6b728020', color: '#9ca3af' }}
+                className="text-[10px] font-medium px-1.5 py-0.5 rounded flex items-center gap-0.5 bg-gray-500/[0.125] text-gray-400"
                 title="Stored in database — not backed by a file"
                 data-testid="tracker-source-db-badge"
               >
@@ -859,8 +858,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
               )}
               {reviewState?.hasUnreviewed && (
                 <div
-                  className="flex items-center gap-2 px-3 py-1.5 text-xs border-b border-nim"
-                  style={{ backgroundColor: 'var(--nim-bg-tertiary)' }}
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs border-b border-nim bg-nim-tertiary"
                   data-testid="tracker-content-review-banner"
                 >
                   <MaterialSymbol icon="rate_review" size={14} className="text-nim-warning" />

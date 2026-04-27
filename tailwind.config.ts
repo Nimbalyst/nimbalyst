@@ -6,7 +6,6 @@
  *
  * Theme colors use CSS variables (--nim-*) which are defined in:
  * - /packages/runtime/src/editor/themes/NimbalystTheme.css (unified theme)
- * - /packages/runtime/src/editor/themes/PlaygroundEditorTheme.css (legacy, mapped via NimbalystTheme.css)
  */
 
 import type { Config } from 'tailwindcss';

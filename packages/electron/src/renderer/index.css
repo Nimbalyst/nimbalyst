@@ -13,12 +13,6 @@
 
 /* Shared component utilities are now imported via JS in index.tsx */
 
-/* Map editor theme variables to electron-specific aliases for backwards compatibility */
-:root {
-  --primary-color: var(--nim-primary);
-  --primary-color-hover: var(--nim-primary-hover);
-}
-
 /* Reset and base styles */
 * {
   box-sizing: border-box;

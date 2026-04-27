@@ -195,13 +195,10 @@ test('bulleted list should render with nim-ul class and visible bullet markers',
 
   console.log('UL elements found:', JSON.stringify(ulInfo, null, 2));
 
-  const lexicalUl = ulInfo.find(ul =>
-    ul.className.includes('nim-ul') || ul.className.includes('PlaygroundEditorTheme__ul')
-  );
+  const lexicalUl = ulInfo.find(ul => ul.className.includes('nim-ul'));
 
-  expect(lexicalUl, 'Should find a <ul> with nim-ul or PlaygroundEditorTheme__ul class').toBeTruthy();
+  expect(lexicalUl, 'Should find a <ul> with nim-ul class').toBeTruthy();
   expect(lexicalUl!.className).toContain('nim-ul');
-  expect(lexicalUl!.className).not.toContain('PlaygroundEditorTheme__ul');
   expect(lexicalUl!.computedListStyle).toBe('disc');
 
   // Check list items - scope to the active/visible editor element

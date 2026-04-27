@@ -225,15 +225,15 @@ function useCardState(sessionId: string, cardType: KanbanCardType): CardStateInf
 function CardStatusBadge({ info }: { info: CardStateInfo }) {
   if (info.state === 'running') {
     return (
-      <span className="flex items-center gap-0.5 text-[10px] px-1 py-px rounded" style={{ color: info.badgeColor, background: 'rgba(96, 165, 250, 0.1)' }}>
-        <span className={`material-symbols-outlined ${info.spinIcon ? 'animate-spin' : ''}`} style={{ fontSize: '12px' }}>{info.badgeIcon}</span>
+      <span className="flex items-center gap-0.5 text-[10px] px-1 py-px rounded bg-blue-400/10" style={{ color: info.badgeColor }}>
+        <span className={`material-symbols-outlined text-[12px] ${info.spinIcon ? 'animate-spin' : ''}`}>{info.badgeIcon}</span>
         {info.badgeLabel}
       </span>
     );
   }
   if (info.state === 'waiting') {
     return (
-      <span className="flex items-center gap-0.5 text-[10px] px-1 py-px rounded" style={{ color: info.badgeColor, background: 'rgba(249, 115, 22, 0.1)' }}>
+      <span className="flex items-center gap-0.5 text-[10px] px-1 py-px rounded bg-orange-500/10" style={{ color: info.badgeColor }}>
         <MaterialSymbol icon="help_outline" size={12} />
         {info.badgeLabel}
       </span>
@@ -544,8 +544,7 @@ function SessionKanbanCard({ session, onSelect, onArchive, onRename, phaseColor,
             {tags.slice(0, 4).map(tag => (
               <span
                 key={tag}
-                className="text-[10px] font-medium px-1.5 py-px rounded"
-                style={{ background: 'rgba(255,255,255,0.06)', color: '#b3b3b3' }}
+                className="text-[10px] font-medium px-1.5 py-px rounded bg-white/[0.06] text-nim-muted"
               >
                 {tag}
               </span>
@@ -881,8 +880,7 @@ function UnphasedColumn({ sessions, onSelect, onArchive, onRename, onDropToPhase
       >
         <div className="flex flex-col items-center gap-1 py-3">
           <span
-            className="w-2 h-2 rounded-full shrink-0"
-            style={{ backgroundColor: '#525252' }}
+            className="w-2 h-2 rounded-full shrink-0 bg-neutral-600"
           />
           <span className="text-[10px] font-semibold text-nim-faint">
             {sessions.length}
@@ -918,10 +916,7 @@ function UnphasedColumn({ sessions, onSelect, onArchive, onRename, onDropToPhase
           onHeaderContextMenu(e, 'unphased', sessions.map(s => s.id));
         }}
       >
-        <span
-          className="w-2 h-2 rounded-full shrink-0"
-          style={{ backgroundColor: '#525252' }}
-        />
+        <span className="w-2 h-2 rounded-full shrink-0 bg-neutral-600" />
         <span className="text-[11px] font-semibold text-nim uppercase tracking-wide truncate">
           Inbox
         </span>
@@ -1148,8 +1143,7 @@ function SessionKanbanToolbar({ selectedCount, onClearSelection }: { selectedCou
       {filter.tags.map(tag => (
         <button
           key={tag}
-          className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] border cursor-pointer shrink-0"
-          style={{ background: 'rgba(96, 165, 250, 0.12)', borderColor: 'rgba(96, 165, 250, 0.3)', color: '#60a5fa' }}
+          className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] border cursor-pointer shrink-0 bg-blue-400/[0.12] border-blue-400/30 text-blue-400"
           onClick={() => removeTag(tag)}
         >
           #{tag}

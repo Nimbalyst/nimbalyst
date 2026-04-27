@@ -892,18 +892,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
 
       {initError && (
         <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--error-color)',
-            fontSize: '14px',
-            padding: '20px',
-            textAlign: 'center',
-          }}
+          className="absolute inset-0 flex flex-col items-center justify-center text-nim-error text-sm p-5 text-center"
         >
           <div style={{ marginBottom: '12px' }}>
             Failed to initialize terminal: {initError}

@@ -429,7 +429,7 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
             collaborationConfig={collaborationMemoConfig}
           />
         ) : (
-          <div className="flex items-center justify-center h-full" style={{ color: 'var(--nim-text-muted)' }}>
+          <div className="flex items-center justify-center h-full text-nim-muted">
             Connecting to document...
           </div>
         )}

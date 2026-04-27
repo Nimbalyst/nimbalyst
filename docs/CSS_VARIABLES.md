@@ -1,196 +1,103 @@
 # CSS Variables Guide
 
-This document provides an overview of the CSS variable system used across the Nimbalyst editor project. All theme colors and design tokens are defined using CSS custom properties (variables) to ensure consistent styling and theming support.
+This document is the canonical reference for the `--nim-*` CSS variable system used across all Nimbalyst packages and extensions.
 
 ## Core Principles
 
-1. **Single Source of Truth**: All theme tokens are defined in Rexical and consumed by other packages
-2. **Semantic Naming**: Variables use semantic names describing their purpose rather than presentation
-3. **Theme Support**: Variables support light, dark, and crystal dark themes
-4. **No Hardcoded Colors**: Never hardcode colors in CSS files - always use variables
-5. **Component-Specific Inheritance**: Components reference base tokens rather than defining their own colors
+1. **Single Source of Truth**: All theme tokens are defined in `packages/runtime/src/editor/themes/NimbalystTheme.css` and consumed by every other package.
+2. **Semantic Naming**: Variables describe purpose, not presentation (e.g., `--nim-bg-secondary`, not `--gray-200`).
+3. **Theme Support**: All variables are redefined per built-in theme (`light`, `dark`, `crystal-dark`) and any custom themes contributed by extensions.
+4. **No Hardcoded Colors**: Never hardcode colors — always use a variable or its Tailwind class equivalent.
 
-## Base Variable Categories
+## Variable Categories
 
-### Surface Colors
-
-Controls backgrounds and layering:
+### Backgrounds
 
 ```css
---surface-primary    /* Main application background */
---surface-secondary  /* Secondary/elevated surfaces */
---surface-tertiary   /* Highest elevation surfaces */
---surface-hover      /* Hover state overlay */
---surface-selected   /* Selection/focus state */
---surface-active     /* Active/pressed state */
+--nim-bg            /* Main content background */
+--nim-bg-secondary  /* Sidebars, panels */
+--nim-bg-tertiary   /* Nested panels, code blocks */
+--nim-bg-hover      /* Hover state */
+--nim-bg-selected   /* Selection state */
+--nim-bg-active     /* Active/pressed state */
 ```
 
-### Text Colors
-
-Typography hierarchy:
+### Text
 
 ```css
---text-primary      /* Primary content text */
---text-secondary    /* Secondary/supporting text */
---text-tertiary     /* Most muted text */
---text-disabled     /* Disabled state text */
+--nim-text          /* Primary content text */
+--nim-text-muted    /* Secondary/supporting text */
+--nim-text-faint    /* Tertiary/hint text */
+--nim-text-disabled /* Disabled state text */
 ```
 
-### Border & Focus
-
-Border and focus indicators:
+### Borders
 
 ```css
---border-primary    /* Default borders */
---border-focus      /* Focus ring/outline */
+--nim-border        /* Default borders */
+--nim-border-focus  /* Focus ring */
 ```
 
-### Interactive Colors
-
-Action and state colors:
+### Interactive
 
 ```css
---accent-primary        /* Primary action color */
---accent-primary-hover  /* Primary hover state */
---accent-link          /* Link text color */
---accent-link-hover    /* Link hover color */
+--nim-primary        /* Primary action / brand color */
+--nim-primary-hover  /* Primary hover state */
+--nim-link           /* Link text */
+--nim-link-hover     /* Link hover */
 ```
 
-### Semantic Colors
-
-Status and feedback colors:
+### Status
 
 ```css
---success-color     /* Success states/feedback */
---warning-color     /* Warning states/feedback */
---error-color       /* Error states/feedback */
---info-color        /* Info states/feedback */
+--nim-success  /* Success feedback */
+--nim-warning  /* Warning feedback */
+--nim-error    /* Error feedback */
+--nim-info     /* Info feedback */
 ```
 
-## Component-Specific Variables
-
-### Editor Canvas
-
-Editor-specific styling:
+### Code
 
 ```css
---editor-background    /* Editor canvas background */
---editor-text          /* Editor content text */
+--nim-code-bg      /* Code block background */
+--nim-code-text    /* Code text color */
+--nim-code-border  /* Code block border */
 ```
 
-### Code Blocks
+## Tailwind Equivalents
 
-Code syntax highlighting:
+Every `--nim-*` variable is exposed as a Tailwind utility via the monorepo `tailwind.config.ts`:
 
-```css
---code-background      /* Code block background */
---code-gutter          /* Line number gutter */
---code-border          /* Code block border */
---code-text            /* Code text color */
-```
+| CSS Variable | Tailwind Class |
+| --- | --- |
+| `var(--nim-bg)` | `bg-nim` |
+| `var(--nim-bg-secondary)` | `bg-nim-secondary` |
+| `var(--nim-bg-tertiary)` | `bg-nim-tertiary` |
+| `var(--nim-bg-hover)` | `bg-nim-hover` |
+| `var(--nim-text)` | `text-nim` |
+| `var(--nim-text-muted)` | `text-nim-muted` |
+| `var(--nim-text-faint)` | `text-nim-faint` |
+| `var(--nim-border)` | `border-nim` |
+| `var(--nim-primary)` | `bg-nim-primary`, `text-nim-primary` |
+| `var(--nim-success)` | `text-nim-success` |
+| `var(--nim-warning)` | `text-nim-warning` |
+| `var(--nim-error)` | `text-nim-error`, `border-nim-error` |
+| `var(--nim-link)` | `text-nim-link` |
 
-### Tables
+Prefer Tailwind classes in JSX. Use `var(--nim-*)` only in CSS files or when an arbitrary class like `bg-[var(--nim-bg)]` is unavoidable.
 
-Table styling:
+## Critical Rules
 
-```css
---table-border         /* Table grid lines */
---table-header        /* Header row/column */
---table-cell          /* Standard cell */
---table-stripe        /* Alternating row */
---table-frozen        /* Frozen row/column */
-```
+- **Never** use `--nim-primary` for container backgrounds. It's the action/brand color, reserved for buttons and interactive accents. Container backgrounds use `--nim-bg`, `--nim-bg-secondary`, or `--nim-bg-tertiary`.
+- **Never** use the legacy variable names (`--surface-*`, `--text-primary`, `--accent-*`, `--primary-color`, `--*-color`). These were removed during the Tailwind migration. Use `--nim-*` instead.
+- **Never** hardcode hex/rgb values for theme-dependent colors. Dynamic per-instance colors (e.g., user-chosen tag colors) are the only legitimate inline-style use.
 
-### Toolbar
+## Theme Definitions
 
-Toolbar styling:
+Built-in themes are defined in `packages/runtime/src/editor/themes/NimbalystTheme.css`. Extensions can register additional themes via `contributions.themes` in their manifest — see [EXTENSION_THEMING.md](./EXTENSION_THEMING.md).
 
-```css
---toolbar-background    /* Toolbar background */
---toolbar-border        /* Toolbar borders */
---toolbar-button-hover  /* Button hover state */
---toolbar-button-active /* Button active state */
-```
+## Related Documentation
 
-### Special Elements
-
-Special content types:
-
-```css
---highlight-background  /* Text highlight bg */
---highlight-border     /* Highlight border */
---quote-text           /* Blockquote text */
---quote-border         /* Quote left border */
-```
-
-## Theme Color Values
-
-### Dark Theme
-
-Standard dark theme with warm gray colors:
-
-```css
---surface-primary: #2d2d2d
---surface-secondary: #1a1a1a
---surface-tertiary: #3a3a3a
-```
-
-### Crystal Dark Theme
-
-Premium dark theme using Tailwind gray scale:
-
-```css
---surface-primary: #0f172a    /* slate-900 */
---surface-secondary: #020617  /* slate-950 */
---surface-tertiary: #1e293b   /* slate-800 */
-```
-
-## Usage Guidelines
-
-1. **Component Variables**
-  - Components should use semantic base tokens
-  - Avoid creating component-specific color variables
-  - Inherit from base tokens when possible
-
-2. **Theme Support**
-  - Apply theme with both CSS class and data-attribute:
-```css
-     .dark-theme,
-     [data-theme="dark"] {
-       /* theme variables */
-     }
-```
-
-3. **Dark Theme Icons**
-  - Use `filter: invert(1)` for icon colors in dark themes
-  - Define in shared dark theme section
-
-4. **Variable Inheritance**
-  - Build on base tokens for variants:
-```css
-     .toolbar-button {
-       background: var(--surface-primary);
-       color: var(--text-primary);
-       border-color: var(--border-primary);
-     }
-     .toolbar-button:hover {
-       background: var(--surface-hover);
-     }
-```
-
-## Implementation Notes
-
-1. **Theme Files**
-  - Dark theme: `packages/runtime/src/editor/themes/DarkEditorTheme.css`
-  - Crystal theme: `packages/runtime/src/editor/themes/CrystalDarkTheme.css`
-  - Light theme: Variables defined in `index.css`
-
-2. **Package Usage**
-  - All packages import themes from Rexical
-  - No package-specific color definitions
-  - Component styles reference Rexical variables
-
-3. **Responsive Design**
-  - Variables support responsive adjustments
-  - Use media queries to modify values when needed
-  - Maintain semantic meaning across breakpoints
+- [THEMING.md](../packages/electron/THEMING.md) — Theming architecture and how themes are applied
+- [UI_PATTERNS.md](./UI_PATTERNS.md) — Tailwind usage patterns, container queries, conditional classes
+- [EXTENSION_THEMING.md](./EXTENSION_THEMING.md) — How extensions consume and contribute themes

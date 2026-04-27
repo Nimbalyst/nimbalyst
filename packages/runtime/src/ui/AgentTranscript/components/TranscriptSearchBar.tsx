@@ -24,10 +24,10 @@ const injectHighlightStyles = () => {
   style.textContent = `
     /* CSS Custom Highlight API styles */
     ::highlight(transcript-search) {
-      background-color: color-mix(in srgb, var(--warning-color, #fbbf24) 35%, transparent);
+      background-color: color-mix(in srgb, var(--nim-warning) 35%, transparent);
     }
     ::highlight(transcript-search-current) {
-      background-color: var(--warning-color, #fbbf24);
+      background-color: var(--nim-warning);
     }
   `;
   document.head.appendChild(style);

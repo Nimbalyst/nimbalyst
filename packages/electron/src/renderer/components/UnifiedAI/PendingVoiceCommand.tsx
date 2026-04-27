@@ -145,7 +145,7 @@ export function PendingVoiceCommand({ sessionId, onSubmit }: PendingVoiceCommand
         </div>
         <button
           onClick={handleCancel}
-          className="flex items-center justify-center w-6 h-6 border-none bg-transparent text-nim-muted cursor-pointer rounded transition-all duration-150 hover:bg-[rgba(239,68,68,0.1)] hover:text-[var(--error-color)]"
+          className="flex items-center justify-center w-6 h-6 border-none bg-transparent text-nim-muted cursor-pointer rounded transition-all duration-150 hover:bg-red-500/10 hover:text-nim-error"
           title="Cancel (Esc)"
         >
           <MaterialSymbol icon="close" size={18} />

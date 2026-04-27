@@ -2,8 +2,6 @@
  * Nimbalyst Editor Theme
  *
  * Lexical editor theme configuration with unified `nim-` class prefixes.
- * This replaces the legacy PlaygroundEditorTheme with consistent naming.
- *
  * The theme object maps Lexical node types to CSS class names that are
  * defined in NimbalystEditorTheme.css.
  */

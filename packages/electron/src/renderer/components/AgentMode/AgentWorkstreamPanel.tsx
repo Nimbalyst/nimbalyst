@@ -372,8 +372,7 @@ const WorkstreamHeader: React.FC<{
           {tags.map(tag => (
             <span
               key={tag}
-              className="group flex items-center gap-0.5 text-[10px] font-medium leading-none pl-1.5 pr-1 py-0.5 rounded-full whitespace-nowrap cursor-default"
-              style={{ background: 'color-mix(in srgb, var(--nim-text) 8%, transparent)', color: 'var(--nim-text-faint)' }}
+              className="group flex items-center gap-0.5 text-[10px] font-medium leading-none pl-1.5 pr-1 py-0.5 rounded-full whitespace-nowrap cursor-default text-nim-faint bg-[color-mix(in_srgb,var(--nim-text)_8%,transparent)]"
             >
               {tag}
               <button
@@ -406,8 +405,7 @@ const WorkstreamHeader: React.FC<{
               {filteredSuggestions.length > 0 && (
                 <div
                   ref={tagDropdownRef}
-                  className="absolute top-full left-0 mt-1 min-w-[120px] rounded-md z-[10000] py-0.5 text-[11px]"
-                  style={{ background: 'var(--nim-bg)', border: '1px solid var(--nim-border)', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}
+                  className="absolute top-full left-0 mt-1 min-w-[120px] rounded-md z-[10000] py-0.5 text-[11px] bg-nim border border-nim shadow-[0_4px_12px_rgba(0,0,0,0.3)]"
                 >
                   {filteredSuggestions.map(s => (
                     <div
