@@ -94,6 +94,7 @@ import { initNetworkAvailabilityListeners } from './store/listeners/networkAvail
 import { initTrackerSyncListeners } from './store/listeners/trackerSyncListeners';
 import { initUpdateListeners } from './store/listeners/updateListeners';
 import { initWalkthroughListeners } from './store/listeners/walkthroughListeners';
+import { initWakeupListeners } from './store/listeners/wakeupListener';
 import { TrackerBottomPanel } from './components/TrackerBottomPanel/TrackerBottomPanel.tsx';
 import { TrackerMode } from './components/TrackerMode';
 import { CollabMode } from './components/CollabMode';
@@ -244,6 +245,7 @@ export default function App() {
     const cleanupTrackerSync = initTrackerSyncListeners();
     const cleanupUpdate = initUpdateListeners();
     const cleanupWalkthrough = initWalkthroughListeners();
+    const cleanupWakeup = initWakeupListeners();
     initNetworkAvailabilityListeners();
     return () => {
       cleanupClaude?.();
@@ -251,6 +253,7 @@ export default function App() {
       cleanupTrackerSync?.();
       cleanupUpdate?.();
       cleanupWalkthrough?.();
+      cleanupWakeup?.();
     };
   }, []);
 

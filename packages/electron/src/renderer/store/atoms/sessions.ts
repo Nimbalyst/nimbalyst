@@ -121,6 +121,29 @@ export const sessionPendingPromptAtom = atomFamily((_sessionId: string) =>
 );
 
 /**
+ * Per-session active scheduled wakeup.
+ * Holds the most recent active wakeup row (pending / waiting_for_workspace / overdue)
+ * for a session, or null if there is none. Updated by `wakeupListener.ts` in response
+ * to `wakeup:changed` IPC events.
+ */
+export interface SessionWakeupView {
+  id: string;
+  sessionId: string;
+  workspaceId: string;
+  prompt: string;
+  reason: string | null;
+  fireAt: number;
+  status: 'pending' | 'firing' | 'fired' | 'waiting_for_workspace' | 'overdue' | 'cancelled' | 'failed';
+  createdAt: number;
+  firedAt: number | null;
+  error: string | null;
+}
+
+export const sessionWakeupAtom = atomFamily((_sessionId: string) =>
+  atom<SessionWakeupView | null>(null)
+);
+
+/**
  * Per-session pending interactive prompt state.
  * Set when any interactive tool is waiting for user input:
  * - AskUserQuestion
@@ -217,6 +240,9 @@ export const refreshPendingPromptsAtom = atom(
         return false;
       }
     );
+    // DEBUG: temp instrumentation for awaiting-input regression
+    console.warn('[DEBUG-PENDING] refreshPendingPromptsAtom writing', { sessionId: sessionId.slice(0, 8), hasPendingPrompt, msgCount: messages.length });
+    console.trace('[DEBUG-PENDING] refreshPendingPromptsAtom caller');
     set(sessionHasPendingInteractivePromptAtom(sessionId), hasPendingPrompt);
   }
 );

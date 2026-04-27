@@ -591,6 +591,54 @@ async function handleGetWorkstreamEditedFiles(
   }
 }
 
+async function handleScheduleWakeup(args: {
+  sessionId: string;
+  workspaceId: string;
+  delaySeconds: number;
+  prompt: string;
+  reason: string;
+}): Promise<string> {
+  const { sessionId, workspaceId, delaySeconds, prompt, reason } = args;
+
+  const session = await AISessionsRepository.get(sessionId);
+  if (!session) {
+    return `Error: Session ${sessionId} not found`;
+  }
+
+  const { getSessionWakeupsStore } = await import('../services/RepositoryManager');
+  const { SessionWakeupScheduler } = await import('../services/SessionWakeupScheduler');
+
+  const id = `wakeup-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  const fireAt = new Date(Date.now() + delaySeconds * 1000);
+
+  const row = await getSessionWakeupsStore().create({
+    id,
+    sessionId,
+    workspaceId,
+    prompt,
+    reason,
+    fireAt,
+  });
+
+  SessionWakeupScheduler.getInstance().onCreated(row);
+
+  // Broadcast to renderers so the UI updates immediately
+  const { BrowserWindow } = await import('electron');
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send('wakeup:changed', row);
+    }
+  }
+
+  return JSON.stringify({
+    wakeupId: row.id,
+    fireAt: row.fireAt,
+    fireAtIso: new Date(row.fireAt).toISOString(),
+    sessionId: row.sessionId,
+    reason: row.reason,
+  }, null, 2);
+}
+
 // ─── MCP server creation ────────────────────────────────────────────
 
 function createSessionContextMcpServer(
@@ -691,6 +739,35 @@ function createSessionContextMcpServer(
           },
         },
         {
+          name: "schedule_wakeup",
+          description:
+            "Schedule the current session to be re-invoked with a prompt after a delay. " +
+            "Persists across Nimbalyst restarts but only fires while Nimbalyst is running. " +
+            "If the workspace window is closed when the wakeup fires, it waits until the workspace opens. " +
+            "Replaces any existing pending wakeup for this session (one wakeup per session at a time).",
+          inputSchema: {
+            type: "object",
+            properties: {
+              delaySeconds: {
+                type: "number",
+                description:
+                  "Seconds from now until the wakeup fires. Min 60, max 604800 (7 days).",
+              },
+              prompt: {
+                type: "string",
+                description:
+                  "The prompt to send to the session when the wakeup fires.",
+              },
+              reason: {
+                type: "string",
+                description:
+                  "One short sentence explaining why this wakeup was scheduled. Shown to the user in the sessions UI.",
+              },
+            },
+            required: ["delaySeconds", "prompt", "reason"],
+          },
+        },
+        {
           name: "update_session_board",
           description:
             "Update a session's kanban board metadata (phase and/or tags). Phase controls which column the session appears in on the Sessions Board. Tags are free-form strings for categorization. Either field can be provided independently.",
@@ -787,6 +864,49 @@ function createSessionContextMcpServer(
             aiSessionId,
             workspaceId
           );
+          return {
+            content: [{ type: "text", text: result }],
+            isError: result.startsWith("Error:"),
+          };
+        }
+
+        case "schedule_wakeup": {
+          const delaySeconds = args?.delaySeconds as number | undefined;
+          const prompt = args?.prompt as string | undefined;
+          const reason = args?.reason as string | undefined;
+
+          if (typeof delaySeconds !== 'number' || !Number.isFinite(delaySeconds)) {
+            return {
+              content: [{ type: "text", text: "Error: delaySeconds is required and must be a number" }],
+              isError: true,
+            };
+          }
+          if (delaySeconds < 60 || delaySeconds > 604800) {
+            return {
+              content: [{ type: "text", text: `Error: delaySeconds must be between 60 and 604800 (7 days). Got ${delaySeconds}.` }],
+              isError: true,
+            };
+          }
+          if (typeof prompt !== 'string' || prompt.trim().length === 0) {
+            return {
+              content: [{ type: "text", text: "Error: prompt is required and must be a non-empty string" }],
+              isError: true,
+            };
+          }
+          if (typeof reason !== 'string' || reason.trim().length === 0) {
+            return {
+              content: [{ type: "text", text: "Error: reason is required and must be a non-empty string" }],
+              isError: true,
+            };
+          }
+
+          const result = await handleScheduleWakeup({
+            sessionId: aiSessionId,
+            workspaceId,
+            delaySeconds,
+            prompt: prompt.trim(),
+            reason: reason.trim(),
+          });
           return {
             content: [{ type: "text", text: result }],
             isError: result.startsWith("Error:"),

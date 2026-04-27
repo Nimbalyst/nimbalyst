@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useRef, useMemo, memo } from '
 import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
-import { sessionOrChildProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, sessionHasPendingInteractivePromptAtom, reparentSessionAtom, refreshSessionListAtom, sessionShareAtom } from '../../store';
+import { sessionOrChildProcessingAtom, sessionUnreadAtom, sessionPendingPromptAtom, sessionHasPendingInteractivePromptAtom, reparentSessionAtom, refreshSessionListAtom, sessionShareAtom, sessionWakeupAtom } from '../../store';
 import { convertToWorkstreamAtom } from '../../store/atoms/sessions';
 import { SessionContextMenu } from './SessionContextMenu';
 
@@ -17,8 +17,9 @@ const SessionStatusIndicator = memo<{ sessionId: string; messageCount?: number }
   const isProcessing = useAtomValue(sessionOrChildProcessingAtom(sessionId));
   const hasPendingPrompt = useAtomValue(sessionPendingPromptAtom(sessionId));
   const hasUnread = useAtomValue(sessionUnreadAtom(sessionId));
+  const wakeup = useAtomValue(sessionWakeupAtom(sessionId));
 
-  // Priority: waiting for input > processing > pending prompt > unread > message count
+  // Priority: waiting for input > processing > pending prompt > scheduled wakeup > unread > message count
   // All interactive prompts (AskUserQuestion, ExitPlanMode, ToolPermission, etc.) show same indicator
   if (hasPendingInteractivePrompt) {
     return (
@@ -40,6 +41,19 @@ const SessionStatusIndicator = memo<{ sessionId: string; messageCount?: number }
     return (
       <div className="session-list-item-status pending-prompt flex items-center justify-center w-5 h-5 text-[var(--nim-warning)] animate-pulse" title="Waiting for your response">
         <MaterialSymbol icon="help" size={14} />
+      </div>
+    );
+  }
+
+  if (wakeup) {
+    const isOverdue = wakeup.status === 'overdue';
+    const colorClass = isOverdue ? 'text-[var(--nim-warning)]' : 'text-[var(--nim-primary)]';
+    const tooltip = isOverdue
+      ? `Overdue wakeup${wakeup.reason ? ` — ${wakeup.reason}` : ''}`
+      : `Scheduled wakeup at ${new Date(wakeup.fireAt).toLocaleString()}${wakeup.reason ? ` — ${wakeup.reason}` : ''}`;
+    return (
+      <div className={`session-list-item-status wakeup flex items-center justify-center w-5 h-5 ${colorClass} opacity-80`} title={tooltip}>
+        <MaterialSymbol icon="schedule" size={14} />
       </div>
     );
   }

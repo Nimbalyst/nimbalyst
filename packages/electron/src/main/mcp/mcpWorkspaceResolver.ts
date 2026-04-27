@@ -228,7 +228,22 @@ export function registerWorkspaceWindow(
   workspacePath: string,
   windowId: number
 ) {
+  const isNew = !workspaceToWindowMap.has(workspacePath);
   workspaceToWindowMap.set(workspacePath, windowId);
+
+  // First time we see a window for this workspace? Re-check any wakeups
+  // that were waiting for it. Imported lazily to avoid circular imports
+  // between the MCP layer and the services layer.
+  if (isNew) {
+    void (async () => {
+      try {
+        const { SessionWakeupScheduler } = await import('../services/SessionWakeupScheduler');
+        await SessionWakeupScheduler.getInstance().onWorkspaceOpened(workspacePath);
+      } catch {
+        // Scheduler may not be configured yet during early startup; safe to ignore.
+      }
+    })();
+  }
 }
 
 /**

@@ -27,6 +27,7 @@ import { FileGutter } from '../AIChat/FileGutter';
 import { recordClaudeActivity } from '../../store/listeners/claudeUsageListeners';
 import { recordCodexActivity } from '../../store/listeners/codexUsageListeners';
 import { PendingReviewBanner } from '../AIChat/PendingReviewBanner';
+import { WakeupBanner } from '../AIChat/WakeupBanner';
 import type { AIMode } from './ModeTag';
 // Note: ExitPlanMode, AskUserQuestion, and ToolPermission use inline widgets via InteractiveWidgetHost (in runtime package)
 import { SlashCommandSuggestions } from './SlashCommandSuggestions';
@@ -1589,7 +1590,10 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
             onUnarchive={handleUnarchive}
             readFile={readFile}
             renderFilesHeader={mode === 'agent' ? () => (
-              <PendingReviewBanner workspacePath={workspacePath} sessionId={sessionId} />
+              <>
+                <WakeupBanner sessionId={sessionId} />
+                <PendingReviewBanner workspacePath={workspacePath} sessionId={sessionId} />
+              </>
             ) : undefined}
             pendingReviewFiles={pendingReviewFiles}
             groupByDirectory={groupByDirectory}
@@ -1609,9 +1613,12 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         </div>
       )}
 
-      {/* Pending review banner - only in chat mode, hidden when collapsed */}
+      {/* Wakeup + pending review banners - only in chat mode, hidden when collapsed */}
       {mode === 'chat' && !collapseTranscript && (
-        <PendingReviewBanner workspacePath={workspacePath} sessionId={sessionId} />
+        <>
+          <WakeupBanner sessionId={sessionId} />
+          <PendingReviewBanner workspacePath={workspacePath} sessionId={sessionId} />
+        </>
       )}
 
       {/* Edited files gutter at bottom - only in chat mode, hidden when collapsed */}

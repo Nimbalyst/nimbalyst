@@ -1240,6 +1240,46 @@ class PGLiteWorker {
       throw error;
     }
 
+    // Session Wakeups table - scheduled re-invocations of an AI session
+    // Persists across app restarts; scheduler in main process arms a single setTimeout
+    console.log('[PGLite Worker] Creating ai_session_wakeups table...');
+    try {
+      await this.db.exec(`
+        CREATE TABLE IF NOT EXISTS ai_session_wakeups (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          workspace_id TEXT NOT NULL,
+          prompt TEXT NOT NULL,
+          reason TEXT,
+          fire_at TIMESTAMPTZ NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending'
+            CHECK (status IN ('pending','firing','fired','waiting_for_workspace','overdue','cancelled','failed')),
+          created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          fired_at TIMESTAMPTZ,
+          error TEXT,
+          CONSTRAINT fk_session_wakeups_session
+            FOREIGN KEY (session_id)
+            REFERENCES ai_sessions(id)
+            ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_session_wakeups_pending_fire_at
+          ON ai_session_wakeups(fire_at)
+          WHERE status = 'pending';
+        CREATE INDEX IF NOT EXISTS idx_session_wakeups_session
+          ON ai_session_wakeups(session_id);
+        CREATE INDEX IF NOT EXISTS idx_session_wakeups_workspace
+          ON ai_session_wakeups(workspace_id);
+        CREATE INDEX IF NOT EXISTS idx_session_wakeups_waiting
+          ON ai_session_wakeups(workspace_id)
+          WHERE status = 'waiting_for_workspace';
+      `);
+      console.log('[PGLite Worker] ai_session_wakeups table created successfully');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to create ai_session_wakeups table:', error);
+      throw error;
+    }
+
     // Worktrees table - stores git worktree metadata
     console.log('[PGLite Worker] Creating worktrees table...');
     try {

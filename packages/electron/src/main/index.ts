@@ -37,6 +37,7 @@ import { registerGitHandlers } from './ipc/GitHandlers';
 import { registerProjectSelectionHandlers } from './ipc/ProjectSelectionHandlers';
 import { registerUsageAnalyticsHandlers } from './ipc/UsageAnalyticsHandlers';
 import { registerWorktreeHandlers } from './ipc/WorktreeHandlers';
+import { registerWakeupHandlers } from './ipc/WakeupHandlers';
 import { registerBlitzHandlers } from './ipc/BlitzHandlers';
 import { registerProjectMigrationHandlers } from './ipc/ProjectMigrationHandlers';
 import { registerSuperLoopHandlers } from './ipc/SuperLoopHandlers';
@@ -77,6 +78,8 @@ import { cliManager, initEnhancedPath, getEnhancedPath, getShellEnvironment } fr
 import { registerWorkspaceWindow, registerExtensionTools, shutdownHttpServer, startMcpHttpServer, updateDocumentState } from './mcp/httpServer';
 import { startSessionContextServer, cleanupSessionContextServer, shutdownSessionContextServer } from './mcp/sessionContextServer';
 import { SessionNamingService } from './services/SessionNamingService';
+import { SessionWakeupScheduler } from './services/SessionWakeupScheduler';
+import { getSessionWakeupsStore } from './services/RepositoryManager';
 import { ExtensionDevService } from './services/ExtensionDevService';
 import { MetaAgentService } from './services/MetaAgentService';
 // SuperLoopProgressService import removed - server disabled (leaking into non-super-loop sessions)
@@ -1065,6 +1068,7 @@ app.whenReady().then(async () => {
     registerGitStatusHandlers();
     registerGitHandlers();
     registerWorktreeHandlers();
+    registerWakeupHandlers();
     registerBlitzHandlers();
     registerProjectMigrationHandlers();
     registerSuperLoopHandlers();
@@ -1434,6 +1438,40 @@ app.whenReady().then(async () => {
         await metaAgentService.start(aiService);
     } catch (error) {
         logger.mcp.error('Failed to start meta-agent MCP server:', error);
+    }
+
+    // Start session wakeup scheduler (persistent scheduled re-invocations)
+    try {
+        const aiSvcRef = aiService;
+        const scheduler = SessionWakeupScheduler.getInstance();
+        scheduler.configure({
+            store: getSessionWakeupsStore(),
+            executor: async ({ sessionId, workspacePath, prompt }) => {
+                if (!aiSvcRef) {
+                    return { triggered: false };
+                }
+                await aiSvcRef.queuePromptForSession(sessionId, prompt);
+                const triggered = await aiSvcRef.triggerQueuedPromptProcessingForSession(
+                    sessionId,
+                    workspacePath,
+                );
+                return { triggered };
+            },
+            broadcastChanged: (row) => {
+                for (const window of BrowserWindow.getAllWindows()) {
+                    if (!window.isDestroyed()) {
+                        try {
+                            window.webContents.send('wakeup:changed', row);
+                        } catch {
+                            // ignore -- destroyed window
+                        }
+                    }
+                }
+            },
+        });
+        await scheduler.start();
+    } catch (error) {
+        logger.mcp.error('Failed to start session wakeup scheduler:', error);
     }
     markEnd('mcp-servers');
 
@@ -2095,6 +2133,13 @@ app.on('before-quit', async (event) => {
                 fs.appendFileSync(debugLog, `[QUIT] Error closing session naming MCP server: ${error}\n`);
             } catch (e) {}
         }
+    }
+
+    try {
+        // Stop session wakeup scheduler (clears timer; rows in DB persist for next launch)
+        SessionWakeupScheduler.getInstance().stop();
+    } catch (error) {
+        console.error('[QUIT] Error stopping session wakeup scheduler:', error);
     }
 
     try {

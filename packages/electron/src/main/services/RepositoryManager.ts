@@ -20,6 +20,7 @@ import { createSyncedAgentMessagesStore } from './SyncedAgentMessagesStore';
 import { createPGLiteWorkspaceRepository } from './PGLiteWorkspaceRepository';
 import { createPGLiteDocumentsRepository } from './PGLiteDocumentsRepository';
 import { createPGLiteQueuedPromptsStore, type QueuedPromptsStore } from './PGLiteQueuedPromptsStore';
+import { createPGLiteSessionWakeupsStore, type SessionWakeupsStore } from './PGLiteSessionWakeupsStore';
 import { createTranscriptEventStore } from './TranscriptEventStore';
 import { database } from '../database/PGLiteDatabaseWorker';
 import { logger } from '../utils/logger';
@@ -37,6 +38,7 @@ class RepositoryManager {
   private workspaceRepository: WorkspaceRepository | null = null;
   private documentsRepository: DocumentsRepository | null = null;
   private queuedPromptsStore: QueuedPromptsStore | null = null;
+  private sessionWakeupsStore: SessionWakeupsStore | null = null;
   private initialized = false;
   private authListenerUnsubscribe: (() => void) | null = null;
   private wasAuthenticated = false; // Track auth state to detect transitions
@@ -117,6 +119,16 @@ class RepositoryManager {
 
       // Create queued prompts store
       this.queuedPromptsStore = createPGLiteQueuedPromptsStore(
+        dbAdapter,
+        async () => {
+          if (!database.isInitialized()) {
+            await database.initialize();
+          }
+        }
+      );
+
+      // Create session wakeups store (scheduled re-invocations)
+      this.sessionWakeupsStore = createPGLiteSessionWakeupsStore(
         dbAdapter,
         async () => {
           if (!database.isInitialized()) {
@@ -275,6 +287,17 @@ class RepositoryManager {
   }
 
   /**
+   * Get the session wakeups store instance.
+   * Used by SessionWakeupScheduler and IPC handlers.
+   */
+  getSessionWakeupsStore(): SessionWakeupsStore {
+    if (!this.sessionWakeupsStore) {
+      throw new Error('RepositoryManager not initialized. Call initialize() first.');
+    }
+    return this.sessionWakeupsStore;
+  }
+
+  /**
    * Reinitialize sync with new configuration.
    * Called when sync settings are changed at runtime.
    */
@@ -346,6 +369,7 @@ class RepositoryManager {
     this.workspaceRepository = null;
     this.documentsRepository = null;
     this.queuedPromptsStore = null;
+    this.sessionWakeupsStore = null;
     this.initialized = false;
     this.wasAuthenticated = false;
   }
@@ -385,4 +409,8 @@ export function getBaseAgentMessagesStore(): AgentMessagesStore {
 
 export function getQueuedPromptsStore(): QueuedPromptsStore {
   return repositoryManager.getQueuedPromptsStore();
+}
+
+export function getSessionWakeupsStore(): SessionWakeupsStore {
+  return repositoryManager.getSessionWakeupsStore();
 }

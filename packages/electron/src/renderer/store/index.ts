@@ -72,6 +72,7 @@ export {
   sessionProcessingAtom,
   sessionUnreadAtom,
   sessionPendingPromptAtom,
+  sessionWakeupAtom,
   sessionHasPendingInteractivePromptAtom,
   // Durable interactive prompts (DB-derived) - used for pending indicator
   sessionPendingPromptsAtom,
