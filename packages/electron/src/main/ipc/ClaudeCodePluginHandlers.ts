@@ -52,12 +52,25 @@ const INSTALLED_PLUGINS_VERSION = 2;
 // Author can be a string or an object with name/email
 type RawAuthor = string | { name?: string; email?: string };
 
-// Helper to normalize author to a string
-function normalizeAuthor(author: RawAuthor | undefined, defaultValue: string): string {
-  if (!author) return defaultValue;
-  if (typeof author === 'string') return author;
-  if (typeof author === 'object' && author.name) return author.name;
-  return defaultValue;
+// Source can be a string (URL or relative path) or a structured object
+type RawSource =
+  | string
+  | {
+      source?: string;
+      url?: string;
+      path?: string;
+      sha?: string;
+      ref?: string;
+    };
+
+interface RawPlugin {
+  name: string;
+  description?: string;
+  author?: RawAuthor;
+  homepage?: string;
+  source?: RawSource;
+  directory?: string;
+  category?: string;
 }
 
 // Raw marketplace.json structure from GitHub
@@ -65,35 +78,71 @@ interface RawMarketplace {
   $schema?: string;
   name?: string;
   description?: string;
-  plugins?: Array<{
-    name: string;
-    description?: string;
-    author?: RawAuthor;
-    homepage?: string;
-    source?: string;
-    directory?: string;
-    category?: string;
-  }>;
-  external_plugins?: Array<{
-    name: string;
-    description?: string;
-    author?: RawAuthor;
-    homepage?: string;
-    source?: string;
-    directory?: string;
-    category?: string;
-  }>;
+  plugins?: RawPlugin[];
+  external_plugins?: RawPlugin[];
+}
+
+// GitHub orgs whose repos host the official Anthropic plugin marketplace
+const ANTHROPIC_GITHUB_ORGS = new Set(['anthropics', 'anthropic']);
+
+// Extract the "owner" segment from a GitHub URL like https://github.com/owner/repo
+function extractGitHubOwner(url: string | undefined): string | null {
+  if (!url || typeof url !== 'string') return null;
+  const match = url.match(/github\.com\/([^/]+)/i);
+  return match ? match[1] : null;
+}
+
+// Pull a URL string and a relative path string out of a RawSource for downstream use
+function parseRawSource(source: RawSource | undefined): { url?: string; path?: string } {
+  if (!source) return {};
+  if (typeof source === 'string') {
+    return /^https?:/i.test(source) ? { url: source } : { path: source };
+  }
+  return {
+    url: typeof source.url === 'string' ? source.url : undefined,
+    path: typeof source.path === 'string' ? source.path : undefined,
+  };
+}
+
+// Helper to normalize author to a string. When the upstream entry has no
+// explicit author, derive one from the GitHub URL in the source/homepage rather
+// than blindly attributing every unauthored plugin to Anthropic.
+function normalizeAuthor(plugin: RawPlugin, fallback: string): string {
+  if (plugin.author) {
+    if (typeof plugin.author === 'string') return plugin.author;
+    if (typeof plugin.author === 'object' && plugin.author.name) return plugin.author.name;
+  }
+
+  const { url: sourceUrl, path: sourcePath } = parseRawSource(plugin.source);
+
+  if (sourcePath?.startsWith('./plugins/') || sourcePath?.startsWith('plugins/')) {
+    return 'Anthropic';
+  }
+
+  const ownerFromSource = extractGitHubOwner(sourceUrl);
+  if (ownerFromSource) {
+    return ANTHROPIC_GITHUB_ORGS.has(ownerFromSource.toLowerCase()) ? 'Anthropic' : ownerFromSource;
+  }
+
+  const ownerFromHomepage = extractGitHubOwner(plugin.homepage);
+  if (ownerFromHomepage && !ANTHROPIC_GITHUB_ORGS.has(ownerFromHomepage.toLowerCase())) {
+    return ownerFromHomepage;
+  }
+
+  return fallback;
 }
 
 const MARKETPLACE_URL = 'https://raw.githubusercontent.com/anthropics/claude-plugins-official/main/.claude-plugin/marketplace.json';
 const MARKETPLACE_REPO = 'anthropics/claude-plugins-official';
 
 /**
- * Normalize source - just pass through for now
+ * Normalize a RawSource (which may be a string or a structured object) into the
+ * single string the install handler expects: either an http(s) URL or a
+ * relative path inside the official marketplace repo.
  */
-function normalizeSource(source: unknown): string {
-  if (!source || typeof source !== 'string') return '';
-  return source;
+function normalizeSource(source: RawSource | undefined): string {
+  const { url, path } = parseRawSource(source);
+  return url || path || '';
 }
 
 /**
@@ -130,9 +179,9 @@ async function fetchMarketplace(): Promise<MarketplaceData> {
               plugins.push({
                 name: p.name,
                 description: p.description || '',
-                author: normalizeAuthor(p.author, 'Anthropic'),
+                author: normalizeAuthor(p, 'Community'),
                 homepage: p.homepage,
-                source: normalizeSource(p.source || p.directory),
+                source: normalizeSource(p.source ?? p.directory),
                 category,
               });
             });
@@ -145,9 +194,9 @@ async function fetchMarketplace(): Promise<MarketplaceData> {
               plugins.push({
                 name: p.name,
                 description: p.description || '',
-                author: normalizeAuthor(p.author, 'Community'),
+                author: normalizeAuthor(p, 'Community'),
                 homepage: p.homepage,
-                source: normalizeSource(p.source || p.directory),
+                source: normalizeSource(p.source ?? p.directory),
                 category,
               });
             });
