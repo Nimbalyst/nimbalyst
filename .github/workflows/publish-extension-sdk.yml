@@ -1,0 +1,79 @@
+name: Publish Extension SDK to npm
+
+on:
+  push:
+    tags:
+      - 'extension-sdk-v*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (build and pack, but do not publish)'
+        type: boolean
+        default: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish @nimbalyst/extension-sdk
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+          cache-dependency-path: '**/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify tag matches package.json version
+        if: github.event_name == 'push'
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          PKG_VERSION=$(node -p "require('./packages/extension-sdk/package.json').version")
+          TAG_VERSION="${REF_NAME#extension-sdk-v}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::Tag version ($TAG_VERSION) does not match packages/extension-sdk/package.json version ($PKG_VERSION)"
+            exit 1
+          fi
+          echo "Version match: $PKG_VERSION"
+
+      - name: Run public release checks
+        run: npm run extension-sdk:check-public
+
+      - name: Publish to npm
+        if: ${{ !inputs.dry_run }}
+        working-directory: packages/extension-sdk
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public
+
+      - name: Dry run pack
+        if: ${{ inputs.dry_run }}
+        working-directory: packages/extension-sdk
+        run: |
+          echo "Dry-run mode: skipping npm publish"
+          npm pack --dry-run
+
+      - name: Summary
+        run: |
+          VERSION=$(node -p "require('./packages/extension-sdk/package.json').version")
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "Dry-run complete for @nimbalyst/extension-sdk@$VERSION"
+          else
+            echo "Published @nimbalyst/extension-sdk@$VERSION"
+            echo "https://www.npmjs.com/package/@nimbalyst/extension-sdk/v/$VERSION"
+          fi
