@@ -543,6 +543,11 @@ interface ElectronAPI {
       createdAt: number;
       lastActiveAt: number;
       historyFile?: string;
+      cols?: number;
+      rows?: number;
+      cursorX?: number;
+      cursorY?: number;
+      screenLines?: string[];
     };
     WorkspaceTerminalState: {
       terminals: Record<string, ElectronAPI['terminal']['TerminalInstance']>;
@@ -585,7 +590,23 @@ interface ElectronAPI {
     isActive: (terminalId: string) => Promise<boolean>;
     write: (terminalId: string, data: string) => Promise<void>;
     resize: (terminalId: string, cols: number, rows: number) => Promise<void>;
+    updateRenderState: (
+      terminalId: string,
+      updates: { workspacePath?: string; cols?: number; rows?: number; cursorX?: number; cursorY?: number; screenLines?: string[] }
+    ) => Promise<{ success: boolean }>;
     getScrollback: (terminalId: string) => Promise<string>;
+    getRestoreSnapshot: (workspacePath: string, terminalId: string) => Promise<{
+      terminalId: string;
+      scrollback: string;
+      sequence: number;
+      cols: number;
+      rows: number;
+      cursorX?: number;
+      cursorY?: number;
+      screenLines?: string[];
+      cwd: string;
+      shellName: string;
+    }>;
     clearScrollback: (terminalId: string) => Promise<void>;
     destroy: (terminalId: string) => Promise<void>;
     getInfo: (terminalId: string) => Promise<any>;
@@ -599,7 +620,7 @@ interface ElectronAPI {
     }>>;
 
     // Events
-    onOutput: (callback: (data: { sessionId: string; data: string }) => void) => () => void;
+    onOutput: (callback: (data: { sessionId: string; data: string; sequence: number }) => void) => () => void;
     onExited: (callback: (data: { sessionId: string; exitCode: number }) => void) => () => void;
     onCommandRunning: (callback: (data: { terminalId: string; isRunning: boolean }) => void) => () => void;
 

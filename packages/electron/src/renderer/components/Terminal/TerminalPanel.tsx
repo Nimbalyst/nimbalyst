@@ -41,6 +41,23 @@ async function ensureGhosttyInit(): Promise<void> {
   return ghosttyInitPromise;
 }
 
+async function waitForVisibleTerminalDimensions(
+  element: HTMLElement,
+  timeoutMs = 1500
+): Promise<void> {
+  const start = Date.now();
+
+  while (Date.now() - start < timeoutMs) {
+    const rect = element.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      return;
+    }
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+  }
+
+  throw new Error('Terminal container never became measurable');
+}
+
 /**
  * Strip escape sequences that can corrupt terminal state when replayed.
  *
@@ -107,6 +124,23 @@ function cleanScrollback(raw: string): string {
   // This specifically targets the pattern: "text... <spaces> \r <more content>"
   // which is zsh's technique for partial line markers
   return raw.replace(/[ \t]+\r(?!\n)/g, '\r');
+}
+
+function getVisibleScreenLines(terminal: Terminal): string[] {
+  const activeBuffer = terminal.buffer.active;
+  const firstVisibleRow = Math.max(0, activeBuffer.length - terminal.rows);
+  const lines: string[] = [];
+
+  for (let row = 0; row < terminal.rows; row += 1) {
+    const line = activeBuffer.getLine(firstVisibleRow + row);
+    lines.push(line?.translateToString(false) ?? '');
+  }
+
+  return lines;
+}
+
+function escapeScreenLineForReplay(line: string): string {
+  return line.replace(/\x1b/g, '').replace(/\r/g, '').replace(/\n/g, '');
 }
 
 /**
@@ -254,6 +288,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   const disposedRef = useRef(false); // Ref to track disposed state for async callbacks
   const [exitCode, setExitCode] = useState<number | null>(null);
   const [initError, setInitError] = useState<string | null>(null);
+  const [restoreWarning, setRestoreWarning] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
   // Use a ref for onExit to avoid effect re-runs when parent passes new callback references
@@ -289,6 +324,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     setHasExited(false);
     setExitCode(null);
     setInitError(null);
+    setRestoreWarning(null);
 
     try {
       await window.electronAPI.terminal.initialize(terminalId, {
@@ -314,14 +350,15 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
   // first becomes active, and stays true forever after. This allows us to:
   // 1. Defer initialization until the terminal is visible (so we get valid dimensions)
   // 2. Keep the terminal alive when switching tabs (no dispose/recreate cycle)
-  const [shouldInit, setShouldInit] = useState(isActive);
+  const [shouldInit, setShouldInit] = useState(false);
 
-  // When isActive becomes true for the first time, enable initialization
+  // When the terminal is active and the panel is visible, enable initialization.
+  // Once initialized, it stays alive even when hidden again.
   useEffect(() => {
-    if (isActive && !shouldInit) {
+    if (isActive && panelVisible && !shouldInit) {
       setShouldInit(true);
     }
-  }, [isActive, shouldInit]);
+  }, [isActive, panelVisible, shouldInit]);
 
   // Initialize terminal - runs once per terminalId when shouldInit becomes true
   // After initialization, the terminal stays alive in the background when switching tabs
@@ -345,6 +382,41 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     let resizeObserver: ResizeObserver | null = null;
     let focusInHandler: (() => void) | null = null;
     let focusOutHandler: (() => void) | null = null;
+    let renderStatePersistTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const persistRenderStateNow = async () => {
+      if (!terminal || disposed) return;
+
+      const maxCols = Math.max(1, terminal.cols);
+      const maxRows = Math.max(1, terminal.rows);
+      const cursorX = Math.max(0, Math.min(terminal.buffer.active.cursorX, maxCols - 1));
+      const cursorY = Math.max(0, Math.min(terminal.buffer.active.cursorY, maxRows - 1));
+      const screenLines = getVisibleScreenLines(terminal);
+
+      try {
+        await window.electronAPI.terminal.updateRenderState(sessionId, {
+          workspacePath,
+          cols: terminal.cols,
+          rows: terminal.rows,
+          cursorX,
+          cursorY,
+          screenLines,
+        });
+      } catch (error) {
+        console.warn('[TerminalPanel] Failed to persist terminal render state:', error);
+      }
+    };
+
+    const scheduleRenderStatePersist = () => {
+      if (renderStatePersistTimer || !terminal || disposed) {
+        return;
+      }
+
+      renderStatePersistTimer = setTimeout(() => {
+        renderStatePersistTimer = null;
+        void persistRenderStateNow();
+      }, 75);
+    };
 
     const initTerminal = async () => {
       try {
@@ -356,28 +428,10 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
 
         if (disposed) return;
 
-        // Initialize PTY if not already active (with timeout)
-        const initPromise = window.electronAPI.terminal.initialize(terminalId, {
-          workspacePath,
-          cwd: workspacePath,
-        });
-
-        const timeoutPromise = new Promise<{ success: false; error: string }>((resolve) => {
-          setTimeout(() => {
-            resolve({ success: false, error: 'Terminal initialization timed out after 10 seconds' });
-          }, 10000);
-        });
-
-        const result = await Promise.race([initPromise, timeoutPromise]);
+        if (!terminalRef.current) return;
+        await waitForVisibleTerminalDimensions(terminalRef.current);
 
         if (disposed) return;
-
-        if (!result.success && !('alreadyActive' in result && result.alreadyActive)) {
-          const errorMessage = result.error || 'Failed to initialize PTY';
-          console.error('[TerminalPanel] Failed to initialize PTY:', errorMessage);
-          setInitError(errorMessage);
-          return;
-        }
 
         // Create Ghostty Terminal instance
         terminal = new Terminal({
@@ -394,21 +448,46 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
 
         if (terminalRef.current && !disposed) {
           terminal.open(terminalRef.current);
-
-          // Delay fit to ensure DOM is ready
-          setTimeout(() => {
-            if (fitAddon && !disposed) {
-              try {
-                fitAddon.fit();
-                const dims = fitAddon.proposeDimensions();
-                if (dims && dims.cols > 0 && dims.rows > 0) {
-                  window.electronAPI.terminal.resize(sessionId, dims.cols, dims.rows);
-                }
-              } catch (e) {
-                console.warn('[TerminalPanel] Initial fit failed:', e);
-              }
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          let initialDims: { cols: number; rows: number } | undefined;
+          try {
+            fitAddon.fit();
+            const dims = fitAddon.proposeDimensions();
+            if (dims && dims.cols > 0 && dims.rows > 0) {
+              initialDims = dims;
             }
-          }, 50);
+          } catch (e) {
+            console.warn('[TerminalPanel] Initial fit failed:', e);
+          }
+
+          // Initialize PTY if not already active (with timeout) after we know real dimensions.
+          const initPromise = window.electronAPI.terminal.initialize(terminalId, {
+            workspacePath,
+            cwd: workspacePath,
+            cols: initialDims?.cols,
+            rows: initialDims?.rows,
+          });
+
+          const timeoutPromise = new Promise<{ success: false; error: string }>((resolve) => {
+            setTimeout(() => {
+              resolve({ success: false, error: 'Terminal initialization timed out after 10 seconds' });
+            }, 10000);
+          });
+
+          const result = await Promise.race([initPromise, timeoutPromise]);
+
+          if (disposed) return;
+
+          if (!result.success && !('alreadyActive' in result && result.alreadyActive)) {
+            const errorMessage = result.error || 'Failed to initialize PTY';
+            console.error('[TerminalPanel] Failed to initialize PTY:', errorMessage);
+            setInitError(errorMessage);
+            return;
+          }
+
+          if (initialDims) {
+            window.electronAPI.terminal.resize(sessionId, initialDims.cols, initialDims.rows);
+          }
 
           terminalInstanceRef.current = terminal;
           fitAddonRef.current = fitAddon;
@@ -449,31 +528,38 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           // This ensures we don't lose output that arrives during scrollback restoration,
           // while also preventing interleaved writes that cause display corruption.
           let scrollbackRestoreComplete = false;
-          const pendingOutput: string[] = [];
+          let lastAppliedSequence = 0;
+          const pendingOutput: Array<{ data: string; sequence: number }> = [];
 
           unsubscribeOutput = window.electronAPI.terminal.onOutput((data) => {
             if (data.sessionId === sessionId && terminal && !disposed) {
+              if (data.sequence <= lastAppliedSequence) {
+                return;
+              }
               if (scrollbackRestoreComplete) {
                 // Normal path: write directly to terminal
                 terminal.write(data.data);
+                lastAppliedSequence = data.sequence;
+                scheduleRenderStatePersist();
               } else {
                 // Queue output during scrollback restoration to prevent interleaving
-                pendingOutput.push(data.data);
+                pendingOutput.push(data);
               }
             }
           });
 
+          const snapshot = await window.electronAPI.terminal.getRestoreSnapshot(workspacePath, sessionId);
+          lastAppliedSequence = snapshot.sequence;
+
           // Restore scrollback if available
-          const scrollback = await window.electronAPI.terminal.getScrollback(sessionId);
-          if (scrollback && !disposed) {
+          if (snapshot.scrollback && !disposed) {
             // Sanitize the scrollback to remove invalid code points that could crash
             // the terminal's render loop. This must happen BEFORE any write attempts.
-            const sanitized = sanitizeScrollback(scrollback);
+            const sanitized = sanitizeScrollback(snapshot.scrollback);
 
             if (sanitized === null) {
-              // Data is severely corrupted, discard it entirely
-              console.warn('[TerminalPanel] Discarding severely corrupted scrollback data');
-              window.electronAPI.terminal.clearScrollback?.(sessionId);
+              console.warn('[TerminalPanel] Scrollback is corrupted, skipping restore');
+              setRestoreWarning('Saved terminal history could not be restored cleanly. Live terminal output continues.');
             } else {
               // Strip escape sequences that can corrupt terminal state when replayed
               const stripped = stripProblematicEscapeSequences(sanitized);
@@ -488,6 +574,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
               const MAX_RESTORE_TIME_MS = 2000; // Abort if restoration takes too long
               const startTime = Date.now();
               let writeError: Error | null = null;
+              let timedOut = false;
 
               const writeChunks = async () => {
                 for (let i = 0; i < cleaned.length; i += CHUNK_SIZE) {
@@ -495,8 +582,8 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
 
                   // Check timeout
                   if (Date.now() - startTime > MAX_RESTORE_TIME_MS) {
-                    console.warn('[TerminalPanel] Scrollback restoration timeout, clearing data');
-                    window.electronAPI.terminal.clearScrollback?.(sessionId);
+                    console.warn('[TerminalPanel] Scrollback restoration timed out, skipping remaining history');
+                    timedOut = true;
                     return;
                   }
 
@@ -521,18 +608,30 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
               }
 
               if (writeError) {
-                console.warn('[TerminalPanel] Failed to restore scrollback, clearing corrupted data:', writeError);
-                // Clear the corrupted scrollback file to prevent future crashes
-                window.electronAPI.terminal.clearScrollback?.(sessionId);
+                console.warn('[TerminalPanel] Failed to restore scrollback, keeping persisted history:', writeError);
+                setRestoreWarning('Saved terminal history restored partially. Live terminal output continues.');
+              } else if (timedOut) {
+                setRestoreWarning('Saved terminal history restored partially because replay took too long.');
               } else if (terminal && !disposed) {
                 // Reset scroll margins to full screen to clear any stale scroll region
                 // from the scrollback content.
                 // CSI r = Set scroll region to entire screen
                 terminal.write('\x1b[r');
-                // Note: We intentionally do NOT send DECSTR (\x1b[!p) here because
-                // it resets the cursor to position (0,0), which causes the cursor to
-                // appear at the top-left while scrollback content fills the screen.
-                // The scroll region reset above is sufficient to fix stale state.
+                terminal.scrollToBottom();
+
+                if (snapshot.screenLines && snapshot.screenLines.length > 0) {
+                  const visibleLines = snapshot.screenLines.slice(-terminal.rows);
+                  for (let row = 0; row < visibleLines.length; row += 1) {
+                    const line = escapeScreenLineForReplay(visibleLines[row]);
+                    terminal.write(`\x1b[${row + 1};1H\x1b[2K${line}`);
+                  }
+                }
+
+                if (snapshot.cursorX !== undefined && snapshot.cursorY !== undefined) {
+                  const cursorRow = Math.max(0, Math.min(snapshot.cursorY, terminal.rows - 1));
+                  const cursorCol = Math.max(0, Math.min(snapshot.cursorX, terminal.cols - 1));
+                  terminal.write(`\x1b[${cursorRow + 1};${cursorCol + 1}H`);
+                }
               }
             }
           }
@@ -540,9 +639,13 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           // Mark scrollback restoration as complete and flush any queued output
           scrollbackRestoreComplete = true;
           if (pendingOutput.length > 0 && terminal && !disposed) {
-            // Write all queued output in one batch to avoid further interleaving
-            terminal.write(pendingOutput.join(''));
+            for (const pending of pendingOutput) {
+              if (pending.sequence <= lastAppliedSequence) continue;
+              terminal.write(pending.data);
+              lastAppliedSequence = pending.sequence;
+            }
           }
+          scheduleRenderStatePersist();
 
           // Listen for PTY exit
           unsubscribeExited = window.electronAPI.terminal.onExited((data) => {
@@ -594,6 +697,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
                 const dims = fitAddon.proposeDimensions();
                 if (dims && dims.cols > 0 && dims.rows > 0) {
                   window.electronAPI.terminal.resize(sessionId, dims.cols, dims.rows);
+                  scheduleRenderStatePersist();
                 }
               } catch (e) {
                 // Ignore resize errors during cleanup
@@ -627,6 +731,7 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
 
           setIsInitialized(true);
           hasInitializedRef.current = true;
+          scheduleRenderStatePersist();
 
           // Auto-focus if this is the active terminal and panel is visible
           if (isActive) {
@@ -643,6 +748,11 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     initTerminal();
 
     return () => {
+      if (renderStatePersistTimer) {
+        clearTimeout(renderStatePersistTimer);
+        renderStatePersistTimer = null;
+      }
+      void persistRenderStateNow();
       disposed = true;
       disposedRef.current = true;
       hasInitializedRef.current = false;
@@ -743,6 +853,25 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
           onClose={handleCloseContextMenu}
           onClear={handleClearTerminal}
         />
+      )}
+
+      {restoreWarning && !initError && !hasExited && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '8px',
+            left: '8px',
+            right: '8px',
+            padding: '8px 12px',
+            backgroundColor: 'var(--nim-bg-secondary)',
+            borderRadius: '4px',
+            color: 'var(--nim-text-muted)',
+            fontSize: '12px',
+            border: '1px solid var(--nim-border)',
+          }}
+        >
+          {restoreWarning}
+        </div>
       )}
 
       {!isInitialized && !hasExited && !initError && (

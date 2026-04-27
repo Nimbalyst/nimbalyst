@@ -43,6 +43,16 @@ export interface TerminalInstance {
   lastActiveAt: number;
   /** Path to shell history file */
   historyFile?: string;
+  /** Last known terminal width in columns */
+  cols?: number;
+  /** Last known terminal height in rows */
+  rows?: number;
+  /** Last known cursor column within the visible terminal viewport */
+  cursorX?: number;
+  /** Last known cursor row within the visible terminal viewport */
+  cursorY?: number;
+  /** Last known visible screen contents, one entry per terminal row */
+  screenLines?: string[];
 }
 
 /**

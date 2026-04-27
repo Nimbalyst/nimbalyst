@@ -66,6 +66,11 @@ interface TerminalMetadata {
   shellPath?: string;
   cwd?: string;
   historyFile?: string;
+  cols?: number;
+  rows?: number;
+  cursorX?: number;
+  cursorY?: number;
+  screenLines?: string[];
   scrollback?: string;
   scrollbackUpdatedAt?: number;
 }
@@ -97,6 +102,9 @@ export interface TerminalProcess {
   rows: number;
   historyFile: string;
   metadata: TerminalMetadata;
+  cursorX: number;
+  cursorY: number;
+  screenLines?: string[];
   isPersisting?: boolean;
   hasPendingPersist?: boolean;
   pendingForcePersist?: boolean;
@@ -104,6 +112,21 @@ export interface TerminalProcess {
   workspacePath?: string;
   /** Whether a command is currently running in this terminal */
   isCommandRunning?: boolean;
+  /** Monotonic sequence number for PTY output ordering */
+  outputSequence: number;
+}
+
+export interface TerminalRestoreSnapshot {
+  terminalId: string;
+  scrollback: string;
+  sequence: number;
+  cols: number;
+  rows: number;
+  cursorX?: number;
+  cursorY?: number;
+  screenLines?: string[];
+  cwd: string;
+  shellName: string;
 }
 
 interface ShellBootstrapConfig {
@@ -191,6 +214,11 @@ export class TerminalSessionManager {
         shellPath: instance.shellPath,
         cwd: instance.cwd,
         historyFile: instance.historyFile,
+        cols: instance.cols,
+        rows: instance.rows,
+        cursorX: instance.cursorX,
+        cursorY: instance.cursorY,
+        screenLines: instance.screenLines,
         scrollback: scrollback ?? undefined,
         scrollbackUpdatedAt: instance.lastActiveAt,
       };
@@ -259,6 +287,11 @@ export class TerminalSessionManager {
       shellPath: terminal.shell.path,
       cwd: terminal.cwd,
       historyFile: terminal.historyFile,
+      cols: terminal.cols,
+      rows: terminal.rows,
+      cursorX: terminal.cursorX,
+      cursorY: terminal.cursorY,
+      screenLines: terminal.screenLines,
       scrollback,
       scrollbackUpdatedAt: options.force || previous.scrollback !== scrollback ? Date.now() : previous.scrollbackUpdatedAt,
     };
@@ -268,7 +301,12 @@ export class TerminalSessionManager {
       previous.shell !== metadata.shell ||
       previous.shellPath !== metadata.shellPath ||
       previous.cwd !== metadata.cwd ||
-      previous.historyFile !== metadata.historyFile;
+      previous.historyFile !== metadata.historyFile ||
+      previous.cols !== metadata.cols ||
+      previous.rows !== metadata.rows ||
+      previous.cursorX !== metadata.cursorX ||
+      previous.cursorY !== metadata.cursorY ||
+      JSON.stringify(previous.screenLines ?? []) !== JSON.stringify(metadata.screenLines ?? []);
 
     const scrollbackChanged = previous.scrollback !== metadata.scrollback;
 
@@ -292,6 +330,11 @@ export class TerminalSessionManager {
           shellPath: terminal.shell.path,
           cwd: terminal.cwd,
           historyFile: terminal.historyFile,
+          cols: terminal.cols,
+          rows: terminal.rows,
+          cursorX: terminal.cursorX,
+          cursorY: terminal.cursorY,
+          screenLines: terminal.screenLines,
           lastActiveAt: Date.now(),
         });
       }
@@ -785,14 +828,21 @@ export class TerminalSessionManager {
       rows,
       historyFile,
       metadata: storedMetadata || {},
+      cursorX: storedMetadata?.cursorX ?? 0,
+      cursorY: storedMetadata?.cursorY ?? 0,
+      screenLines: storedMetadata?.screenLines,
       isPersisting: false,
       hasPendingPersist: false,
       pendingForcePersist: false,
       workspacePath: options.workspacePath,
+      outputSequence: 0,
     };
 
     // Handle output from PTY
     ptyProcess.onData((data: string) => {
+      terminalProcess.outputSequence += 1;
+      const sequence = terminalProcess.outputSequence;
+
       // Append to scrollback buffer (with size limit)
       terminalProcess.scrollbackBuffer += data;
       if (terminalProcess.scrollbackBuffer.length > MAX_SCROLLBACK_SIZE) {
@@ -824,6 +874,7 @@ export class TerminalSessionManager {
       this.broadcastToWindows('terminal:output', {
         sessionId: terminalId,
         data,
+        sequence,
       });
     });
 
@@ -882,6 +933,7 @@ export class TerminalSessionManager {
       terminal.pty.resize(cols, rows);
       terminal.cols = cols;
       terminal.rows = rows;
+      this.scheduleScrollbackPersist(sessionId);
     } catch (error) {
       // EBADF errors occur when the PTY file descriptor is no longer valid
       // (e.g., terminal exited). This is expected and can be safely ignored.
@@ -895,6 +947,82 @@ export class TerminalSessionManager {
   getScrollbackBuffer(sessionId: string): string | null {
     const terminal = this.terminals.get(sessionId);
     return terminal?.scrollbackBuffer || null;
+  }
+
+  updateTerminalRenderState(
+    sessionId: string,
+    updates: {
+      workspacePath?: string;
+      cols?: number;
+      rows?: number;
+      cursorX?: number;
+      cursorY?: number;
+      screenLines?: string[];
+    }
+  ): void {
+    const terminal = this.terminals.get(sessionId);
+
+    if (terminal) {
+      if (updates.cols !== undefined) {
+        terminal.cols = updates.cols;
+      }
+      if (updates.rows !== undefined) {
+        terminal.rows = updates.rows;
+      }
+      if (updates.cursorX !== undefined) {
+        terminal.cursorX = updates.cursorX;
+      }
+      if (updates.cursorY !== undefined) {
+        terminal.cursorY = updates.cursorY;
+      }
+      if (updates.screenLines !== undefined) {
+        terminal.screenLines = updates.screenLines;
+      }
+      this.scheduleScrollbackPersist(sessionId);
+      return;
+    }
+
+    if (updates.workspacePath) {
+      updateTerminalInstance(updates.workspacePath, sessionId, {
+        cols: updates.cols,
+        rows: updates.rows,
+        cursorX: updates.cursorX,
+        cursorY: updates.cursorY,
+        screenLines: updates.screenLines,
+      });
+    }
+  }
+
+  async getRestoreSnapshot(terminalId: string, workspacePath?: string): Promise<TerminalRestoreSnapshot> {
+    const active = this.terminals.get(terminalId);
+    if (active) {
+      return {
+        terminalId,
+        scrollback: active.scrollbackBuffer,
+        sequence: active.outputSequence,
+        cols: active.cols,
+        rows: active.rows,
+        cursorX: active.cursorX,
+        cursorY: active.cursorY,
+        screenLines: active.screenLines,
+        cwd: active.cwd,
+        shellName: active.shell.name,
+      };
+    }
+
+    const storedMetadata = await this.loadStoredTerminalMetadata(terminalId, workspacePath);
+    return {
+      terminalId,
+      scrollback: storedMetadata?.scrollback || '',
+      sequence: 0,
+      cols: storedMetadata?.cols || 80,
+      rows: storedMetadata?.rows || 30,
+      cursorX: storedMetadata?.cursorX,
+      cursorY: storedMetadata?.cursorY,
+      screenLines: storedMetadata?.screenLines,
+      cwd: storedMetadata?.cwd || workspacePath || process.cwd(),
+      shellName: storedMetadata?.shell || 'unknown',
+    };
   }
 
   /**

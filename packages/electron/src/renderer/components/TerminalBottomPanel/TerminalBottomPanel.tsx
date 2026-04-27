@@ -21,6 +21,7 @@ import {
   activeTerminalIdAtom,
   terminalPanelVisibleAtom,
   terminalPanelHeightAtom,
+  terminalPanelHydratedAtom,
   closeTerminalPanelAtom,
   loadTerminals,
   setActiveTerminal,
@@ -80,6 +81,7 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
   // Panel state from Jotai atoms
   const visible = useAtomValue(terminalPanelVisibleAtom);
   const height = useAtomValue(terminalPanelHeightAtom);
+  const panelStateHydrated = useAtomValue(terminalPanelHydratedAtom);
   const closePanel = useSetAtom(closeTerminalPanelAtom);
 
   // Terminal list state from Jotai atoms
@@ -133,6 +135,7 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
 
   // Track analytics and persist visibility when panel visibility changes
   useEffect(() => {
+    if (!panelStateHydrated) return;
     if (visible && posthog) {
       posthog.capture('terminal_panel_opened', {
         terminalCount: terminals.length,
@@ -140,7 +143,7 @@ export const TerminalBottomPanel: React.FC<TerminalBottomPanelProps> = ({
     }
     // Persist visibility state per-workspace
     window.electronAPI.terminal.setPanelVisible(workspacePath, visible);
-  }, [visible, workspacePath, posthog, terminals.length]);
+  }, [visible, workspacePath, posthog, terminals.length, panelStateHydrated]);
 
   // Create new terminal
   const handleCreateTerminal = useCallback(async () => {

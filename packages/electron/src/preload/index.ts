@@ -1179,8 +1179,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('terminal:write', terminalId, data),
     resize: (terminalId: string, cols: number, rows: number) =>
       ipcRenderer.invoke('terminal:resize', terminalId, cols, rows),
+    updateRenderState: (
+      terminalId: string,
+      updates: { workspacePath?: string; cols?: number; rows?: number; cursorX?: number; cursorY?: number; screenLines?: string[] }
+    ) => ipcRenderer.invoke('terminal:update-render-state', terminalId, updates),
     getScrollback: (terminalId: string) =>
       ipcRenderer.invoke('terminal:get-scrollback', terminalId),
+    getRestoreSnapshot: (workspacePath: string, terminalId: string) =>
+      ipcRenderer.invoke('terminal:get-restore-snapshot', workspacePath, terminalId),
     clearScrollback: (terminalId: string) =>
       ipcRenderer.invoke('terminal:clear-scrollback', terminalId),
     destroy: (terminalId: string) =>
@@ -1191,7 +1197,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('terminal:get-available-shells'),
 
     // Events
-    onOutput: (callback: (data: { sessionId: string; data: string }) => void) => {
+    onOutput: (callback: (data: { sessionId: string; data: string; sequence: number }) => void) => {
       const handler = (_event: any, data: any) => callback(data);
       ipcRenderer.on('terminal:output', handler);
       return () => ipcRenderer.removeListener('terminal:output', handler);

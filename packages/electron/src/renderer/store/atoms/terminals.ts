@@ -25,6 +25,8 @@ export interface TerminalInstance {
   createdAt: number;
   lastActiveAt: number;
   historyFile?: string;
+  cols?: number;
+  rows?: number;
 }
 
 /**
@@ -59,6 +61,11 @@ export const terminalPanelVisibleAtom = atom<boolean>(false);
 export const terminalPanelHeightAtom = atom<number>(300);
 
 /**
+ * Whether terminal panel state has been hydrated from persistent storage
+ */
+export const terminalPanelHydratedAtom = atom<boolean>(false);
+
+/**
  * Toggle terminal panel visibility (write-only atom)
  */
 export const toggleTerminalPanelAtom = atom(null, (_get, set) => {
@@ -85,7 +92,10 @@ export const openTerminalPanelAtom = atom(null, (_get, set) => {
  */
 export async function loadTerminalPanelState(workspacePath: string): Promise<void> {
   try {
-    if (!window.electronAPI?.terminal?.getPanelState) return;
+    if (!window.electronAPI?.terminal?.getPanelState) {
+      store.set(terminalPanelHydratedAtom, true);
+      return;
+    }
     const state = await window.electronAPI.terminal.getPanelState(workspacePath);
     if (state?.panelVisible !== undefined) {
       store.set(terminalPanelVisibleAtom, state.panelVisible);
@@ -95,7 +105,13 @@ export async function loadTerminalPanelState(workspacePath: string): Promise<voi
     }
   } catch (error) {
     console.error('[terminals] Failed to load terminal panel state:', error);
+  } finally {
+    store.set(terminalPanelHydratedAtom, true);
   }
+}
+
+export function resetTerminalPanelHydration(): void {
+  store.set(terminalPanelHydratedAtom, false);
 }
 
 /**

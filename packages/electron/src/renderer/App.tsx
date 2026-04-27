@@ -178,6 +178,7 @@ import {
   closeTerminalPanelAtom,
   openTerminalPanelAtom,
   loadTerminalPanelState,
+  resetTerminalPanelHydration,
 } from './store/atoms/terminals';
 
 logger.ui.info('App.tsx loading');
@@ -658,6 +659,7 @@ export default function App() {
   // Load terminal panel state from terminal store into Jotai atoms
   useEffect(() => {
     if (!workspacePath) return;
+    resetTerminalPanelHydration();
     loadTerminalPanelState(workspacePath).then(() => {
       // If terminal panel is visible on load, close tracker panel (mutually exclusive)
       if (store.get(terminalPanelVisibleAtom)) {

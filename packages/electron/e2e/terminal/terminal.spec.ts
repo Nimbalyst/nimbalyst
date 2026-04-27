@@ -17,8 +17,7 @@ import {
   TEST_TIMEOUTS
 } from '../helpers';
 import {
-  switchToAgentMode,
-  PLAYWRIGHT_TEST_SELECTORS
+  switchToFilesMode
 } from '../utils/testHelpers';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -43,109 +42,180 @@ test.afterAll(async () => {
   await fs.rm(workspacePath, { recursive: true, force: true }).catch(() => undefined);
 });
 
+async function openTerminalPanel(page: Page): Promise<void> {
+  await switchToFilesMode(page);
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('terminal:show')));
+  await expect(page.locator('.terminal-bottom-panel-container')).toBeVisible({ timeout: 5000 });
+}
+
+function activeTerminalInput(page: Page) {
+  return page.locator('.terminal-bottom-panel-terminal:visible [data-testid="terminal-container"]');
+}
+
+async function ensureTerminalReady(page: Page): Promise<void> {
+  const terminalContainer = activeTerminalInput(page);
+  if (await terminalContainer.isVisible().catch(() => false)) {
+    await expect(page.locator('.terminal-bottom-panel-terminal:visible .terminal-container')).toBeVisible({ timeout: 5000 });
+    return;
+  }
+
+  const emptyButton = page.locator('.terminal-bottom-panel-empty button');
+  if (await emptyButton.isVisible().catch(() => false)) {
+    await emptyButton.click();
+  } else {
+    await page.locator('.terminal-bottom-panel-new-tab').click();
+  }
+
+  await expect(terminalContainer).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('.terminal-bottom-panel-terminal:visible .terminal-container')).toBeVisible({ timeout: 5000 });
+  await page.waitForTimeout(1500);
+}
+
+async function sendCommandToActiveTerminal(page: Page, workspacePath: string, command: string): Promise<void> {
+  await page.evaluate(async ({ workspacePath, command }) => {
+    const activeTerminalId = await window.electronAPI.terminal.getActive(workspacePath);
+    if (!activeTerminalId) {
+      throw new Error('No active terminal found');
+    }
+
+    await window.electronAPI.terminal.write(activeTerminalId, `${command}\r`);
+  }, { workspacePath, command });
+}
+
 // --- Terminal Session tests (from terminal-session.spec.ts) ---
 
-test.describe('Terminal Sessions', () => {
-  test('should create terminal session and execute pwd command', async () => {
+test.describe('Terminal Bottom Panel Sessions', () => {
+  test('should create a bottom-panel terminal and execute pwd command', async () => {
     test.setTimeout(TEST_TIMEOUTS.VERY_LONG);
 
-    await switchToAgentMode(page);
-
-    const sessionHistory = page.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistory);
-    await expect(sessionHistory).toBeVisible({ timeout: 5000 });
-
-    // Click the new terminal button
-    const newTerminalButton = page.locator('[data-testid="new-terminal-button"]');
-    await expect(newTerminalButton).toBeVisible({ timeout: 5000 });
-    await newTerminalButton.click();
-
-    // Wait for terminal container to appear
-    const terminalContainer = page.locator('[data-testid^="terminal-session-"]');
-    await expect(terminalContainer).toBeVisible({ timeout: 10000 });
-
-    await page.waitForTimeout(2000);
+    await openTerminalPanel(page);
+    await ensureTerminalReady(page);
 
     // Find the xterm container
     const xtermContainer = page.locator('.terminal-container');
     await expect(xtermContainer).toBeVisible({ timeout: 5000 });
 
-    // Focus and type pwd
-    await xtermContainer.click();
-    await page.waitForTimeout(500);
-    await page.keyboard.type('pwd');
-    await page.keyboard.press('Enter');
+    const pwdOutputFile = path.join(workspacePath, 'pwd-output.txt');
+    await sendCommandToActiveTerminal(page, workspacePath, `pwd > "${pwdOutputFile}"`);
     await page.waitForTimeout(1000);
 
-    // Verify terminal session appears in the session list
-    const terminalSessionItem = page.locator('.session-list-item-icon.terminal-icon');
-    await expect(terminalSessionItem).toBeVisible({ timeout: 5000 });
-
-    // Verify terminal is showing content
-    const xtermScreen = page.locator('.xterm-screen');
-    await expect(xtermScreen).toBeVisible({ timeout: 3000 });
-
-    const terminalContent = page.locator('.xterm-rows');
-    await expect(terminalContent).toBeVisible({ timeout: 3000 });
+    const pwdOutput = await fs.readFile(pwdOutputFile, 'utf8');
+    expect(pwdOutput.trim()).toBe(workspacePath);
   });
 
-  test('should show terminal icon in session list for terminal sessions', async () => {
-    // Terminal should already exist from previous test
-    const terminalIcon = page.locator('.session-list-item .material-symbols-rounded').filter({ hasText: 'terminal' });
-    await expect(terminalIcon).toBeVisible({ timeout: 5000 });
+  test('should render a terminal tab in the bottom panel', async () => {
+    await openTerminalPanel(page);
+    await ensureTerminalReady(page);
+
+    const terminalTab = page.locator('.terminal-tab');
+    await expect(terminalTab.first()).toBeVisible({ timeout: 5000 });
   });
 
-  test('should allow creating multiple terminal sessions', async () => {
+  test('should allow creating multiple bottom-panel terminals', async () => {
     test.setTimeout(TEST_TIMEOUTS.VERY_LONG);
 
-    // Create another terminal (one already exists from previous tests)
-    const newTerminalButton = page.locator('[data-testid="new-terminal-button"]');
-    await newTerminalButton.click();
-    await page.waitForTimeout(2000);
+    await openTerminalPanel(page);
+    await ensureTerminalReady(page);
 
-    // Verify we have 2+ terminal tabs
-    const terminalTabs = page.locator('.tab').filter({ hasText: 'Terminal' });
-    const count = await terminalTabs.count();
-    expect(count).toBeGreaterThanOrEqual(2);
+    const terminalTabs = page.locator('.terminal-tab');
+    const countBefore = await terminalTabs.count();
+
+    await page.locator('.terminal-bottom-panel-new-tab').click();
+    await page.waitForTimeout(1500);
+
+    await expect(terminalTabs).toHaveCount(countBefore + 1, { timeout: 10000 });
   });
 });
 
 // --- Terminal Close/Reopen tests (from terminal-reopen.spec.ts) ---
 
 test.describe('Terminal Panel - Close and Reopen', () => {
-  test('terminal should function correctly after close and reopen', async () => {
+  test('terminal should function correctly after page reload with panel open', async () => {
     test.setTimeout(TEST_TIMEOUTS.VERY_LONG);
 
-    // Switch to files mode first so we can use the bottom panel terminal
-    await page.keyboard.press('Meta+E');
-    await page.waitForTimeout(500);
-
-    // Open terminal panel via custom event
-    await page.evaluate(() => window.dispatchEvent(new CustomEvent('terminal:show')));
-    await page.waitForTimeout(500);
-
-    // Panel is open
+    await openTerminalPanel(page);
     const panelContainer = page.locator('.terminal-bottom-panel-container');
+
+    await ensureTerminalReady(page);
+    const terminalContainer = activeTerminalInput(page);
+
+    const testFileBefore = path.join(workspacePath, 'reload-before.txt');
+    await sendCommandToActiveTerminal(page, workspacePath, `echo BEFORE_RELOAD > "${testFileBefore}"`);
+    await page.waitForTimeout(1000);
+
+    const beforeContent = await fs.readFile(testFileBefore, 'utf8').catch(() => '');
+    expect(beforeContent.trim()).toBe('BEFORE_RELOAD');
+
+    await page.reload();
+    await waitForAppReady(page);
+    await page.waitForTimeout(1000);
+
     await expect(panelContainer).toBeVisible({ timeout: 5000 });
-
-    // Click "New Terminal" button if terminal isn't already running
-    const emptyButton = page.locator('.terminal-bottom-panel-empty button');
-    if (await emptyButton.isVisible().catch(() => false)) {
-      await emptyButton.click();
-    }
-
-    // Wait for terminal to be ready
-    const terminalContainer = page.locator('[data-testid="terminal-container"]');
     await expect(terminalContainer).toBeVisible({ timeout: 10000 });
     await page.waitForTimeout(2000);
 
-    // Focus the terminal
-    await terminalContainer.click();
+    const testFileAfter = path.join(workspacePath, 'reload-after.txt');
+    await sendCommandToActiveTerminal(page, workspacePath, `echo AFTER_RELOAD > "${testFileAfter}"`);
+    await page.waitForTimeout(1000);
+
+    const afterContent = await fs.readFile(testFileAfter, 'utf8').catch(() => '');
+    expect(afterContent.trim()).toBe('AFTER_RELOAD');
+  });
+
+  test('terminal should function correctly after page reload while panel is hidden', async () => {
+    test.setTimeout(TEST_TIMEOUTS.VERY_LONG);
+
+    await openTerminalPanel(page);
+    const panelContainer = page.locator('.terminal-bottom-panel-container');
+
+    await ensureTerminalReady(page);
+    const terminalContainer = activeTerminalInput(page);
+
+    const testFileBefore = path.join(workspacePath, 'hidden-before.txt');
+    await sendCommandToActiveTerminal(page, workspacePath, `echo BEFORE_HIDDEN_RELOAD > "${testFileBefore}"`);
+    await page.waitForTimeout(1000);
+
+    const beforeContent = await fs.readFile(testFileBefore, 'utf8').catch(() => '');
+    expect(beforeContent.trim()).toBe('BEFORE_HIDDEN_RELOAD');
+
+    const closeButton = page.locator('.terminal-bottom-panel-close');
+    await closeButton.click();
+    await page.waitForTimeout(500);
+    await expect(panelContainer).not.toBeVisible();
+
+    await page.reload();
+    await waitForAppReady(page);
+    await page.waitForTimeout(1000);
+    await expect(panelContainer).not.toBeVisible();
+
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('terminal:show')));
     await page.waitForTimeout(500);
 
+    await expect(panelContainer).toBeVisible({ timeout: 5000 });
+    await expect(terminalContainer).toBeVisible({ timeout: 10000 });
+    await page.waitForTimeout(2000);
+
+    const testFileAfter = path.join(workspacePath, 'hidden-after.txt');
+    await sendCommandToActiveTerminal(page, workspacePath, `echo AFTER_HIDDEN_RELOAD > "${testFileAfter}"`);
+    await page.waitForTimeout(1000);
+
+    const afterContent = await fs.readFile(testFileAfter, 'utf8').catch(() => '');
+    expect(afterContent.trim()).toBe('AFTER_HIDDEN_RELOAD');
+  });
+
+  test('terminal should function correctly after close and reopen', async () => {
+    test.setTimeout(TEST_TIMEOUTS.VERY_LONG);
+
+    await openTerminalPanel(page);
+    const panelContainer = page.locator('.terminal-bottom-panel-container');
+
+    await ensureTerminalReady(page);
+    const terminalContainer = activeTerminalInput(page);
+
+    // Focus the terminal
     // Run a command that produces a file
     const testFileBefore = path.join(workspacePath, 'before.txt');
-    await page.keyboard.type(`echo BEFORE_CLOSE > "${testFileBefore}"`);
-    await page.keyboard.press('Enter');
+    await sendCommandToActiveTerminal(page, workspacePath, `echo BEFORE_CLOSE > "${testFileBefore}"`);
     await page.waitForTimeout(1000);
 
     // Verify the first command worked
@@ -169,13 +239,9 @@ test.describe('Terminal Panel - Close and Reopen', () => {
     await page.waitForTimeout(2000);
 
     // Focus the terminal again
-    await terminalContainer.click();
-    await page.waitForTimeout(500);
-
     // Run a command after reopening
     const testFileAfter = path.join(workspacePath, 'after.txt');
-    await page.keyboard.type(`echo AFTER_REOPEN > "${testFileAfter}"`);
-    await page.keyboard.press('Enter');
+    await sendCommandToActiveTerminal(page, workspacePath, `echo AFTER_REOPEN > "${testFileAfter}"`);
     await page.waitForTimeout(1000);
 
     // Verify the file was created (proves cursor was at prompt, not at 0,0)

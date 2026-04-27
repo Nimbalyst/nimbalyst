@@ -110,6 +110,8 @@ export function registerTerminalHandlers(): void {
           createdAt: now,
           lastActiveAt: now,
           historyFile: terminalInfo?.historyFile,
+          cols: terminalInfo?.cols,
+          rows: terminalInfo?.rows,
         };
 
         createTerminalInstance(payload.workspacePath, instance);
@@ -182,6 +184,8 @@ export function registerTerminalHandlers(): void {
           createdAt: now,
           lastActiveAt: now,
           historyFile: terminalInfo?.historyFile,
+          cols: terminalInfo?.cols,
+          rows: terminalInfo?.rows,
         };
 
         createTerminalInstance(payload.workspacePath, instance);
@@ -219,10 +223,19 @@ export function registerTerminalHandlers(): void {
         cols?: number;
         rows?: number;
       }
-    ) => {
+      ) => {
       try {
         // Check if already active
         if (manager.isTerminalActive(terminalId)) {
+          if (options.cols && options.rows) {
+            manager.resizeTerminal(terminalId, options.cols, options.rows);
+          }
+          const updates: Partial<Omit<TerminalInstance, 'id'>> = {
+            lastActiveAt: Date.now(),
+          };
+          if (options.cols !== undefined) updates.cols = options.cols;
+          if (options.rows !== undefined) updates.rows = options.rows;
+          updateTerminalInstance(options.workspacePath, terminalId, updates);
           return { success: true, alreadyActive: true };
         }
 
@@ -268,6 +281,25 @@ export function registerTerminalHandlers(): void {
     return { success: true };
   });
 
+  safeHandle(
+    'terminal:update-render-state',
+    async (
+      _event,
+      sessionId: string,
+      updates: {
+        workspacePath?: string;
+        cols?: number;
+        rows?: number;
+        cursorX?: number;
+        cursorY?: number;
+        screenLines?: string[];
+      }
+    ) => {
+      manager.updateTerminalRenderState(sessionId, updates);
+      return { success: true };
+    }
+  );
+
   /**
    * Get scrollback buffer for restoration
    */
@@ -282,6 +314,19 @@ export function registerTerminalHandlers(): void {
     }
     return await manager.getStoredScrollback(sessionId);
   });
+
+  safeHandle(
+    'terminal:get-restore-snapshot',
+    async (_event, workspacePath: string, sessionId: string) => {
+      if (!sessionId || typeof sessionId !== 'string') {
+        throw new Error('sessionId is required and must be a string');
+      }
+      if (!workspacePath || typeof workspacePath !== 'string') {
+        throw new Error('workspacePath is required and must be a string');
+      }
+      return await manager.getRestoreSnapshot(sessionId, workspacePath);
+    }
+  );
 
   /**
    * Clear scrollback buffer (used when scrollback is corrupted)
