@@ -255,9 +255,17 @@ export default defineConfig({
         ignored: ['!**/runtime/src/**']
       },
       fs: {
-        // Allow serving files from parent directories and node_modules
-        // Monaco Editor requires serving CSS files from node_modules
-        allow: ['..', '../../node_modules']
+        // Allow serving files from parent directories and node_modules.
+        // Monaco Editor's @font-face for the `codicon` font points at
+        // monaco-editor/esm/vs/base/browser/ui/codicons/codicon/codicon.ttf,
+        // which is hoisted to the workspace-root node_modules. Without that
+        // root in the allow list, Vite returns 403 for the font and Monaco's
+        // diff-insert/delete glyphs render as tofu boxes (□) on changed lines.
+        allow: [
+          resolve(__dirname, 'src'),                // packages/electron/src
+          resolve(__dirname, 'node_modules'),       // packages/electron/node_modules
+          resolve(__dirname, '../../node_modules'), // workspace-root node_modules (Monaco lives here)
+        ],
       }
     },
     build: {

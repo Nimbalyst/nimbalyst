@@ -162,6 +162,43 @@ test.beforeAll(async () => {
 `,
     'utf8'
   );
+  // Test file for the encoding-fidelity diff test. Includes non-ASCII bytes
+  // (accented chars, em-dash, emoji, CJK) so chardet auto-detection in
+  // read-file-content has a chance to misclassify it as latin1/utf16/etc.
+  await fs.writeFile(
+    path.join(workspaceDir, 'diff-encoding-test.ts'),
+    `// Café — résumé naïveté\nexport const greeting = "héllo wörld 你好 👋";\nexport const original = true;\n`,
+    'utf8'
+  );
+  // Test file for the Codex-ordering Accept-All persistence test. The real
+  // AIService Codex flow writes the file first (via the SDK's apply_patch),
+  // then HistoryManager.createTag is called with the pre-edit baseline. This
+  // is the OPPOSITE order from the existing diff-accept-test, which creates
+  // the tag first. The race we care about hides only with this ordering.
+  await fs.writeFile(
+    path.join(workspaceDir, 'codex-accept-test.ts'),
+    `export interface Greeting {\n  text: string;\n  emoji: string;\n}\n\nexport function greet(name: string): Greeting {\n  return { text: \`Hello, \${name}\`, emoji: '👋' };\n}\n`,
+    'utf8'
+  );
+  // Test file mirroring the user-reported bug: Codex inserts new lines whose
+  // first character is NBSP (U+00A0) instead of ASCII space. Monaco's unicode
+  // highlight feature draws a box around the NBSP, which is what the user
+  // sees as "weird characters" in the diff. The Accept All path must still
+  // round-trip the actual file bytes to disk.
+  await fs.writeFile(
+    path.join(workspaceDir, 'codex-nbsp-test.ts'),
+    `/*\n\nNumbers\n- One\n- Two\n- Three\n\n\nLetters\n- A\n- B\n- C\n- D\n\n*/\n`,
+    'utf8'
+  );
+  // Mirrors the user's actual reproduction file (markdowntests/small-typescript.ts).
+  // Disk bytes are CLEAN ASCII -- but Monaco still renders square glyphs on
+  // the inserted lines in the diff. This test inspects exactly what those
+  // glyphs are (gutter widgets, inline decorations, view-overlay elements).
+  await fs.writeFile(
+    path.join(workspaceDir, 'codex-glyph-probe.ts'),
+    `/*\n\nNumbers\n- One\n- Two\n- Three\n\n\nLetters\n- A\n- B\n- C\n- D\n\n*/\n`,
+    'utf8'
+  );
   await fs.writeFile(
     path.join(workspaceDir, 'history-test.ts'),
     `// Initial content
@@ -537,4 +574,478 @@ function hello() {
 
   // Close the tab to clean up
   await closeTabByFileName(page, 'history-test.ts');
+});
+
+test('Codex-style diff preserves non-ASCII bytes round-trip', async () => {
+  // Simulates the Codex file_change pipeline:
+  //   - FileSnapshotCache captures pre-edit content as utf-8
+  //   - HistoryManager creates a pending tag with that baseline
+  //   - Codex writes new content to disk
+  //   - Renderer reads disk via read-file-content (chardet auto-detect)
+  //   - Monaco DiffEditor renders original=baseline, modified=disk
+  //
+  // The bug we're hunting: if chardet picks a non-utf-8 encoding for the
+  // post-edit read, the modified pane is decoded with a different encoding
+  // than the original pane, and characters render mojibake-style.
+  //
+  // This test asserts byte-faithful round-trip on both panes.
+  const tsPath = path.join(workspaceDir, 'diff-encoding-test.ts');
+  const fileName = 'diff-encoding-test.ts';
+
+  const originalContent = await fs.readFile(tsPath, 'utf-8');
+  // Modified version keeps the non-ASCII content but adds a new export. Codex
+  // typically rewrites a span of lines; this mirrors that pattern.
+  const modifiedContent = `// Café — résumé naïveté\nexport const greeting = "héllo wörld 你好 👋";\nexport const original = false;\nexport const note = "ümlaut — em-dash — 𝓮𝓶𝓸𝓳𝓲";\n`;
+
+  await openFileFromTree(page, fileName);
+  await page.waitForSelector(VISIBLE_MONACO_SELECTOR, { timeout: TEST_TIMEOUTS.EDITOR_LOAD });
+  await page.waitForTimeout(500);
+
+  // Sanity: editor shows the non-ASCII original
+  const initialText = await getMonacoContent(page);
+  expect(initialText).toContain('héllo wörld');
+  expect(initialText).toContain('你好');
+
+  // Simulate Codex pre-edit tag + apply_patch: tag holds pre-edit content,
+  // then Codex writes the modified content to disk.
+  const tagId = `enc-tag-${Date.now()}`;
+  const sessionId = `enc-session-${Date.now()}`;
+
+  await page.evaluate(async ({ workspacePath, filePath, tagId, sessionId, originalContent }) => {
+    await window.electronAPI.history.createTag(
+      workspacePath,
+      filePath,
+      tagId,
+      originalContent,
+      sessionId,
+      'codex-encoding-test'
+    );
+  }, { workspacePath: workspaceDir, filePath: tsPath, tagId, sessionId, originalContent });
+
+  await fs.writeFile(tsPath, modifiedContent, 'utf8');
+
+  // Diff bar appears once the watcher event triggers DocumentModel diff mode
+  await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffHeader, { timeout: 5000 });
+
+  // Read both panes of the Monaco diff editor.
+  //
+  // We can't always rely on `window.monaco.editor.getEditors()` (the
+  // @monaco-editor/react loader doesn't expose it as a window global in some
+  // builds). Instead we walk the DOM: Monaco renders diff panes as
+  //   `.monaco-diff-editor .editor.original .monaco-editor`
+  //   `.monaco-diff-editor .editor.modified .monaco-editor`
+  // and stashes the editor instance on the DOM node via a property bag the
+  // contributions register. We can read text from the underlying ITextModel
+  // by reaching through the rendered DOM, but the safest cross-version path
+  // is to extract the text from the view-lines and normalize NBSP back to
+  // space. For non-ASCII fidelity testing we just need the codepoints.
+  const diffPanes = await page.evaluate(() => {
+    const wrapper = document.querySelector('.monaco-code-editor[data-diff-mode="true"]');
+    if (!wrapper) return { error: 'no diff-mode wrapper' };
+    const diffRoot = wrapper.querySelector('.monaco-diff-editor');
+    if (!diffRoot) return { error: 'no monaco-diff-editor element' };
+
+    function readPane(paneSelector: string): string {
+      const pane = diffRoot!.querySelector(paneSelector);
+      if (!pane) return '';
+      // Sort by `top` style on .view-line so we get them in display order.
+      const lineEls = Array.from(pane.querySelectorAll('.view-line')) as HTMLElement[];
+      lineEls.sort((a, b) => {
+        const at = parseInt(a.style.top || '0', 10);
+        const bt = parseInt(b.style.top || '0', 10);
+        return at - bt;
+      });
+      const text = lineEls.map(l => l.textContent ?? '').join('\n');
+      // Monaco renders leading spaces as NBSP (U+00A0); restore.
+      return text.replace(/ /g, ' ');
+    }
+
+    return {
+      original: readPane('.editor.original'),
+      modified: readPane('.editor.modified'),
+    };
+  });
+
+  expect(diffPanes.error).toBeUndefined();
+
+  // Encoding fidelity: each pane must contain the actual codepoints, not
+  // mojibake. If chardet misdetects the file as latin1, "ümlaut" would render
+  // as "Ã¼mlaut", "你好" as "ä½ å¥½", "👋" as "ðŸ‘‹".
+  // The original side comes from the gzipped pre-edit tag (always utf-8).
+  // The modified side comes from read-file-content (chardet auto-detect).
+  for (const phrase of ['héllo wörld', '你好', '👋', 'naïveté']) {
+    expect(diffPanes.original).toContain(phrase);
+    expect(diffPanes.modified).toContain(phrase);
+  }
+  // The new line only exists in modified.
+  expect(diffPanes.modified).toContain('ümlaut — em-dash');
+
+  // Mojibake markers — none of these should ever appear if encoding is right.
+  for (const mojibake of ['Ã¼', 'Ã©', 'Ã¶', 'ä½', 'ðŸ']) {
+    expect(diffPanes.original).not.toContain(mojibake);
+    expect(diffPanes.modified).not.toContain(mojibake);
+  }
+
+  await closeTabByFileName(page, fileName);
+});
+
+test('Codex-style Accept All persists changes (write-then-tag ordering)', async () => {
+  // The real Codex flow in AIService:
+  //   1. Codex SDK writes the file to disk via apply_patch
+  //   2. AIService receives the file_change event
+  //   3. AIService captures pre-edit content from FileSnapshotCache
+  //   4. AIService calls HistoryManager.createTag(... beforeContent ...)
+  //
+  // The fs.watch event from step 1 is racing with step 4. Once both have
+  // landed, DocumentModel sees a pending tag and enters diff mode.
+  //
+  // The existing 'accepting diff applies changes' test creates the tag first
+  // and then writes the file -- that's the OPPOSITE order. We mirror the
+  // real ordering here so the test exercises the full race window.
+  const tsPath = path.join(workspaceDir, 'codex-accept-test.ts');
+  const fileName = 'codex-accept-test.ts';
+
+  const originalContent = await fs.readFile(tsPath, 'utf-8');
+  const modifiedContent = `export interface Greeting {\n  text: string;\n  emoji: string;\n  loud: boolean;\n}\n\nexport function greet(name: string, loud = false): Greeting {\n  const text = loud ? \`HELLO, \${name.toUpperCase()}!\` : \`Hello, \${name}\`;\n  return { text, emoji: '👋', loud };\n}\n`;
+
+  await openFileFromTree(page, fileName);
+  await page.waitForSelector(VISIBLE_MONACO_SELECTOR, { timeout: TEST_TIMEOUTS.EDITOR_LOAD });
+  await page.waitForTimeout(500);
+
+  const initialText = await getMonacoContent(page);
+  expect(initialText).toContain('export function greet');
+
+  const tagId = `codex-accept-tag-${Date.now()}`;
+  const sessionId = `codex-accept-session-${Date.now()}`;
+
+  // 1. Write modified content FIRST (simulates Codex apply_patch). This
+  //    triggers the workspace file watcher before any tag exists.
+  await fs.writeFile(tsPath, modifiedContent, 'utf8');
+
+  // 2. Create the pending tag SECOND (simulates AIService receiving the
+  //    file_change event and calling createTag).
+  await page.evaluate(async ({ workspacePath, filePath, tagId, sessionId, originalContent }) => {
+    await window.electronAPI.history.createTag(
+      workspacePath,
+      filePath,
+      tagId,
+      originalContent,
+      sessionId,
+      'codex-accept-test'
+    );
+  }, { workspacePath: workspaceDir, filePath: tsPath, tagId, sessionId, originalContent });
+
+  // Diff bar should appear once the tag-created event reaches the renderer.
+  await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffHeader, { timeout: 5000 });
+
+  const tabElement = getTabByFileName(page, fileName);
+  await expect(tabElement.locator(PLAYWRIGHT_TEST_SELECTORS.tabUnacceptedIndicator))
+    .toBeVisible({ timeout: 2000 });
+
+  // Click Accept All
+  const acceptButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffAcceptAllButton);
+  await acceptButton.click();
+
+  // Diff bar should disappear and stay gone. The race we suspect: the file
+  // watcher echo from saveFile() arrives before updateTagStatus completes,
+  // so DocumentModel re-enters diff mode. We wait for the diff bar to go
+  // hidden, then wait an additional beat to detect any re-entry.
+  await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffHeader, {
+    state: 'hidden',
+    timeout: 3000,
+  });
+  await page.waitForTimeout(1500);
+
+  // The diff bar must STILL be hidden — no spurious re-entry.
+  await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffHeader))
+    .toHaveCount(0, { timeout: 1000 });
+  await expect(tabElement.locator(PLAYWRIGHT_TEST_SELECTORS.tabUnacceptedIndicator))
+    .toHaveCount(0, { timeout: 1000 });
+
+  // Editor must show the modified content.
+  const finalEditorText = await getMonacoContent(page);
+  expect(finalEditorText).toContain('loud = false');
+  expect(finalEditorText).toContain('toUpperCase()');
+  expect(finalEditorText).not.toContain('return { text: `Hello, ${name}`, emoji');
+
+  // File on disk must have the modified content (not reverted).
+  const finalContent = await fs.readFile(tsPath, 'utf-8');
+  expect(finalContent).toBe(modifiedContent);
+
+  await closeTabByFileName(page, fileName);
+});
+
+test('Probe: identify the square glyph Monaco renders on inserted diff lines', async () => {
+  // The user reported small "square" glyphs appearing on inserted lines in
+  // Monaco's diff modified pane. Disk bytes are clean ASCII. This probe
+  // captures EVERY visible artifact on/around the inserted-line area:
+  //   - char codes of the line text
+  //   - DOM tree under each .view-line
+  //   - all decoration/overlay layers Monaco creates
+  // so we can identify exactly what's drawing the square.
+  const filePath = path.join(workspaceDir, 'codex-glyph-probe.ts');
+  const fileName = 'codex-glyph-probe.ts';
+
+  const originalContent = await fs.readFile(filePath, 'utf-8');
+  // Insert "- Four" and "- Five" right after "- Three" -- exact match of the
+  // user's screenshot scenario. Clean ASCII bytes (0x2d 0x20 0x46...).
+  const modifiedContent = originalContent.replace(
+    '- Three\n',
+    '- Three\n- Four\n- Five\n',
+  );
+
+  // Sanity: confirm we're probing with clean ASCII (no hidden non-ASCII).
+  for (let i = 0; i < modifiedContent.length; i++) {
+    if (modifiedContent.charCodeAt(i) > 127 && modifiedContent.charCodeAt(i) !== 10) {
+      throw new Error(`Test setup is wrong: non-ASCII char at index ${i}`);
+    }
+  }
+
+  await openFileFromTree(page, fileName);
+  await page.waitForSelector(VISIBLE_MONACO_SELECTOR, { timeout: TEST_TIMEOUTS.EDITOR_LOAD });
+  await page.waitForTimeout(500);
+
+  const tagId = `glyph-tag-${Date.now()}`;
+  const sessionId = `glyph-session-${Date.now()}`;
+
+  await fs.writeFile(filePath, modifiedContent, 'utf8');
+  await page.evaluate(async ({ workspacePath, filePath, tagId, sessionId, originalContent }) => {
+    await window.electronAPI.history.createTag(
+      workspacePath, filePath, tagId, originalContent, sessionId, 'codex-glyph-probe',
+    );
+  }, { workspacePath: workspaceDir, filePath, tagId, sessionId, originalContent });
+
+  await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffHeader, { timeout: 5000 });
+  // Let Monaco settle its decorations.
+  await page.waitForTimeout(500);
+
+  const probe = await page.evaluate(() => {
+    const wrapper = document.querySelector('.monaco-code-editor[data-diff-mode="true"]');
+    if (!wrapper) return { error: 'no diff wrapper' };
+    const modPane = wrapper.querySelector('.monaco-diff-editor .editor.modified');
+    if (!modPane) return { error: 'no modified pane' };
+
+    const linesEl = modPane.querySelector('.view-lines');
+    const lineEls = Array.from(linesEl?.querySelectorAll('.view-line') ?? []) as HTMLElement[];
+    lineEls.sort((a, b) => parseInt(a.style.top || '0', 10) - parseInt(b.style.top || '0', 10));
+
+    const lineDetails = lineEls.map((line, idx) => {
+      const text = line.textContent ?? '';
+      const codes: number[] = [];
+      for (let i = 0; i < text.length; i++) codes.push(text.charCodeAt(i));
+      return {
+        idx,
+        top: line.style.top,
+        text,
+        charCodes: codes,
+        innerHTML: line.innerHTML.slice(0, 400),
+      };
+    });
+
+    // Find which lines are flagged as inserted by the diff. Monaco marks
+    // them with `.line-insert` somewhere in the overlay layers.
+    const insertedTops = new Set<string>();
+    modPane.querySelectorAll('.line-insert').forEach((el) => {
+      const top = (el as HTMLElement).style.top;
+      if (top) insertedTops.add(top);
+    });
+
+    // Find children inside `.margin` for inserted-line tops -- this is where
+    // Monaco renders gutter glyphs (the square the user is asking about).
+    const marginEl = modPane.querySelector('.margin');
+    const marginChildrenForInsertedLines: Array<{ top: string; outerHTML: string }> = [];
+    if (marginEl) {
+      const marginChildren = Array.from(marginEl.querySelectorAll('*')) as HTMLElement[];
+      for (const ch of marginChildren) {
+        if (ch.style.top && insertedTops.has(ch.style.top)) {
+          marginChildrenForInsertedLines.push({
+            top: ch.style.top,
+            outerHTML: ch.outerHTML.slice(0, 500),
+          });
+        }
+      }
+    }
+
+    // Same for view-overlays — these draw inline (over the text area).
+    const viewOverlaysEl = modPane.querySelector('.view-overlays');
+    const viewOverlayChildrenForInsertedLines: Array<{ top: string; outerHTML: string }> = [];
+    if (viewOverlaysEl) {
+      const ovChildren = Array.from(viewOverlaysEl.querySelectorAll('*')) as HTMLElement[];
+      for (const ch of ovChildren) {
+        if (ch.style.top && insertedTops.has(ch.style.top)) {
+          viewOverlayChildrenForInsertedLines.push({
+            top: ch.style.top,
+            outerHTML: ch.outerHTML.slice(0, 500),
+          });
+        }
+      }
+    }
+
+    // Pseudo-element CSS rules sometimes inject the glyph via `content`. We
+    // can't read pseudo-elements from JS directly, but we can capture the
+    // CSS rules that target `.line-insert::before` / `::after` or any class
+    // we find on the inserted-line markers.
+    const possibleGlyphElements: Array<{ className: string; before: string; after: string }> = [];
+    modPane.querySelectorAll('.line-insert, .char-insert').forEach((el) => {
+      const el2 = el as HTMLElement;
+      const before = window.getComputedStyle(el2, '::before');
+      const after = window.getComputedStyle(el2, '::after');
+      possibleGlyphElements.push({
+        className: el2.className,
+        before: `content: ${before.content}; width: ${before.width}; bg: ${before.backgroundColor}`,
+        after: `content: ${after.content}; width: ${after.width}; bg: ${after.backgroundColor}`,
+      });
+    });
+
+    // Enumerate all CSS classes that ever appear on overlay decoration nodes.
+    const decorationClasses = new Set<string>();
+    modPane.querySelectorAll('[class*="decoration"], [class*="insert"], [class*="delete"], [class*="diff"]').forEach((el) => {
+      const cls = (el as HTMLElement).className;
+      if (typeof cls === 'string') {
+        cls.split(/\s+/).forEach(c => {
+          if (c) decorationClasses.add(c);
+        });
+      }
+    });
+
+    return {
+      lineDetails,
+      insertedTops: Array.from(insertedTops),
+      marginChildrenForInsertedLines,
+      viewOverlayChildrenForInsertedLines,
+      possibleGlyphElements,
+      decorationClasses: Array.from(decorationClasses).sort(),
+    };
+  });
+
+  // Also fetch the underlying Monaco text model content so we can compare
+  // it against both disk and the rendered DOM.
+  const modelContent = await page.evaluate(() => {
+    const monaco = (window as any).monaco;
+    if (!monaco?.editor?.getModels) return { error: 'no monaco.editor' };
+    const models = monaco.editor.getModels() as Array<{ uri: any; getValue(): string }>;
+    return models.map(m => ({ uri: String(m.uri), value: m.getValue() }));
+  });
+
+  // Print everything so we can read the structure even if assertions pass.
+  // eslint-disable-next-line no-console
+  console.log('=== MONACO DIFF PROBE ===');
+  console.log(JSON.stringify({ probe, modelContent }, null, 2));
+
+  // What we know going in: disk bytes are clean ASCII (asserted at the top
+  // of this test). What we want to know: where does the visible square glyph
+  // come from? Possible sources:
+  //   (a) Monaco's renderer turning ASCII spaces into NBSP in the DOM, then
+  //       the unicodeHighlight feature flagging the NBSP as suspicious.
+  //   (b) A diff add/insert indicator element overlaid on the line.
+  //   (c) Actual NBSP in the underlying text model (would mean the bug is
+  //       in our content pipeline writing NBSP into Monaco).
+  //
+  // We assert (c) is NOT happening: every model's value must contain only
+  // basic ASCII for our test file. If a model has codepoint 160, the bug is
+  // upstream of Monaco -- in DiskBackedStore / DocumentModel / setContent.
+  if ('error' in modelContent) {
+    // If we can't read models we can't assert, but the probe data is still
+    // captured for inspection.
+  } else {
+    for (const m of modelContent) {
+      for (let i = 0; i < m.value.length; i++) {
+        const code = m.value.charCodeAt(i);
+        if (code === 160) {
+          throw new Error(
+            `Monaco text model "${m.uri}" contains NBSP at index ${i}. ` +
+            `Disk bytes are clean ASCII -- something between disk and Monaco ` +
+            `is mutating bytes. Excerpt: "${m.value.slice(Math.max(0, i - 10), i + 10)}"`
+          );
+        }
+      }
+    }
+  }
+
+  await closeTabByFileName(page, fileName);
+});
+
+test('Accept All preserves NBSP-leading lines that Codex inserts', async () => {
+  // Reproduces the user-reported "weird characters in diff + accept doesn't
+  // keep changes" symptom. The screenshot showed Monaco's unicode-highlight
+  // boxes on inserted lines like "- Four" — those boxes mean the line starts
+  // with a non-ASCII codepoint. LLMs (and therefore Codex apply_patch output)
+  // routinely emit NBSP (U+00A0) where they meant ASCII space.
+  //
+  // We verify two things:
+  //   (a) the diff displays the actual NBSP-bearing content (not silently
+  //       normalized away)
+  //   (b) Accept All round-trips the exact bytes to disk -- the file after
+  //       Accept must still contain the NBSP-leading lines
+  const filePath = path.join(workspaceDir, 'codex-nbsp-test.ts');
+  const fileName = 'codex-nbsp-test.ts';
+
+  const originalContent = await fs.readFile(filePath, 'utf-8');
+  const NBSP = ' ';
+  // Insert two new lines with NBSP-leading content, just like the screenshot.
+  const modifiedContent = originalContent.replace(
+    '- Three\n',
+    `- Three\n${NBSP}- Four\n${NBSP}- Five\n`,
+  );
+  // Sanity: modified actually differs from original and contains NBSP.
+  expect(modifiedContent).not.toBe(originalContent);
+  expect(modifiedContent.includes(NBSP)).toBe(true);
+
+  await openFileFromTree(page, fileName);
+  await page.waitForSelector(VISIBLE_MONACO_SELECTOR, { timeout: TEST_TIMEOUTS.EDITOR_LOAD });
+  await page.waitForTimeout(500);
+
+  const tagId = `nbsp-tag-${Date.now()}`;
+  const sessionId = `nbsp-session-${Date.now()}`;
+
+  // Codex ordering: write the file first (with NBSP), then create tag.
+  await fs.writeFile(filePath, modifiedContent, 'utf8');
+  await page.evaluate(async ({ workspacePath, filePath, tagId, sessionId, originalContent }) => {
+    await window.electronAPI.history.createTag(
+      workspacePath,
+      filePath,
+      tagId,
+      originalContent,
+      sessionId,
+      'codex-nbsp-test',
+    );
+  }, { workspacePath: workspaceDir, filePath, tagId, sessionId, originalContent });
+
+  await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffHeader, { timeout: 5000 });
+
+  // Read the modified pane via Monaco DOM and assert NBSP is still there.
+  // If Monaco silently normalized NBSP -> space in the diff editor, this
+  // would fail (and Accept would write the wrong bytes).
+  const modifiedPaneCharCodes = await page.evaluate(() => {
+    const wrapper = document.querySelector('.monaco-code-editor[data-diff-mode="true"]');
+    const pane = wrapper?.querySelector('.monaco-diff-editor .editor.modified');
+    if (!pane) return null;
+    const lines = Array.from(pane.querySelectorAll('.view-line')) as HTMLElement[];
+    lines.sort((a, b) => parseInt(a.style.top || '0', 10) - parseInt(b.style.top || '0', 10));
+    // Return char codes of the first character of each line so we can detect
+    // NBSP (160) vs ASCII space (32).
+    return lines.map(l => (l.textContent ?? '').charCodeAt(0));
+  });
+  expect(modifiedPaneCharCodes).not.toBeNull();
+  // The two inserted lines should appear in the modified pane with NBSP (160)
+  // as their first character. Monaco renders NBSP literally in DOM textContent.
+  expect(modifiedPaneCharCodes).toContain(160);
+
+  // Click Accept All
+  await page.locator(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffAcceptAllButton).click();
+  await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.unifiedDiffHeader, {
+    state: 'hidden',
+    timeout: 3000,
+  });
+  await page.waitForTimeout(1500);
+
+  // The file on disk must STILL contain the NBSP-leading lines.
+  // If acceptDiff() returned a normalized string, or the unmount race
+  // caused us to revert, this assertion catches it.
+  const finalContent = await fs.readFile(filePath, 'utf-8');
+  expect(finalContent).toBe(modifiedContent);
+  expect(finalContent.includes(`${NBSP}- Four`)).toBe(true);
+  expect(finalContent.includes(`${NBSP}- Five`)).toBe(true);
+
+  await closeTabByFileName(page, fileName);
 });
