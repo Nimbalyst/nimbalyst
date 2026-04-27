@@ -8,8 +8,6 @@ import {
   advancedSettingsAtom,
   setAdvancedSettingsAtom,
   resetWalkthroughsAtom,
-  aiDebugSettingsAtom,
-  setAIDebugSettingsAtom,
   developerFeatureSettingsAtom,
   setDeveloperFeatureSettingsAtom,
   customPathDirsAtom,
@@ -24,10 +22,6 @@ import {
   type ExternalEditorType,
   type PreferredTerminalShell,
 } from '../../../store/atoms/appSettings';
-import {
-  autoCommitEnabledAtom,
-  setAutoCommitEnabledAtom,
-} from '../../../store/atoms/autoCommitAtoms';
 import {
   trackerAutomationAtom,
   setTrackerAutomationAtom,
@@ -94,19 +88,10 @@ export function AdvancedPanel() {
     cwdMode?: 'native' | 'wsl';
   }>>([]);
 
-  // AI debug settings from Jotai atoms
-  const [aiDebugSettings] = useAtom(aiDebugSettingsAtom);
-  const [, updateAIDebugSettings] = useAtom(setAIDebugSettingsAtom);
-  const { showToolCalls, aiDebugLogging, showPromptAdditions } = aiDebugSettings;
-
   // Developer feature settings from Jotai atoms
   const [developerSettings] = useAtom(developerFeatureSettingsAtom);
   const [, updateDeveloperSettings] = useAtom(setDeveloperFeatureSettingsAtom);
   const { developerMode, developerFeatures } = developerSettings;
-
-  // Auto-commit setting
-  const autoCommitEnabled = useAtomValue(autoCommitEnabledAtom);
-  const setAutoCommitEnabled = useSetAtom(setAutoCommitEnabledAtom);
 
   // Tracker automation settings
   const trackerAutomation = useAtomValue(trackerAutomationAtom);
@@ -148,7 +133,6 @@ export function AdvancedPanel() {
     historyMaxSnapshots,
     preferredTerminalShell,
   } = settings;
-  const isDevelopment = import.meta.env.DEV;
   const [showFeaturesMenu, setShowFeaturesMenu] = useState(false);
 
   // Fetch enhanced PATH when user clicks to show it
@@ -421,16 +405,6 @@ export function AdvancedPanel() {
         />
 
         <SettingsToggle
-          checked={autoCommitEnabled}
-          onChange={(checked) => {
-            setAutoCommitEnabled(checked);
-            posthog?.capture('auto_commit_toggled', { enabled: checked });
-          }}
-          name="Auto-approve Commits"
-          description="Automatically approve when Claude proposes git commits."
-        />
-
-        <SettingsToggle
           checked={walkthroughsEnabled}
           onChange={(checked) => updateSettings({ walkthroughsEnabled: checked })}
           name="Show Feature Guides"
@@ -635,42 +609,6 @@ export function AdvancedPanel() {
         </div>
       </div>
 
-      {/* ── Developer Options (dev mode only) ── */}
-      {isDevelopment ? (
-        <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
-          <h4 className="provider-panel-section-title text-base font-semibold mb-2 text-[var(--nim-text)]">Developer Options</h4>
-          <p className="text-sm leading-relaxed text-[var(--nim-text-muted)] mb-2">
-            Only available in development mode.
-          </p>
-
-          <SettingsToggle
-            checked={showToolCalls}
-            onChange={(checked) => updateAIDebugSettings({ showToolCalls: checked })}
-            name="Show All Tool Calls"
-            description="Display all MCP tool calls in the AI chat sidebar, including Edit/applyDiff calls."
-          />
-
-          <SettingsToggle
-            checked={aiDebugLogging}
-            onChange={(checked) => updateAIDebugSettings({ aiDebugLogging: checked })}
-            name="AI Debug Logging"
-            description="Capture detailed logs of all AI editing operations including LLM requests/responses."
-          />
-
-          <SettingsToggle
-            checked={showPromptAdditions}
-            onChange={(checked) => updateAIDebugSettings({ showPromptAdditions: checked })}
-            name="Show Prompt Additions"
-            description="Display system prompt additions and context that Nimbalyst appends to Claude Code requests."
-          />
-        </div>
-      ) : (
-        <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
-          <p className="text-sm leading-relaxed text-[var(--nim-text-muted)]">
-            Advanced settings are only available in development mode.
-          </p>
-        </div>
-      )}
     </div>
   );
 }

@@ -139,7 +139,7 @@ export function useKeyboardShortcuts({
         e.preventDefault();
         e.stopPropagation();
 
-        const setViewMode = (mode: 'list' | 'card' | 'kanban') => store.set(setViewModeAtom, mode);
+        const setViewMode = (mode: 'list' | 'kanban') => store.set(setViewModeAtom, mode);
         const currentViewMode = store.get(viewModeAtom);
 
         if (activeMode === 'agent') {

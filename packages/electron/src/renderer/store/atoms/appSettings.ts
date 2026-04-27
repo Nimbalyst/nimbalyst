@@ -20,7 +20,7 @@ import posthog from 'posthog-js';
 import { copyToClipboard } from '@nimbalyst/runtime';
 import { store } from '@nimbalyst/runtime/store';
 import { type EffortLevel, DEFAULT_EFFORT_LEVEL, parseEffortLevel } from '@nimbalyst/runtime/ai/server/effortLevels';
-import { AlphaFeatureTag } from '../../../shared/alphaFeatures';
+import { AlphaFeatureTag, getDefaultAlphaFeatures } from '../../../shared/alphaFeatures';
 import { BetaFeatureTag } from '../../../shared/betaFeatures';
 import { DeveloperFeatureTag, DEVELOPER_FEATURES, getDefaultDeveloperFeatures, enableAllDeveloperFeatures, disableAllDeveloperFeatures, areAllDeveloperFeaturesEnabled } from '../../../shared/developerFeatures';
 import { normalizeCodexProviderConfig, omitModelsField, stripTransientProviderFields } from '@nimbalyst/runtime/ai/server/utils/modelConfigUtils';
@@ -364,8 +364,6 @@ export interface AdvancedSettings {
   // Alpha feature flags - individual control over alpha features
   // Uses Record<AlphaFeatureTag, boolean> for dynamic feature registration
   alphaFeatures: Record<AlphaFeatureTag, boolean>;
-  // Whether to automatically enable all new alpha features
-  enableAllAlphaFeatures: boolean;
   // Beta feature flags - user-visible beta features
   betaFeatures: Record<BetaFeatureTag, boolean>;
   // Whether to automatically enable all new beta features
@@ -392,13 +390,7 @@ const defaultAdvancedSettings: AdvancedSettings = {
   walkthroughsViewedCount: 0,
   walkthroughsTotalCount: 0,
   maxHeapSizeMB: 4096,
-  alphaFeatures: {
-    sync: false,
-    'voice-mode': false,
-    'card-mode': false,
-    'super-loops': false,
-  } as Record<AlphaFeatureTag, boolean>,
-  enableAllAlphaFeatures: false,
+  alphaFeatures: getDefaultAlphaFeatures(),
   betaFeatures: {
     blitz: false,
     codex: false,
@@ -474,9 +466,6 @@ function scheduleAdvancedPersist(
           break;
         case 'alphaFeatures':
           await window.electronAPI.invoke('alpha-features:set', settingsToPersist.alphaFeatures);
-          break;
-        case 'enableAllAlphaFeatures':
-          await window.electronAPI.invoke('alpha-features:set-enable-all', settingsToPersist.enableAllAlphaFeatures);
           break;
         case 'betaFeatures':
           await window.electronAPI.invoke('beta-features:set', settingsToPersist.betaFeatures);
@@ -577,25 +566,12 @@ export function alphaFeatureEnabledAtom(tag: AlphaFeatureTag): Atom<boolean> {
   let cached = alphaFeatureAtomCache.get(tag);
   if (!cached) {
     cached = atom(
-      (get) => {
-        const settings = get(advancedSettingsAtom);
-        return settings.releaseChannel === 'alpha' && (settings.alphaFeatures[tag] ?? false);
-      }
+      (get) => get(advancedSettingsAtom).alphaFeatures[tag] ?? false
     );
     alphaFeatureAtomCache.set(tag, cached);
   }
   return cached;
 }
-
-/**
- * Alpha feature: Sync enabled (convenience atom)
- */
-export const alphaSyncEnabledAtom = alphaFeatureEnabledAtom('sync');
-
-/**
- * Alpha feature: Voice mode enabled (convenience atom)
- */
-export const alphaVoiceModeEnabledAtom = alphaFeatureEnabledAtom('voice-mode');
 
 /**
  * Check if a specific beta feature is enabled by tag.
@@ -679,7 +655,7 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
   }
 
   try {
-    const [channel, analyticsEnabled, extensionDevToolsEnabled, walkthroughState, maxHeapSizeMB, alphaFeatures, enableAllAlphaFeatures, betaFeatures, enableAllBetaFeatures, customPathDirs, spellcheckEnabled, historyMaxAgeDays, historyMaxSnapshots, preferredTerminalShell] =
+    const [channel, analyticsEnabled, extensionDevToolsEnabled, walkthroughState, maxHeapSizeMB, alphaFeatures, betaFeatures, enableAllBetaFeatures, customPathDirs, spellcheckEnabled, historyMaxAgeDays, historyMaxSnapshots, preferredTerminalShell] =
       await Promise.all([
         window.electronAPI.invoke('release-channel:get'),
         window.electronAPI.invoke('analytics:is-enabled'),
@@ -687,7 +663,6 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
         window.electronAPI.invoke('walkthroughs:get-state'),
         window.electronAPI.invoke('app-settings:get', 'maxHeapSizeMB'),
         window.electronAPI.invoke('alpha-features:get'),
-        window.electronAPI.invoke('alpha-features:get-enable-all'),
         window.electronAPI.invoke('beta-features:get'),
         window.electronAPI.invoke('beta-features:get-enable-all'),
         window.electronAPI.invoke('app-settings:get', 'customPathDirs'),
@@ -710,8 +685,7 @@ export async function initAdvancedSettings(): Promise<AdvancedSettings> {
       walkthroughsViewedCount,
       walkthroughsTotalCount,
       maxHeapSizeMB: maxHeapSizeMB ?? 4096,
-      alphaFeatures: alphaFeatures ?? defaultAdvancedSettings.alphaFeatures,
-      enableAllAlphaFeatures: enableAllAlphaFeatures ?? false,
+      alphaFeatures: { ...defaultAdvancedSettings.alphaFeatures, ...(alphaFeatures ?? {}) },
       betaFeatures: betaFeatures ?? defaultAdvancedSettings.betaFeatures,
       enableAllBetaFeatures: enableAllBetaFeatures ?? false,
       spellcheckEnabled: spellcheckEnabled ?? true,

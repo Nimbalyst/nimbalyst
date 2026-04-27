@@ -1,11 +1,8 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useAtomValue } from 'jotai';
 import { MaterialSymbol, getProviderIcon } from '@nimbalyst/runtime';
-import { releaseChannelAtom } from '../../store/atoms/appSettings';
 import { useAlphaFeatures } from '../../hooks/useAlphaFeature';
 import { AlphaBadge } from '../common/AlphaBadge';
-import type { AlphaFeatureTag } from '../../../shared/alphaFeatures';
 
 export type SettingsCategory =
   | 'agent-permissions'
@@ -21,6 +18,7 @@ export type SettingsCategory =
   | 'sync'
   | 'themes'
   | 'advanced'
+  | 'agent-features'
   | 'beta-features'
   | 'mcp-servers'
   | 'installed-extensions'
@@ -42,7 +40,7 @@ interface CategoryItem {
   name: string;
   icon: React.ReactNode;
   badge?: string | number;
-  alphaTag?: AlphaFeatureTag;
+  isAlpha?: boolean;
   statusDot?: 'success' | 'warning' | 'error';
   hidden?: boolean;
 }
@@ -62,9 +60,10 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   providerStatus = {},
   scope = 'user',
 }) => {
-  // Get release channel and alpha/beta feature flags from Jotai atoms
-  const releaseChannel = useAtomValue(releaseChannelAtom);
-  const alphaFeatures = useAlphaFeatures(['voice-mode', 'collaboration', 'opencode', 'copilot-cli']);
+  // Alpha feature flags drive Collaboration group visibility only.
+  // Per-feature panels (Voice Mode, OpenCode, Copilot, Agent Features) are always visible
+  // so users can discover and enable them; the panels themselves gate their controls.
+  const alphaFeatures = useAlphaFeatures(['collaboration']);
   const getStatusDot = (providerId: string): 'success' | 'warning' | 'error' | undefined => {
     const status = providerStatus[providerId];
     if (!status) return undefined;
@@ -98,30 +97,36 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
           icon: <MaterialSymbol icon="palette" size={16} />,
         },
         {
-          id: 'voice-mode',
-          name: 'Voice Mode',
-          icon: <MaterialSymbol icon="mic" size={16} />,
-          alphaTag: 'voice-mode',
-          hidden: !alphaFeatures['voice-mode'], // Only visible when feature is enabled
-        },
-        {
           id: 'advanced',
           name: 'Advanced',
           icon: <MaterialSymbol icon="settings" size={16} />,
         },
         {
+          id: 'voice-mode',
+          name: 'Voice Mode',
+          icon: <MaterialSymbol icon="mic" size={16} />,
+          isAlpha: true,
+        },
+        {
+          id: 'agent-features',
+          name: 'Agent Features',
+          icon: <MaterialSymbol icon="science" size={16} />,
+          isAlpha: true,
+        },
+
+        {
           id: 'beta-features',
           name: 'Beta Features',
-          icon: <MaterialSymbol icon="science" size={16} />,
+          icon: <MaterialSymbol icon="biotech" size={16} />,
           hidden: true,
         },
       ],
     },
     {
       title: 'Agent Providers',
-      infoTooltip: `Agent mode uses the Claude Code SDK with a few extensions for added functionality in Nimbalyst.
-
-Has full MCP support with file system access, multi-file operations, and session persistence. Can use a Claude Code monthly plan from Anthropic.
+      infoTooltip: `Agents run in loops against your files to produce work. 
+      
+The have full MCP support with file system access, multi-file operations, and session persistence.
 
 Best for complex coding tasks.`,
       items: [
@@ -142,16 +147,14 @@ Best for complex coding tasks.`,
           name: 'OpenCode',
           icon: getProviderIcon('opencode', { size: 16 }),
           statusDot: getStatusDot('opencode'),
-          alphaTag: 'opencode',
-          hidden: !alphaFeatures['opencode'],
+          isAlpha: true,
         },
         {
           id: 'copilot-cli',
           name: 'GitHub Copilot',
           icon: <MaterialSymbol icon="terminal" size={16} />,
           statusDot: getStatusDot('copilot-cli'),
-          alphaTag: 'copilot-cli',
-          hidden: !alphaFeatures['copilot-cli'],
+          isAlpha: true,
         },
       ],
     },
@@ -200,13 +203,13 @@ Best for quick edits and tasks that do not require multi-file operations.`,
           id: 'team' as SettingsCategory,
           name: 'Team',
           icon: <MaterialSymbol icon="group" size={16} />,
-          alphaTag: 'collaboration' as AlphaFeatureTag,
+          isAlpha: true,
         },
         {
           id: 'tracker-config' as SettingsCategory,
           name: 'Trackers',
           icon: <MaterialSymbol icon="assignment" size={16} />,
-          alphaTag: 'collaboration' as AlphaFeatureTag,
+          isAlpha: true,
         },
       ],
     }] : []),
@@ -296,7 +299,7 @@ Best for quick edits and tasks that do not require multi-file operations.`,
                 >
                   <span className="settings-sidebar-item-icon flex items-center justify-center w-5 h-5 shrink-0 text-[var(--nim-text-muted)]">{item.icon}</span>
                   <span className="settings-sidebar-item-name flex-1 truncate">{item.name}</span>
-                  {item.alphaTag && <AlphaBadge size="xs" />}
+                  {item.isAlpha && <AlphaBadge size="xs" />}
                   {item.badge && (
                     <span className="settings-sidebar-item-badge text-[10px] font-medium px-1.5 py-0.5 rounded bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)]">
                       {item.badge}

@@ -1,12 +1,12 @@
 /**
  * Alpha Feature Registry
  *
- * Central registry for all alpha/beta features that can be individually toggled.
- * This ensures new features are properly tracked and discoverable.
+ * Central registry for alpha features that can be individually toggled.
+ * Features are available to all users regardless of release channel and default to disabled.
  *
  * To add a new alpha feature:
  * 1. Add an entry to ALPHA_FEATURES with a unique tag, display name, and description
- * 2. Use isAlphaFeatureEnabled('your-tag') to check if the feature is available
+ * 2. Use useAlphaFeature('your-tag') (renderer) or check via the alpha-features IPC (main)
  */
 
 export interface AlphaFeatureDefinition {
@@ -26,18 +26,6 @@ export interface AlphaFeatureDefinition {
  */
 export const ALPHA_FEATURES: readonly AlphaFeatureDefinition[] = [
   {
-    tag: 'voice-mode',
-    name: 'Voice Mode',
-    description: 'Enable voice interaction mode for hands-free coding with AI.',
-    icon: 'mic',
-  },
-  {
-    tag: 'card-mode',
-    name: 'Card View Mode',
-    description: 'Enable card view mode for agent sessions panel.',
-    icon: 'grid_view',
-  },
-  {
     tag: 'super-loops',
     name: 'Super Loops',
     description: 'Enable Super Loops for iterative agent workflows in dedicated worktrees.',
@@ -56,28 +44,10 @@ export const ALPHA_FEATURES: readonly AlphaFeatureDefinition[] = [
     icon: 'group',
   },
   {
-    tag: 'tracker-kanban',
-    name: 'Tracker Kanban View',
-    description: 'Enable kanban board view in tracker mode.',
-    icon: 'view_kanban',
-  },
-  {
-    tag: 'opencode',
-    name: 'OpenCode Agent',
-    description: 'Enable the open source OpenCode coding agent with multi-model support.',
-    icon: 'code',
-  },
-  {
     tag: 'meta-agent',
     name: 'Meta Agent',
     description: 'Enable meta-agent sessions that orchestrate and delegate work to child sessions.',
     icon: 'hub',
-  },
-  {
-    tag: 'copilot-cli',
-    name: 'GitHub Copilot Agent',
-    description: 'Enable GitHub Copilot CLI as an agent provider via ACP protocol.',
-    icon: 'code',
   },
 ] as const;
 
@@ -94,30 +64,6 @@ export function getDefaultAlphaFeatures(): Record<AlphaFeatureTag, boolean> {
     acc[feature.tag] = false;
     return acc;
   }, {} as Record<AlphaFeatureTag, boolean>);
-}
-
-/**
- * Check if all alpha features are enabled.
- */
-export function areAllAlphaFeaturesEnabled(features: Record<AlphaFeatureTag, boolean>): boolean {
-  return ALPHA_FEATURES.every(feature => features[feature.tag] === true);
-}
-
-/**
- * Enable all alpha features.
- */
-export function enableAllAlphaFeatures(): Record<AlphaFeatureTag, boolean> {
-  return ALPHA_FEATURES.reduce((acc, feature) => {
-    acc[feature.tag] = true;
-    return acc;
-  }, {} as Record<AlphaFeatureTag, boolean>);
-}
-
-/**
- * Disable all alpha features.
- */
-export function disableAllAlphaFeatures(): Record<AlphaFeatureTag, boolean> {
-  return getDefaultAlphaFeatures();
 }
 
 /**

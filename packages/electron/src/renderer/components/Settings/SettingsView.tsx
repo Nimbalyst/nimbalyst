@@ -15,6 +15,7 @@ import { OpenCodePanel } from '../GlobalSettings/panels/OpenCodePanel';
 import { CopilotCLIPanel } from '../GlobalSettings/panels/CopilotCLIPanel';
 import { LMStudioPanel } from '../GlobalSettings/panels/LMStudioPanel';
 import { AdvancedPanel } from '../GlobalSettings/panels/AdvancedPanel';
+import { AgentFeaturesPanel } from './AgentFeaturesPanel';
 import { BetaFeaturesPanel } from '../GlobalSettings/panels/BetaFeaturesPanel';
 import { NotificationsPanel } from '../GlobalSettings/panels/NotificationsPanel';
 import { VoiceModePanel } from './VoiceModePanel';
@@ -36,12 +37,10 @@ import {
   setProviderConfigAtom,
   setApiKeyAtom,
   setAvailableModelsAtom,
-  releaseChannelAtom,
   flushPendingAIProviderPersist,
   type ProviderConfig,
   type AIModel,
 } from '../../store/atoms/appSettings';
-import { useAlphaFeature } from '../../hooks/useAlphaFeature';
 import { omitModelsField } from '@nimbalyst/runtime/ai/server/utils/modelConfigUtils';
 
 // Re-export ProviderConfig for backward compatibility
@@ -95,10 +94,6 @@ export function SettingsView({
   const [, updateApiKey] = useAtom(setApiKeyAtom);
   const [, updateAvailableModels] = useAtom(setAvailableModelsAtom);
 
-  // Release channel from atom (Phase 3)
-  const releaseChannel = useAtomValue(releaseChannelAtom);
-  const alphaSyncEnabled = useAlphaFeature('sync');
-
   // Destructure for easier access (these update when atom updates)
   const { providers, apiKeys, availableModels } = aiProviderSettings;
 
@@ -151,7 +146,7 @@ export function SettingsView({
 
   // Valid categories for each scope
   const projectCategories: SettingsCategory[] = ['agent-permissions', 'team', 'tracker-config', 'installed-extensions', 'claude-plugins', 'mcp-servers', 'claude-code', 'claude', 'openai', 'openai-codex', 'opencode', 'copilot-cli', 'lmstudio'];
-  const userCategories: SettingsCategory[] = ['claude-code', 'claude', 'openai', 'openai-codex', 'opencode', 'copilot-cli', 'lmstudio', 'sync', 'notifications', 'voice-mode', 'advanced', 'marketplace', 'installed-extensions', 'claude-plugins', 'mcp-servers'];
+  const userCategories: SettingsCategory[] = ['claude-code', 'claude', 'openai', 'openai-codex', 'opencode', 'copilot-cli', 'lmstudio', 'sync', 'notifications', 'voice-mode', 'agent-features', 'advanced', 'marketplace', 'installed-extensions', 'claude-plugins', 'mcp-servers'];
 
   // When initialCategory/initialScope props change, update state (for deep linking)
   useEffect(() => {
@@ -231,11 +226,6 @@ export function SettingsView({
     // - Advanced settings (including release channel) - Phase 3
     // - Sync config - Phase 4
     // - Voice mode settings - Phase 7
-
-    // Set default category for alpha users with sync enabled (using atom values)
-    if (releaseChannel === 'alpha' && alphaSyncEnabled && !initialCategory) {
-      setSelectedCategory('sync');
-    }
 
     // Fetch available models - cached in atom but not persisted
     try {
@@ -549,6 +539,8 @@ export function SettingsView({
       case 'advanced':
         // AdvancedPanel is self-contained - uses Jotai atoms and IPC directly
         return <AdvancedPanel />;
+      case 'agent-features':
+        return <AgentFeaturesPanel />;
       case 'beta-features':
         return <BetaFeaturesPanel />;
       case 'notifications':

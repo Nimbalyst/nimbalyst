@@ -37,7 +37,7 @@ export interface SessionHistoryLayout {
   preCollapseWidth?: number;
   collapsedGroups: string[];
   sortOrder: 'updated' | 'created';
-  viewMode: 'list' | 'card' | 'kanban';
+  viewMode: 'list' | 'kanban';
 }
 
 /**
@@ -80,9 +80,11 @@ const DEFAULT_LAYOUT: AgentModeLayout = {
  * Handles missing fields from old persisted data.
  */
 function mergeWithDefaults(persisted: Partial<AgentModeLayout> | undefined): AgentModeLayout {
-  const sessionHistoryLayout = {
+  const sessionHistoryLayout: SessionHistoryLayout = {
     ...DEFAULT_SESSION_HISTORY_LAYOUT,
     ...persisted?.sessionHistoryLayout,
+    // The retired 'card' view mode coerces to 'list' on load.
+    viewMode: persisted?.sessionHistoryLayout?.viewMode === 'kanban' ? 'kanban' : 'list',
   };
   // Only pick known layout fields from persisted data.
   // agenticCodingWindowState stores both layout AND selectedWorkstream at the same level.
@@ -137,7 +139,7 @@ export const sortOrderAtom = atom(
   (get) => get(agentModeLayoutAtom).sessionHistoryLayout.sortOrder
 );
 
-/** View mode for session history (list or card) */
+/** View mode for session history (list or kanban) */
 export const viewModeAtom = atom(
   (get) => get(agentModeLayoutAtom).sessionHistoryLayout.viewMode
 );
@@ -337,7 +339,7 @@ export const setSortOrderAtom = atom(
  */
 export const setViewModeAtom = atom(
   null,
-  (get, set, viewMode: 'list' | 'card' | 'kanban') => {
+  (get, set, viewMode: 'list' | 'kanban') => {
     set(setSessionHistoryLayoutAtom, { viewMode });
   }
 );

@@ -7,13 +7,13 @@
  * @example
  * ```tsx
  * function MyComponent() {
- *   const isSyncEnabled = useAlphaFeature('sync');
+ *   const isCollaborationEnabled = useAlphaFeature('collaboration');
  *
- *   if (!isSyncEnabled) {
+ *   if (!isCollaborationEnabled) {
  *     return <div>Feature not available</div>;
  *   }
  *
- *   return <SyncPanel />;
+ *   return <CollaborationFeature />;
  * }
  * ```
  */
@@ -45,12 +45,12 @@ export function useAlphaFeature(tag: AlphaFeatureTag): boolean {
  *
  * @example
  * ```tsx
- * const features = useAlphaFeatures(['sync', 'voice-mode']);
- * if (features.sync) {
- *   // sync is enabled
+ * const features = useAlphaFeatures(['blitz', 'super-loops']);
+ * if (features.blitz) {
+ *   // blitz is enabled
  * }
- * if (features['voice-mode']) {
- *   // voice-mode is enabled
+ * if (features['super-loops']) {
+ *   // super-loops is enabled
  * }
  * ```
  */

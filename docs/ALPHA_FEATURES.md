@@ -4,12 +4,12 @@ This document describes how to work with the alpha features system in Nimbalyst.
 
 ## Overview
 
-Alpha features are individually toggleable experimental features that are available when the alpha release channel is enabled. This system ensures that:
+Alpha features are individually toggleable experimental features. They are available to **all users regardless of release channel** and default to disabled — each user opts in per feature in the relevant settings panel. This system ensures that:
 
 1. All alpha features are **explicitly registered** in a central location
 2. Features can be toggled **independently** without code changes
 3. Type safety prevents typos when checking feature availability
-4. New features are automatically added to the settings UI
+4. Each feature has a toggle in its natural settings location (e.g. Voice Mode in the Voice Mode panel, agent-mode features in the Agent Features panel)
 
 ## Adding a New Alpha Feature
 
@@ -90,47 +90,45 @@ The feature registry is located at `/packages/electron/src/shared/alphaFeatures.
 
 ### Current Features
 
-| Tag | Name | Description |
-|-----|------|-------------|
-| `sync` | Account & Sync | Enable account sign-in and session synchronization across devices. |
-| `voice-mode` | Voice Mode | Enable voice interaction mode for hands-free coding with AI. |
-| `claude-plugins` | Claude Plugins | Enable Claude Agent plugins and extensions management. |
+See `ALPHA_FEATURES` in `/packages/electron/src/shared/alphaFeatures.ts` for the live list. Features that have their own dedicated settings panel (e.g. Voice Mode, OpenCode, GitHub Copilot) are not in the registry — they expose their own enable toggle directly.
 
 ## How It Works
 
 ### Storage
 
-Alpha feature flags are stored in the electron-store as:
+Alpha feature flags are stored in the electron-store as a flat record keyed by tag, e.g.:
 
 ```typescript
 {
   alphaFeatures: {
-    'sync': true,
-    'voice-mode': false,
-    'claude-plugins': true,
-    'my-new-feature': false,
+    'blitz': true,
+    'super-loops': false,
+    'collaboration': true,
   }
 }
 ```
 
+Missing entries default to `false`. The release channel does not affect feature availability — channel only controls which auto-update stream the user pulls from.
+
 ### Type Safety
 
-The `AlphaFeatureTag` type is automatically derived from the registry, so TypeScript will prevent typos:
+The `AlphaFeatureTag` type is automatically derived from the registry, so TypeScript will prevent typos when calling `useAlphaFeature`:
 
 ```typescript
 // ✅ Correct
-const enabled = useAlphaFeature('sync');
+const enabled = useAlphaFeature('collaboration');
 
-// ❌ Type error - 'syncx' is not a valid feature tag
-const enabled = useAlphaFeature('syncx');
-
-// ❌ Type error - wrong case
-const enabled = useAlphaFeature('Sync');
+// ❌ Type error - typo
+const enabled = useAlphaFeature('collab');
 ```
 
-### Dynamic Registration
+### Surfacing the Toggle
 
-When new features are added to the registry, they automatically appear in the settings UI under Advanced Settings → Release Channel → Alpha (if selected). No manual UI updates needed.
+Add the toggle wherever it belongs naturally:
+
+- Agent-mode behaviors (super-loops, blitz, meta-agent) appear in the **Agent Features** settings panel
+- Collaboration toggle lives at the top of the **Account & Sync** panel
+- Features with their own panel (Voice Mode, OpenCode, Copilot) expose their own enable toggle directly and are not in the alpha registry
 
 ## Best Practices
 
@@ -142,7 +140,7 @@ When new features are added to the registry, they automatically appear in the se
 
 ## Migration Guide
 
-If you have existing code that checks `releaseChannel === 'alpha'`, migrate it to use the feature flag system:
+If you have existing code that checks `releaseChannel === 'alpha'`, migrate it to use a per-feature flag — channel must not gate features:
 
 ### Before
 
@@ -150,17 +148,17 @@ If you have existing code that checks `releaseChannel === 'alpha'`, migrate it t
 const releaseChannel = useAtomValue(releaseChannelAtom);
 
 if (releaseChannel === 'alpha') {
-  return <SyncPanel />;
+  return <ExperimentalThing />;
 }
 ```
 
 ### After
 
 ```tsx
-const syncEnabled = useAlphaFeature('sync');
+const isEnabled = useAlphaFeature('experimental-thing');
 
-if (syncEnabled) {
-  return <SyncPanel />;
+if (isEnabled) {
+  return <ExperimentalThing />;
 }
 ```
 
@@ -171,7 +169,7 @@ The system includes validation to catch unregistered feature tags during develop
 ```typescript
 import { validateAlphaFeatureTags } from '@nimbalyst/shared/alphaFeatures';
 
-const result = validateAlphaFeatureTags(['sync', 'voice-mode', 'unknown-tag']);
+const result = validateAlphaFeatureTags(['blitz', 'super-loops', 'unknown-tag']);
 if (!result.valid) {
   console.warn('Unknown feature tags:', result.unknown);
   // Output: Unknown feature tags: ['unknown-tag']

@@ -7,7 +7,7 @@ import { logger } from './logger';
 import { type EffortLevel, parseEffortLevel } from '@nimbalyst/runtime/ai/server/effortLevels';
 import type { OnboardingConfig } from '../../shared/types/workspace';
 import { DEFAULT_ONBOARDING_CONFIG } from '../../shared/types/workspace';
-import { AlphaFeatureTag, getDefaultAlphaFeatures, enableAllAlphaFeatures, areAllAlphaFeaturesEnabled, ALPHA_FEATURES } from '../../shared/alphaFeatures';
+import { AlphaFeatureTag, getDefaultAlphaFeatures, ALPHA_FEATURES } from '../../shared/alphaFeatures';
 import { DeveloperFeatureTag, getDefaultDeveloperFeatures, DEVELOPER_FEATURES } from '../../shared/developerFeatures';
 import { BetaFeatureTag, getDefaultBetaFeatures, enableAllBetaFeatures as enableAllBetaFeaturesUtil, BETA_FEATURES } from '../../shared/betaFeatures';
 import { normalizeCodexProviderConfig, omitModelsField } from '@nimbalyst/runtime/ai/server/utils/modelConfigUtils';
@@ -141,8 +141,6 @@ interface AppStoreSchema {
   // Alpha feature flags - individual control over alpha features
   // Uses Record<AlphaFeatureTag, boolean> for dynamic feature registration
   alphaFeatures?: Record<AlphaFeatureTag, boolean>;
-  // Whether to automatically enable all new alpha features
-  enableAllAlphaFeatures?: boolean;
   // Beta feature flags - user-visible beta features that can be individually toggled
   betaFeatures?: Record<BetaFeatureTag, boolean>;
   // Whether to automatically enable all new beta features
@@ -1777,61 +1775,30 @@ export function setMaxHeapSizeMB(sizeMB: number | undefined): void {
 }
 
 // Alpha Feature Flags
-// Individual control over alpha features when alpha channel is enabled
-// Uses dynamic registration from alphaFeatures registry
-
-/**
- * Get whether "Enable All Alpha Features" is turned on.
- */
-export function getEnableAllAlphaFeatures(): boolean {
-  return getAppStore().get('enableAllAlphaFeatures') ?? false;
-}
-
-/**
- * Set whether "Enable All Alpha Features" is turned on.
- */
-export function setEnableAllAlphaFeatures(enabled: boolean): void {
-  getAppStore().set('enableAllAlphaFeatures', enabled);
-}
+// Individual opt-in toggles, available to all users regardless of release channel.
+// Uses dynamic registration from alphaFeatures registry.
 
 /**
  * Get the alpha feature flags.
- * Returns all feature flags with defaults for any missing values.
- *
- * If "Enable All Alpha Features" is turned on, new features are automatically enabled.
- * Legacy behavior: If user was on alpha channel before individual feature flags
- * were implemented, enable all features by default to maintain their experience.
+ * Returns all registered features merged with stored values; missing entries default to false.
  */
 export function getAlphaFeatures(): Record<AlphaFeatureTag, boolean> {
   const stored = getAppStore().get('alphaFeatures');
-  const releaseChannel = getReleaseChannel();
-  const enableAll = getEnableAllAlphaFeatures();
-
-  // Check if this is a legacy alpha user (alpha channel but no feature flags set)
-  const isLegacyAlphaUser = !stored && releaseChannel === 'alpha';
-
-  if (!stored) {
-    // Legacy alpha users get all features enabled, new users get none
-    if (isLegacyAlphaUser) {
-      logger.store.info('[getAlphaFeatures] Legacy alpha user detected, enabling all features');
-      return enableAllAlphaFeatures();
-    }
-    // Return all features disabled
-    return getDefaultAlphaFeatures();
-  }
-
-  // Merge stored values with defaults to handle new features added after initial storage
   const defaults = getDefaultAlphaFeatures();
 
-  // Ensure all registered features exist in stored object (for new features added later)
-  for (const feature of ALPHA_FEATURES) {
-    if (!(feature.tag in stored)) {
-      // If "Enable All Alpha Features" is on, enable new features automatically
-      stored[feature.tag] = enableAll ? true : defaults[feature.tag];
-    }
+  if (!stored) {
+    return defaults;
   }
 
-  return stored;
+  // Merge stored values with defaults so newly-registered features default to off
+  // and removed features fall away.
+  const merged = { ...defaults };
+  for (const feature of ALPHA_FEATURES) {
+    if (feature.tag in stored) {
+      merged[feature.tag] = stored[feature.tag];
+    }
+  }
+  return merged;
 }
 
 /**
@@ -2020,14 +1987,6 @@ export function runMigrations(currentVersion: string): void {
   }
 
   logger.store.info('[Migrations] Running migrations from', lastKnownVersion || '(unknown/<=0.52.10)', 'to', currentVersion);
-
-  // Migration for users upgrading from version <= 0.52.15
-  // Enable all alpha features for all users upgrading from older versions
-  // This ensures they get new features like 'card-mode' automatically
-  if (isUpgradingFromOldVersion || versionLessThanOrEqual(lastKnownVersion, '0.52.15')) {
-    logger.store.info('[Migrations] Enabling all alpha features for user upgrading from older version');
-    setEnableAllAlphaFeatures(true);
-  }
 
   // Migration: Auto-switch users from claude-code:opus to claude-code:opus-1m (1M context)
   // Only runs once — on first upgrade to a version with this migration.
