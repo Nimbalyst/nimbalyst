@@ -2,7 +2,12 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { getFileName } from '../../utils/pathUtils';
-import { diffTreeGroupByDirectoryAtom, setDiffTreeGroupByDirectoryAtom } from '../../store/atoms/projectState';
+import {
+  diffTreeGroupByDirectoryAtom,
+  setDiffTreeGroupByDirectoryAtom,
+  fileGutterCollapsedAtom,
+  setFileGutterCollapsedAtom,
+} from '../../store/atoms/projectState';
 import { sessionFileEditsAtom, sessionPendingReviewFilesAtom } from '../../store/atoms/sessionFiles';
 
 interface FileGutterProps {
@@ -36,7 +41,13 @@ interface DirectoryNode {
 
 export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendingReviewFiles }: FileGutterProps) {
   const [files, setFiles] = useState<FileData[]>([]);
-  const [isExpanded, setIsExpanded] = useState(true);
+  const fileGutterCollapsed = useAtomValue(fileGutterCollapsedAtom);
+  const setFileGutterCollapsed = useSetAtom(setFileGutterCollapsedAtom);
+  const isExpanded = !(fileGutterCollapsed[type] ?? false);
+  const toggleExpanded = useCallback(() => {
+    if (!workspacePath) return;
+    setFileGutterCollapsed({ type, collapsed: isExpanded, workspacePath });
+  }, [isExpanded, setFileGutterCollapsed, type, workspacePath]);
   const [gitStatus, setGitStatus] = useState<Record<string, FileGitStatus>>({});
   const [groupByDirectory] = useAtom(diffTreeGroupByDirectoryAtom);
   const setDiffTreeGroupByDirectory = useSetAtom(setDiffTreeGroupByDirectoryAtom);
@@ -440,7 +451,7 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
     <div className={`file-gutter flex flex-col bg-[var(--nim-bg-secondary)] max-h-[50%] shrink-0 ${type === 'referenced' ? 'file-gutter--referenced border-b border-[var(--nim-border)]' : 'file-gutter--edited border-t border-[var(--nim-border)]'}`}>
       <div className="file-gutter__header-container flex items-center justify-between gap-2 py-1 px-2">
         <button
-          onClick={() => setIsExpanded(!isExpanded)}
+          onClick={toggleExpanded}
           className="file-gutter__header w-full flex items-center justify-between py-1 px-2 text-base font-semibold text-[var(--nim-text-muted)] bg-transparent border-none rounded cursor-pointer transition-all duration-200 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
         >
           <div className="file-gutter__header-content flex items-center gap-1.5">

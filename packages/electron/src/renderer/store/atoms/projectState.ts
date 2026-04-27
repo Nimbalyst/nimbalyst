@@ -56,6 +56,12 @@ export interface DiffTreeState {
 }
 
 /**
+ * FileGutter (referenced/edited file lists in chat) collapsed state per type.
+ */
+export type FileGutterType = 'referenced' | 'edited';
+export type FileGutterCollapsedState = Partial<Record<FileGutterType, boolean>>;
+
+/**
  * File scope mode for the Files Edited sidebar in agent mode.
  * - current-changes: Show only files with uncommitted git changes (default)
  * - session-files: Show all files touched in this session/workstream
@@ -93,6 +99,7 @@ export interface ProjectState {
   layout: PanelLayout;
   fileTree: FileTreeState;
   diffTree: DiffTreeState;
+  fileGutterCollapsed: FileGutterCollapsedState;
   agentMode: AgentModeSettings;
   lastOpenedFile: string | null;
   recentFiles: string[];
@@ -126,6 +133,7 @@ const defaultProjectState: ProjectState = {
   diffTree: {
     groupByDirectory: true,
   },
+  fileGutterCollapsed: {},
   agentMode: {
     fileScopeMode: 'session-files',
   },
@@ -146,6 +154,13 @@ export const projectStateAtom = atom<ProjectState>(defaultProjectState);
  */
 export const diffTreeGroupByDirectoryAtom = atom(
   (get) => get(projectStateAtom).diffTree.groupByDirectory
+);
+
+/**
+ * FileGutter collapsed state map.
+ */
+export const fileGutterCollapsedAtom = atom(
+  (get) => get(projectStateAtom).fileGutterCollapsed ?? {}
 );
 
 /**
@@ -184,6 +199,45 @@ export const setDiffTreeGroupByDirectoryAtom = atom(
         console.error('[projectState] Failed to persist diffTreeGroupByDirectory:', err);
       });
     }
+  }
+);
+
+/**
+ * Set FileGutter collapsed state for a given type.
+ * Persists to workspace state via IPC.
+ */
+export const setFileGutterCollapsedAtom = atom(
+  null,
+  (get, set, payload: { type: FileGutterType; collapsed: boolean; workspacePath: string }) => {
+    const { type, collapsed, workspacePath } = payload;
+    const state = get(projectStateAtom);
+    const nextMap: FileGutterCollapsedState = {
+      ...(state.fileGutterCollapsed ?? {}),
+      [type]: collapsed,
+    };
+    set(projectStateAtom, {
+      ...state,
+      fileGutterCollapsed: nextMap,
+    });
+    if (workspacePath && typeof window !== 'undefined' && window.electronAPI) {
+      window.electronAPI.invoke('workspace:update-state', workspacePath, {
+        fileGutterCollapsed: { [type]: collapsed },
+      }).catch((err: unknown) => {
+        console.error('[projectState] Failed to persist fileGutterCollapsed:', err);
+      });
+    }
+  }
+);
+
+/**
+ * Hydrate FileGutter collapsed state from persisted workspace state.
+ * Called on startup hydration.
+ */
+export const hydrateFileGutterCollapsedAtom = atom(
+  null,
+  (get, set, value: FileGutterCollapsedState) => {
+    const state = get(projectStateAtom);
+    set(projectStateAtom, { ...state, fileGutterCollapsed: { ...value } });
   }
 );
 

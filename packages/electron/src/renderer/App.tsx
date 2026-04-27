@@ -139,7 +139,7 @@ import {
 import { setStorageBackend } from '@nimbalyst/runtime';
 import { store, editorDirtyAtom, makeEditorKey } from '@nimbalyst/runtime/store';
 import { extensionPanelAIContextAtom } from './store/atoms/extensionPanels';
-import { setDiffTreeGroupByDirectoryAtom, setAgentFileScopeModeAtom, setHiddenGutterButtonsAtom } from './store/atoms/projectState';
+import { setDiffTreeGroupByDirectoryAtom, setAgentFileScopeModeAtom, setHiddenGutterButtonsAtom, hydrateFileGutterCollapsedAtom } from './store/atoms/projectState';
 import { toggleSessionHistoryCollapsedAtom, scrollToMessageAtom } from './store/atoms/agentMode';
 import { setDeveloperFeatureSettingsAtom } from './store/atoms/appSettings';
 import {
@@ -448,6 +448,7 @@ export default function App() {
   const setDiffTreeGroupByDirectory = useSetAtom(setDiffTreeGroupByDirectoryAtom);
   const setAgentFileScopeMode = useSetAtom(setAgentFileScopeModeAtom);
   const setHiddenGutterButtons = useSetAtom(setHiddenGutterButtonsAtom);
+  const hydrateFileGutterCollapsed = useSetAtom(hydrateFileGutterCollapsedAtom);
 
   // Check if a fullscreen extension panel is active (hides other content modes)
   const activeFullscreenPanel = activeExtensionPanel ? getPanelById(activeExtensionPanel) : null;
@@ -626,11 +627,15 @@ export default function App() {
         if (state?.hiddenGutterButtons?.length) {
           setHiddenGutterButtons(state.hiddenGutterButtons);
         }
+        // Hydrate FileGutter collapsed state per type into Jotai atom
+        if (state?.fileGutterCollapsed) {
+          hydrateFileGutterCollapsed(state.fileGutterCollapsed);
+        }
       })
       .catch(error => {
         console.error('[App] Failed to load workspace state:', error);
       });
-  }, [workspacePath, setDiffTreeGroupByDirectory, setAgentFileScopeMode, setHiddenGutterButtons]);
+  }, [workspacePath, setDiffTreeGroupByDirectory, setAgentFileScopeMode, setHiddenGutterButtons, hydrateFileGutterCollapsed]);
 
   // Save active mode when it changes
   useEffect(() => {

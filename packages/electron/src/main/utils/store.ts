@@ -363,6 +363,8 @@ export interface WorkspaceState {
   agentWorktreeSessionModes?: Record<string, 'agent' | 'files'>;
   // Diff tree view settings (file gutter grouping)
   diffTreeGroupByDirectory?: boolean;
+  // FileGutter collapsed state per type ('referenced' | 'edited')
+  fileGutterCollapsed?: { referenced?: boolean; edited?: boolean };
   // Workstream state (per-workstream UI state for agent mode)
   workstreamStates?: Record<string, unknown>;
   // Agent mode file scope mode (shared across all sessions in workspace)
@@ -533,6 +535,7 @@ function createDefaultWorkspaceState(workspacePath: string): WorkspaceState {
     agentPermissions: undefined,
     agentWorktreeSessionModes: undefined,
     diffTreeGroupByDirectory: undefined,
+    fileGutterCollapsed: undefined,
     workstreamStates: undefined,
     collabTree: {
       expandedFolders: [],
