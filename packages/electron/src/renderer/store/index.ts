@@ -212,7 +212,6 @@ export {
   trackerCountsAtom,
   trackerCountAtom,
   trackerItemsAtom,
-  activeTrackerTypeAtom,
   selectedTrackerItemAtom,
   trackerFilterAtom,
   filteredTrackerItemsAtom,

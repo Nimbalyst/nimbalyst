@@ -10,7 +10,6 @@
 
 import { atom } from 'jotai';
 import type { EditorKey, EditorContext } from '@nimbalyst/runtime/store';
-import type { TrackerType } from './trackers';
 
 /**
  * Tab information for persistence.
@@ -36,8 +35,6 @@ export interface PanelLayout {
   sidebarCollapsed: boolean;
   aiPanelWidth: number;
   aiPanelCollapsed: boolean;
-  bottomPanelHeight: number;
-  bottomPanelType: TrackerType | null;
 }
 
 /**
@@ -123,8 +120,6 @@ const defaultProjectState: ProjectState = {
     sidebarCollapsed: false,
     aiPanelWidth: 400,
     aiPanelCollapsed: true,
-    bottomPanelHeight: 200,
-    bottomPanelType: null,
   },
   fileTree: {
     expandedDirs: [],

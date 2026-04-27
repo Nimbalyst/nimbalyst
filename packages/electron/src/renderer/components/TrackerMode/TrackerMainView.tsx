@@ -342,10 +342,13 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
       }
 
       setQuickAddType(null);
+      // Auto-select the newly created item so the detail panel opens for editing
+      const createdId = result.item?.id ?? id;
+      setModeLayout({ selectedItemId: createdId });
     } catch (error) {
       console.error('[TrackerMainView] Failed to create tracker item:', error);
     }
-  }, [workspacePath, quickAddType, trackerTypes]);
+  }, [workspacePath, quickAddType, trackerTypes, setModeLayout]);
 
   // Import state
   const [importMenuOpen, setImportMenuOpen] = useState(false);

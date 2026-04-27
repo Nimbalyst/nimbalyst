@@ -344,9 +344,6 @@ export interface WorkspaceState {
   agenticTabs?: TabManagerState; // Tab state for agentic coding window (separate storage)
   aiPanel: WorkspaceAIPanelState;
   navigationHistory?: NavigationHistoryState;
-  // Tracker bottom panel state
-  trackerBottomPanel?: 'plans' | 'bugs' | 'tasks' | 'ideas' | 'decisions' | null;
-  trackerBottomPanelHeight?: number;
   // Onboarding configuration
   onboarding?: OnboardingConfig;
   // File tree filter state
@@ -525,8 +522,6 @@ function createDefaultWorkspaceState(workspacePath: string): WorkspaceState {
     agenticTabs: undefined,
     aiPanel: { ...DEFAULT_AI_PANEL_STATE },
     navigationHistory: undefined,
-    trackerBottomPanel: null,
-    trackerBottomPanelHeight: 300,
     onboarding: undefined,
     fileTreeFilter: undefined,
     showFileIcons: undefined,

@@ -105,7 +105,6 @@ import { initTrackerSyncListeners } from './store/listeners/trackerSyncListeners
 import { initUpdateListeners } from './store/listeners/updateListeners';
 import { initWalkthroughListeners } from './store/listeners/walkthroughListeners';
 import { initWakeupListeners } from './store/listeners/wakeupListener';
-import { TrackerBottomPanel } from './components/TrackerBottomPanel/TrackerBottomPanel.tsx';
 import { TrackerMode } from './components/TrackerMode';
 import { CollabMode } from './components/CollabMode';
 import { TerminalBottomPanel } from './components/TerminalBottomPanel';
@@ -164,10 +163,6 @@ import {
   hasCollabUnsyncedChanges,
 } from './store/atoms/collabEditor';
 import {
-  activeTrackerTypeAtom,
-  trackerPanelOpenAtom,
-  toggleTrackerPanelAtom,
-  closeTrackerPanelAtom,
   initTrackerPanelLayout,
   trackerModeLayoutAtom,
 } from './store/atoms/trackers';
@@ -579,11 +574,6 @@ export default function App() {
     }
   }, [activeMode]);
 
-  // Tracker panel state from atoms
-  const isTrackerPanelOpen = useAtomValue(trackerPanelOpenAtom);
-  const toggleTrackerPanel = useSetAtom(toggleTrackerPanelAtom);
-  const closeTrackerPanel = useSetAtom(closeTrackerPanelAtom);
-
   // Terminal bottom panel state (Jotai atoms)
   const terminalPanelVisible = useAtomValue(terminalPanelVisibleAtom);
   const terminalPanelHeight = useAtomValue(terminalPanelHeightAtom);
@@ -665,13 +655,8 @@ export default function App() {
   useEffect(() => {
     if (!workspacePath) return;
     resetTerminalPanelHydration();
-    loadTerminalPanelState(workspacePath).then(() => {
-      // If terminal panel is visible on load, close tracker panel (mutually exclusive)
-      if (store.get(terminalPanelVisibleAtom)) {
-        closeTrackerPanel();
-      }
-    });
-  }, [workspacePath, closeTrackerPanel]);
+    void loadTerminalPanelState(workspacePath);
+  }, [workspacePath]);
 
 
   // Register aiToolService methods on aiChatBridge for runtime to use
@@ -755,7 +740,7 @@ export default function App() {
     }, 100);
 
     return () => clearTimeout(timeout);
-  }, [activeMode, isTrackerPanelOpen]);
+  }, [activeMode]);
 
   // NOTE: Tab management moved to EditorMode. App.tsx no longer maintains tabs.
   // Current file info is stored in refs to prevent re-renders.
@@ -1341,12 +1326,11 @@ export default function App() {
   useEffect(() => {
     const handleTerminalShow = () => {
       openTerminalPanel();
-      closeTrackerPanel(); // Close tracker when opening terminal
     };
 
     window.addEventListener('terminal:show', handleTerminalShow);
     return () => window.removeEventListener('terminal:show', handleTerminalShow);
-  }, [openTerminalPanel, closeTrackerPanel]);
+  }, [openTerminalPanel]);
 
   // Listen for tracker item navigation events (from TrackerToolWidget in transcript)
   useEffect(() => {
@@ -1827,7 +1811,6 @@ export default function App() {
         onToggleTerminalPanel={() => {
           toggleTerminalPanel();
           if (!terminalPanelVisible) {
-            closeTrackerPanel(); // Close tracker when opening terminal
             setActiveExtensionBottomPanel(null); // Close extension bottom panel when opening terminal
           }
         }}
@@ -1865,7 +1848,6 @@ export default function App() {
           setActiveExtensionBottomPanel(panelId);
           if (panelId) {
             // Close other bottom panels for mutual exclusivity
-            closeTrackerPanel();
             closeTerminalPanel();
           }
         }}
@@ -2073,14 +2055,6 @@ export default function App() {
             )}
           </div>
         </div>
-
-        {/* Bottom: Tracker Bottom Panel - spans width after nav gutter */}
-        {isTrackerPanelOpen && (
-          <TrackerBottomPanel
-            onSwitchToFilesMode={() => setActiveMode('files')}
-            workspacePath={workspacePath || undefined}
-          />
-        )}
 
         {/* Bottom: Terminal Bottom Panel - spans width after nav gutter */}
         {workspacePath && (
