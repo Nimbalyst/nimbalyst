@@ -54,6 +54,10 @@ import {
   initAutoCommitSetting,
 } from './store/atoms/autoCommitAtoms';
 import {
+  diffPeekSizeAtom,
+  initDiffPeekSize,
+} from './store/atoms/diffPeekSizeAtoms';
+import {
   trackerAutomationAtom,
   initTrackerAutomationSettings,
 } from './store/atoms/trackerAutomationAtoms';
@@ -145,6 +149,9 @@ await Promise.allSettled([
   }),
   initAutoCommitSetting().then((enabled) => {
     store.set(autoCommitEnabledAtom, enabled);
+  }),
+  initDiffPeekSize().then((size) => {
+    if (size) store.set(diffPeekSizeAtom, size);
   }),
   initTrackerAutomationSettings().then((settings) => {
     store.set(trackerAutomationAtom, settings);

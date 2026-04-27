@@ -133,6 +133,25 @@ export interface InteractiveWidgetHost {
    */
   gitCommitCancel(proposalId: string): Promise<void>;
 
+  /**
+   * Fetch the unified diff for a single file in the working tree (HEAD vs working tree).
+   * Used by interactive widgets (e.g. the git commit proposal) to peek at a file's
+   * pending changes. Returns null if the platform does not support inline diffs
+   * (e.g. mobile, where the working tree is not local).
+   */
+  gitFileDiff?(filePath: string): Promise<{ unifiedDiff: string; isBinary: boolean } | null>;
+
+  /**
+   * Persisted size of the diff peek popover, or null to use the default.
+   * Shared with the git extension's changes panel.
+   */
+  diffPeekSize?: { width: number; height: number } | null;
+
+  /**
+   * Persist a new size for the diff peek popover (debounced by the host).
+   */
+  setDiffPeekSize?(size: { width: number; height: number }): void;
+
   // ============================================================
   // Auto-commit
   // ============================================================

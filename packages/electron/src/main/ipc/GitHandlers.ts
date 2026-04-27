@@ -746,13 +746,18 @@ export function registerGitHandlers(): void {
    * Get a typed diff for a single file scoped to a working-tree group.
    * Cleanly separates staged vs unstaged vs untracked diffs (the legacy
    * `git:diff` channel mixes them by diffing HEAD against the working tree).
+   *
+   * The `working` group returns the combined HEAD-vs-working-tree diff for a file
+   * regardless of staging state, falling back to a synthesized diff for untracked
+   * files. This is what tools like the git commit proposal widget want when they
+   * need to show "what's about to be committed" without knowing the file's group.
    */
   safeHandle(
     'git:file-diff',
     async (
       _event,
       workspacePath: string,
-      args: { path: string; group: 'staged' | 'unstaged' | 'untracked' | 'conflicted' }
+      args: { path: string; group: 'staged' | 'unstaged' | 'untracked' | 'conflicted' | 'working' }
     ): Promise<{
       unifiedDiff: string;
       isBinary: boolean;
@@ -780,6 +785,34 @@ export function registerGitHandlers(): void {
         if (group === 'unstaged' || group === 'conflicted') {
           const diff = await git.diff(['--', filePath]);
           return { unifiedDiff: diff, isBinary: /\bBinary files\b/.test(diff) };
+        }
+
+        if (group === 'working') {
+          // Combined HEAD-vs-working-tree diff. For untracked files there's nothing in
+          // HEAD, so synthesize against /dev/null. For deleted files HEAD has the
+          // content and the working tree doesn't — `git diff HEAD` handles this.
+          if (repoHasCommits) {
+            const diff = await git.diff(['HEAD', '--', filePath]);
+            if (diff && diff.trim().length > 0) {
+              return { unifiedDiff: diff, isBinary: /\bBinary files\b/.test(diff) };
+            }
+          }
+          // Fall through to untracked-file synthesis if HEAD diff was empty
+          // (e.g. file is brand-new and not staged).
+          const absolute = isAbsolute(filePath) ? filePath : join(workspacePath, filePath);
+          if (!existsSync(absolute)) {
+            return { unifiedDiff: '', isBinary: false };
+          }
+          try {
+            const diff = await git.raw(['diff', '--no-index', '--', '/dev/null', filePath]);
+            return { unifiedDiff: diff, isBinary: /\bBinary files\b/.test(diff) };
+          } catch (err) {
+            const diff = (err as { stdout?: string })?.stdout ?? '';
+            if (diff) {
+              return { unifiedDiff: diff, isBinary: /\bBinary files\b/.test(diff) };
+            }
+            return { unifiedDiff: '', isBinary: false };
+          }
         }
 
         if (group === 'untracked') {

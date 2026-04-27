@@ -1341,12 +1341,17 @@
   border: 1px solid var(--nim-border, #4a4a4a);
   border-radius: 8px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2);
-  width: min(640px, calc(100vw - 32px));
   display: flex;
   flex-direction: column;
   overflow: hidden;
   z-index: 1000;
   outline: none;
+  /* User-resizable. Width/height come from inline style (controlled by consumer). */
+  resize: both;
+  min-width: 320px;
+  min-height: 160px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
 }
 
 .git-diff-popover--peek {

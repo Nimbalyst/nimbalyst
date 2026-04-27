@@ -24,7 +24,8 @@ interface DiffPeekPopoverProps {
   error: string | null;
   onClose: () => void;
   onPin: () => void;
-  onOpenInEditor: () => void;
+  /** Optional. When provided, renders the "Open in editor" link in the header. */
+  onOpenInEditor?: () => void;
   /** Controlled width in px. Falls back to a default when omitted. */
   width?: number;
   /** Controlled height in px. Falls back to a default when omitted. */
@@ -36,6 +37,9 @@ interface DiffPeekPopoverProps {
 const DEFAULT_WIDTH = 640;
 const DEFAULT_HEIGHT = 380;
 const RESIZE_DEBOUNCE_MS = 150;
+
+const KBD_CLASS =
+  'inline-block py-px px-1 mr-0.5 rounded-sm border border-[var(--nim-border)] bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)] font-mono text-[9px] leading-none';
 
 export function DiffPeekPopover({
   anchorRect,
@@ -82,7 +86,6 @@ export function DiffPeekPopover({
   const filename = filePath.split('/').pop() ?? filePath;
   const dir = filePath.includes('/') ? filePath.slice(0, filePath.lastIndexOf('/')) : '';
 
-  // Promote a peek to pinned on Enter, regardless of focus inside the popover.
   useEffect(() => {
     if (mode !== 'peek') return;
     const handler = (e: KeyboardEvent) => {
@@ -95,7 +98,6 @@ export function DiffPeekPopover({
     return () => window.removeEventListener('keydown', handler);
   }, [mode, onPin]);
 
-  // Watch the floating element for user-driven resize (CSS resize: both).
   const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastReportedRef = useRef<{ width: number; height: number } | null>(null);
 
@@ -137,41 +139,60 @@ export function DiffPeekPopover({
     height: height ?? DEFAULT_HEIGHT,
   };
 
+  const containerClass = `flex flex-col overflow-hidden outline-none z-[1000] bg-[var(--nim-bg-secondary)] rounded-lg shadow-[0_12px_32px_rgba(0,0,0,0.4),0_2px_8px_rgba(0,0,0,0.2)] resize min-w-[320px] min-h-[160px] max-w-[calc(100vw-32px)] max-h-[calc(100vh-32px)] border ${
+    mode === 'peek'
+      ? 'border-dashed border-[var(--nim-primary)]'
+      : 'border-[var(--nim-primary)]'
+  }`;
+
   return (
     <FloatingPortal>
       <div
         ref={refs.setFloating}
         style={sizedStyle}
-        className={`git-diff-popover git-diff-popover--${mode}`}
+        className={containerClass}
         {...getFloatingProps()}
       >
-        <div className="git-diff-popover-header">
-          <span className="git-diff-popover-filename" title={filePath}>
-            {dir && <span className="git-diff-popover-dir">{dir}/</span>}
-            <span className="git-diff-popover-name">{filename}</span>
-          </span>
-          <span className="git-diff-popover-stats">
-            {stats.added > 0 && <span className="git-diff-stat-added">+{stats.added}</span>}
-            {stats.removed > 0 && <span className="git-diff-stat-removed">−{stats.removed}</span>}
-          </span>
-          {mode === 'peek' && <span className="git-diff-popover-mode-badge">Peeking</span>}
-          {mode === 'pinned' && <span className="git-diff-popover-mode-badge git-diff-popover-mode-badge--pinned">Pinned</span>}
-          <button
-            type="button"
-            className="git-diff-popover-open-link"
-            onClick={(e) => { e.stopPropagation(); onOpenInEditor(); }}
+        <div className="flex items-center gap-2 py-2 px-3 border-b border-[var(--nim-border)] bg-[var(--nim-bg)] text-xs">
+          <span
+            className="flex-1 flex items-baseline gap-0 overflow-hidden text-ellipsis whitespace-nowrap font-mono"
+            title={filePath}
           >
-            Open in editor
-          </button>
+            {dir && <span className="text-[var(--nim-text-faint)] text-[11px]">{dir}/</span>}
+            <span className="text-[var(--nim-text)] font-semibold">{filename}</span>
+          </span>
+          <span className="flex gap-1.5 font-mono text-[11px] font-semibold">
+            {stats.added > 0 && <span className="text-[var(--nim-success)]">+{stats.added}</span>}
+            {stats.removed > 0 && <span className="text-[var(--nim-error)]">−{stats.removed}</span>}
+          </span>
+          {mode === 'peek' && (
+            <span className="text-[10px] tracking-[0.06em] uppercase py-0.5 px-1.5 rounded-sm bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-faint)]">
+              Peeking
+            </span>
+          )}
+          {mode === 'pinned' && (
+            <span className="text-[10px] tracking-[0.06em] uppercase py-0.5 px-1.5 rounded-sm bg-[color-mix(in_srgb,var(--nim-primary)_25%,transparent)] text-[var(--nim-primary)]">
+              Pinned
+            </span>
+          )}
+          {onOpenInEditor && (
+            <button
+              type="button"
+              className="bg-transparent border-0 cursor-pointer text-[var(--nim-primary)] text-[11px] py-0.5 px-1 hover:underline"
+              onClick={(e) => { e.stopPropagation(); onOpenInEditor(); }}
+            >
+              Open in editor
+            </button>
+          )}
         </div>
 
-        <div className="git-diff-popover-scroll">
+        <div className="flex-1 overflow-auto bg-[var(--nim-bg)]">
           <UnifiedDiffView diff={diff} isBinary={isBinary} loading={loading} error={error} />
         </div>
 
-        <div className="git-diff-popover-footer">
-          <span><kbd>Esc</kbd> close</span>
-          {mode === 'peek' && <span><kbd>Enter</kbd> pin</span>}
+        <div className="flex gap-3 py-1.5 px-3 border-t border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] text-[10px] text-[var(--nim-text-faint)]">
+          <span><kbd className={KBD_CLASS}>Esc</kbd> close</span>
+          {mode === 'peek' && <span><kbd className={KBD_CLASS}>Enter</kbd> pin</span>}
         </div>
       </div>
     </FloatingPortal>

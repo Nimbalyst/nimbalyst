@@ -76,6 +76,7 @@ import { setAgentModeSettingsAtom, showPromptAdditionsAtom, hasExternalEditorAto
 import { supportsEffortLevel, parseEffortLevel, type EffortLevel } from '../../utils/modelUtils';
 import { buildPlanImplementationPrompt, resolvePlanFilePath } from '../../utils/pathUtils';
 import { autoCommitEnabledAtom, setAutoCommitEnabledAtom } from '../../store/atoms/autoCommitAtoms';
+import { diffPeekSizeAtom, setDiffPeekSizeAtom } from '../../store/atoms/diffPeekSizeAtoms';
 import { registerSessionWorkspace, loadInitialSessionFileState } from '../../store/listeners/fileStateListeners';
 import { SESSION_PHASE_COLUMNS, setSessionPhaseAtom, type SessionPhase } from '../../store/atoms/sessionKanban';
 import { sessionRegistryAtom } from '../../store';
@@ -424,6 +425,10 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   // Auto-commit setting
   const autoCommitEnabled = useAtomValue(autoCommitEnabledAtom);
   const setAutoCommitEnabled = useSetAtom(setAutoCommitEnabledAtom);
+
+  // Diff peek popover size (shared with git extension)
+  const diffPeekSize = useAtomValue(diffPeekSizeAtom);
+  const setDiffPeekSize = useSetAtom(setDiffPeekSizeAtom);
 
   // Session phase for kanban board
   const sessionRegistry = useAtomValue(sessionRegistryAtom);
@@ -1316,6 +1321,27 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         });
       },
 
+      gitFileDiff: async (filePath: string) => {
+        try {
+          const gitWorkspacePath = sessionData?.worktreePath || workspacePath;
+          const result = await window.electronAPI.invoke(
+            'git:file-diff',
+            gitWorkspacePath,
+            { path: filePath, group: 'working' as const }
+          ) as { unifiedDiff: string; isBinary: boolean };
+          return { unifiedDiff: result.unifiedDiff, isBinary: result.isBinary };
+        } catch (err) {
+          console.error('[SessionTranscript] gitFileDiff failed:', err);
+          throw err;
+        }
+      },
+
+      // Diff peek popover size (persisted via AI settings)
+      diffPeekSize,
+      setDiffPeekSize: (size: { width: number; height: number }) => {
+        setDiffPeekSize(size);
+      },
+
       // Super Loop blocked feedback
       superLoopBlockedFeedback: async (feedback: string) => {
         try {
@@ -1417,6 +1443,8 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     posthog,
     autoCommitEnabled,
     setAutoCommitEnabled,
+    diffPeekSize,
+    setDiffPeekSize,
     onFileClick,
   ]);
 

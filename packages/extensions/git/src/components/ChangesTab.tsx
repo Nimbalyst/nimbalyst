@@ -322,6 +322,38 @@ export function ChangesTab({
   const [focusedRow, setFocusedRow] = useState<RowKey | null>(null);
   const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
 
+  // Persisted diff peek size (shared with the git commit proposal widget via AI settings).
+  const [diffPeekSize, setDiffPeekSizeState] = useState<{ width: number; height: number } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    ipc.invoke('ai:getSettings')
+      .then((settings) => {
+        if (cancelled) return;
+        const size = (settings as { diffPeekSize?: { width: number; height: number } | null } | null)?.diffPeekSize;
+        if (size && typeof size.width === 'number' && typeof size.height === 'number') {
+          setDiffPeekSizeState(size);
+        }
+      })
+      .catch(() => { /* not fatal */ });
+    return () => { cancelled = true; };
+  }, []);
+  const diffPeekPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleDiffPeekResize = useCallback((size: { width: number; height: number }) => {
+    setDiffPeekSizeState(size);
+    if (diffPeekPersistTimerRef.current) clearTimeout(diffPeekPersistTimerRef.current);
+    diffPeekPersistTimerRef.current = setTimeout(() => {
+      diffPeekPersistTimerRef.current = null;
+      ipc.invoke('ai:saveSettings', { diffPeekSize: size }).catch((err) => {
+        console.error('[ChangesTab] Failed to persist diff peek size:', err);
+      });
+    }, 300);
+  }, []);
+  useEffect(() => {
+    return () => {
+      if (diffPeekPersistTimerRef.current) clearTimeout(diffPeekPersistTimerRef.current);
+    };
+  }, []);
+
   // Token bumped whenever git status changes — invalidates the diff cache.
   const [diffInvalidationToken, setDiffInvalidationToken] = useState(0);
 
@@ -993,6 +1025,9 @@ export function ChangesTab({
           onClose={closePopover}
           onPin={promoteToPin}
           onOpenInEditor={handleOpenInEditor}
+          width={diffPeekSize?.width}
+          height={diffPeekSize?.height}
+          onResize={handleDiffPeekResize}
         />
       )}
     </div>

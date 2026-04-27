@@ -2505,6 +2505,9 @@ export class AIService {
         enabled: boolean;
         autoCloseOnCommit: boolean;
       };
+      const diffPeekSize = this.getSettingsStore().get('diffPeekSize', null) as
+        | { width: number; height: number }
+        | null;
 
       return {
         defaultProvider: this.getSettingsStore().get('defaultProvider', 'claude-code'),
@@ -2518,6 +2521,7 @@ export class AIService {
         customClaudeCodePath,
         autoCommitEnabled,
         trackerAutomation,
+        diffPeekSize,
       };
     });
 
@@ -2634,6 +2638,18 @@ export class AIService {
           autoCloseOnCommit: true,
         }) as Record<string, unknown>;
         this.getSettingsStore().set('trackerAutomation', { ...current, ...settings.trackerAutomation });
+      }
+
+      if (settings.diffPeekSize !== undefined) {
+        // Allow null to clear; otherwise expect { width, height }.
+        if (
+          settings.diffPeekSize === null ||
+          (typeof settings.diffPeekSize === 'object' &&
+            typeof settings.diffPeekSize.width === 'number' &&
+            typeof settings.diffPeekSize.height === 'number')
+        ) {
+          this.getSettingsStore().set('diffPeekSize', settings.diffPeekSize);
+        }
       }
 
       return { success: true };
