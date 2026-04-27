@@ -1339,6 +1339,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
             }}
             cursorPosition={cursorPosition}
             maxHeight={500}
+            minWidth={typeaheadMatch.trigger === '@@' ? 360 : undefined}
             sectionOrder={typeaheadMatch.trigger === '/'
               ? ['Built-in Commands', 'Project Commands', 'User Commands', 'Extension Commands',
                  'Project Skills', 'User Skills', 'Plugin Skills']

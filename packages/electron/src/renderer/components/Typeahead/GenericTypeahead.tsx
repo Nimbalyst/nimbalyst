@@ -5,7 +5,7 @@ import { getCursorCoordinates } from './typeaheadUtils';
 export interface TypeaheadOption {
   id: string;
   label: string;
-  description?: string;
+  description?: string | React.ReactElement;
   icon?: string | React.ReactElement;
   section?: string;
   data?: any;
