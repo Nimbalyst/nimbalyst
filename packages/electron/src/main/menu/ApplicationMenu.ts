@@ -24,7 +24,7 @@
 import { Menu, BrowserWindow, app, dialog, shell, nativeTheme } from 'electron';
 import { basename, join } from 'path';
 import * as path from 'path';
-import { existsSync, copyFileSync, mkdirSync } from 'fs';
+import { existsSync } from 'fs';
 import * as fs from 'fs';
 import { windows, windowStates, createWindow, findWindowByFilePath, getWindowId } from '../window/WindowManager';
 import { createAboutWindow } from '../window/AboutWindow';
@@ -220,93 +220,6 @@ async function createRecentSubmenu(): Promise<any[]> {
     }
 
     return submenu;
-}
-
-// Install a built-in agent to the workspace
-async function installBuiltinAgent(window: BrowserWindow, agentFileName: string) {
-    const windowState = windowStates.get(window.id);
-    if (!windowState || windowState.mode !== 'workspace' || !windowState.workspacePath) {
-        dialog.showMessageBox(window, {
-            type: 'warning',
-            title: 'No Workspace',
-            message: 'Please open a workspace before installing agents.',
-            buttons: ['OK']
-        });
-        return;
-    }
-
-    const workspacePath = windowState.workspacePath;
-    const agentsDir = join(workspacePath, 'agents');
-    const targetPath = join(agentsDir, agentFileName);
-
-    // Check if agent already exists
-    if (existsSync(targetPath)) {
-        const result = await dialog.showMessageBox(window, {
-            type: 'question',
-            title: 'Agent Exists',
-            message: `The agent "${agentFileName}" already exists in your workspace. Do you want to overwrite it?`,
-            buttons: ['Overwrite', 'Cancel'],
-            defaultId: 1,
-            cancelId: 1
-        });
-
-        if (result.response === 1) {
-            return; // User cancelled
-        }
-    }
-
-    try {
-        // Create agents directory if it doesn't exist
-        if (!existsSync(agentsDir)) {
-            mkdirSync(agentsDir, { recursive: true });
-        }
-
-        // Copy the built-in agent file
-        // In packaged app, resources are in app.asar or Resources folder
-        let actualSourcePath: string;
-
-        if (app.isPackaged) {
-            // In packaged app, try multiple possible locations
-            const possiblePaths = [
-                // Resources folder next to app.asar
-                join(process.resourcesPath, 'builtin-agents', agentFileName),
-                // Inside app.asar (will work with asar support)
-                join(__dirname, '..', '..', 'resources', 'builtin-agents', agentFileName),
-                // macOS specific location
-                join(process.resourcesPath, '..', 'Resources', 'builtin-agents', agentFileName),
-            ];
-
-            actualSourcePath = possiblePaths.find(p => existsSync(p)) || '';
-        } else {
-            // In development
-            const devSourcePath = join(__dirname, '..', '..', '..', 'resources', 'builtin-agents', agentFileName);
-            actualSourcePath = devSourcePath;
-        }
-
-        if (!actualSourcePath || !existsSync(actualSourcePath)) {
-            throw new Error(`Built-in agent file not found: ${agentFileName}`);
-        }
-
-        copyFileSync(actualSourcePath, targetPath);
-
-        dialog.showMessageBox(window, {
-            type: 'info',
-            title: 'Agent Installed',
-            message: `The agent "${agentFileName}" has been successfully installed to your workspace.`,
-            detail: `You can now use it by pressing Cmd+K to open the Agent Command Palette.`,
-            buttons: ['OK']
-        });
-
-        // Trigger agent reload
-        window.webContents.send('agents:updated', workspacePath);
-    } catch (error) {
-        dialog.showMessageBox(window, {
-            type: 'error',
-            title: 'Installation Failed',
-            message: `Failed to install agent: ${error instanceof Error ? error.message : String(error)}`,
-            buttons: ['OK']
-        });
-    }
 }
 
 // Create application menu

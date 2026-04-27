@@ -11,7 +11,6 @@ import type { DialogConfig } from '../contexts/DialogContext.types';
 import { QuickOpen } from '../components/QuickOpen';
 import { SessionQuickOpen } from '../components/SessionQuickOpen';
 import { PromptQuickOpen } from '../components/PromptQuickOpen';
-import { AgentCommandPalette } from '../components/AgentCommandPalette';
 import { ProjectQuickOpen } from '../components/ProjectQuickOpen';
 import { DIALOG_IDS } from './registry';
 
@@ -43,11 +42,6 @@ export interface PromptQuickOpenData {
   onSessionSelect: (sessionId: string, messageTimestamp?: number) => void;
   /** Pre-fill the search input when the modal opens */
   initialSearchQuery?: string;
-}
-
-export interface AgentCommandPaletteData {
-  workspacePath?: string;
-  documentContext?: { content?: string; filePath?: string };
 }
 
 export interface ProjectQuickOpenData {
@@ -129,25 +123,6 @@ function PromptQuickOpenWrapper({
   );
 }
 
-function AgentCommandPaletteWrapper({
-  isOpen,
-  onClose,
-  data,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  data: AgentCommandPaletteData;
-}) {
-  return (
-    <AgentCommandPalette
-      isOpen={isOpen}
-      onClose={onClose}
-      workspacePath={data.workspacePath}
-      documentContext={data.documentContext}
-    />
-  );
-}
-
 function ProjectQuickOpenWrapper({
   isOpen,
   onClose,
@@ -188,14 +163,6 @@ export function registerNavigationDialogs() {
     group: 'navigation',
     component:
       PromptQuickOpenWrapper as DialogConfig<PromptQuickOpenData>['component'],
-    priority: 100,
-  });
-
-  registerDialog<AgentCommandPaletteData>({
-    id: DIALOG_IDS.AGENT_COMMAND_PALETTE,
-    group: 'navigation',
-    component:
-      AgentCommandPaletteWrapper as DialogConfig<AgentCommandPaletteData>['component'],
     priority: 100,
   });
 

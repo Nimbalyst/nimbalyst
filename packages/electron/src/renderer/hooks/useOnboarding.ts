@@ -7,6 +7,10 @@ import type { OnboardingData, UnifiedOnboardingData, WindowsClaudeCodeWarningDat
 import OnboardingService from '../services/OnboardingService';
 import type { ContentMode } from '../types/WindowModeTypes';
 import { setDeveloperFeatureSettingsAtom } from '../store/atoms/appSettings';
+import {
+  unifiedOnboardingRequestAtom,
+  windowsClaudeCodeWarningRequestAtom,
+} from '../store/atoms/appCommands';
 
 interface UseOnboardingOptions {
   workspacePath: string | null;
@@ -294,67 +298,54 @@ export function useOnboarding({
     checkUnifiedOnboarding();
   }, [isInitializing, dialogReady, workspaceMode, handleOnboardingComplete, handleOnboardingSkip, checkWindowsWarning]);
 
-  // Listen for show-unified-onboarding IPC event (from Developer menu)
+  // React to "show unified onboarding" command from the Developer menu. The
+  // IPC subscription lives in store/listeners/appCommandListeners.ts.
+  const unifiedOnboardingRequest = useAtomValue(unifiedOnboardingRequestAtom);
   useEffect(() => {
-    if (!window.electronAPI?.on) return;
+    if (!unifiedOnboardingRequest) return;
+    const { options } = unifiedOnboardingRequest;
+    let forcedMode: 'new' | 'existing' | null = null;
+    if (options?.forceNewUser) {
+      forcedMode = 'new';
+    } else if (options?.forceExistingUser) {
+      forcedMode = 'existing';
+    }
+    forcedModeRef.current = forcedMode;
 
-    const handleShowUnifiedOnboarding = (options?: { forceNewUser?: boolean; forceExistingUser?: boolean }) => {
-      let forcedMode: 'new' | 'existing' | null = null;
-      if (options?.forceNewUser) {
-        forcedMode = 'new';
-      } else if (options?.forceExistingUser) {
-        forcedMode = 'existing';
-      }
-      forcedModeRef.current = forcedMode;
+    if (dialogRef.current) {
+      onboardingOpenRef.current = true;
+      dialogRef.current.open<UnifiedOnboardingData>(DIALOG_IDS.ONBOARDING, {
+        onComplete: handleOnboardingComplete,
+        onSkip: handleOnboardingSkip,
+        forcedMode,
+      });
+    }
+  }, [unifiedOnboardingRequest, handleOnboardingComplete, handleOnboardingSkip]);
 
-      if (dialogRef.current) {
-        onboardingOpenRef.current = true;
-        dialogRef.current.open<UnifiedOnboardingData>(DIALOG_IDS.ONBOARDING, {
-          onComplete: handleOnboardingComplete,
-          onSkip: handleOnboardingSkip,
-          forcedMode,
-        });
-      }
-    };
-
-    window.electronAPI.on('show-unified-onboarding', handleShowUnifiedOnboarding);
-
-    return () => {
-      window.electronAPI.off?.('show-unified-onboarding', handleShowUnifiedOnboarding);
-    };
-  }, [handleOnboardingComplete, handleOnboardingSkip]);
-
-  // Listen for show-windows-claude-code-warning IPC event (from Developer menu)
+  // React to "show Windows Claude Code warning" from the Developer menu. The
+  // IPC subscription lives in store/listeners/appCommandListeners.ts.
+  const windowsWarningVersion = useAtomValue(windowsClaudeCodeWarningRequestAtom);
+  const windowsWarningInitialVersionRef = useRef(windowsWarningVersion);
   useEffect(() => {
-    if (!window.electronAPI?.on) return;
-
-    const handleShowWindowsWarning = () => {
-      if (dialogRef.current) {
-        windowsWarningOpenRef.current = true;
-        dialogRef.current.open<WindowsClaudeCodeWarningData>(DIALOG_IDS.WINDOWS_CLAUDE_CODE_WARNING, {
-          onClose: () => {
-            posthog?.capture('windows_claude_code_warning_closed');
-            windowsWarningOpenRef.current = false;
-          },
-          onDismiss: () => {
-            posthog?.capture('windows_claude_code_warning_dismissed_forever');
-            windowsWarningOpenRef.current = false;
-          },
-          onOpenSettings: () => {
-            posthog?.capture('windows_claude_code_warning_shown');
-            windowsWarningOpenRef.current = false;
-            setActiveMode('settings');
-          },
-        });
-      }
-    };
-
-    window.electronAPI.on('show-windows-claude-code-warning', handleShowWindowsWarning);
-
-    return () => {
-      window.electronAPI.off?.('show-windows-claude-code-warning', handleShowWindowsWarning);
-    };
-  }, [posthog, setActiveMode]);
+    if (windowsWarningVersion === windowsWarningInitialVersionRef.current) return;
+    if (!dialogRef.current) return;
+    windowsWarningOpenRef.current = true;
+    dialogRef.current.open<WindowsClaudeCodeWarningData>(DIALOG_IDS.WINDOWS_CLAUDE_CODE_WARNING, {
+      onClose: () => {
+        posthog?.capture('windows_claude_code_warning_closed');
+        windowsWarningOpenRef.current = false;
+      },
+      onDismiss: () => {
+        posthog?.capture('windows_claude_code_warning_dismissed_forever');
+        windowsWarningOpenRef.current = false;
+      },
+      onOpenSettings: () => {
+        posthog?.capture('windows_claude_code_warning_shown');
+        windowsWarningOpenRef.current = false;
+        setActiveMode('settings');
+      },
+    });
+  }, [windowsWarningVersion, posthog, setActiveMode]);
 
   // Check and show commands toast
   const checkAndShowCommandsToast = useCallback(async (): Promise<boolean> => {

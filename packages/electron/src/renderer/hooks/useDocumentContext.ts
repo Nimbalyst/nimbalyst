@@ -103,7 +103,6 @@ export function detectFileType(filePath: string): string {
  * Consolidates the logic for creating document context that's used by:
  * - AIChat component
  * - AgenticPanel component
- * - AgentCommandPalette component
  *
  * Returns a memoized document context object based on the active tab
  */

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useAtomValue } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { HelpTooltip } from '../../help';
+import { syncStatusUpdateAtom } from '../../store/atoms/syncStatus';
 
 export interface SyncConfig {
   enabled: boolean;
@@ -65,28 +67,25 @@ export const SyncStatusButton: React.FC<SyncStatusButtonProps> = ({ workspacePat
     }
   }, [workspacePath]);
 
-  // Initial fetch and subscribe to status changes (no polling)
+  // Initial fetch and subscribe to status changes (no polling).
+  // The IPC subscription lives in store/listeners/syncListeners.ts; we just
+  // ensure the main process is broadcasting and rely on syncStatusUpdateAtom.
   useEffect(() => {
     fetchStatus();
-
-    // Subscribe to sync status changes (main process will broadcast)
     window.electronAPI.invoke('sync:subscribe-status');
-
-    // Listen for status change events
-    const handleStatusChange = (newStatus: { connected: boolean; syncing: boolean; error: string | null }) => {
-      setStatus(prev => ({
-        ...prev,
-        connected: newStatus.connected,
-        syncing: newStatus.syncing,
-        error: newStatus.error,
-      }));
-    };
-
-    const unsubscribe = window.electronAPI.on('sync:status-changed', handleStatusChange);
-    return () => {
-      unsubscribe?.();
-    };
   }, [fetchStatus]);
+
+  // Apply incremental status updates broadcast via IPC.
+  const syncStatusUpdate = useAtomValue(syncStatusUpdateAtom);
+  useEffect(() => {
+    if (!syncStatusUpdate) return;
+    setStatus(prev => ({
+      ...prev,
+      connected: syncStatusUpdate.connected,
+      syncing: syncStatusUpdate.syncing,
+      error: syncStatusUpdate.error,
+    }));
+  }, [syncStatusUpdate]);
 
   // Close menu when clicking outside
   useEffect(() => {

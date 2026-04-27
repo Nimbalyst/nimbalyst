@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useAtomValue } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
+import { themeIdAtom } from '@nimbalyst/runtime/store';
 import {
   getAllAvailableThemesAsync,
 } from '../../hooks/useTheme';
@@ -12,11 +14,8 @@ interface ThemeToggleButtonProps {
 }
 
 export const ThemeToggleButton: React.FC<ThemeToggleButtonProps> = ({ className = '' }) => {
-  const [currentTheme, setCurrentTheme] = useState<string>(() => {
-    // Get initial theme from main process (synchronously)
-    const mainProcessTheme = window.electronAPI?.getThemeSync?.() || 'light';
-    return mainProcessTheme;
-  });
+  // Theme state lives in themeIdAtom; updated by store/listeners/themeListeners.ts
+  const currentTheme = useAtomValue(themeIdAtom) as string;
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [availableThemes, setAvailableThemes] = useState<Array<{
@@ -35,21 +34,6 @@ export const ThemeToggleButton: React.FC<ThemeToggleButtonProps> = ({ className 
     };
 
     loadThemes();
-  }, []);
-
-  // Listen for theme changes from other sources (like the menu)
-  useEffect(() => {
-    if (!window.electronAPI?.on) return;
-
-    const handleThemeChange = (newTheme: string) => {
-      setCurrentTheme(newTheme);
-    };
-
-    window.electronAPI.on('theme-change', handleThemeChange);
-
-    return () => {
-      window.electronAPI.off?.('theme-change', handleThemeChange);
-    };
   }, []);
 
   // Close menu when clicking outside
@@ -74,14 +58,13 @@ export const ThemeToggleButton: React.FC<ThemeToggleButtonProps> = ({ className 
   const selectTheme = useCallback((themeId: string) => {
     setIsMenuOpen(false);
 
-    // Update local state immediately for responsive UI
-    setCurrentTheme(themeId);
-
     // Find the theme to get its isDark property
     const theme = availableThemes.find(t => t.id === themeId);
     const isDark = theme?.isDark ?? false;
 
-    // Send theme change to main process for persistence and cross-window sync
+    // Send theme change to main process for persistence and cross-window sync.
+    // Main process broadcasts back via theme-change, picked up by themeListeners,
+    // which updates themeIdAtom and re-renders this component.
     if (window.electronAPI?.send) {
       window.electronAPI.send('set-theme', themeId, isDark);
     }

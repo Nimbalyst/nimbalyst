@@ -6,7 +6,9 @@
  */
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { useAtomValue } from 'jotai';
 import { init, Terminal, FitAddon, OSC8LinkProvider, UrlRegexProvider, type ITheme, type ILinkProvider, type ILink } from 'ghostty-web';
+import { themeIdAtom } from '@nimbalyst/runtime/store';
 import { TerminalContextMenu } from './TerminalContextMenu';
 
 // Type for terminal API is defined in electron.d.ts
@@ -700,23 +702,14 @@ export const TerminalPanel: React.FC<TerminalPanelProps> = ({
     }
   }, [isActive, panelVisible, sessionId]);
 
-  // Listen for theme changes and update terminal colors
+  // React to theme changes by re-reading CSS vars into the terminal instance.
+  // themeIdAtom is updated by store/listeners/themeListeners.ts.
+  const currentThemeId = useAtomValue(themeIdAtom);
   useEffect(() => {
-    if (!window.electronAPI?.on) return;
-
-    const handleThemeChange = () => {
-      if (terminalInstanceRef.current) {
-        // Re-read CSS variables and apply new theme to terminal
-        terminalInstanceRef.current.options.theme = getTerminalTheme();
-      }
-    };
-
-    window.electronAPI.on('theme-change', handleThemeChange);
-
-    return () => {
-      window.electronAPI.off?.('theme-change', handleThemeChange);
-    };
-  }, []);
+    if (terminalInstanceRef.current) {
+      terminalInstanceRef.current.options.theme = getTerminalTheme();
+    }
+  }, [currentThemeId]);
 
   return (
     <div

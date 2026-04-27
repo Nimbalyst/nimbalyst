@@ -9,7 +9,6 @@ interface UIState {
   theme: ConfigTheme;
   sidebarWidth: number;
   isQuickOpenVisible: boolean;
-  isAgentPaletteVisible: boolean;
   isNewFileDialogOpen: boolean;
   isAIChatCollapsed: boolean;
   aiChatWidth: number;
@@ -23,7 +22,6 @@ interface UIActions {
   setTheme: (theme: ConfigTheme) => void;
   setSidebarWidth: (width: number) => void;
   setIsQuickOpenVisible: (visible: boolean) => void;
-  setIsAgentPaletteVisible: (visible: boolean) => void;
   setIsNewFileDialogOpen: (open: boolean) => void;
   setIsAIChatCollapsed: (collapsed: boolean) => void;
   setAIChatWidth: (width: number) => void;
@@ -40,7 +38,6 @@ export function useUIState(): [UIState, UIActions] {
   });
   const [sidebarWidth, setSidebarWidth] = useState<number>(250);
   const [isQuickOpenVisible, setIsQuickOpenVisible] = useState(false);
-  const [isAgentPaletteVisible, setIsAgentPaletteVisible] = useState(false);
   const [isNewFileDialogOpen, setIsNewFileDialogOpen] = useState(false);
   const [isAIChatCollapsed, setIsAIChatCollapsed] = useState(false);
   const [aiChatWidth, setAIChatWidth] = useState<number>(350);
@@ -57,7 +54,6 @@ export function useUIState(): [UIState, UIActions] {
     theme,
     sidebarWidth,
     isQuickOpenVisible,
-    isAgentPaletteVisible,
     isNewFileDialogOpen,
     isAIChatCollapsed,
     aiChatWidth,
@@ -71,7 +67,6 @@ export function useUIState(): [UIState, UIActions] {
     setTheme,
     setSidebarWidth,
     setIsQuickOpenVisible,
-    setIsAgentPaletteVisible,
     setIsNewFileDialogOpen,
     setIsAIChatCollapsed,
     setAIChatWidth,

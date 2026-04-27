@@ -11,6 +11,7 @@ import {
   type BackgroundTask,
   type BackgroundTaskSyncState,
 } from '../../store/atoms/backgroundTasks';
+import { syncStatusUpdateAtom } from '../../store/atoms/syncStatus';
 
 interface BackgroundTaskIndicatorProps {
   workspacePath?: string;
@@ -200,24 +201,21 @@ export const BackgroundTaskIndicator: React.FC<BackgroundTaskIndicatorProps> = (
 
     fetchSyncStatus();
     window.electronAPI.invoke('sync:subscribe-status').catch(() => undefined);
+  }, [fetchSyncStatus, isDevMode]);
 
-    const unsubscribe = window.electronAPI.on(
-      'sync:status-changed',
-      (newStatus: { connected: boolean; syncing: boolean; error: string | null }) => {
-        setSyncStatus((prev) => ({
-          ...prev,
-          connected: newStatus.connected,
-          syncing: newStatus.syncing,
-          error: newStatus.error,
-          lastUpdatedAt: Date.now(),
-        }));
-      },
-    );
-
-    return () => {
-      unsubscribe?.();
-    };
-  }, [fetchSyncStatus, isDevMode, setSyncStatus]);
+  // Apply incremental sync status updates from the central listener
+  // (store/listeners/syncListeners.ts).
+  const syncStatusUpdate = useAtomValue(syncStatusUpdateAtom);
+  useEffect(() => {
+    if (!isDevMode || !syncStatusUpdate) return;
+    setSyncStatus((prev) => ({
+      ...prev,
+      connected: syncStatusUpdate.connected,
+      syncing: syncStatusUpdate.syncing,
+      error: syncStatusUpdate.error,
+      lastUpdatedAt: Date.now(),
+    }));
+  }, [syncStatusUpdate, isDevMode, setSyncStatus]);
 
   useEffect(() => {
     if (!menu.isOpen) {

@@ -13,6 +13,7 @@ import { getExtensionLoader } from '@nimbalyst/runtime';
 import { KeyboardShortcuts } from '../../shared/KeyboardShortcuts';
 import { HelpTooltip } from '../help';
 import { store, gitStatusMapAtom, revealRequestAtom, rawFileTreeAtom, fileTreeLoadedAtom, type FileGitStatus as AtomFileGitStatus } from '../store';
+import { sessionFileEditsAtom } from '../store/atoms/sessionFiles';
 import { refreshFileTree } from '../store/listeners/fileTreeListeners';
 import { useTabsActions } from '../contexts/TabsContext';
 import { WorkspaceSummaryHeader } from './WorkspaceSummaryHeader';
@@ -547,35 +548,19 @@ export function WorkspaceSidebar({
     }
   }, [workspacePath]);
 
+  // Watch the centrally-maintained file edits atom. When the central listener
+  // (fileStateListeners.ts) processes session-files:updated, this atom changes
+  // and we refetch read+written file filters via IPC.
+  const sessionFileEdits = useAtomValue(
+    sessionFileEditsAtom(currentAISessionId ?? '')
+  );
   useEffect(() => {
     if (!currentAISessionId) {
       setSessionFileFilters({ read: [], written: [] });
       return;
     }
-
-    setSessionFileFilters({ read: [], written: [] });
     loadClaudeSessionFiles(currentAISessionId);
-  }, [currentAISessionId, loadClaudeSessionFiles]);
-
-  useEffect(() => {
-    if (!currentAISessionId || !window.electronAPI?.on) {
-      return;
-    }
-
-    const handler = (sessionId: string) => {
-      if (sessionId === currentAISessionId) {
-        loadClaudeSessionFiles(currentAISessionId);
-      }
-    };
-
-    const unsubscribe = window.electronAPI.on('session-files:updated', handler);
-
-    return () => {
-      if (typeof unsubscribe === 'function') {
-        unsubscribe();
-      }
-    };
-  }, [currentAISessionId, loadClaudeSessionFiles]);
+  }, [currentAISessionId, sessionFileEdits, loadClaudeSessionFiles]);
 
   // Clear file tree filter when a reveal request comes in (so the target file is visible)
   const fileTreeFilterRef = useRef(fileTreeFilter);

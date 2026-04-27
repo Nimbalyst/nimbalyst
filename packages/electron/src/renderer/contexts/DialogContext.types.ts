@@ -5,7 +5,7 @@ import type React from 'react';
  * Dialogs within the same group are mutually exclusive (opening one closes others).
  */
 export type DialogGroup =
-  | 'navigation' // QuickOpen, SessionQuickOpen, PromptQuickOpen, AgentCommandPalette
+  | 'navigation' // QuickOpen, SessionQuickOpen, PromptQuickOpen, ProjectQuickOpen
   | 'alert' // ErrorDialog, ConfirmDialog - can stack on top of other groups
   | 'onboarding' // FeatureWalkthrough, OnboardingDialog - sequential flow
   | 'settings' // ApiKeyDialog

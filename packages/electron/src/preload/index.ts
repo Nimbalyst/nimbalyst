@@ -134,10 +134,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('toggle-search-replace', callback);
     return () => ipcRenderer.removeListener('toggle-search-replace', callback);
   },
-  onToggleAgentPalette: (callback: () => void) => {
-    ipcRenderer.on('toggle-agent-palette', callback);
-    return () => ipcRenderer.removeListener('toggle-agent-palette', callback);
-  },
   onOpenWelcomeTab: (callback: () => void) => {
     ipcRenderer.on('open-welcome-tab', callback);
     return () => ipcRenderer.removeListener('open-welcome-tab', callback);

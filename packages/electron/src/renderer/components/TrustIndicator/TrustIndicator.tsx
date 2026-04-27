@@ -7,12 +7,13 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import {
   workspacePermissionsAtomFamily,
   loadWorkspacePermissions,
 } from '../../store/atoms/appSettings';
+import { permissionsChangedVersionAtom } from '../../store/atoms/permissions';
 import { HelpTooltip } from '../../help';
 
 export interface TrustStatus {
@@ -66,20 +67,12 @@ export const TrustIndicator: React.FC<TrustIndicatorProps> = ({
     }
   }, [workspacePath, setPermissionsState]);
 
-  // Initial fetch and listen for changes
+  // Re-fetch on initial mount and whenever the central permissions listener
+  // (store/listeners/permissionListeners.ts) bumps the version counter.
+  const permissionsVersion = useAtomValue(permissionsChangedVersionAtom);
   useEffect(() => {
     fetchStatus();
-
-    // Listen for permission changes from main process
-    const handlePermissionChange = () => {
-      fetchStatus();
-    };
-
-    window.electronAPI.on('permissions:changed', handlePermissionChange);
-    return () => {
-      window.electronAPI.off?.('permissions:changed', handlePermissionChange);
-    };
-  }, [fetchStatus]);
+  }, [fetchStatus, permissionsVersion]);
 
   // Close menu when clicking outside
   useEffect(() => {

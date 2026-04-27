@@ -73,7 +73,6 @@ import { registerDatabaseBrowserHandlers } from './ipc/DatabaseBrowserHandlers';
 import { registerTerminalHandlers, shutdownTerminalHandlers } from './ipc/TerminalHandlers';
 import { AIService } from './services/ai/AIService';
 import { detectFileWorkspace, suggestWorkspaceForFile, getAdditionalDirectoriesForWorkspace } from './utils/workspaceDetection';
-// import { AgentService } from './services/agents/AgentService';
 import { cliManager, initEnhancedPath, getEnhancedPath, getShellEnvironment } from './services/CLIManager';
 import { registerWorkspaceWindow, registerExtensionTools, shutdownHttpServer, startMcpHttpServer, updateDocumentState } from './mcp/httpServer';
 import { startSessionContextServer, cleanupSessionContextServer, shutdownSessionContextServer } from './mcp/sessionContextServer';
@@ -289,7 +288,6 @@ function checkClaudeCodeInstallationOnFirstLaunch(): void {
 
 // AI service instance
 let aiService: AIService | null = null;
-// let agentService: AgentService | null = null;
 let runtimeSessionStore: SessionStore | null = null;
 let mcpHttpServer: any = null;
 let mcpConfigService: MCPConfigService | null = null;
@@ -1378,9 +1376,6 @@ app.whenReady().then(async () => {
     initVoiceModeService();
     initVoiceModeSettingsHandler();
     registerWalkthroughHandlers();
-
-    // Initialize Agent service
-    // agentService = new AgentService(aiService);
 
     // Start MCP SSE server
     markStart('mcp-servers');

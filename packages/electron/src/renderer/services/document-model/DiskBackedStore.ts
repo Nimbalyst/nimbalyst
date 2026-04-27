@@ -5,7 +5,12 @@
  * Subscribes to file-watcher events for external change notifications.
  */
 
+import { store } from '@nimbalyst/runtime/store';
 import type { DocumentBackingStore, ExternalChangeCallback, ExternalChangeInfo } from './types';
+import {
+  fileChangedOnDiskAtomFamily,
+  historyPendingTagCreatedAtomFamily,
+} from '../../store/atoms/fileWatch';
 
 export class DiskBackedStore implements DocumentBackingStore {
   private readonly filePath: string;
@@ -61,12 +66,12 @@ export class DiskBackedStore implements DocumentBackingStore {
   }
 
   /**
-   * Register with Electron IPC channels for file changes.
+   * Subscribe to per-path atoms updated by store/listeners/fileChangeListeners.ts.
    *
-   * Listens to two events:
-   * - `file-changed-on-disk`: normal file watcher events (sends `{ path }`)
-   * - `history:pending-tag-created`: fired after HistoryManager creates a pending tag,
-   *    signals that echo suppression should be bypassed to check for AI edits.
+   * Two events surface as separate atom families:
+   * - `file-changed-on-disk`: normal file watcher events
+   * - `history:pending-tag-created`: signals echo suppression should be
+   *    bypassed to check for AI edits
    */
   private setupFileWatcher(): void {
     const emitChange = async (checkPendingTags: boolean) => {
@@ -95,21 +100,23 @@ export class DiskBackedStore implements DocumentBackingStore {
       }
     };
 
-    const fileChangeHandler = (data: { path: string }) => {
-      if (data.path !== this.filePath) return;
-      emitChange(false);
-    };
+    const fileChangeAtom = fileChangedOnDiskAtomFamily(this.filePath);
+    const tagCreatedAtom = historyPendingTagCreatedAtomFamily(this.filePath);
+    const initialFileChangeVersion = store.get(fileChangeAtom);
+    const initialTagCreatedVersion = store.get(tagCreatedAtom);
 
-    const tagCreatedHandler = (data: { path: string }) => {
-      if (data.path !== this.filePath) return;
-      emitChange(true);
-    };
+    const unsubFileChange = store.sub(fileChangeAtom, () => {
+      if (store.get(fileChangeAtom) === initialFileChangeVersion) return;
+      void emitChange(false);
+    });
+    const unsubTagCreated = store.sub(tagCreatedAtom, () => {
+      if (store.get(tagCreatedAtom) === initialTagCreatedVersion) return;
+      void emitChange(true);
+    });
 
-    window.electronAPI.on('file-changed-on-disk', fileChangeHandler);
-    window.electronAPI.on('history:pending-tag-created', tagCreatedHandler);
     this.ipcCleanup = () => {
-      window.electronAPI.off('file-changed-on-disk', fileChangeHandler);
-      window.electronAPI.off('history:pending-tag-created', tagCreatedHandler);
+      unsubFileChange();
+      unsubTagCreated();
     };
   }
 

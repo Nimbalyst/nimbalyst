@@ -5,6 +5,7 @@ import { MaterialSymbol } from '@nimbalyst/runtime';
 import { ErrorBoundary } from '../../ErrorBoundary';
 import { useTheme } from '../../../hooks/useTheme';
 import { enabledProvidersAtom } from '../../../store/atoms/appSettings';
+import { mcpTestProgressAtom } from '../../../store/atoms/mcpStatus';
 
 interface MCPServerConfig {
   command?: string;
@@ -676,6 +677,15 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
   const [testMessage, setTestMessage] = useState<string>('');
   const [testHelpUrl, setTestHelpUrl] = useState<string | null>(null);
   const [isStalePortError, setIsStalePortError] = useState(false);
+
+  // Stream MCP test progress messages from the central listener
+  // (store/listeners/mcpListeners.ts) into local state. Only apply while a
+  // test is in progress so stale messages don't leak between tests.
+  const mcpTestProgress = useAtomValue(mcpTestProgressAtom);
+  useEffect(() => {
+    if (testStatus !== 'testing' || !mcpTestProgress?.message) return;
+    setTestMessage(mcpTestProgress.message);
+  }, [mcpTestProgress, testStatus]);
 
   // OAuth state
   const [oauthStatus, setOauthStatus] = useState<OAuthStatus>('unknown');
@@ -1525,15 +1535,6 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
     setTestStatus('testing');
     setTestMessage('Starting...');
 
-    const unsubscribe = window.electronAPI.on(
-      'mcp-config:test-progress',
-      (data: { status: string; message: string }) => {
-        if (data.message) {
-          setTestMessage(data.message);
-        }
-      }
-    );
-
     try {
       const testConfig: MCPServerConfig = {
         type: formType,
@@ -1600,8 +1601,6 @@ function MCPServersPanelInner({ scope = 'user', workspacePath }: MCPServersPanel
         success: false,
         errorType: 'exception'
       });
-    } finally {
-      unsubscribe();
     }
   };
 

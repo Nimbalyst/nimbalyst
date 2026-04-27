@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useAtom, useSetAtom } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { getFileName } from '../../utils/pathUtils';
 import { diffTreeGroupByDirectoryAtom, setDiffTreeGroupByDirectoryAtom } from '../../store/atoms/projectState';
+import { sessionFileEditsAtom, sessionPendingReviewFilesAtom } from '../../store/atoms/sessionFiles';
 
 interface FileGutterProps {
   sessionId: string | null;
@@ -234,39 +235,13 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick, pendin
     }
   }, [groupByDirectory, groupedFiles]);
 
+  // Watch centrally-maintained atoms (updated by fileStateListeners.ts) and
+  // refetch when they change. Avoids component-level IPC subscriptions.
+  const sessionFileEdits = useAtomValue(sessionFileEditsAtom(sessionId ?? ''));
+  const centralPendingReviewFiles = useAtomValue(sessionPendingReviewFilesAtom(sessionId ?? ''));
   useEffect(() => {
     fetchFiles();
-  }, [fetchFiles]);
-
-  // Listen for file tracking updates and refresh
-  useEffect(() => {
-    if (!sessionId || typeof window === 'undefined' || !(window as any).electronAPI) {
-      return;
-    }
-
-    const handleFileUpdate = (updatedSessionId: string) => {
-      if (updatedSessionId === sessionId) {
-        fetchFiles();
-      }
-    };
-
-    (window as any).electronAPI.on('session-files:updated', handleFileUpdate);
-
-    const unsubscribePendingCount = (window as any).electronAPI.history?.onPendingCountChanged?.(
-      (data: { workspacePath: string }) => {
-        if (workspacePath && data.workspacePath === workspacePath) {
-          fetchFiles();
-        }
-      }
-    );
-
-    return () => {
-      if ((window as any).electronAPI?.off) {
-        (window as any).electronAPI.off('session-files:updated', handleFileUpdate);
-      }
-      unsubscribePendingCount?.();
-    };
-  }, [sessionId, workspacePath, fetchFiles]);
+  }, [fetchFiles, sessionFileEdits, centralPendingReviewFiles]);
 
   // Fetch git status for edited files
   useEffect(() => {

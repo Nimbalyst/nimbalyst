@@ -17,7 +17,6 @@ export {
   type QuickOpenData,
   type SessionQuickOpenData,
   type PromptQuickOpenData,
-  type AgentCommandPaletteData,
   type ProjectQuickOpenData,
 } from './navigation';
 export {

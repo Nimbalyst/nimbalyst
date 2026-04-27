@@ -4,6 +4,7 @@ import type { ConfigTheme } from '@nimbalyst/runtime';
 import { useTabsActions, type TabData } from '../../contexts/TabsContext';
 import { store, editorDirtyAtom, makeEditorKey } from '@nimbalyst/runtime/store';
 import { pushNavigationEntryAtom, isRestoringNavigationAtom } from '../../store';
+import { newMockupRequestAtom, toggleAIChatPanelRequestAtom } from '../../store/atoms/appCommands';
 import { useTabNavigation } from '../../hooks/useTabNavigation';
 import { handleWorkspaceFileSelect as handleWorkspaceFileSelectUtil } from '../../utils/workspaceFileOperations';
 import { createInitialFileContent, createMockupContent } from '../../utils/fileUtils';
@@ -768,8 +769,12 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     return cleanup;
   }, [workspacePath]);
 
-  // Listen for file-new-mockup IPC event from menu
+  // React to the "new mockup" command from the menu. The IPC subscription
+  // lives in store/listeners/appCommandListeners.ts; here we watch the counter.
+  const newMockupVersion = useAtomValue(newMockupRequestAtom);
+  const newMockupInitialVersionRef = useRef(newMockupVersion);
   useEffect(() => {
+    if (newMockupVersion === newMockupInitialVersionRef.current) return;
     const handleNewMockup = async () => {
       if (!workspacePath || !window.electronAPI) return;
 
@@ -819,40 +824,27 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
       }
     };
 
-    if (window.electronAPI?.on) {
-      const cleanup = window.electronAPI.on('file-new-mockup', handleNewMockup);
-      return cleanup;
-    }
+    void handleNewMockup();
+  }, [newMockupVersion, workspacePath, selectedFolderPath, handleWorkspaceFileSelect]);
 
-    return undefined;
-  }, [workspacePath, selectedFolderPath, handleWorkspaceFileSelect]);
-
-  // Listen for toggle-ai-chat-panel IPC event (Cmd+Shift+A)
-  // Use ref to debounce rapid calls (can happen with menu accelerators)
+  // React to "toggle AI chat panel" (Cmd+Shift+A) from the menu. The IPC
+  // subscription lives in store/listeners/appCommandListeners.ts.
+  // Use a ref to debounce rapid calls (can happen with menu accelerators).
+  const toggleAIChatPanelVersion = useAtomValue(toggleAIChatPanelRequestAtom);
+  const toggleAIChatInitialVersionRef = useRef(toggleAIChatPanelVersion);
   const toggleAIChatInProgressRef = useRef(false);
   useEffect(() => {
-    if (!window.electronAPI?.on) return;
+    if (toggleAIChatPanelVersion === toggleAIChatInitialVersionRef.current) return;
+    if (toggleAIChatInProgressRef.current) {
+      console.log('[EditorMode] handleToggleAIChatPanel: ignoring duplicate call');
+      return;
+    }
+    toggleAIChatInProgressRef.current = true;
+    setTimeout(() => { toggleAIChatInProgressRef.current = false; }, 100);
 
-    const handleToggleAIChatPanel = () => {
-      // Debounce: if we're already processing a toggle, ignore duplicate calls
-      if (toggleAIChatInProgressRef.current) {
-        console.log('[EditorMode] handleToggleAIChatPanel: ignoring duplicate call');
-        return;
-      }
-      toggleAIChatInProgressRef.current = true;
-      // Reset the guard after a short delay to allow future toggles
-      setTimeout(() => { toggleAIChatInProgressRef.current = false; }, 100);
-
-      console.log('[EditorMode] handleToggleAIChatPanel IPC received');
-      setIsAIChatCollapsed(prev => !prev);
-    };
-
-    window.electronAPI.on('toggle-ai-chat-panel', handleToggleAIChatPanel);
-
-    return () => {
-      window.electronAPI.off?.('toggle-ai-chat-panel', handleToggleAIChatPanel);
-    };
-  }, []);
+    console.log('[EditorMode] handleToggleAIChatPanel IPC received');
+    setIsAIChatCollapsed(prev => !prev);
+  }, [toggleAIChatPanelVersion]);
 
   // Handle new file creation with file type support
   const handleNewFile = useCallback(async (fileName: string, fileType: NewFileType) => {

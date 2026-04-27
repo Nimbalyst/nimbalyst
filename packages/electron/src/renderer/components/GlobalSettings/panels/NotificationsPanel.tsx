@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAtom } from 'jotai';
-import { getSoundPlayer } from '../../../services/SoundPlayer';
 import { SettingsToggle } from '../SettingsToggle';
 import {
   notificationSettingsAtom,
@@ -22,24 +21,7 @@ export function NotificationsPanel() {
 
   const { completionSoundEnabled, completionSoundType, osNotificationsEnabled, notifyWhenFocused } = settings;
 
-  // Set up IPC listener for sound playback
-  useEffect(() => {
-    if (!window.electronAPI?.on) return;
-
-    const handlePlaySound = (soundType: string) => {
-      console.log('[NotificationsPanel] Received play-completion-sound event:', soundType);
-      const soundPlayer = getSoundPlayer();
-      soundPlayer.playSound(soundType as CompletionSoundType).catch(err => {
-        console.error('[NotificationsPanel] Failed to play sound:', err);
-      });
-    };
-
-    const cleanup = window.electronAPI.on('play-completion-sound', handlePlaySound);
-
-    return () => {
-      if (cleanup) cleanup();
-    };
-  }, []);
+  // play-completion-sound is handled by store/listeners/soundListeners.ts.
 
   const handleTestSound = async () => {
     if (!window.electronAPI) return;

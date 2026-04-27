@@ -57,10 +57,6 @@
       "import": "./dist/ai/modelConstants.js",
       "types": "./dist/ai/modelConstants.d.ts"
     },
-    "./agents": {
-      "import": "./dist/agents/index.js",
-      "types": "./dist/agents/index.d.ts"
-    },
     "./ui/AgentTranscript": {
       "import": "./dist/ui/AgentTranscript/index.js",
       "types": "./dist/ui/AgentTranscript/index.d.ts"

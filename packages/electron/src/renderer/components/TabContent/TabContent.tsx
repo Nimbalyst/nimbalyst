@@ -13,7 +13,8 @@
 
 import React, { useCallback, useEffect, useRef } from 'react';
 import { createRoot, Root } from 'react-dom/client';
-import { Provider as JotaiProvider } from 'jotai';
+import { Provider as JotaiProvider, useAtomValue } from 'jotai';
+import { fileSaveRequestAtom } from '../../store/atoms/appCommands';
 import type { TextReplacement } from '@nimbalyst/runtime';
 import type { Tab } from '../TabManager/TabManager';
 import { TabEditor } from '../TabEditor/TabEditor';
@@ -501,38 +502,30 @@ const TabContentComponent: React.FC<TabContentProps> = ({
     return unsubscribe;
   }, [tabsActions, loadContent, createTabEditor, createPlaceholder, removeTabEditor, updateVisibility]);
 
-  // Handle file-save IPC event from menu (Cmd+S)
-  // Dispatches a DOM event on the active tab's container element.
-  // TabEditor listens for this event directly, avoiding the stale
-  // saveFunctionsRef registration chain.
+  // React to file-save command (Cmd+S) from the menu. The IPC subscription
+  // lives in store/listeners/appCommandListeners.ts; we watch the counter and
+  // dispatch a DOM event on the active tab's container element. TabEditor
+  // listens for this event directly, avoiding the stale saveFunctionsRef
+  // registration chain.
+  const fileSaveVersion = useAtomValue(fileSaveRequestAtom);
+  const fileSaveInitialVersionRef = useRef(fileSaveVersion);
   useEffect(() => {
-    if (!window.electronAPI) return;
+    if (fileSaveVersion === fileSaveInitialVersionRef.current) return;
+    const currentActiveTabId = activeTabIdRef.current;
+    if (!currentActiveTabId) return;
 
-    const handleFileSave = async () => {
-      const currentActiveTabId = activeTabIdRef.current;
-      if (!currentActiveTabId) return;
+    const instance = tabInstancesRef.current.get(currentActiveTabId);
+    const editorContainer = instance?.element?.querySelector('.multi-editor-instance');
+    if (editorContainer) {
+      editorContainer.dispatchEvent(new CustomEvent('nimbalyst-save', { bubbles: false }));
+      return;
+    }
 
-      // Find the active tab's editor container and dispatch a save event on it.
-      // TabEditor listens for 'nimbalyst-save' on its .multi-editor-instance root div.
-      const instance = tabInstancesRef.current.get(currentActiveTabId);
-      const editorContainer = instance?.element?.querySelector('.multi-editor-instance');
-      if (editorContainer) {
-        editorContainer.dispatchEvent(new CustomEvent('nimbalyst-save', { bubbles: false }));
-        return;
-      }
-
-      // Fallback: use the registered save function (for backward compat)
-      const saveFn = saveFunctionsRef.current.get(currentActiveTabId);
-      if (saveFn) {
-        await saveFn();
-      }
-    };
-
-    window.electronAPI.on('file-save', handleFileSave);
-    return () => {
-      window.electronAPI.off('file-save', handleFileSave);
-    };
-  }, []);
+    const saveFn = saveFunctionsRef.current.get(currentActiveTabId);
+    if (saveFn) {
+      void saveFn();
+    }
+  }, [fileSaveVersion]);
 
   // Create saveTabById function and expose to parent
   const saveTabById = useCallback(async (tabId: string): Promise<void> => {

@@ -88,9 +88,19 @@ import {
   refreshSessionListAtom,
   sessionRegistryAtom,
 } from './store';
+import { initAiCommandListeners } from './store/listeners/aiCommandListeners';
+import { initAppCommandListeners } from './store/listeners/appCommandListeners';
 import { initClaudeUsageListeners } from './store/listeners/claudeUsageListeners';
 import { initCodexUsageListeners } from './store/listeners/codexUsageListeners';
+import { initFileChangeListeners } from './store/listeners/fileChangeListeners';
+import { initMcpListeners } from './store/listeners/mcpListeners';
+import { initMenuCommandListeners } from './store/listeners/menuCommandListeners';
 import { initNetworkAvailabilityListeners } from './store/listeners/networkAvailabilityListeners';
+import { initNotificationListeners } from './store/listeners/notificationListeners';
+import { initPermissionListeners } from './store/listeners/permissionListeners';
+import { initSoundListeners } from './store/listeners/soundListeners';
+import { initSyncListeners } from './store/listeners/syncListeners';
+import { initThemeListener } from './store/listeners/themeListeners';
 import { initTrackerSyncListeners } from './store/listeners/trackerSyncListeners';
 import { initUpdateListeners } from './store/listeners/updateListeners';
 import { initWalkthroughListeners } from './store/listeners/walkthroughListeners';
@@ -116,7 +126,6 @@ import { UpdateToast } from './components/UpdateToast';
 import { ProjectTrustToast } from './components/ProjectTrustToast';
 import { getTextSelection } from './components/UnifiedAI/TextSelectionIndicator';
 // NOTE: PostHogSurvey now managed by DialogProvider
-import { NotificationSessionChecker } from './components/NotificationSessionChecker';
 import OnboardingService from './services/OnboardingService';
 import { WalkthroughProvider } from './walkthroughs';
 import { TipProvider } from './tips';
@@ -133,6 +142,22 @@ import { extensionPanelAIContextAtom } from './store/atoms/extensionPanels';
 import { setDiffTreeGroupByDirectoryAtom, setAgentFileScopeModeAtom, setHiddenGutterButtonsAtom } from './store/atoms/projectState';
 import { toggleSessionHistoryCollapsedAtom, scrollToMessageAtom } from './store/atoms/agentMode';
 import { setDeveloperFeatureSettingsAtom } from './store/atoms/appSettings';
+import {
+  agentInsertPlanReferenceRequestAtom,
+  closeActiveTabRequestAtom,
+  confirmCloseUnsavedRequestAtom,
+  extensionMarketplaceInstallRequestAtom,
+  navigationGoBackRequestAtom,
+  navigationGoForwardRequestAtom,
+  reopenLastClosedTabRequestAtom,
+  setContentModeRequestAtom,
+  showDiscordInvitationRequestAtom,
+  showExtensionProjectIntroDialogRequestAtom,
+  showFigmaMcpMigrationRequestAtom,
+  showProjectSelectionDialogRequestAtom,
+  showSessionImportDialogRequestAtom,
+  showTrustToastRequestAtom,
+} from './store/atoms/appCommands';
 import { isCollabUri } from './utils/collabUri';
 import {
   collabConnectionStatusAtom,
@@ -240,16 +265,36 @@ export default function App() {
 
   // Initialize centralized IPC listeners once at app startup
   useEffect(() => {
+    const cleanupAiCommands = initAiCommandListeners();
+    const cleanupAppCommands = initAppCommandListeners();
     const cleanupClaude = initClaudeUsageListeners();
     const cleanupCodex = initCodexUsageListeners();
+    const cleanupFileChange = initFileChangeListeners();
+    const cleanupMcp = initMcpListeners();
+    const cleanupMenuCommand = initMenuCommandListeners();
+    const cleanupNotification = initNotificationListeners();
+    const cleanupPermission = initPermissionListeners();
+    const cleanupSound = initSoundListeners();
+    const cleanupSync = initSyncListeners();
+    const cleanupTheme = initThemeListener();
     const cleanupTrackerSync = initTrackerSyncListeners();
     const cleanupUpdate = initUpdateListeners();
     const cleanupWalkthrough = initWalkthroughListeners();
     const cleanupWakeup = initWakeupListeners();
     initNetworkAvailabilityListeners();
     return () => {
+      cleanupAiCommands?.();
+      cleanupAppCommands?.();
       cleanupClaude?.();
       cleanupCodex?.();
+      cleanupFileChange?.();
+      cleanupMcp?.();
+      cleanupMenuCommand?.();
+      cleanupNotification?.();
+      cleanupPermission?.();
+      cleanupSound?.();
+      cleanupSync?.();
+      cleanupTheme?.();
       cleanupTrackerSync?.();
       cleanupUpdate?.();
       cleanupWalkthrough?.();
@@ -354,7 +399,7 @@ export default function App() {
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
   const [workspaceName, setWorkspaceName] = useState<string | null>(null);
   // NOTE: fileTree, sidebarWidth, isNewFileDialogOpen, newFileDirectory, isHistoryDialogOpen moved to EditorMode
-  // NOTE: Navigation dialogs (QuickOpen, SessionQuickOpen, PromptQuickOpen, AgentCommandPalette) are now managed by DialogProvider
+  // NOTE: Navigation dialogs (QuickOpen, SessionQuickOpen, PromptQuickOpen, ProjectQuickOpen) are now managed by DialogProvider
   // NOTE: isAIChatCollapsed, aiChatWidth moved to EditorMode for workspace mode
   // These are kept for potential single-file mode or agent mode use
   const [isAIChatCollapsed, setIsAIChatCollapsed] = useState(false);
@@ -998,28 +1043,22 @@ export default function App() {
     setTimeout(() => setActiveMode('settings'), 0);
   }, [openSettingsCommand, setSettingsInitialCategory, setSettingsInitialScope, incrementSettingsKey]);
 
-  // Listen for unified navigation back/forward IPC events
+  // React to unified navigation back/forward commands. The IPC subscriptions
+  // live in store/listeners/appCommandListeners.ts.
+  const navigationGoBackVersion = useAtomValue(navigationGoBackRequestAtom);
+  const navigationGoForwardVersion = useAtomValue(navigationGoForwardRequestAtom);
+  const navigationGoBackInitialRef = useRef(navigationGoBackVersion);
+  const navigationGoForwardInitialRef = useRef(navigationGoForwardVersion);
   useEffect(() => {
-    if (!window.electronAPI?.on) return;
-
-    const handleGoBack = () => {
-      console.log('[App] navigation:go-back received, using unified navigation');
-      goBack();
-    };
-
-    const handleGoForward = () => {
-      console.log('[App] navigation:go-forward received, using unified navigation');
-      goForward();
-    };
-
-    window.electronAPI.on('navigation:go-back', handleGoBack);
-    window.electronAPI.on('navigation:go-forward', handleGoForward);
-
-    return () => {
-      window.electronAPI.off?.('navigation:go-back', handleGoBack);
-      window.electronAPI.off?.('navigation:go-forward', handleGoForward);
-    };
-  }, [goBack, goForward]);
+    if (navigationGoBackVersion === navigationGoBackInitialRef.current) return;
+    console.log('[App] navigation:go-back received, using unified navigation');
+    goBack();
+  }, [navigationGoBackVersion, goBack]);
+  useEffect(() => {
+    if (navigationGoForwardVersion === navigationGoForwardInitialRef.current) return;
+    console.log('[App] navigation:go-forward received, using unified navigation');
+    goForward();
+  }, [navigationGoForwardVersion, goForward]);
 
   // Listen for mouse back/forward button clicks (unified navigation)
   useEffect(() => {
@@ -1045,78 +1084,62 @@ export default function App() {
     };
   }, [goBack, goForward]);
 
+  // React to extension marketplace install requests. The IPC subscription
+  // lives in store/listeners/appCommandListeners.ts. On startup, also drain
+  // any request the main process queued before the listener was ready.
+  const extensionMarketplaceRequest = useAtomValue(extensionMarketplaceInstallRequestAtom);
   useEffect(() => {
-    if (!window.electronAPI?.on) return;
-
-    const handleInstallRequest = (request: { extensionId: string; requestedAt?: string }) => {
-      openMarketplaceInstallRequest(request);
-    };
-
-    const unsubscribe = window.electronAPI.on('extension-marketplace:install-request', handleInstallRequest);
-
+    if (!extensionMarketplaceRequest) return;
+    openMarketplaceInstallRequest(extensionMarketplaceRequest.request);
+  }, [extensionMarketplaceRequest, openMarketplaceInstallRequest]);
+  useEffect(() => {
     void window.electronAPI.invoke('extension-marketplace:consume-pending-install-request').then((result) => {
       if (result?.success && result.data?.extensionId) {
-        handleInstallRequest(result.data);
+        openMarketplaceInstallRequest(result.data);
       }
     }).catch((error) => {
       console.warn('[App] Failed to consume pending marketplace install request:', error);
     });
-
-    return unsubscribe;
   }, [openMarketplaceInstallRequest]);
 
-  // Listen for IPC events from menu
+  // React to menu IPC commands. The subscriptions live in
+  // store/listeners/appCommandListeners.ts.
+  const setContentModeRequest = useAtomValue(setContentModeRequestAtom);
   useEffect(() => {
-    if (!window.electronAPI?.on) return;
+    if (!setContentModeRequest) return;
+    setActiveMode(setContentModeRequest.mode as ContentMode);
+  }, [setContentModeRequest]);
 
-    const handleSetContentMode = (mode: ContentMode) => {
-      // console.log('[App] handleSetContentMode called with mode:', mode);
-      setActiveMode(mode);
-    };
+  const agentInsertPlanReferenceRequest = useAtomValue(agentInsertPlanReferenceRequestAtom);
+  useEffect(() => {
+    if (!agentInsertPlanReferenceRequest) return;
+    console.log('[App] handleInsertPlanReference called with path:', agentInsertPlanReferenceRequest.planPath);
+    setAgentPlanReference(agentInsertPlanReferenceRequest.planPath);
+  }, [agentInsertPlanReferenceRequest]);
 
-    const handleInsertPlanReference = (planPath: string) => {
-      console.log('[App] handleInsertPlanReference called with path:', planPath);
-      setAgentPlanReference(planPath);
-    };
-
-    const handleShowProjectSelectionDialog = (data: { filePath: string; fileName: string; suggestedWorkspace?: string }) => {
-      console.log('[App] handleShowProjectSelectionDialog called with data:', data);
-      if (dialogRef.current) {
-        dialogRef.current.open<ProjectSelectionData>(DIALOG_IDS.PROJECT_SELECTION, {
+  const showProjectSelectionDialogRequest = useAtomValue(showProjectSelectionDialogRequestAtom);
+  useEffect(() => {
+    if (!showProjectSelectionDialogRequest) return;
+    const { data } = showProjectSelectionDialogRequest;
+    console.log('[App] handleShowProjectSelectionDialog called with data:', data);
+    if (!dialogRef.current) return;
+    dialogRef.current.open<ProjectSelectionData>(DIALOG_IDS.PROJECT_SELECTION, {
+      filePath: data.filePath,
+      fileName: data.fileName,
+      suggestedWorkspace: data.suggestedWorkspace,
+      onSelectProject: async (selectedWorkspacePath) => {
+        await window.electronAPI.invoke('project-selected', {
           filePath: data.filePath,
-          fileName: data.fileName,
-          suggestedWorkspace: data.suggestedWorkspace,
-          onSelectProject: async (selectedWorkspacePath) => {
-            await window.electronAPI.invoke('project-selected', {
-              filePath: data.filePath,
-              workspacePath: selectedWorkspacePath
-            });
-          },
-          onCancel: () => {
-            window.electronAPI.invoke('project-selection-cancelled', {
-              filePath: data.filePath
-            });
-          }
+          workspacePath: selectedWorkspacePath
+        });
+      },
+      onCancel: () => {
+        window.electronAPI.invoke('project-selection-cancelled', {
+          filePath: data.filePath
         });
       }
-    };
-
-    // console.log('[App] Setting up IPC listener for set-content-mode');
-    window.electronAPI.on('set-content-mode', handleSetContentMode);
-    window.electronAPI.on('agent:insert-plan-reference', handleInsertPlanReference);
-    window.electronAPI.on('show-project-selection-dialog', handleShowProjectSelectionDialog);
-    // NOTE: toggle-ai-chat-panel is handled by EditorMode where the AI chat state lives
-    // COMMENTED OUT - Cmd+K now switches to Agent mode
-    // window.electronAPI.on('toggle-agent-palette', handleToggleAgentPalette);
-
-    return () => {
-      // console.log('[App] Removing IPC listener for set-content-mode');
-      window.electronAPI.off?.('set-content-mode', handleSetContentMode);
-      window.electronAPI.off?.('agent:insert-plan-reference', handleInsertPlanReference);
-      window.electronAPI.off?.('show-project-selection-dialog', handleShowProjectSelectionDialog);
-      // window.electronAPI.off?.('toggle-agent-palette', handleToggleAgentPalette);
-    };
-  }, []); // Remove workspaceMode dependency - listener should always be active
+    });
+  }, [showProjectSelectionDialogRequest]);
 
   // Listen for agent-new-session IPC event (Cmd+N in agent mode)
   useEffect(() => {
@@ -1143,102 +1166,71 @@ export default function App() {
     };
   }, []);
 
-  // Listen for Discord invitation IPC event
+  // React to "show Discord invitation" command. The IPC subscription lives
+  // in store/listeners/appCommandListeners.ts.
+  const showDiscordInvitationVersion = useAtomValue(showDiscordInvitationRequestAtom);
+  const showDiscordInvitationInitialRef = useRef(showDiscordInvitationVersion);
   useEffect(() => {
-    // console.log('[App] Setting up Discord invitation IPC listener');
-    if (!window.electronAPI?.on) {
-      console.log('[App] electronAPI.on not available');
-      return;
-    }
-
-    const handleShowDiscordInvitation = () => {
-      console.log('[App] Received show-discord-invitation event');
-      if (dialogRef.current) {
-        dialogRef.current.open(DIALOG_IDS.DISCORD_INVITATION, {
-          onDismiss: () => {
-            // No additional action needed - dialog will close automatically
-          }
-        });
+    if (showDiscordInvitationVersion === showDiscordInvitationInitialRef.current) return;
+    console.log('[App] Received show-discord-invitation event');
+    if (!dialogRef.current) return;
+    dialogRef.current.open(DIALOG_IDS.DISCORD_INVITATION, {
+      onDismiss: () => {
+        // No additional action needed - dialog will close automatically
       }
-    };
-
-    window.electronAPI.on('show-discord-invitation', handleShowDiscordInvitation);
-    // console.log('[App] Discord invitation listener registered');
-
-    return () => {
-      // console.log('[App] Removing Discord invitation listener');
-      window.electronAPI.off?.('show-discord-invitation', handleShowDiscordInvitation);
-    };
-  }, []);
+    });
+  }, [showDiscordInvitationVersion]);
 
   // NOTE: Windows Claude Code warning and onboarding IPC listeners moved to useOnboarding hook
   // NOTE: show-commands-toast IPC listener removed - commands now via extension-based plugins
 
-  // Listen for show-trust-toast IPC event (from Developer menu)
+  // React to "show trust toast" command (Developer menu). The IPC subscription
+  // lives in store/listeners/appCommandListeners.ts.
+  const showTrustToastVersion = useAtomValue(showTrustToastRequestAtom);
+  const showTrustToastInitialRef = useRef(showTrustToastVersion);
   useEffect(() => {
-    if (!window.electronAPI?.on) return;
+    if (showTrustToastVersion === showTrustToastInitialRef.current) return;
+    setForceShowTrustToast(true);
+  }, [showTrustToastVersion]);
 
-    const handleShowTrustToast = () => {
-      setForceShowTrustToast(true);
-    };
-
-    window.electronAPI.on('show-trust-toast', handleShowTrustToast);
-
-    return () => {
-      window.electronAPI.off?.('show-trust-toast', handleShowTrustToast);
-    };
-  }, []);
-
-  // Listen for show-session-import-dialog IPC event (from Developer menu)
+  // React to "show session import dialog" command (Developer menu). The IPC
+  // subscription lives in store/listeners/appCommandListeners.ts.
+  const showSessionImportDialogVersion = useAtomValue(showSessionImportDialogRequestAtom);
+  const showSessionImportDialogInitialRef = useRef(showSessionImportDialogVersion);
   useEffect(() => {
-    if (!window.electronAPI?.on) return;
+    if (showSessionImportDialogVersion === showSessionImportDialogInitialRef.current) return;
+    if (!dialogRef.current || !workspacePath) return;
+    dialogRef.current.open(DIALOG_IDS.SESSION_IMPORT, {
+      workspacePath,
+    });
+  }, [showSessionImportDialogVersion, workspacePath]);
 
-    const handleShowSessionImportDialog = () => {
-      if (dialogRef.current && workspacePath) {
-        dialogRef.current.open(DIALOG_IDS.SESSION_IMPORT, {
-          workspacePath,
-        });
-      }
-    };
-
-    window.electronAPI.on('show-session-import-dialog', handleShowSessionImportDialog);
-
-    return () => {
-      window.electronAPI.off?.('show-session-import-dialog', handleShowSessionImportDialog);
-    };
-  }, [workspacePath]);
-
-  // Listen for show-extension-project-intro-dialog IPC event
+  // React to "show extension project intro dialog" requests. The IPC
+  // subscription lives in store/listeners/appCommandListeners.ts. The
+  // request carries a requestId we use to send the response back.
+  const showExtensionProjectIntroDialogRequest = useAtomValue(showExtensionProjectIntroDialogRequestAtom);
   useEffect(() => {
-    if (!window.electronAPI?.on || !window.electronAPI?.send) return;
+    if (!showExtensionProjectIntroDialogRequest) return;
+    const { requestId } = showExtensionProjectIntroDialogRequest;
+    const channel = `extension-project-intro-dialog-response:${requestId}`;
 
-    const handleShowExtensionProjectIntroDialog = (data: { requestId: string }) => {
-      const channel = `extension-project-intro-dialog-response:${data.requestId}`;
+    if (!dialogRef.current) {
+      window.electronAPI?.send?.(channel, { action: 'cancel' });
+      return;
+    }
 
-      if (!dialogRef.current) {
-        window.electronAPI.send(channel, { action: 'cancel' });
-        return;
-      }
-
-      dialogRef.current.open<ExtensionProjectIntroData>(DIALOG_IDS.EXTENSION_PROJECT_INTRO, {
-        onContinue: () => {
-          window.electronAPI.send(channel, { action: 'continue' });
-        },
-        onDontShowAgain: () => {
-          window.electronAPI.send(channel, { action: 'dont-show-again' });
-        },
-        onCancel: () => {
-          window.electronAPI.send(channel, { action: 'cancel' });
-        },
-      });
-    };
-
-    window.electronAPI.on('show-extension-project-intro-dialog', handleShowExtensionProjectIntroDialog);
-
-    return () => {
-      window.electronAPI.off?.('show-extension-project-intro-dialog', handleShowExtensionProjectIntroDialog);
-    };
-  }, []);
+    dialogRef.current.open<ExtensionProjectIntroData>(DIALOG_IDS.EXTENSION_PROJECT_INTRO, {
+      onContinue: () => {
+        window.electronAPI?.send?.(channel, { action: 'continue' });
+      },
+      onDontShowAgain: () => {
+        window.electronAPI?.send?.(channel, { action: 'dont-show-again' });
+      },
+      onCancel: () => {
+        window.electronAPI?.send?.(channel, { action: 'cancel' });
+      },
+    });
+  }, [showExtensionProjectIntroDialogRequest]);
 
   // NOTE: Commands toast check removed - commands now via extension-based plugins
 
@@ -1288,15 +1280,14 @@ export default function App() {
     showFigmaMcpMigrationToast();
   }, [showFigmaMcpMigrationToast]);
 
-  // Listen for Developer menu trigger (force show)
+  // React to "show figma mcp migration" command (Developer menu). The IPC
+  // subscription lives in store/listeners/appCommandListeners.ts.
+  const showFigmaMcpMigrationVersion = useAtomValue(showFigmaMcpMigrationRequestAtom);
+  const showFigmaMcpMigrationInitialRef = useRef(showFigmaMcpMigrationVersion);
   useEffect(() => {
-    if (!window.electronAPI?.on) return;
-    const handler = () => showFigmaMcpMigrationToast(true);
-    window.electronAPI.on('show-figma-mcp-migration', handler);
-    return () => {
-      window.electronAPI.off?.('show-figma-mcp-migration', handler);
-    };
-  }, [showFigmaMcpMigrationToast]);
+    if (showFigmaMcpMigrationVersion === showFigmaMcpMigrationInitialRef.current) return;
+    showFigmaMcpMigrationToast(true);
+  }, [showFigmaMcpMigrationVersion, showFigmaMcpMigrationToast]);
 
   // Update window title for files mode - agent mode sets title directly from AgenticPanel
   useEffect(() => {
@@ -1569,7 +1560,6 @@ export default function App() {
     setIsAIChatStateLoaded,
     setSessionToLoad,
     setIsKeyboardShortcutsDialogOpen: () => {}, // Unused - KeyboardShortcutsDialog now managed by DialogProvider
-    setIsAgentPaletteVisible: () => {}, // Unused - AgentCommandPalette now managed by DialogProvider
     setAIPlanningMode: setAIPlanningModeEnabled,
     setTheme,
 
@@ -1664,8 +1654,12 @@ export default function App() {
     }
   }, [workspaceMode]); // Only re-run when workspaceMode changes
 
-  // Handle close confirmation from main process
+  // React to "confirm close (unsaved)" command. The IPC subscription lives
+  // in store/listeners/appCommandListeners.ts.
+  const confirmCloseUnsavedVersion = useAtomValue(confirmCloseUnsavedRequestAtom);
+  const confirmCloseUnsavedInitialRef = useRef(confirmCloseUnsavedVersion);
   useEffect(() => {
+    if (confirmCloseUnsavedVersion === confirmCloseUnsavedInitialRef.current) return;
     if (!window.electronAPI) return;
 
     const handleConfirmClose = async () => {
@@ -1713,65 +1707,45 @@ export default function App() {
       }
     };
 
-    window.electronAPI.on('confirm-close-unsaved', handleConfirmClose);
+    void handleConfirmClose();
+  }, [confirmCloseUnsavedVersion, confirmDialog]);
 
-    return () => {
-      window.electronAPI?.off?.('confirm-close-unsaved', handleConfirmClose);
-    };
-  }, [confirmDialog]);
-
-  // Handle close-active-tab from menu - route to active panel
-  // NOTE: Uses activeModeStateRef defined earlier near activeMode state
-  // Guard against duplicate IPC calls (React StrictMode can cause double-mounting)
+  // React to close-active-tab from the menu. IPC subscription lives in
+  // store/listeners/appCommandListeners.ts.
+  // Guard against duplicate IPC calls (React StrictMode can cause double-mounting).
   const closeTabInProgressRef = useRef(false);
-
+  const closeActiveTabVersion = useAtomValue(closeActiveTabRequestAtom);
+  const closeActiveTabInitialRef = useRef(closeActiveTabVersion);
   useEffect(() => {
-    const handleCloseActiveTab = () => {
-      // Debounce: if we're already processing a close, ignore duplicate calls
-      if (closeTabInProgressRef.current) {
-        console.log('[App] handleCloseActiveTab: ignoring duplicate call');
-        return;
-      }
-      closeTabInProgressRef.current = true;
-      // Reset the guard after a short delay to allow future closes
-      setTimeout(() => { closeTabInProgressRef.current = false; }, 100);
+    if (closeActiveTabVersion === closeActiveTabInitialRef.current) return;
+    if (closeTabInProgressRef.current) {
+      console.log('[App] handleCloseActiveTab: ignoring duplicate call');
+      return;
+    }
+    closeTabInProgressRef.current = true;
+    setTimeout(() => { closeTabInProgressRef.current = false; }, 100);
 
-      console.log('[App] handleCloseActiveTab IPC received, activeMode:', activeModeStateRef.current);
-      if (activeModeStateRef.current === 'agent') {
-        console.log('[App] Routing to agentModeRef.closeActiveTab()');
-        agentModeRef.current?.closeActiveTab();
-      } else if (activeModeStateRef.current === 'files') {
-        console.log('[App] Routing to editorModeRef.closeActiveTab()');
-        editorModeRef.current?.closeActiveTab();
-      }
-    };
+    console.log('[App] handleCloseActiveTab IPC received, activeMode:', activeModeStateRef.current);
+    if (activeModeStateRef.current === 'agent') {
+      console.log('[App] Routing to agentModeRef.closeActiveTab()');
+      agentModeRef.current?.closeActiveTab();
+    } else if (activeModeStateRef.current === 'files') {
+      console.log('[App] Routing to editorModeRef.closeActiveTab()');
+      editorModeRef.current?.closeActiveTab();
+    }
+  }, [closeActiveTabVersion]);
 
-    window.electronAPI.on('close-active-tab', handleCloseActiveTab);
-
-    return () => {
-      window.electronAPI?.off?.('close-active-tab', handleCloseActiveTab);
-    };
-  }, []); // Empty deps - listener registered once, uses refs for current values
-
-  // Handle reopen-last-closed-tab from menu - route to active panel
+  // React to reopen-last-closed-tab from the menu.
+  const reopenLastClosedTabVersion = useAtomValue(reopenLastClosedTabRequestAtom);
+  const reopenLastClosedTabInitialRef = useRef(reopenLastClosedTabVersion);
   useEffect(() => {
-    const handleReopenLastClosedTab = () => {
-      // console.log('[App] handleReopenLastClosedTab called, activeMode:', activeModeStateRef.current);
-      if (activeModeStateRef.current === 'agent') {
-        // console.log('[App] Calling agentModeRef.current?.reopenLastClosedSession()');
-        agentModeRef.current?.reopenLastClosedSession?.();
-      } else if (activeModeStateRef.current === 'files') {
-        // console.log('[App] Calling editorModeRef.current?.reopenLastClosedTab()');
-        editorModeRef.current?.reopenLastClosedTab?.();
-      }
-    };
-
-    window.electronAPI.on('reopen-last-closed-tab', handleReopenLastClosedTab);
-
-    return () => {
-      window.electronAPI?.off?.('reopen-last-closed-tab', handleReopenLastClosedTab);
-    };
-  }, []); // Empty deps - listener registered once, uses refs for current values
+    if (reopenLastClosedTabVersion === reopenLastClosedTabInitialRef.current) return;
+    if (activeModeStateRef.current === 'agent') {
+      agentModeRef.current?.reopenLastClosedSession?.();
+    } else if (activeModeStateRef.current === 'files') {
+      editorModeRef.current?.reopenLastClosedTab?.();
+    }
+  }, [reopenLastClosedTabVersion]);
 
   // NOTE: view-history (Cmd+Y) is handled by the keyboard handler above, not IPC
 
@@ -2130,7 +2104,7 @@ export default function App() {
         })()}
       </div>
 
-      {/* Navigation dialogs (QuickOpen, SessionQuickOpen, PromptQuickOpen, AgentCommandPalette) */}
+      {/* Navigation dialogs (QuickOpen, SessionQuickOpen, PromptQuickOpen, ProjectQuickOpen) */}
       {/* are now managed by DialogProvider and rendered automatically */}
 
       {/* KeyboardShortcutsDialog, ApiKeyDialog, ProjectSelectionDialog, ErrorDialog are now managed by DialogProvider */}
@@ -2152,7 +2126,6 @@ export default function App() {
       <MockupPickerMenuHost />
       <ExtensionHostComponents />
       <UpdateToast />
-      <NotificationSessionChecker />
       <ProjectTrustToast
         workspacePath={workspacePath}
         onOpenSettings={() => {

@@ -33,8 +33,6 @@ export { TranscriptMigrationRepository } from './storage/repositories/Transcript
 export { AIChatIntegrationPlugin } from './ai/plugins/AIChatIntegrationPlugin';
 export { editorRegistry } from './ai/EditorRegistry';
 export type { EditorInstance } from './ai/EditorRegistry';
-// Agents
-export * from './agents';
 // Plugins
 export { DocumentLinkPlugin } from './plugins/DocumentLinkPlugin';
 export { DocumentReferenceNode, DocumentReferenceTransformer, LegacyDocumentReferenceTransformer, $createDocumentReferenceNode, $isDocumentReferenceNode } from './plugins/DocumentLinkPlugin/DocumentLinkNode';

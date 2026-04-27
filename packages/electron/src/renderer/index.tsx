@@ -206,11 +206,8 @@ posthog.onSessionId(async (sessionId: string, windowId, changeReason) => {
   window.electronAPI.analytics?.setSessionId(sessionId);
 })
 
-// Set up IPC listener for queued prompt claimed events
-// This forwards the IPC message to a DOM CustomEvent that SessionTranscript listens for
-window.electronAPI.on('ai:promptClaimed', (data: { sessionId: string; promptId: string }) => {
-  window.dispatchEvent(new CustomEvent('ai:promptClaimed', { detail: data }));
-});
+// IPC listeners (including ai:promptClaimed) live in store/listeners/* and
+// are initialized inside App.tsx once React mounts.
 
 root.render(
   <React.StrictMode>

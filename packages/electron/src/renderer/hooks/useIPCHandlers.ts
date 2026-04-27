@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useAtomValue } from 'jotai';
 import type { LexicalCommand, TextReplacement } from '@nimbalyst/runtime';
 import {
   APPROVE_DIFF_COMMAND,
@@ -12,12 +13,15 @@ import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
 import { SearchReplaceStateManager } from '@nimbalyst/runtime';
 import { store } from '@nimbalyst/runtime/store';
 import { aiApi } from '../services/aiApi';
-import { getSoundPlayer } from '../services/SoundPlayer';
 import { getFileName } from '../utils/pathUtils';
 import type { ContentMode } from '../types/WindowModeTypes';
 import { dialogRef } from '../contexts/DialogContext';
 import { DIALOG_IDS } from '../dialogs';
-import type { AgentCommandPaletteData } from '../dialogs';
+import {
+  menuFindCommandAtom,
+  menuFindNextCommandAtom,
+  menuFindPreviousCommandAtom,
+} from '../store/atoms/menuCommands';
 
 // Tracker field updates now go through the generic trackerStatus frontmatter format.
 // No hardcoded plan-specific field list needed.
@@ -80,7 +84,6 @@ interface UseIPCHandlersProps {
   setSessionToLoad: (session: { sessionId: string; workspacePath?: string } | null) => void;
   // NOTE: setIsHistoryDialogOpen removed - EditorMode manages dialogs
   setIsKeyboardShortcutsDialogOpen: (open: boolean) => void;
-  setIsAgentPaletteVisible: (visible: boolean) => void;
   setTheme: (theme: any) => void;
   setAIPlanningMode?: (enabled: boolean) => void;
 
@@ -138,7 +141,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setIsAIChatStateLoaded,
     setSessionToLoad,
     setIsKeyboardShortcutsDialogOpen,
-    setIsAgentPaletteVisible,
     setAIPlanningMode,
     setTheme,
 
@@ -188,7 +190,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setIsAIChatStateLoaded,
     setSessionToLoad,
     setIsKeyboardShortcutsDialogOpen,
-    setIsAgentPaletteVisible,
     setAIPlanningMode,
     setTheme,
   });
@@ -219,7 +220,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setIsAIChatStateLoaded,
     setSessionToLoad,
     setIsKeyboardShortcutsDialogOpen,
-    setIsAgentPaletteVisible,
     setAIPlanningMode,
     setTheme,
   };
@@ -351,42 +351,8 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
         window.electronAPI.setDocumentEdited(true);
       }
     }));
-    // Handle menu:find - route to editor's SearchReplace dialog
-    // Agent mode handles its own menu:find via CustomEvent
-    cleanupFns.push(window.electronAPI.on('menu:find', () => {
-      const mode = propsRef.current.activeMode;
-
-      if (mode === 'files') {
-        // Editor mode - open SearchReplace dialog
-        const activeFilePath = editorRegistry.getActiveFilePath();
-        if (activeFilePath) {
-          SearchReplaceStateManager.toggle(activeFilePath);
-        }
-      } else if (mode === 'agent') {
-        // Agent mode: dispatch CustomEvent for AgentWorkstreamPanel to handle
-        window.dispatchEvent(new CustomEvent('menu:find'));
-      }
-    }));
-
-    // Handle menu:find-next
-    cleanupFns.push(window.electronAPI.on('menu:find-next', () => {
-      const mode = propsRef.current.activeMode;
-      if (mode === 'agent') {
-        // Agent mode: dispatch CustomEvent for AgentWorkstreamPanel to handle
-        window.dispatchEvent(new CustomEvent('menu:find-next'));
-      }
-      // Editor mode: Monaco/Lexical handle this internally via their own keyboard shortcuts
-    }));
-
-    // Handle menu:find-previous
-    cleanupFns.push(window.electronAPI.on('menu:find-previous', () => {
-      const mode = propsRef.current.activeMode;
-      if (mode === 'agent') {
-        // Agent mode: dispatch CustomEvent for AgentWorkstreamPanel to handle
-        window.dispatchEvent(new CustomEvent('menu:find-previous'));
-      }
-      // Editor mode: Monaco/Lexical handle this internally via their own keyboard shortcuts
-    }));
+    // menu:find / menu:find-next / menu:find-previous are handled below via
+    // counter atoms updated by store/listeners/menuCommandListeners.ts.
 
     cleanupFns.push(window.electronAPI.onFileDeleted((data) => {
       // console.log('[FILE_DELETED] File deleted event received:', data.filePath);
@@ -885,24 +851,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       }));
     }
 
-    // Handle toggle agent palette from menu
-    if (window.electronAPI.onToggleAgentPalette) {
-      cleanupFns.push(window.electronAPI.onToggleAgentPalette(() => {
-        console.log('Toggle agent palette command received from menu');
-        if (stateRef.current.workspaceMode && stateRef.current.workspacePath && dialogRef.current) {
-          dialogRef.current.open<AgentCommandPaletteData>(DIALOG_IDS.AGENT_COMMAND_PALETTE, {
-            workspacePath: stateRef.current.workspacePath,
-            documentContext: {
-              content: getContentRef.current?.() || '',
-              filePath: currentFilePathRef.current || undefined
-            }
-          });
-        } else {
-          console.log('Not in workspace mode or dialogRef not ready, agent palette not available');
-        }
-      }));
-    }
-
     // Handle open welcome tab from menu
     if (window.electronAPI.onOpenWelcomeTab) {
       cleanupFns.push(window.electronAPI.onOpenWelcomeTab(() => {
@@ -1023,26 +971,8 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     aiApi.on('streamEditContent', handleStreamEditContent);
     aiApi.on('streamEditEnd', handleStreamEditEnd);
 
-    // Handle completion sound playback from main process
-    const handlePlayCompletionSound = (soundType: string) => {
-      const soundPlayer = getSoundPlayer();
-      soundPlayer.playSound(soundType as any).catch(err => {
-        console.error('Failed to play completion sound:', err);
-      });
-    };
-
-    // Handle permission request sound playback from main process
-    const handlePlayPermissionSound = () => {
-      const soundPlayer = getSoundPlayer();
-      soundPlayer.playSound('bell').catch(err => {
-        console.error('Failed to play permission sound:', err);
-      });
-    };
-
-    if (window.electronAPI?.on) {
-      cleanupFns.push(window.electronAPI.on('play-completion-sound', handlePlayCompletionSound));
-      cleanupFns.push(window.electronAPI.on('play-permission-sound', handlePlayPermissionSound));
-    }
+    // play-completion-sound and play-permission-sound are handled by the
+    // central listener in store/listeners/soundListeners.ts.
 
     // Clean up listeners when dependencies change
     return () => {
@@ -1055,4 +985,41 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       aiApi.off('streamEditEnd', handleStreamEditEnd);
     };
   }, []); // Empty dependency array - handlers use refs to access current values
+
+  // React to menu:find / find-next / find-previous commands. The IPC
+  // subscriptions live in store/listeners/menuCommandListeners.ts.
+  const menuFindVersion = useAtomValue(menuFindCommandAtom);
+  const menuFindNextVersion = useAtomValue(menuFindNextCommandAtom);
+  const menuFindPreviousVersion = useAtomValue(menuFindPreviousCommandAtom);
+  const menuFindInitialRef = useRef(menuFindVersion);
+  const menuFindNextInitialRef = useRef(menuFindNextVersion);
+  const menuFindPreviousInitialRef = useRef(menuFindPreviousVersion);
+
+  useEffect(() => {
+    if (menuFindVersion === menuFindInitialRef.current) return;
+    const mode = propsRef.current.activeMode;
+    if (mode === 'files') {
+      const activeFilePath = editorRegistry.getActiveFilePath();
+      if (activeFilePath) {
+        SearchReplaceStateManager.toggle(activeFilePath);
+      }
+    } else if (mode === 'agent') {
+      window.dispatchEvent(new CustomEvent('menu:find'));
+    }
+  }, [menuFindVersion]);
+
+  useEffect(() => {
+    if (menuFindNextVersion === menuFindNextInitialRef.current) return;
+    if (propsRef.current.activeMode === 'agent') {
+      window.dispatchEvent(new CustomEvent('menu:find-next'));
+    }
+    // Editor mode: Monaco/Lexical handle this via their own keyboard shortcuts.
+  }, [menuFindNextVersion]);
+
+  useEffect(() => {
+    if (menuFindPreviousVersion === menuFindPreviousInitialRef.current) return;
+    if (propsRef.current.activeMode === 'agent') {
+      window.dispatchEvent(new CustomEvent('menu:find-previous'));
+    }
+  }, [menuFindPreviousVersion]);
 }

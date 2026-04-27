@@ -108,8 +108,11 @@ const CSS_VAR_MAP: Record<keyof ExtendedThemeColors, string> = {
 };
 
 /**
- * Initialize theme from main process and set up IPC listener.
+ * Initialize theme from main process.
  * Called once at app startup to sync the atom with main process state.
+ *
+ * The IPC subscription for `theme-change` lives in
+ * store/listeners/themeListeners.ts (centralized listener pattern).
  */
 export function initializeTheme(): void {
   // Get theme synchronously from main process
@@ -118,19 +121,6 @@ export function initializeTheme(): void {
 
   // Apply the theme (handles both built-in and custom themes)
   void applyThemeToDOM(mainProcessTheme as ThemeId);
-
-  // Listen for theme changes from the menu (Window > Theme) or other windows
-  if (window.electronAPI?.on) {
-    window.electronAPI.on('theme-change', (newTheme: string) => {
-      const resolvedTheme = newTheme as ThemeId;
-
-      // Update atom (this will re-render all subscribing components)
-      store.set(themeIdAtom, resolvedTheme);
-
-      // Update DOM immediately (handles both built-in and custom themes)
-      void applyThemeToDOM(resolvedTheme);
-    });
-  }
 }
 
 /**
@@ -238,7 +228,7 @@ function deriveColorsFromTheme(
  * Apply theme to DOM (classList and data-theme attribute).
  * For custom themes, also applies CSS variables.
  */
-async function applyThemeToDOM(theme: ThemeId): Promise<void> {
+export async function applyThemeToDOM(theme: ThemeId): Promise<void> {
   const root = document.documentElement;
 
   // Resolve 'system' and 'auto' to actual theme based on OS preference

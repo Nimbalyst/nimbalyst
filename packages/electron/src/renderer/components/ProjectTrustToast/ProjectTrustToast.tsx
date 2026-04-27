@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useAtomValue } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
+import { permissionsChangedVersionAtom } from '../../store/atoms/permissions';
 
 interface ProjectTrustToastProps {
   workspacePath: string | null;
@@ -97,36 +99,32 @@ export const ProjectTrustToast: React.FC<ProjectTrustToastProps> = ({
     checkTrustStatus();
   }, [workspacePath, isChangingMode]);
 
-  // Listen for external trust changes (e.g., from settings or TrustIndicator)
-  // But ignore changes if we just saved to avoid race conditions
+  // React to external trust changes (settings, TrustIndicator) by depending on
+  // permissionsChangedVersionAtom (incremented by store/listeners/permissionListeners.ts).
+  // Skip the initial mount value -- the prior useEffect handles initial fetch.
+  const permissionsVersion = useAtomValue(permissionsChangedVersionAtom);
+  const initialPermissionsVersionRef = useRef(permissionsVersion);
   useEffect(() => {
-    const handlePermissionChange = async () => {
-      if (!workspacePath) return;
+    if (permissionsVersion === initialPermissionsVersionRef.current) {
+      return;
+    }
+    if (!workspacePath) return;
+    if (justSavedRef.current) return;
 
-      // Ignore permission changes right after we saved
-      if (justSavedRef.current) {
-        return;
-      }
-
+    let cancelled = false;
+    (async () => {
       try {
         const status = await window.electronAPI.invoke('permissions:getWorkspacePermissions', workspacePath);
-        // Show toast if workspace is NOT trusted (e.g., user clicked "Change Mode")
-        // Trusted = permissionMode is not null
-        if (status.permissionMode === null) {
-          setIsVisible(true);
-        } else {
-          setIsVisible(false);
-        }
+        if (cancelled) return;
+        setIsVisible(status.permissionMode === null);
       } catch (error) {
         console.error('[ProjectTrustToast] Failed to check trust status on change:', error);
       }
-    };
-
-    const cleanup = window.electronAPI.on('permissions:changed', handlePermissionChange);
+    })();
     return () => {
-      cleanup?.();
+      cancelled = true;
     };
-  }, [workspacePath]);
+  }, [permissionsVersion, workspacePath]);
 
   // Handle dismissing the toast without making a choice
   const handleDismiss = useCallback(() => {

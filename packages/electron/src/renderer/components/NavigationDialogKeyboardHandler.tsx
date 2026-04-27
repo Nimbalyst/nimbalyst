@@ -6,14 +6,15 @@
  */
 
 import React, { useEffect, useRef } from 'react';
+import { useAtomValue } from 'jotai';
 import { useNavigationDialogs } from '../dialogs';
+import { openNavigationDialogRequestAtom } from '../store/atoms/appCommands';
 
 const isMac = navigator.platform.startsWith('Mac');
 import type {
   QuickOpenData,
   SessionQuickOpenData,
   PromptQuickOpenData,
-  AgentCommandPaletteData,
   ProjectQuickOpenData,
 } from '../dialogs';
 
@@ -54,7 +55,6 @@ export function NavigationDialogKeyboardHandler({
     openQuickOpen,
     openSessionQuickOpen,
     openPromptQuickOpen,
-    openAgentCommandPalette,
     openProjectQuickOpen,
   } = useNavigationDialogs();
 
@@ -88,7 +88,6 @@ export function NavigationDialogKeyboardHandler({
     openQuickOpen,
     openSessionQuickOpen,
     openPromptQuickOpen,
-    openAgentCommandPalette,
     openProjectQuickOpen,
   });
 
@@ -97,7 +96,6 @@ export function NavigationDialogKeyboardHandler({
       openQuickOpen,
       openSessionQuickOpen,
       openPromptQuickOpen,
-      openAgentCommandPalette,
       openProjectQuickOpen,
     };
   });
@@ -237,9 +235,13 @@ export function NavigationDialogKeyboardHandler({
     return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, []);
 
-  // Listen for menu-triggered dialog opens via IPC
+  // React to menu-triggered dialog opens. The IPC subscription lives in
+  // store/listeners/appCommandListeners.ts; we watch the request atom here.
+  const openNavigationDialogRequest = useAtomValue(openNavigationDialogRequestAtom);
   useEffect(() => {
-    const handleOpenDialog = (dialogId: string) => {
+    if (!openNavigationDialogRequest) return;
+    const dialogId = openNavigationDialogRequest.dialogId;
+    const handleOpenDialog = () => {
       const props = propsRef.current;
       const dialogs = dialogsRef.current;
 
@@ -304,11 +306,8 @@ export function NavigationDialogKeyboardHandler({
       }
     };
 
-    window.electronAPI.on('open-navigation-dialog', handleOpenDialog);
-    return () => {
-      window.electronAPI.off?.('open-navigation-dialog', handleOpenDialog);
-    };
-  }, []);
+    handleOpenDialog();
+  }, [openNavigationDialogRequest]);
 
   // This component renders nothing
   return null;

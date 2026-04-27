@@ -56,7 +56,6 @@ interface ElectronAPI {
   // UI callbacks
   onToggleSearch: (callback: () => void) => () => void;
   onToggleSearchReplace: (callback: () => void) => () => void;
-  onToggleAgentPalette: (callback: () => void) => () => void;
   onOpenWelcomeTab: (callback: () => void) => () => void;
   onOpenPlansTab: (callback: () => void) => () => void;
   onOpenKeyboardShortcuts: (callback: () => void) => () => void;
