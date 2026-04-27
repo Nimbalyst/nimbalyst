@@ -1158,7 +1158,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       <div className={`ai-chat-input flex flex-col gap-1.5 px-3 py-1.5 border-t border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] shrink-0 relative ${isMemoryMode ? 'memory-mode' : ''}`}>
         {/* Vertical resize handle at top of input area */}
         <div
-          className={`ai-chat-input-resize-handle absolute -top-[3px] left-0 right-0 h-1.5 cursor-row-resize z-10 before:content-[''] before:absolute before:top-0.5 before:left-0 before:right-0 before:h-0.5 before:bg-transparent before:transition-colors before:duration-150 ${isResizing ? 'before:bg-[var(--nim-primary)]' : ''} hover:before:bg-[var(--nim-primary)]`}
+          className={`ai-chat-input-resize-handle absolute -top-[3px] left-0 right-0 h-1.5 cursor-row-resize z-10 before:content-[''] before:absolute before:top-0.5 before:left-0 before:right-0 before:h-0.5 before:transition-colors before:duration-150 ${isResizing ? 'before:bg-[var(--nim-primary)]' : ''} hover:before:bg-[var(--nim-primary)]`}
           onMouseDown={handleResizeMouseDown}
           title="Drag to resize prompt box"
         />

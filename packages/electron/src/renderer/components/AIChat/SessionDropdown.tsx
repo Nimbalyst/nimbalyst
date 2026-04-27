@@ -149,7 +149,7 @@ export function SessionDropdown({
               {sessions.map(session => (
                     <div
                       key={session.id}
-                      className={`session-dropdown-item flex items-center justify-between px-3 py-2.5 bg-transparent border-none text-[var(--nim-text)] text-[13px] cursor-pointer transition-colors duration-200 w-full text-left hover:bg-[var(--nim-bg-hover)] ${session.id === currentSessionId ? 'active bg-[var(--nim-bg-selected)] font-medium' : ''}`}
+                      className={`session-dropdown-item flex items-center justify-between px-3 py-2.5 border-none text-[var(--nim-text)] text-[13px] cursor-pointer transition-colors duration-200 w-full text-left hover:bg-[var(--nim-bg-hover)] ${session.id === currentSessionId ? 'active bg-[var(--nim-bg-selected)] font-medium' : ''}`}
                     >
                       {renamingId === session.id ? (
                         <input

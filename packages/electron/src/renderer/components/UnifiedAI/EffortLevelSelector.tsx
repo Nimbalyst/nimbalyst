@@ -52,7 +52,7 @@ export function EffortLevelSelector({ level, onLevelChange }: EffortLevelSelecto
           {EFFORT_LEVELS.map(l => (
             <button
               key={l.key}
-              className={`flex items-center justify-between gap-2 px-2 py-1.5 w-full bg-transparent border-none rounded text-xs cursor-pointer transition-[background] duration-150 text-left text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)] ${l.key === level ? 'bg-[var(--nim-bg-secondary)] text-[var(--nim-primary)]' : ''}`}
+              className={`flex items-center justify-between gap-2 px-2 py-1.5 w-full border-none rounded text-xs cursor-pointer transition-[background] duration-150 text-left text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)] ${l.key === level ? 'bg-[var(--nim-bg-secondary)] text-[var(--nim-primary)]' : ''}`}
               onClick={() => { onLevelChange(l.key); setIsOpen(false); }}
             >
               <span>{l.label}</span>

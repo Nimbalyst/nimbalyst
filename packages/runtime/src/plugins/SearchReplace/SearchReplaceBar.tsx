@@ -696,7 +696,7 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
         {/* Options */}
         <div className="search-replace-options flex gap-1 shrink-0">
           <button
-            className={`search-option-button w-7 h-7 flex items-center justify-center bg-transparent border border-[var(--nim-border)] rounded text-[var(--nim-text-muted)] text-xs font-semibold cursor-pointer transition-all duration-150 p-0 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)] ${!caseInsensitive ? 'bg-[var(--nim-primary)] border-[var(--nim-primary)] text-white' : ''}`}
+            className={`search-option-button w-7 h-7 flex items-center justify-center border border-[var(--nim-border)] rounded text-[var(--nim-text-muted)] text-xs font-semibold cursor-pointer transition-all duration-150 p-0 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)] ${!caseInsensitive ? 'bg-[var(--nim-primary)] border-[var(--nim-primary)] text-white' : ''}`}
             tabIndex={-1}
             onClick={() => {
               const newValue = !caseInsensitive;
@@ -709,7 +709,7 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
             Aa
           </button>
           <button
-            className={`search-option-button w-7 h-7 flex items-center justify-center bg-transparent border border-[var(--nim-border)] rounded text-[var(--nim-text-muted)] text-xs font-semibold cursor-pointer transition-all duration-150 p-0 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)] ${useRegex ? 'bg-[var(--nim-primary)] border-[var(--nim-primary)] text-white' : ''}`}
+            className={`search-option-button w-7 h-7 flex items-center justify-center border border-[var(--nim-border)] rounded text-[var(--nim-text-muted)] text-xs font-semibold cursor-pointer transition-all duration-150 p-0 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)] ${useRegex ? 'bg-[var(--nim-primary)] border-[var(--nim-primary)] text-white' : ''}`}
             tabIndex={-1}
             onClick={() => {
               const newValue = !useRegex;

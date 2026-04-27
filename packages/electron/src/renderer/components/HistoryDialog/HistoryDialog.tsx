@@ -39,7 +39,7 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
   const [previewContent, setPreviewContent] = useState<string>('');
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [diffMode, setDiffMode] = useState(false);
-  const [diffViewMode, setDiffViewMode] = useState<'rich' | 'text'>('rich');
+  const [richView, setRichView] = useState(true);
   const [viewMode, setViewMode] = useState<'changes' | 'version'>('changes');
   const [compactView, setCompactView] = useState(true);
   const [versionAContent, setVersionAContent] = useState<string>('');
@@ -159,7 +159,7 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
       setSelectedVersions([]);
       setPreviewContent('');
       setDiffMode(false);
-      setDiffViewMode('rich');
+      setRichView(true);
       setViewMode('changes');
       setVersionAContent('');
       setVersionBContent('');
@@ -341,7 +341,7 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
         loadSnapshot(actualNewerTimestamp),
       ]);
 
-      if (contentA && contentB && snapshotA && snapshotB) {
+      if (contentA != null && contentB != null && snapshotA && snapshotB) {
         setVersionAContent(contentA);
         setVersionBContent(contentB);
         setVersionAMeta({ type: snapshotA.type, timestamp: snapshotA.timestamp });
@@ -349,10 +349,17 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
         // Set preview content to the newer version for restore functionality
         setPreviewContent(contentB);
         setDiffMode(true);
-        setLoadingPreview(false);
+      } else {
+        console.warn('[HistoryDialog] Diff load skipped: missing content or metadata', {
+          hasContentA: contentA != null,
+          hasContentB: contentB != null,
+          hasSnapshotA: !!snapshotA,
+          hasSnapshotB: !!snapshotB,
+        });
       }
     } catch (error) {
       console.error('Failed to load snapshots for diff:', error);
+    } finally {
       setLoadingPreview(false);
     }
   };
@@ -457,20 +464,20 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
 
   // Navigation handlers
   const handleNavigatePrevious = useCallback(() => {
-    if (diffViewMode === 'rich') {
+    if (richView) {
       (window as any).__richDiffNavigatePrevious?.();
     } else {
       (window as any).__textDiffNavigatePrevious?.();
     }
-  }, [diffViewMode]);
+  }, [richView]);
 
   const handleNavigateNext = useCallback(() => {
-    if (diffViewMode === 'rich') {
+    if (richView) {
       (window as any).__richDiffNavigateNext?.();
     } else {
       (window as any).__textDiffNavigateNext?.();
     }
-  }, [diffViewMode]);
+  }, [richView]);
 
   const handleNavigationStateChange = useCallback((state: DiffNavigationState | TextDiffNavigationState) => {
     setNavigationState(state);
@@ -487,16 +494,34 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
             {filePath && <span className="history-dialog-path text-[11px] text-[var(--nim-text-muted)] whitespace-nowrap overflow-hidden text-ellipsis">{filePath}</span>}
           </div>
           <div className="history-dialog-header-right flex items-center gap-3">
+            {fileType === 'markdown' && (
+              <div className="view-variant-toggle flex bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded-md p-0.5 gap-0.5">
+                <button
+                  className={`view-mode-button py-1 px-3 text-[11px] font-medium border-none rounded cursor-pointer transition-all duration-200 ${richView ? 'text-white bg-[var(--nim-primary)]' : 'text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'}`}
+                  onClick={() => setRichView(true)}
+                  title="Rendered view"
+                >
+                  Rich
+                </button>
+                <button
+                  className={`view-mode-button py-1 px-3 text-[11px] font-medium border-none rounded cursor-pointer transition-all duration-200 ${!richView ? 'text-white bg-[var(--nim-primary)]' : 'text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'}`}
+                  onClick={() => setRichView(false)}
+                  title="Raw source"
+                >
+                  Raw
+                </button>
+              </div>
+            )}
             <div className="view-mode-toggle flex bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded-md p-0.5 gap-0.5">
               <button
-                className={`view-mode-button py-1 px-3 text-[11px] font-medium bg-transparent border-none rounded cursor-pointer transition-all duration-200 ${viewMode === 'changes' ? 'text-white bg-[var(--nim-primary)]' : 'text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'}`}
+                className={`view-mode-button py-1 px-3 text-[11px] font-medium border-none rounded cursor-pointer transition-all duration-200 ${viewMode === 'changes' ? 'text-white bg-[var(--nim-primary)]' : 'text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'}`}
                 onClick={() => setViewMode('changes')}
                 title="Show diff with previous version"
               >
                 Diff
               </button>
               <button
-                className={`view-mode-button py-1 px-3 text-[11px] font-medium bg-transparent border-none rounded cursor-pointer transition-all duration-200 ${viewMode === 'version' ? 'text-white bg-[var(--nim-primary)]' : 'text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'}`}
+                className={`view-mode-button py-1 px-3 text-[11px] font-medium border-none rounded cursor-pointer transition-all duration-200 ${viewMode === 'version' ? 'text-white bg-[var(--nim-primary)]' : 'text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'}`}
                 onClick={() => setViewMode('version')}
                 title="View full content"
               >
@@ -619,20 +644,6 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
                 )}
                 {diffMode && fileType === 'markdown' && (
                   <>
-                    <div className="diff-mode-toggle flex bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md p-0.5 gap-0.5">
-                      <button
-                        className={`diff-mode-button py-1 px-3 text-[11px] font-medium bg-transparent border-none rounded cursor-pointer transition-all duration-200 ${diffViewMode === 'rich' ? 'active text-white bg-[var(--nim-primary)]' : 'text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'}`}
-                        onClick={() => setDiffViewMode('rich')}
-                      >
-                        Rich
-                      </button>
-                      <button
-                        className={`diff-mode-button py-1 px-3 text-[11px] font-medium bg-transparent border-none rounded cursor-pointer transition-all duration-200 ${diffViewMode === 'text' ? 'active text-white bg-[var(--nim-primary)]' : 'text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'}`}
-                        onClick={() => setDiffViewMode('text')}
-                      >
-                        Text
-                      </button>
-                    </div>
                     {navigationState && navigationState.totalGroups > 0 && (
                       <div className="diff-navigation-controls flex items-center gap-2 ml-3">
                         <button
@@ -658,7 +669,7 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
                             <path d="M6 3L9 6L6 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                           </svg>
                         </button>
-                        {diffViewMode === 'text' && 'addedLines' in navigationState && (
+                        {!richView && 'addedLines' in navigationState && (
                           <div className="diff-stats flex items-center gap-2 ml-2 pl-2 border-l border-[var(--nim-border)]">
                             <span className="diff-stat diff-stat-added text-[11px] font-semibold py-0.5 px-1.5 rounded-sm text-[var(--nim-success)] bg-[var(--nim-success-light)]">+{navigationState.addedLines}</span>
                             <span className="diff-stat diff-stat-removed text-[11px] font-semibold py-0.5 px-1.5 rounded-sm text-[var(--nim-error)] bg-[var(--nim-error-light)]">-{navigationState.removedLines}</span>
@@ -684,7 +695,7 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
               <div className="history-preview-content nim-scrollbar flex-1 overflow-auto [&:has(.diff-preview-editor)]:p-0">
                 {fileType === 'markdown' ? (
                   // Markdown files: use rich or text diff
-                  diffViewMode === 'rich' ? (
+                  richView ? (
                     <DiffPreviewEditor
                       key={`${versionAMeta?.timestamp}-${versionBMeta?.timestamp}`}
                       oldMarkdown={versionAContent}
@@ -729,7 +740,7 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
                   <div className="image-preview flex items-center justify-center w-full h-full bg-[var(--nim-bg-tertiary)] p-4 [&_img]:max-w-full [&_img]:max-h-full [&_img]:object-contain">
                     <img src={`file://${filePath}`} alt="Preview" />
                   </div>
-                ) : fileType === 'markdown' ? (
+                ) : fileType === 'markdown' && richView ? (
                   <div className="markdown-preview h-full">
                     <MarkdownEditor
                       key={selectedVersions[0]?.timestamp}
@@ -769,7 +780,7 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
               </div>
             )}
 
-            {loadingPreview && (diffViewMode === 'rich' || !diffMode) && (
+            {loadingPreview && (richView || !diffMode) && (
               <div className="history-preview-loading absolute inset-0 flex flex-col items-center justify-center bg-[var(--nim-bg)] z-10 gap-3">
                 <div className="history-preview-loading-spinner w-10 h-10 border-[3px] border-[var(--nim-border)] border-t-[var(--nim-primary)] rounded-full animate-spin" />
                 <div className="history-preview-loading-text text-[var(--nim-text-muted)] text-sm">

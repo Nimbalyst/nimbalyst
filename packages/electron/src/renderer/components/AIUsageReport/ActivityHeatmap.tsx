@@ -100,7 +100,7 @@ export const ActivityHeatmap: React.FC<ActivityHeatmapProps> = ({ workspaceId })
           {(['messages', 'edits', 'sessions'] as ActivityMetric[]).map((m) => (
             <button
               key={m}
-              className={`metric-button bg-transparent border-none px-3 py-1.5 text-xs font-medium text-[var(--nim-text-muted)] cursor-pointer rounded transition-all duration-200 whitespace-nowrap hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)] ${metric === m ? 'active bg-[var(--nim-bg)] text-[var(--nim-text)] shadow-sm' : ''}`}
+              className={`metric-button border-none px-3 py-1.5 text-xs font-medium text-[var(--nim-text-muted)] cursor-pointer rounded transition-all duration-200 whitespace-nowrap hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)] ${metric === m ? 'active bg-[var(--nim-bg)] text-[var(--nim-text)] shadow-sm' : ''}`}
               onClick={() => setMetric(m)}
             >
               {METRIC_LABELS[m].title.replace(/^(AI |Documents )/g, '')}

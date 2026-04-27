@@ -486,13 +486,13 @@ export function WorkspaceHistoryDialog({
                       {fileType === 'markdown' && (
                         <div className="workspace-history-diff-mode-toggle flex bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md p-0.5 gap-0.5 ml-auto">
                           <button
-                            className={`workspace-history-diff-mode-button px-3 py-1 text-[11px] font-medium bg-transparent border-none rounded cursor-pointer transition-all duration-200 ${diffViewMode === 'rich' ? 'active text-white bg-[var(--nim-primary)]' : 'text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'}`}
+                            className={`workspace-history-diff-mode-button px-3 py-1 text-[11px] font-medium border-none rounded cursor-pointer transition-all duration-200 ${diffViewMode === 'rich' ? 'active text-white bg-[var(--nim-primary)]' : 'text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'}`}
                             onClick={() => setDiffViewMode('rich')}
                           >
                             Rich
                           </button>
                           <button
-                            className={`workspace-history-diff-mode-button px-3 py-1 text-[11px] font-medium bg-transparent border-none rounded cursor-pointer transition-all duration-200 ${diffViewMode === 'text' ? 'active text-white bg-[var(--nim-primary)]' : 'text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'}`}
+                            className={`workspace-history-diff-mode-button px-3 py-1 text-[11px] font-medium border-none rounded cursor-pointer transition-all duration-200 ${diffViewMode === 'text' ? 'active text-white bg-[var(--nim-primary)]' : 'text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'}`}
                             onClick={() => setDiffViewMode('text')}
                           >
                             Text

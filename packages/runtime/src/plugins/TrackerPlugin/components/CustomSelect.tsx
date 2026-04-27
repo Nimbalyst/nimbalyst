@@ -97,7 +97,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
             {!required && (
               <button
                 type="button"
-                className="custom-select-option flex items-center gap-1.5 w-full py-2 px-2.5 bg-transparent border-none cursor-pointer text-[13px] text-[var(--nim-text)] text-left transition-colors duration-100 hover:bg-[var(--nim-bg-hover)]"
+                className="custom-select-option flex items-center gap-1.5 w-full py-2 px-2.5 border-none cursor-pointer text-[13px] text-[var(--nim-text)] text-left transition-colors duration-100 hover:bg-[var(--nim-bg-hover)]"
                 onClick={() => handleSelect('')}
               >
                 <span className="custom-select-option-label flex-1">None</span>
@@ -107,7 +107,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
               <button
                 key={option.value}
                 type="button"
-                className={`custom-select-option flex items-center gap-1.5 w-full py-2 px-2.5 bg-transparent border-none cursor-pointer text-[13px] text-[var(--nim-text)] text-left transition-colors duration-100 hover:bg-[var(--nim-bg-hover)] ${option.value === value ? 'selected bg-[var(--nim-bg-tertiary)] font-medium' : ''}`}
+                className={`custom-select-option flex items-center gap-1.5 w-full py-2 px-2.5 border-none cursor-pointer text-[13px] text-[var(--nim-text)] text-left transition-colors duration-100 hover:bg-[var(--nim-bg-hover)] ${option.value === value ? 'selected bg-[var(--nim-bg-tertiary)] font-medium' : ''}`}
                 onClick={() => handleSelect(option.value)}
               >
                 {option.icon && (

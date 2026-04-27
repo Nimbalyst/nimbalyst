@@ -1300,7 +1300,7 @@ export function TrackerTable({
           {typeOptions.map(option => (
             <button
               key={option.value}
-              className={`tracker-type-tab flex items-center gap-1.5 py-2 px-3 bg-transparent border border-[var(--nim-border)] rounded-md text-[var(--nim-text-muted)] text-[13px] font-medium cursor-pointer transition-all duration-150 hover:bg-[var(--nim-bg-secondary)] ${internalTypeFilter === option.value ? 'active bg-[var(--nim-bg-secondary)] !border-[var(--nim-primary)] !text-[var(--nim-primary)]' : ''}`}
+              className={`tracker-type-tab flex items-center gap-1.5 py-2 px-3 border border-[var(--nim-border)] rounded-md text-[var(--nim-text-muted)] text-[13px] font-medium cursor-pointer transition-all duration-150 hover:bg-[var(--nim-bg-secondary)] ${internalTypeFilter === option.value ? 'active bg-[var(--nim-bg-secondary)] !border-[var(--nim-primary)] !text-[var(--nim-primary)]' : ''}`}
               onClick={() => setInternalTypeFilter(option.value as TrackerItemType | 'all')}
             >
               <span className="material-symbols-outlined text-lg">{option.icon}</span>
