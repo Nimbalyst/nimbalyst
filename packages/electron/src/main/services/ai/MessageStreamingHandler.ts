@@ -75,6 +75,7 @@ import {
 } from './aiServiceUtils';
 import type Store from 'electron-store';
 import type { AIService } from './AIService';
+import type { HooklessAgentFileWatcher } from './HooklessAgentFileWatcher';
 
 export type SendMessageHandler = (
   event: Electron.IpcMainInvokeEvent,
@@ -96,11 +97,10 @@ interface AIServiceInternal {
   analytics: { sendEvent(event: string, props?: any): void };
   sendMessageHandler: SendMessageHandler | null;
   processingQueuedPromptIds: Set<string>;
-  codexSessionWatchers: Map<string, { cache: any; watcher: any; workspacePath: string }>;
-  codexStopTimers: Map<string, ReturnType<typeof setTimeout>>;
   matchDebounceTimers: Map<string, ReturnType<typeof setTimeout>>;
   sessionsProcessingQueue: Set<string>;
   documentContextService: DocumentContextService;
+  hooklessWatcher: HooklessAgentFileWatcher;
 
   // Helper methods
   getSettingsStore(): Store<Record<string, unknown>>;
@@ -125,23 +125,11 @@ interface AIServiceInternal {
   ): ToolHandler;
   inferWorktreePathFromFilePath(workspacePath: string, filePath: string): string | null;
   inferWorktreePathFromCommand(command: string | undefined, workspacePath: string): string | null;
-  ensureCodexSessionWatcher(
-    sessionId: string,
-    workspacePath: string,
-    event: Electron.IpcMainInvokeEvent,
-  ): Promise<void>;
   adoptWorktreeForSession(
     session: SessionData,
     worktreePath: string,
     event: Electron.IpcMainInvokeEvent,
   ): Promise<void>;
-  trackBashFileEditsFromCommand(
-    session: SessionData,
-    workspacePath: string,
-    command: string,
-    commandItemId?: string,
-  ): Promise<boolean>;
-  stopCodexSessionWatcher(sessionId: string): Promise<void>;
 }
 
 export class MessageStreamingHandler {
@@ -237,7 +225,7 @@ export class MessageStreamingHandler {
     // This is passed through documentContext to avoid changing sendMessage signature
     let permissionsPath = session.worktreeProjectPath || effectiveWorkspacePath;
     if (isAgentProvider(session.provider)) {
-      await this.svc.ensureCodexSessionWatcher(session.id, effectiveWorkspacePath, event);
+      await this.svc.hooklessWatcher.ensureForSession(session.id, effectiveWorkspacePath, event);
     }
 
     // Comprehensive logging of what we're sending to Claude
@@ -770,7 +758,7 @@ export class MessageStreamingHandler {
         logger.main.info(`[AIService] All teammates completed for session ${data.sessionId}, ending deferred session`);
         await stateManager.endSession(data.sessionId);
         // Stop file watcher - session is fully complete (teammates done)
-        await this.svc.stopCodexSessionWatcher(data.sessionId);
+        await this.svc.hooklessWatcher.stopForSession(data.sessionId);
 
         // Play completion sound now that the session is truly done
         const soundService = SoundNotificationService.getInstance();
@@ -991,7 +979,7 @@ export class MessageStreamingHandler {
         && effectiveWorkspacePath
       ) {
         try {
-          await this.svc.ensureCodexSessionWatcher(session.id, effectiveWorkspacePath, event);
+          await this.svc.hooklessWatcher.ensureForSession(session.id, effectiveWorkspacePath, event);
         } catch (watcherError) {
           logger.main.error('[AIService] Failed to start Codex file cache:', watcherError);
         }
@@ -1102,7 +1090,7 @@ export class MessageStreamingHandler {
                   const OPENCODE_EDIT_TOOLS = ['edit', 'write', 'create'];
                   if (OPENCODE_EDIT_TOOLS.includes(trackToolName) && session.provider === 'opencode') {
                     const editFilePath = extractFilePath(trackArgs);
-                    const watcherEntry = this.svc.codexSessionWatchers.get(session.id);
+                    const watcherEntry = this.svc.hooklessWatcher.getEntry(session.id);
                     // Only create the pre-edit tag for paths inside the workspace —
                     // OpenCode occasionally hands back paths the model invented outside
                     // the workspace (e.g. `/foo.txt`), and the diff workflow only needs
@@ -1150,7 +1138,7 @@ export class MessageStreamingHandler {
                     pendingBashCommands.set(commandItemId, trackArgs.command);
 
                     if (seenCount >= 2 && !processedBashCommandItemIds.has(commandItemId)) {
-                      const tracked = await this.svc.trackBashFileEditsFromCommand(
+                      const tracked = await this.svc.hooklessWatcher.trackBashEditsFromCommand(
                         session,
                         workspacePath,
                         trackArgs.command,
@@ -1244,7 +1232,7 @@ export class MessageStreamingHandler {
                 // FileSnapshotCache BEFORE reading current (post-edit) content.
                 // The file has already been modified by Codex, so disk reads give
                 // after-state. The cache holds the content as of session start.
-                const watcherEntry = this.svc.codexSessionWatchers.get(session.id);
+                const watcherEntry = this.svc.hooklessWatcher.getEntry(session.id);
                 if (watcherEntry) {
                   for (const change of changes) {
                     if (!change?.path || change.kind === 'delete') continue;
@@ -1950,14 +1938,9 @@ export class MessageStreamingHandler {
               await stateManager.endSession(session.id);
               // Stop file watcher after a brief delay to let pending
               // watcher events drain through WorkspaceFileEditAttributionService.
-              // Store the timer handle so ensureCodexSessionWatcher can cancel it
-              // if a new turn starts before the timer fires.
-              const sessionIdForCleanup = session.id;
-              const stopTimer = setTimeout(() => {
-                this.svc.codexStopTimers.delete(sessionIdForCleanup);
-                this.svc.stopCodexSessionWatcher(sessionIdForCleanup);
-              }, 500);
-              this.svc.codexStopTimers.set(sessionIdForCleanup, stopTimer);
+              // The manager cancels the scheduled stop if a new turn starts
+              // before the timer fires.
+              this.svc.hooklessWatcher.scheduleStop(session.id, 500);
 
               // Play completion sound if enabled
               const soundService = SoundNotificationService.getInstance();
@@ -2067,7 +2050,7 @@ export class MessageStreamingHandler {
       for (const [commandItemId, command] of pendingBashCommands.entries()) {
         if (processedBashCommandItemIds.has(commandItemId)) continue;
         try {
-          const tracked = await this.svc.trackBashFileEditsFromCommand(
+          const tracked = await this.svc.hooklessWatcher.trackBashEditsFromCommand(
             session,
             workspacePath,
             command,
@@ -2221,7 +2204,7 @@ export class MessageStreamingHandler {
         } else {
           await stateManager.endSession(session.id);
           // Stop file watcher - session ended on error
-          await this.svc.stopCodexSessionWatcher(session.id);
+          await this.svc.hooklessWatcher.stopForSession(session.id);
         }
 
         // Clear executing and pending prompt flags for mobile sync on error
