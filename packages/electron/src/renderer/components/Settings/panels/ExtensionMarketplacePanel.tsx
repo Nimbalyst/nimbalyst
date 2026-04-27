@@ -50,7 +50,19 @@ interface MarketplaceInstallRecord {
   githubUrl?: string;
 }
 
-type ViewState = 'discover' | 'installed';
+interface InstalledExtensionInfo {
+  id: string;
+  path: string;
+  isBuiltin: boolean;
+  manifest: {
+    name?: string;
+    version?: string;
+    description?: string;
+    author?: string;
+    icon?: string;
+  };
+}
+
 type InstallStatus = 'idle' | 'installing' | 'installed' | 'error';
 
 interface ExtensionMarketplaceInstallRequest {
@@ -62,6 +74,7 @@ interface ExtensionMarketplaceInstallRequest {
 interface ExtensionMarketplacePanelProps {
   installRequest?: ExtensionMarketplaceInstallRequest | null;
   onInstallRequestHandled?: (token: number) => void;
+  onViewInstalled?: () => void;
 }
 
 // Category icon map (Material Symbols)
@@ -79,18 +92,19 @@ const CATEGORY_ICONS: Record<string, string> = {
 export function ExtensionMarketplacePanel({
   installRequest = null,
   onInstallRequestHandled,
+  onViewInstalled,
 }: ExtensionMarketplacePanelProps) {
   const posthog = usePostHog();
   const { theme } = useTheme();
 
   // All hooks must be declared before any early returns
   const [hasAcceptedRisk, setHasAcceptedRisk] = useState<boolean | null>(null);
-  const [viewState, setViewState] = useState<ViewState>('discover');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [registry, setRegistry] = useState<RegistryData | null>(null);
   const [installedExtensions, setInstalledExtensions] = useState<Record<string, MarketplaceInstallRecord>>({});
-  const [allInstalledIds, setAllInstalledIds] = useState<Set<string>>(new Set());
+  const [allInstalledExtensions, setAllInstalledExtensions] = useState<InstalledExtensionInfo[]>([]);
+  const allInstalledIds = useMemo(() => new Set(allInstalledExtensions.map(e => e.id)), [allInstalledExtensions]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedExtension, setSelectedExtension] = useState<RegistryExtension | null>(null);
@@ -121,7 +135,6 @@ export function ExtensionMarketplacePanel({
 
     const requestedExtension = registry.extensions.find((extension) => extension.id === installRequest.extensionId);
     if (!requestedExtension) {
-      setViewState('discover');
       setStatusMessage(`Extension ${installRequest.extensionId} was not found in the marketplace`);
       onInstallRequestHandled?.(installRequest.token);
 
@@ -129,7 +142,6 @@ export function ExtensionMarketplacePanel({
       return () => window.clearTimeout(timeoutId);
     }
 
-    setViewState('discover');
     setSelectedCategory(null);
     setSearchQuery('');
     setSelectedExtension(requestedExtension);
@@ -170,7 +182,7 @@ export function ExtensionMarketplacePanel({
 
       // Track all installed extension IDs (built-in + user-installed)
       if (Array.isArray(allExtensionsResult)) {
-        setAllInstalledIds(new Set(allExtensionsResult.map((e: { id: string }) => e.id)));
+        setAllInstalledExtensions(allExtensionsResult as InstalledExtensionInfo[]);
       }
 
       if (updatesResult.success && Array.isArray(updatesResult.data)) {
@@ -221,7 +233,7 @@ export function ExtensionMarketplacePanel({
           setInstalledExtensions(installedResult.data || {});
         }
         if (Array.isArray(allExtensionsResult)) {
-          setAllInstalledIds(new Set(allExtensionsResult.map((e: { id: string }) => e.id)));
+          setAllInstalledExtensions(allExtensionsResult as InstalledExtensionInfo[]);
         }
       } else {
         setInstallStatus(prev => ({ ...prev, [extension.id]: 'error' }));
@@ -259,7 +271,7 @@ export function ExtensionMarketplacePanel({
           setInstalledExtensions(installedResult.data || {});
         }
         if (Array.isArray(allExtensionsResult)) {
-          setAllInstalledIds(new Set(allExtensionsResult.map((e: { id: string }) => e.id)));
+          setAllInstalledExtensions(allExtensionsResult as InstalledExtensionInfo[]);
         }
       } else {
         setStatusMessage(result.error || 'Uninstall failed');
@@ -355,7 +367,7 @@ export function ExtensionMarketplacePanel({
           setInstalledExtensions(installedResult.data || {});
         }
         if (Array.isArray(allExtensionsResult)) {
-          setAllInstalledIds(new Set(allExtensionsResult.map((e: { id: string }) => e.id)));
+          setAllInstalledExtensions(allExtensionsResult as InstalledExtensionInfo[]);
         }
       } else {
         setInstallStatus(prev => ({ ...prev, [extension.id]: 'error' }));
@@ -734,118 +746,6 @@ export function ExtensionMarketplacePanel({
     </div>
   );
 
-  const renderInstalled = () => {
-    const installRecords = Object.values(installedExtensions);
-    const updateCount = Object.keys(availableUpdates).length;
-
-    return (
-      <div data-testid="marketplace-installed" role="main">
-        {updateCount > 0 && (
-          <div className="flex items-center justify-between mb-4 py-2.5 px-4 rounded-lg bg-[rgba(96,165,250,0.1)] border border-[rgba(96,165,250,0.3)]">
-            <div className="flex items-center gap-2">
-              <MaterialSymbol icon="upgrade" size={18} className="text-[var(--nim-primary)]" />
-              <span className="text-sm text-[var(--nim-text)]">
-                {updateCount} update{updateCount > 1 ? 's' : ''} available
-              </span>
-            </div>
-            <button
-              className="py-1.5 px-4 border-none rounded-md bg-[var(--nim-primary)] text-white text-xs font-medium cursor-pointer transition-opacity duration-150 hover:opacity-90"
-              onClick={handleUpdateAll}
-              data-testid="marketplace-update-all"
-            >
-              Update All
-            </button>
-          </div>
-        )}
-
-        {installRecords.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 px-6 text-center text-[var(--nim-text-faint)]">
-            <MaterialSymbol icon="extension_off" size={48} />
-            <p className="m-0 mt-4 mb-6 text-[0.9375rem]">No marketplace extensions installed yet</p>
-            <button
-              className="py-2.5 px-5 rounded-md border-none bg-[var(--nim-primary)] text-white text-sm font-medium cursor-pointer transition-opacity duration-150 hover:opacity-90"
-              onClick={() => setViewState('discover')}
-            >
-              Browse Extensions
-            </button>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {installRecords.map((record) => {
-              const ext = registry?.extensions.find(e => e.id === record.extensionId);
-              const categoryIcon = ext ? (CATEGORY_ICONS[ext.categories[0]] || 'extension') : 'extension';
-              const update = getAvailableUpdate(record.extensionId);
-              const status = installStatus[record.extensionId] || 'idle';
-
-              return (
-                <div
-                  key={record.extensionId}
-                  className={`flex items-center justify-between p-4 border rounded-lg bg-[var(--nim-bg-secondary)] ${
-                    update ? 'border-[rgba(96,165,250,0.4)]' : 'border-[var(--nim-border)]'
-                  }`}
-                  data-testid={`marketplace-installed-${record.extensionId}`}
-                >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="w-9 h-9 rounded-md bg-[var(--nim-bg-tertiary)] flex items-center justify-center shrink-0">
-                      <MaterialSymbol icon={categoryIcon} size={18} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-[0.9375rem] text-[var(--nim-text)] mb-0.5">
-                        {ext?.name || record.extensionId}
-                      </div>
-                      <div className="text-xs text-[var(--nim-text-faint)] flex gap-3">
-                        {update ? (
-                          <span className="text-[var(--nim-primary)]">
-                            v{update.currentVersion} &rarr; v{update.availableVersion}
-                          </span>
-                        ) : (
-                          <span>v{record.version}</span>
-                        )}
-                        <span>{record.source === 'github-url' ? 'GitHub' : 'Marketplace'}</span>
-                        <span>Installed {new Date(record.installedAt).toLocaleDateString()}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    {update && ext && (
-                      <button
-                        className={`py-1.5 px-3 border-none rounded text-xs font-medium cursor-pointer transition-opacity duration-150 ${
-                          status === 'installing'
-                            ? 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)]'
-                            : 'bg-[var(--nim-primary)] text-white hover:opacity-90'
-                        } disabled:opacity-60 disabled:cursor-not-allowed`}
-                        onClick={() => handleUpdate(ext)}
-                        disabled={status === 'installing'}
-                        data-testid={`marketplace-update-${record.extensionId}`}
-                      >
-                        {status === 'installing' ? 'Updating...' : 'Update'}
-                      </button>
-                    )}
-                    {ext?.repositoryUrl && (
-                      <button
-                        className="py-1.5 px-3 border border-[var(--nim-border)] rounded bg-transparent text-[var(--nim-text-muted)] text-xs font-medium cursor-pointer transition-all duration-150 hover:border-[var(--nim-text-muted)] hover:text-[var(--nim-text)]"
-                        onClick={() => window.electronAPI.openExternal(ext.repositoryUrl)}
-                      >
-                        Repository
-                      </button>
-                    )}
-                    <button
-                      className="py-1.5 px-3 border border-[var(--nim-error)] rounded bg-transparent text-[var(--nim-error)] text-xs font-medium cursor-pointer transition-all duration-150 hover:bg-[var(--nim-error)] hover:text-white"
-                      onClick={() => handleUninstall(record.extensionId)}
-                      data-testid={`marketplace-uninstall-${record.extensionId}`}
-                    >
-                      Uninstall
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    );
-  };
-
   const renderExtensionDetails = () => {
     if (!selectedExtension) return null;
 
@@ -1061,42 +961,31 @@ export function ExtensionMarketplacePanel({
     );
   };
 
-  const installedCount = Object.keys(installedExtensions).length;
+  const devExtensionCount = allInstalledExtensions.filter(
+    e => !e.isBuiltin && !installedExtensions[e.id]
+  ).length;
+  const installedCount = Object.keys(installedExtensions).length + devExtensionCount;
   const updateCount = Object.keys(availableUpdates).length;
 
   return (
     <div className="provider-panel flex flex-col" data-testid="extension-marketplace-panel">
-      <div className="mb-6 pb-4 border-b border-[var(--nim-border)]">
-        <h3 className="text-xl font-semibold leading-tight mb-2 text-[var(--nim-text)]">Extension Marketplace</h3>
-        <p className="text-sm leading-relaxed text-[var(--nim-text-muted)]">
-          Discover and install extensions to enhance your Nimbalyst workspace.
-        </p>
-      </div>
-
-      {/* View Switcher */}
-      <div className="flex gap-1 mb-4 p-1 bg-[var(--nim-bg-tertiary)] rounded-lg w-fit">
-        <button
-          className={`py-2 px-4 border-none rounded-md text-sm font-medium cursor-pointer transition-all duration-150 ${
-            viewState === 'discover'
-              ? 'bg-[var(--nim-primary)] text-white shadow-sm'
-              : 'bg-transparent text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'
-          }`}
-          onClick={() => setViewState('discover')}
-          data-testid="marketplace-tab-discover"
-        >
-          Discover
-        </button>
-        <button
-          className={`py-2 px-4 border-none rounded-md text-sm font-medium cursor-pointer transition-all duration-150 ${
-            viewState === 'installed'
-              ? 'bg-[var(--nim-primary)] text-white shadow-sm'
-              : 'bg-transparent text-[var(--nim-text-muted)] hover:text-[var(--nim-text)] hover:bg-[var(--nim-bg-hover)]'
-          }`}
-          onClick={() => setViewState('installed')}
-          data-testid="marketplace-tab-installed"
-        >
-          Installed ({installedCount}){updateCount > 0 && ` • ${updateCount} update${updateCount > 1 ? 's' : ''}`}
-        </button>
+      <div className="mb-4 pb-4 border-b border-[var(--nim-border)] flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-xl font-semibold leading-tight mb-2 text-[var(--nim-text)]">Extension Marketplace</h3>
+          <p className="text-sm leading-relaxed text-[var(--nim-text-muted)]">
+            Discover and install extensions to enhance your Nimbalyst workspace.
+          </p>
+        </div>
+        {onViewInstalled && (
+          <button
+            className="shrink-0 inline-flex items-center gap-1.5 py-2 px-3 border border-[var(--nim-border)] rounded-md bg-transparent text-[var(--nim-text-muted)] text-xs font-medium cursor-pointer transition-all duration-150 hover:border-[var(--nim-text-muted)] hover:text-[var(--nim-text)]"
+            onClick={onViewInstalled}
+            data-testid="marketplace-view-installed"
+          >
+            <MaterialSymbol icon="extension" size={16} />
+            Installed ({installedCount}){updateCount > 0 && ` • ${updateCount} update${updateCount > 1 ? 's' : ''}`}
+          </button>
+        )}
       </div>
 
       {/* Status Message */}
@@ -1106,7 +995,7 @@ export function ExtensionMarketplacePanel({
         </div>
       )}
 
-      {viewState === 'discover' ? renderDiscover() : renderInstalled()}
+      {renderDiscover()}
       {renderExtensionDetails()}
     </div>
   );

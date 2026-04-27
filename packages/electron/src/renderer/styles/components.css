@@ -491,24 +491,3 @@
   cursor: not-allowed;
 }
 
-/* Provider toggle (larger variant) - requires CSS for pseudo-elements */
-.provider-toggle-slider::before {
-  position: absolute;
-  content: '';
-  height: 1.25rem;
-  width: 1.25rem;
-  left: 0.125rem;
-  bottom: 0.125rem;
-  border-radius: 50%;
-  transition: all 0.2s;
-  background: white;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-}
-
-.provider-toggle input:checked + .provider-toggle-slider {
-  background: var(--nim-primary);
-}
-
-.provider-toggle input:checked + .provider-toggle-slider::before {
-  transform: translateX(1.25rem);
-}

@@ -611,6 +611,7 @@ export function SettingsView({
           <ExtensionMarketplacePanel
             installRequest={marketplaceInstallRequest}
             onInstallRequestHandled={onMarketplaceInstallRequestHandled}
+            onViewInstalled={() => setSelectedCategory('installed-extensions')}
           />
         );
       default:

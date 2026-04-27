@@ -63,7 +63,7 @@ export function ToggleSwitch({
   disabled?: boolean;
 }) {
   return (
-    <label className={`provider-toggle relative inline-block w-11 h-6 shrink-0 ${disabled ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}`}>
+    <label className={`relative inline-block w-11 h-6 shrink-0 ${disabled ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}`}>
       <input
         type="checkbox"
         checked={checked}
@@ -71,7 +71,7 @@ export function ToggleSwitch({
         disabled={disabled}
         className="hidden peer"
       />
-      <span className="provider-toggle-slider absolute cursor-pointer inset-0 rounded-full transition-all bg-[var(--nim-bg-tertiary)] before:absolute before:content-[''] before:h-5 before:w-5 before:left-0.5 before:bottom-0.5 before:rounded-full before:transition-all before:bg-white before:shadow-sm peer-checked:bg-[var(--nim-primary)] peer-checked:before:translate-x-5" />
+      <span className="absolute cursor-pointer inset-0 rounded-full transition-all bg-[var(--nim-bg-tertiary)] before:absolute before:content-[''] before:h-5 before:w-5 before:left-0.5 before:bottom-0.5 before:rounded-full before:transition-all before:bg-white before:shadow-sm peer-checked:bg-[var(--nim-primary)] peer-checked:before:translate-x-5" />
     </label>
   );
 }

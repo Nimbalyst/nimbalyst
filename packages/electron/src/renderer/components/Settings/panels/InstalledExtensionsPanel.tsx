@@ -5,11 +5,13 @@ import type { ExtensionManifest, SettingsPanelProps } from '@nimbalyst/runtime';
 import { getExtensionLoader } from '@nimbalyst/runtime';
 import { ExtensionConfigPanel } from './ExtensionConfigPanel';
 import { useTheme } from '../../../hooks/useTheme';
+import { ToggleSwitch } from '../../GlobalSettings/SettingsToggle';
 
 interface InstalledExtension {
   id: string;
   path: string;
   manifest: ExtensionManifest;
+  isBuiltin?: boolean;
 }
 
 interface ExtensionSettings {
@@ -17,9 +19,33 @@ interface ExtensionSettings {
   claudePluginEnabled?: boolean;
 }
 
+interface MarketplaceInstallRecord {
+  extensionId: string;
+  version: string;
+  installedAt: string;
+  updatedAt: string;
+  source: 'marketplace' | 'github-url';
+  githubUrl?: string;
+}
+
+interface RegistryExtensionLite {
+  id: string;
+  version: string;
+  downloadUrl: string;
+  checksum: string;
+  repositoryUrl?: string;
+}
+
+type ExtensionSource = 'marketplace' | 'github' | 'local' | 'built-in';
+
 interface ExtensionWithState extends InstalledExtension {
   enabled: boolean;
   claudePluginEnabled?: boolean;
+  source: ExtensionSource;
+  installedAt?: string;
+  installRecord?: MarketplaceInstallRecord;
+  availableUpdate?: { currentVersion: string; availableVersion: string };
+  registryEntry?: RegistryExtensionLite;
 }
 
 interface InstalledExtensionsPanelProps {
@@ -122,25 +148,61 @@ export const InstalledExtensionsPanel: React.FC<InstalledExtensionsPanelProps> =
       setLoading(true);
       setError(null);
 
-      // Get installed extensions from main process
-      const installed = await window.electronAPI.extensions.listInstalled() as InstalledExtension[];
+      const [installed, settings, marketplaceInstallsResult, updatesResult, registryResult] = await Promise.all([
+        window.electronAPI.extensions.listInstalled() as Promise<InstalledExtension[]>,
+        window.electronAPI.extensions.getAllSettings() as Promise<Record<string, ExtensionSettings>>,
+        window.electronAPI.invoke('extension-marketplace:get-installed'),
+        window.electronAPI.invoke('extension-marketplace:check-updates'),
+        window.electronAPI.invoke('extension-marketplace:fetch-registry'),
+      ]);
 
-      // Get enabled state for all extensions
-      const settings = await window.electronAPI.extensions.getAllSettings() as Record<string, ExtensionSettings>;
+      const installRecords: Record<string, MarketplaceInstallRecord> = marketplaceInstallsResult?.success
+        ? (marketplaceInstallsResult.data || {})
+        : {};
 
-      // Combine extension info with enabled state
+      const updateMap: Record<string, { currentVersion: string; availableVersion: string }> = {};
+      if (updatesResult?.success && Array.isArray(updatesResult.data)) {
+        for (const u of updatesResult.data) {
+          updateMap[u.extensionId] = { currentVersion: u.currentVersion, availableVersion: u.availableVersion };
+        }
+      }
+
+      const registryById: Record<string, RegistryExtensionLite> = {};
+      if (registryResult?.success && Array.isArray(registryResult.data?.extensions)) {
+        for (const ext of registryResult.data.extensions) {
+          registryById[ext.id] = {
+            id: ext.id,
+            version: ext.version,
+            downloadUrl: ext.downloadUrl,
+            checksum: ext.checksum,
+            repositoryUrl: ext.repositoryUrl,
+          };
+        }
+      }
+
       const extensionsWithState: ExtensionWithState[] = installed.map(ext => {
         const extSettings = settings[ext.id];
         const claudePlugin = ext.manifest.contributions?.claudePlugin;
+        const installRecord = installRecords[ext.id];
+        const source: ExtensionSource = ext.isBuiltin
+          ? 'built-in'
+          : installRecord?.source === 'marketplace'
+            ? 'marketplace'
+            : installRecord?.source === 'github-url'
+              ? 'github'
+              : 'local';
         return {
           ...ext,
-          enabled: extSettings?.enabled ?? true, // Default to enabled
-          // Claude plugin enabled defaults to the manifest's enabledByDefault, then true
+          enabled: extSettings?.enabled ?? true,
           claudePluginEnabled: extSettings?.claudePluginEnabled ?? claudePlugin?.enabledByDefault ?? true,
+          source,
+          installedAt: installRecord?.installedAt,
+          installRecord,
+          availableUpdate: updateMap[ext.id],
+          registryEntry: registryById[ext.id],
         };
       });
 
-      // Sort alphabetically by name
       extensionsWithState.sort((a, b) =>
         a.manifest.name.localeCompare(b.manifest.name)
       );
@@ -213,8 +275,82 @@ export const InstalledExtensionsPanel: React.FC<InstalledExtensionsPanelProps> =
     }
   }, [posthog]);
 
+  const handleUpdate = useCallback(async (ext: ExtensionWithState) => {
+    if (!ext.registryEntry || !ext.availableUpdate) return;
+    setProcessingId(ext.id);
+    setError(null);
+    try {
+      const result = await window.electronAPI.invoke(
+        'extension-marketplace:install',
+        ext.id,
+        ext.registryEntry.downloadUrl,
+        ext.registryEntry.checksum,
+        ext.registryEntry.version,
+      );
+      if (result.success) {
+        posthog?.capture('extension_marketplace_updated', {
+          extensionId: ext.id,
+          fromVersion: ext.availableUpdate.currentVersion,
+          toVersion: ext.registryEntry.version,
+        });
+        await loadExtensions();
+      } else {
+        setError(result.error || 'Update failed');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Update failed');
+    } finally {
+      setProcessingId(null);
+    }
+  }, [posthog]);
+
+  const handleUninstall = useCallback(async (extensionId: string) => {
+    if (!window.confirm('Uninstall this extension? This will remove its files and settings.')) return;
+    setProcessingId(extensionId);
+    setError(null);
+    try {
+      const result = await window.electronAPI.invoke('extension-marketplace:uninstall', extensionId);
+      if (result.success) {
+        posthog?.capture('extension_marketplace_uninstalled', { extensionId });
+        if (selectedId === extensionId) {
+          setSelectedId(null);
+        }
+        await loadExtensions();
+      } else {
+        setError(result.error || 'Uninstall failed');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Uninstall failed');
+    } finally {
+      setProcessingId(null);
+    }
+  }, [posthog, selectedId]);
+
+  const handleReveal = useCallback((path: string) => {
+    window.electronAPI.invoke('show-in-finder', path);
+  }, []);
+
   const enabledCount = extensions.filter(ext => ext.enabled).length;
   const totalCount = extensions.length;
+  const updateCount = extensions.filter(ext => ext.availableUpdate && ext.registryEntry).length;
+
+  const sourceLabel = (s: ExtensionSource) => {
+    switch (s) {
+      case 'marketplace': return 'Marketplace';
+      case 'github': return 'GitHub';
+      case 'local': return 'Local';
+      case 'built-in': return 'Built-in';
+    }
+  };
+
+  const sourcePillClasses = (s: ExtensionSource) => {
+    switch (s) {
+      case 'marketplace': return 'bg-[rgba(96,165,250,0.15)] text-[var(--nim-primary)]';
+      case 'github': return 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-muted)]';
+      case 'local': return 'bg-[rgba(251,191,36,0.15)] text-[var(--nim-warning)]';
+      case 'built-in': return 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text-faint)]';
+    }
+  };
 
   if (loading) {
     return (
@@ -294,7 +430,12 @@ export const InstalledExtensionsPanel: React.FC<InstalledExtensionsPanelProps> =
           <div className="w-[260px] flex-shrink-0 flex flex-col bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded-lg overflow-hidden">
             <div className="px-3 py-2.5 border-b border-[var(--nim-border)] flex items-center justify-between flex-shrink-0">
               <span className="text-xs font-semibold text-[var(--nim-text-muted)] uppercase tracking-wide">Extensions</span>
-              <span className="text-xs text-[var(--nim-text-faint)]">{enabledCount} of {totalCount} enabled</span>
+              <span className="text-xs text-[var(--nim-text-faint)]">
+                {enabledCount}/{totalCount}
+                {updateCount > 0 && (
+                  <span className="ml-2 text-[var(--nim-primary)]">{updateCount} update{updateCount > 1 ? 's' : ''}</span>
+                )}
+              </span>
             </div>
             <div className="flex-1 overflow-y-auto min-h-0">
               {extensions.map((ext) => (
@@ -308,18 +449,26 @@ export const InstalledExtensionsPanel: React.FC<InstalledExtensionsPanelProps> =
                   onClick={() => setSelectedId(ext.id)}
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-[var(--nim-text)] truncate">{ext.manifest.name}</div>
-                    <div className="text-xs text-[var(--nim-text-faint)]">{ext.manifest.author || 'Unknown'}</div>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-sm font-medium text-[var(--nim-text)] truncate">{ext.manifest.name}</span>
+                      {ext.availableUpdate && ext.registryEntry && (
+                        <MaterialSymbol icon="upgrade" size={14} className="text-[var(--nim-primary)] shrink-0" />
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className={`inline-flex items-center px-1.5 py-0 rounded text-[0.625rem] font-semibold uppercase tracking-tight ${sourcePillClasses(ext.source)}`}>
+                        {sourceLabel(ext.source)}
+                      </span>
+                      <span className="text-xs text-[var(--nim-text-faint)] truncate">{ext.manifest.author || 'Unknown'}</span>
+                    </div>
                   </div>
-                  <label className="provider-toggle flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
+                  <span className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <ToggleSwitch
                       checked={ext.enabled}
-                      onChange={(e) => handleToggle(ext.id, e.target.checked)}
+                      onChange={(checked) => handleToggle(ext.id, checked)}
                       disabled={processingId === ext.id}
                     />
-                    <span className="provider-toggle-slider"></span>
-                  </label>
+                  </span>
                 </div>
               ))}
             </div>
@@ -343,6 +492,63 @@ export const InstalledExtensionsPanel: React.FC<InstalledExtensionsPanelProps> =
 
                 {/* Details body - scrollable */}
                 <div className="flex-1 overflow-y-auto min-h-0 p-4">
+                  {/* Source + actions */}
+                  <div className="mb-5 pb-4 border-b border-[var(--nim-border)]">
+                    <div className="flex flex-wrap items-center gap-2 mb-3 text-xs text-[var(--nim-text-muted)]">
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[0.6875rem] font-semibold uppercase tracking-tight ${sourcePillClasses(selectedExtension.source)}`}>
+                        {sourceLabel(selectedExtension.source)}
+                      </span>
+                      {selectedExtension.installedAt && (
+                        <span>Installed {new Date(selectedExtension.installedAt).toLocaleDateString()}</span>
+                      )}
+                      {selectedExtension.availableUpdate && (
+                        <span className="text-[var(--nim-primary)]">
+                          v{selectedExtension.availableUpdate.currentVersion} &rarr; v{selectedExtension.availableUpdate.availableVersion}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedExtension.availableUpdate && selectedExtension.registryEntry && (
+                        <button
+                          className="py-1.5 px-3 border-none rounded text-xs font-medium cursor-pointer transition-opacity duration-150 bg-[var(--nim-primary)] text-white hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
+                          onClick={() => handleUpdate(selectedExtension)}
+                          disabled={processingId === selectedExtension.id}
+                          data-testid={`installed-update-${selectedExtension.id}`}
+                        >
+                          {processingId === selectedExtension.id ? 'Updating...' : `Update to v${selectedExtension.availableUpdate.availableVersion}`}
+                        </button>
+                      )}
+                      {(selectedExtension.manifest.marketplace?.repositoryUrl || selectedExtension.registryEntry?.repositoryUrl) && (
+                        <button
+                          className="py-1.5 px-3 border border-[var(--nim-border)] rounded bg-transparent text-[var(--nim-text-muted)] text-xs font-medium cursor-pointer transition-all duration-150 hover:border-[var(--nim-text-muted)] hover:text-[var(--nim-text)]"
+                          onClick={() => {
+                            const url = selectedExtension.manifest.marketplace?.repositoryUrl || selectedExtension.registryEntry?.repositoryUrl;
+                            if (url) window.electronAPI.openExternal(url);
+                          }}
+                        >
+                          Repository
+                        </button>
+                      )}
+                      <button
+                        className="py-1.5 px-3 border border-[var(--nim-border)] rounded bg-transparent text-[var(--nim-text-muted)] text-xs font-medium cursor-pointer transition-all duration-150 hover:border-[var(--nim-text-muted)] hover:text-[var(--nim-text)]"
+                        onClick={() => handleReveal(selectedExtension.path)}
+                        data-testid={`installed-reveal-${selectedExtension.id}`}
+                      >
+                        Reveal
+                      </button>
+                      {selectedExtension.source !== 'built-in' && (
+                        <button
+                          className="py-1.5 px-3 border border-[var(--nim-error)] rounded bg-transparent text-[var(--nim-error)] text-xs font-medium cursor-pointer transition-all duration-150 hover:bg-[var(--nim-error)] hover:text-white disabled:opacity-60 disabled:cursor-not-allowed"
+                          onClick={() => handleUninstall(selectedExtension.id)}
+                          disabled={processingId === selectedExtension.id}
+                          data-testid={`installed-uninstall-${selectedExtension.id}`}
+                        >
+                          Uninstall
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
                   {/* Extension configuration if available */}
                   {selectedExtension.manifest.contributions?.configuration && selectedExtension.enabled && (
                       <div className="mb-5">
@@ -365,15 +571,11 @@ export const InstalledExtensionsPanel: React.FC<InstalledExtensionsPanelProps> =
                             <span className="material-symbols-outlined text-base text-[var(--nim-primary)]">smart_toy</span>
                             {selectedExtension.manifest.contributions.claudePlugin.displayName || 'Claude Plugin'}
                           </div>
-                          <label className="provider-toggle">
-                            <input
-                              type="checkbox"
-                              checked={selectedExtension.claudePluginEnabled ?? true}
-                              onChange={(e) => handleClaudePluginToggle(selectedExtension.id, e.target.checked)}
-                              disabled={processingId === selectedExtension.id || !selectedExtension.enabled}
-                            />
-                            <span className="provider-toggle-slider"></span>
-                          </label>
+                          <ToggleSwitch
+                            checked={selectedExtension.claudePluginEnabled ?? true}
+                            onChange={(checked) => handleClaudePluginToggle(selectedExtension.id, checked)}
+                            disabled={processingId === selectedExtension.id || !selectedExtension.enabled}
+                          />
                         </div>
                         <div className="text-xs text-[var(--nim-text-muted)] mb-2.5">
                           {selectedExtension.manifest.contributions.claudePlugin.description || 'No description'}
