@@ -578,7 +578,7 @@ function ClaudeCodePluginsPanelInner({ scope = 'user', workspacePath }: ClaudeCo
       )}
 
       {/* Content */}
-      <div className="plugin-content flex-1 overflow-y-auto max-h-[calc(100vh-350px)] [container-type:inline-size] [container-name:plugin-content]">
+      <div className="plugin-content [container-type:inline-size] [container-name:plugin-content]">
         {viewState === 'discover' && renderDiscover()}
         {viewState === 'installed' && renderInstalled()}
       </div>
