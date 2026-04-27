@@ -28,6 +28,8 @@ import { handleVoiceAgentSpeak, handleVoiceAgentStop, voiceToolSchemas } from ".
 import { handleDisplayToUser, displayToolSchemas } from "./tools/displayToolHandler";
 import {
   handleApplyDiff,
+  handleApplyCollabDocEdit,
+  handleReadCollabDoc,
   handleStreamContent,
   handleOpenWorkspace,
   handleCaptureEditorScreenshot,
@@ -342,6 +344,12 @@ function createSharedMcpServer(
       switch (toolName) {
         case "applyDiff":
           return handleApplyDiff(args);
+
+        case "applyCollabDocEdit":
+          return handleApplyCollabDocEdit(args);
+
+        case "readCollabDoc":
+          return handleReadCollabDoc(args);
 
         case "streamContent":
           return handleStreamContent(args);

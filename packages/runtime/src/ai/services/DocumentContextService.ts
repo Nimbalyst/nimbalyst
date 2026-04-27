@@ -334,7 +334,9 @@ export class DocumentContextService implements IDocumentContextService {
     const state = this.lastDocumentStateBySession.get(sessionId);
     const hasDocument = !!documentContext.filePath;
     if (hasDocument && state && !state.sentEditingInstructions) {
-      additions.editingInstructions = this.getEditingInstructions();
+      additions.editingInstructions = documentContext.fileType === 'collab-markdown'
+        ? this.getCollabEditingInstructions()
+        : this.getEditingInstructions();
       // Mark that we've sent editing instructions for this session
       state.sentEditingInstructions = true;
     }
@@ -377,6 +379,20 @@ export class DocumentContextService implements IDocumentContextService {
       prompt += `The user is currently looking at this document. They are not necessarily asking you about this document, but they may be. Use your best judgement to decide if they are making a general request or asking specifically about this document.\n`;
       prompt += `<ACTIVE_DOCUMENT>${context.filePath}</ACTIVE_DOCUMENT>\n`;
 
+      // Collaborative documents (collab:// URIs) live in Yjs/Cloudflare Workers,
+      // not on disk. Filesystem Read/Edit/Write do NOT work for this URI; the
+      // agent must call readCollabDoc to see content and applyCollabDocEdit to
+      // change it. We deliberately do NOT inline document content here — that
+      // would balloon every prompt with the full document on every turn.
+      if (context.fileType === 'collab-markdown') {
+        prompt += `<COLLAB_DOCUMENT_NOTE>\n`;
+        prompt += `This is a shared collaborative document synced in realtime over Yjs. Other users may be editing it concurrently — prefer small, scoped edits over sweeping rewrites.\n`;
+        prompt += `To READ this document, call the readCollabDoc tool with this collab:// URI. The filesystem Read tool will not work for collab:// URIs.\n`;
+        prompt += `To MODIFY this document, call applyCollabDocEdit (or applyDiff) with this collab:// URI. Filesystem tools like Edit/Write will not propagate via Yjs and will not reach other collaborators.\n`;
+        prompt += `Filesystem tools remain available for OTHER files in the workspace; the constraints above apply only to this active shared document.\n`;
+        prompt += `</COLLAB_DOCUMENT_NOTE>\n`;
+      }
+
       // Add cursor position if available
       if (context.cursorPosition) {
         prompt += `Cursor: Line ${context.cursorPosition.line}, Column ${context.cursorPosition.column}\n`;
@@ -411,11 +427,19 @@ export class DocumentContextService implements IDocumentContextService {
         prompt += `\nThe user has drawn annotations on the mockup. Use the capture_editor_screenshot tool to see their annotations.\n`;
       }
 
-      // Add content or diff based on transition
-      // For claude-code, skip DOCUMENT_CONTENT entirely (it has file system access via tools)
-      if (transition === 'modified' && context.documentDiff) {
+      // Add content or diff based on transition.
+      // For collab docs on claude-code: skip everything. The agent has the
+      // readCollabDoc / applyCollabDocEdit tools and the COLLAB_DOCUMENT_NOTE
+      // tells it how. Inlining the doc on every turn would balloon the prompt.
+      // For collab docs on chat providers: still inline (they have no MCP /
+      // readCollabDoc fallback).
+      // For filesystem files: original behavior (claude-code has Read tool;
+      // chat providers get content inline).
+      const isCollab = context.fileType === 'collab-markdown';
+      const isClaudeCodeCollab = isCollab && providerType === 'claude-code';
+      if (transition === 'modified' && context.documentDiff && !isClaudeCodeCollab) {
         prompt += `\nThe document has changed since your last message:\n<DOCUMENT_DIFF>\n${context.documentDiff}\n</DOCUMENT_DIFF>\n`;
-      } else if (transition === 'none') {
+      } else if (transition === 'none' && !isClaudeCodeCollab) {
         prompt += `\n(Document content unchanged since last message.)\n`;
       } else if (context.content && providerType !== 'claude-code') {
         prompt += `\n<DOCUMENT_CONTENT>\n${context.content}\n</DOCUMENT_CONTENT>\n`;
@@ -430,6 +454,30 @@ export class DocumentContextService implements IDocumentContextService {
     }
 
     return prompt || undefined;
+  }
+
+  /**
+   * Get one-time editing instructions for collaborative shared documents.
+   * Sent in place of getEditingInstructions when the active doc is a
+   * collab:// URI. Steers the agent to readCollabDoc / applyCollabDocEdit
+   * instead of the filesystem Read/Edit/Write tools.
+   */
+  private getCollabEditingInstructions(): string {
+    return `Editing instructions for the active shared collaborative document. These apply only to the active collab:// document, not other files in the workspace.
+<COLLAB_DOC_INSTRUCTIONS>
+This document lives in a Yjs CRDT synced over Cloudflare Workers. Filesystem Read/Edit/Write WILL NOT work on it and will not propagate to other connected users.
+
+1. Use readCollabDoc(filePath) to view the document — do NOT use the Read tool on the collab:// URI
+2. Use applyCollabDocEdit(filePath, replacements) to modify it (or applyDiff against the collab:// URI). Replacements are { oldText, newText } pairs that must match exactly.
+3. Other users may be editing concurrently — prefer small, scoped replacements over sweeping rewrites
+4. Keep responses brief (2-4 words like "Editing document..." or "Adding section...")
+5. DO NOT explain what you're doing — the user sees the changes propagate live
+
+WORKFLOW:
+1. Call readCollabDoc to see the current content (REQUIRED before editing)
+2. Make your edits with applyCollabDocEdit
+3. Done — the change is live for all collaborators
+</COLLAB_DOC_INSTRUCTIONS>`;
   }
 
   /**

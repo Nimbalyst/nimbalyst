@@ -12,7 +12,7 @@ import React, { useCallback, useState, useEffect, useRef, useMemo } from 'react'
 import { useAtomValue } from 'jotai';
 import { store } from '@nimbalyst/runtime/store';
 import { CollabSidebar } from './CollabSidebar';
-import { TabsProvider, useTabsActions, useTabs } from '../../contexts/TabsContext';
+import { TabsProvider, useTabsActions, useTabs, type TabData } from '../../contexts/TabsContext';
 import { TabManager } from '../TabManager/TabManager';
 import { TabContent } from '../TabContent/TabContent';
 import { ChatSidebar } from '../ChatSidebar';
@@ -22,6 +22,7 @@ import { isCollabUri, parseCollabUri } from '../../utils/collabUri';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { getCollabNodeName } from './collabTree';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
+import type { SerializableDocumentContext } from '../../hooks/useDocumentContext';
 
 interface CollabModeProps {
   workspacePath: string;
@@ -145,6 +146,81 @@ const CollabModeInner: React.FC<CollabModeProps> = ({
 
   // Refs for sidebar resize drag (avoids re-renders during drag)
   const sidebarDragRef = useRef({ isDragging: false, startX: 0, startWidth: 0 });
+
+  // Track active tab and its getContent function so the right-pane chat can
+  // pull a fresh snapshot of the live (Yjs-synced) document on each message.
+  // Refs avoid re-rendering CollabMode on every tab switch / keystroke.
+  const activeTabForContextRef = useRef<TabData | null>(null);
+  const getContentByTabIdRef = useRef<Map<string, () => string>>(new Map());
+
+  const handleGetContentReady = useCallback((tabId: string, getContentFn: () => string) => {
+    getContentByTabIdRef.current.set(tabId, getContentFn);
+  }, []);
+
+  const getDocumentContext = useCallback(async (): Promise<SerializableDocumentContext> => {
+    const activeTab = activeTabForContextRef.current;
+    if (!activeTab || !isCollabUri(activeTab.filePath)) {
+      return {
+        filePath: '',
+        fileType: 'unknown',
+        content: '',
+      };
+    }
+
+    // Read the latest content directly from the live Lexical editor for this
+    // tab. This reflects whatever Yjs has merged into the local Y.Doc, which
+    // is the source of truth for shared docs (the file does NOT exist on
+    // disk, so window.electronAPI.readFileContent is not appropriate here).
+    let content = '';
+    const getContentFn = getContentByTabIdRef.current.get(activeTab.id);
+    if (getContentFn) {
+      try {
+        content = getContentFn() ?? '';
+      } catch (err) {
+        console.error('[CollabMode] Failed to read collab doc content:', err);
+      }
+    }
+
+    return {
+      filePath: activeTab.filePath,
+      fileType: 'collab-markdown',
+      content,
+    };
+  }, []);
+
+  // Keep activeTabForContextRef in sync with the currently active tab and
+  // prune getContent entries for tabs that no longer exist.
+  useEffect(() => {
+    const activeTab = activeTabId ? tabs.find(t => t.id === activeTabId) : null;
+    activeTabForContextRef.current = activeTab || null;
+
+    const liveTabIds = new Set(tabs.map(t => t.id));
+    for (const tabId of getContentByTabIdRef.current.keys()) {
+      if (!liveTabIds.has(tabId)) {
+        getContentByTabIdRef.current.delete(tabId);
+      }
+    }
+  }, [tabs, activeTabId]);
+
+  // Tell the MCP layer about the active collab document so applyDiff /
+  // applyCollabDocEdit can resolve the collab:// URI to this window.
+  // We only push state while collab mode is active to avoid clobbering
+  // EditorMode's filesystem-backed entries.
+  useEffect(() => {
+    if (!isActive) return;
+    const activeTab = activeTabId ? tabs.find(t => t.id === activeTabId) : null;
+    if (!activeTab || !isCollabUri(activeTab.filePath)) return;
+    if (!window.electronAPI?.updateMcpDocumentState) return;
+
+    window.electronAPI.updateMcpDocumentState({
+      content: '',
+      filePath: activeTab.filePath,
+      fileType: 'collab-markdown',
+      workspacePath,
+      cursorPosition: undefined,
+      selection: undefined,
+    });
+  }, [isActive, activeTabId, tabs, workspacePath]);
 
   // Load persisted layout on mount
   useEffect(() => {
@@ -364,6 +440,7 @@ const CollabModeInner: React.FC<CollabModeProps> = ({
           >
             <TabContent
               onTabClose={handleTabClose}
+              onGetContentReady={handleGetContentReady}
             />
           </TabManager>
         ) : (
@@ -384,6 +461,7 @@ const CollabModeInner: React.FC<CollabModeProps> = ({
       {hasTabs && (
         <ChatSidebar
           workspacePath={workspacePath}
+          getDocumentContext={getDocumentContext}
           onFileOpen={async (filePath) => onFileOpen(filePath)}
           width={chatWidth}
           onWidthChange={handleChatWidthChange}

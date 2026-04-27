@@ -2,6 +2,7 @@ import { detectStreamingIntent, parseStreamingChunk, StreamingEditRequest } from
 import { logger } from '../utils/logger';
 import type { DocumentContext, Message, SessionData } from '@nimbalyst/runtime/ai/server/types';
 import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
+import { isCollabUri } from '../utils/collabUri';
 
 const LOG_PREVIEW_LENGTH = 400;
 
@@ -266,17 +267,27 @@ class AIApi {
           return;
         }
 
-        // Validate that the file is a markdown file
-        if (!targetFilePath.endsWith('.md')) {
+        // Validate target: filesystem markdown files OR shared collab docs.
+        const isCollab = isCollabUri(targetFilePath);
+        if (!isCollab && !targetFilePath.endsWith('.md')) {
           window.electronAPI.sendMcpApplyDiffResult(data.resultChannel, {
             success: false,
-            error: `applyDiff can only modify markdown files (.md). Attempted to modify: ${targetFilePath}`
+            error: `applyDiff can only modify markdown files (.md) or collaborative documents (collab:// URIs). Attempted to modify: ${targetFilePath}`
           });
           return;
         }
 
-        // If the file isn't registered (not open), open it in the background
+        // If the file isn't registered (not open), open it in the background.
+        // Collaborative docs cannot be opened in the background here — they
+        // live in Yjs and require an active CollaborativeTabEditor mount.
         if (!editorRegistry.has(targetFilePath)) {
+          if (isCollab) {
+            window.electronAPI.sendMcpApplyDiffResult(data.resultChannel, {
+              success: false,
+              error: `Cannot edit collab document ${targetFilePath}: no editor is currently mounted for it. Open the document in collab mode first.`
+            });
+            return;
+          }
           logger.api.info('File not open, opening in background:', targetFilePath);
 
           // Read the file content

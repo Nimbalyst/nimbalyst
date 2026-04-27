@@ -14,6 +14,7 @@ import { SearchReplaceStateManager } from '@nimbalyst/runtime';
 import { store } from '@nimbalyst/runtime/store';
 import { aiApi } from '../services/aiApi';
 import { getFileName } from '../utils/pathUtils';
+import { isCollabUri } from '../utils/collabUri';
 import type { ContentMode } from '../types/WindowModeTypes';
 import { dialogRef } from '../contexts/DialogContext';
 import { DIALOG_IDS } from '../dialogs';
@@ -543,22 +544,32 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
 
           const filePath = targetFilePath;
 
-          // Validate that the file is a markdown file
-          if (!filePath.endsWith('.md')) {
-            console.error('[MCP] applyDiff can only modify markdown files:', filePath);
+          // Validate target: filesystem markdown files OR shared collab docs.
+          const isCollab = isCollabUri(filePath);
+          if (!isCollab && !filePath.endsWith('.md')) {
+            console.error('[MCP] applyDiff can only modify markdown files or collab docs:', filePath);
             if (window.electronAPI.sendMcpApplyDiffResult) {
               window.electronAPI.sendMcpApplyDiffResult(resultChannel, {
                 success: false,
-                error: `applyDiff can only modify markdown files (.md). Attempted to modify: ${filePath}`
+                error: `applyDiff can only modify markdown files (.md) or collaborative documents (collab:// URIs). Attempted to modify: ${filePath}`
               });
             }
             return;
           }
 
-          // If the file isn't registered (not open), open it in the background
+          // If the file isn't registered (not open), open it in the background.
+          // Collaborative docs cannot be opened in the background here — they
+          // require an active CollaborativeTabEditor backed by a Y.Doc.
           if (!editorRegistry.has(filePath)) {
-            // console.log('[MCP] File not open, opening in background:', filePath);
-
+            if (isCollab) {
+              if (window.electronAPI.sendMcpApplyDiffResult) {
+                window.electronAPI.sendMcpApplyDiffResult(resultChannel, {
+                  success: false,
+                  error: `Cannot edit collab document ${filePath}: no editor is currently mounted for it. Open the document in collab mode first.`
+                });
+              }
+              return;
+            }
             // Read the file content
             const result = await window.electronAPI.readFileContent(filePath);
             const fileContent = result?.success ? result.content : '';
@@ -606,6 +617,39 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
 
           // Could show error notification here
           // alert(`Failed to apply edit: ${errorMessage}`);
+        }
+      }));
+    }
+
+    if (window.electronAPI.onMcpReadCollabDoc) {
+      cleanupFns.push(window.electronAPI.onMcpReadCollabDoc(async ({ targetFilePath, resultChannel }) => {
+        try {
+          if (!targetFilePath || !isCollabUri(targetFilePath)) {
+            window.electronAPI.sendMcpReadCollabDocResult(resultChannel, {
+              success: false,
+              error: `readCollabDoc requires a collab:// URI. Got: ${targetFilePath ?? '(missing)'}`,
+            });
+            return;
+          }
+
+          if (!editorRegistry.has(targetFilePath)) {
+            window.electronAPI.sendMcpReadCollabDocResult(resultChannel, {
+              success: false,
+              error: `No editor mounted for ${targetFilePath}. Open the document in collab mode first.`,
+            });
+            return;
+          }
+
+          const content = editorRegistry.getContent(targetFilePath);
+          window.electronAPI.sendMcpReadCollabDocResult(resultChannel, {
+            success: true,
+            content,
+          });
+        } catch (error) {
+          window.electronAPI.sendMcpReadCollabDocResult(resultChannel, {
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error reading collab doc',
+          });
         }
       }));
     }

@@ -22,13 +22,13 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     name: 'applyDiff',
     description:
-      'Apply text replacements to a markdown document. IMPORTANT: Only .md files can be modified. REQUIRED for adding rows to tables - replace the entire table. If no filePath is provided, applies to the currently active document.',
+      'Apply text replacements to a markdown document or a collaborative shared document. IMPORTANT: Only .md files or collab:// URIs can be modified. REQUIRED for adding rows to tables - replace the entire table. If no filePath is provided, applies to the currently active document.',
     parameters: {
       type: 'object',
       properties: {
         filePath: {
           type: 'string',
-          description: 'Optional absolute path to the markdown file (.md) to apply replacements to. If not provided, applies to the currently active document. MUST end in .md extension.',
+          description: 'Optional absolute path to a markdown file (.md) or a collab:// URI for a shared document. If not provided, applies to the currently active document.',
         },
         replacements: {
           type: 'array',
@@ -280,9 +280,11 @@ export class RuntimeToolExecutor {
       throw new Error('applyDiff requires at least one replacement');
     }
 
-    // Validate that the file is a markdown file if filePath is provided
-    if (args.filePath && !args.filePath.endsWith('.md')) {
-      throw new Error(`applyDiff can only modify markdown files (.md). Attempted to modify: ${args.filePath}`);
+    // Validate target: filesystem markdown files OR collaborative documents
+    // (collab:// URIs). Both go through editorRegistry; collab docs propagate
+    // edits via Yjs to other connected users.
+    if (args.filePath && !args.filePath.endsWith('.md') && !args.filePath.startsWith('collab://')) {
+      throw new Error(`applyDiff can only modify markdown files (.md) or collaborative documents (collab:// URIs). Attempted to modify: ${args.filePath}`);
     }
 
     try {

@@ -13,6 +13,12 @@ type McpToolResult = {
   isError: boolean;
 };
 
+const COLLAB_URI_PREFIX = "collab://";
+
+function isCollabUri(path: string | undefined): path is string {
+  return !!path && path.startsWith(COLLAB_URI_PREFIX);
+}
+
 export function getEditorToolSchemas(sessionId: string | undefined) {
   const tools: Array<{ name: string; description: string; inputSchema: any }> = [
     {
@@ -39,6 +45,56 @@ export function getEditorToolSchemas(sessionId: string | undefined) {
               "Theme to use for the screenshot (optional, uses the app's current theme if not specified). Useful for capturing both dark and light mode versions.",
           },
         },
+      },
+    },
+    {
+      name: "readCollabDoc",
+      description:
+        "Read the current contents of a shared collaborative document (collab:// URI). Use this whenever you need to see the document text — the filesystem Read tool does NOT work for collab:// URIs because the document lives in Yjs, not on disk. Returns the live Lexical/Yjs content the user is currently looking at.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          filePath: {
+            type: "string",
+            description:
+              "The collab:// URI of the shared document to read (e.g. 'collab://org:abc:doc:xyz').",
+          },
+        },
+        required: ["filePath"],
+      },
+    },
+    {
+      name: "applyCollabDocEdit",
+      description:
+        "Apply text replacements to a collaborative shared document (collab:// URI). Use this when the active document is a shared/collaborative document — filesystem Edit/Write will NOT propagate via Yjs and will not reach other collaborators. Replacements are applied through the live Lexical/Yjs editor so other connected users see the change in realtime. Call readCollabDoc first to see the current content before editing.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          filePath: {
+            type: "string",
+            description:
+              "The collab:// URI of the shared document to modify (e.g. 'collab://org:abc:doc:xyz').",
+          },
+          replacements: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                oldText: {
+                  type: "string",
+                  description:
+                    "Text to replace (must match the document content exactly).",
+                },
+                newText: {
+                  type: "string",
+                  description: "Replacement text.",
+                },
+              },
+              required: ["oldText", "newText"],
+            },
+          },
+        },
+        required: ["filePath", "replacements"],
       },
     },
   ];
@@ -94,12 +150,15 @@ export async function handleApplyDiff(args: any): Promise<McpToolResult> {
 
   const targetWindow = await findWindowForFilePath(targetFilePath);
   if (targetWindow) {
-    if (!targetFilePath.endsWith(".md")) {
+    // applyDiff supports markdown files on disk (.md) and collaborative
+    // shared documents addressed by collab:// URIs (which are always markdown
+    // and live in Yjs, not on disk).
+    if (!targetFilePath.endsWith(".md") && !isCollabUri(targetFilePath)) {
       return {
         content: [
           {
             type: "text",
-            text: `Error: applyDiff can only modify markdown files (.md). Attempted to modify: ${targetFilePath}`,
+            text: `Error: applyDiff can only modify markdown files (.md) or collaborative documents (collab:// URIs). Attempted to modify: ${targetFilePath}`,
           },
         ],
         isError: true,
@@ -145,6 +204,89 @@ export async function handleApplyDiff(args: any): Promise<McpToolResult> {
     content: [{ type: "text", text: "Error: No window available for target file" }],
     isError: true,
   };
+}
+
+/**
+ * readCollabDoc — return the current text of a shared collaborative document
+ * by asking the renderer to pull it directly out of the live Lexical/Yjs
+ * editor. Filesystem Read does not work for collab:// URIs.
+ */
+export async function handleReadCollabDoc(args: any): Promise<McpToolResult> {
+  const targetFilePath = args?.filePath;
+  if (!isCollabUri(targetFilePath)) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Error: readCollabDoc requires a collab:// URI. Got: ${targetFilePath ?? "(missing)"}.`,
+        },
+      ],
+      isError: true,
+    };
+  }
+
+  const targetWindow = await findWindowForFilePath(targetFilePath);
+  if (!targetWindow) {
+    return {
+      content: [{ type: "text", text: `Error: No window available for ${targetFilePath}` }],
+      isError: true,
+    };
+  }
+
+  const resultChannel = `mcp-result-${Date.now()}-${Math.random()}`;
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      ipcMain.removeAllListeners(resultChannel);
+      resolve({
+        content: [{ type: "text", text: "Timed out while reading collab document." }],
+        isError: true,
+      });
+    }, 10000);
+
+    ipcMain.once(resultChannel, (_event, result: { success: boolean; content?: string; error?: string }) => {
+      clearTimeout(timeout);
+      if (!result?.success) {
+        resolve({
+          content: [{ type: "text", text: `Failed to read collab doc: ${result?.error || "Unknown error"}` }],
+          isError: true,
+        });
+        return;
+      }
+      resolve({
+        content: [{ type: "text", text: result.content ?? "" }],
+        isError: false,
+      });
+    });
+
+    targetWindow.webContents.send("mcp:readCollabDoc", {
+      targetFilePath,
+      resultChannel,
+    });
+  });
+}
+
+/**
+ * applyCollabDocEdit — collab-only alias for applyDiff.
+ *
+ * Validates that the target is a collab:// URI and then delegates to the
+ * shared applyDiff handler. Exposed as a distinct MCP tool so transcripts
+ * make it clear when the agent is editing the live shared document, and so
+ * the system preamble can call out a single canonical name.
+ */
+export async function handleApplyCollabDocEdit(args: any): Promise<McpToolResult> {
+  const targetFilePath = args?.filePath;
+  if (!isCollabUri(targetFilePath)) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Error: applyCollabDocEdit requires a collab:// URI. Got: ${targetFilePath ?? "(missing)"}. For filesystem files, use Edit instead.`,
+        },
+      ],
+      isError: true,
+    };
+  }
+  return handleApplyDiff(args);
 }
 
 export async function handleStreamContent(args: any): Promise<McpToolResult> {

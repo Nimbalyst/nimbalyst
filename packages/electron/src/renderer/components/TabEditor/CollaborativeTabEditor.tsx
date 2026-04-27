@@ -17,7 +17,8 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAtomValue } from 'jotai';
-import { MarkdownEditor } from '@nimbalyst/runtime';
+import { MarkdownEditor, DocumentPathProvider } from '@nimbalyst/runtime';
+import { LexicalDiffHeaderAdapter } from '../UnifiedDiffHeader';
 import { DocumentSyncProvider } from '@nimbalyst/runtime/sync';
 import { CollabLexicalProvider } from '@nimbalyst/runtime/sync';
 import type { EditorHost, ExtensionStorage } from '@nimbalyst/runtime';
@@ -171,6 +172,9 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
   const cursorColor = useMemo(() => randomCursorColor(), []);
   const assetService = useMemo(() => new CollabAssetService(activeConfig), [activeConfig]);
   const keyRotationEpoch = useAtomValue(collabKeyRotationEpochAtom);
+  // Captured Lexical editor instance — needed to render the DiffApprovalBar
+  // (and any other FixedTabHeader plugin) when the agent applies edits.
+  const [lexicalEditor, setLexicalEditor] = useState<any | null>(null);
 
   // Re-key: when the rotation epoch changes, re-fetch config with new encryption key
   useEffect(() => {
@@ -420,14 +424,27 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
       <CollabStatusBar filePath={filePath} fileName={fileName} />
 
       {/* Editor area */}
-      <div style={{ flex: 1, overflow: 'hidden' }}>
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         {providerReadyRef.current ? (
-          <MarkdownEditor
-            host={editorHost}
-            config={markdownConfig}
-            onGetContent={onGetContentReady}
-            collaborationConfig={collaborationMemoConfig}
-          />
+          <DocumentPathProvider documentPath={filePath}>
+            {/* Accept/reject bar when an AI edit is pending review. Mirrors
+                the TabEditor markdown branch; the global DiffApprovalBarPlugin
+                is intentionally disabled in App.tsx. */}
+            <LexicalDiffHeaderAdapter
+              editor={lexicalEditor ?? undefined}
+              filePath={filePath}
+              fileName={fileName}
+            />
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              <MarkdownEditor
+                host={editorHost}
+                config={markdownConfig}
+                onGetContent={onGetContentReady}
+                onEditorReady={setLexicalEditor}
+                collaborationConfig={collaborationMemoConfig}
+              />
+            </div>
+          </DocumentPathProvider>
         ) : (
           <div className="flex items-center justify-center h-full text-nim-muted">
             Connecting to document...

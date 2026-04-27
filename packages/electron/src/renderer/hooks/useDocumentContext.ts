@@ -3,6 +3,7 @@ import type { TabData } from '../contexts/TabsContext';
 import { getTextSelection } from '../components/UnifiedAI/TextSelectionIndicator';
 import type { MockupSelection, EditorContext } from '@nimbalyst/runtime';
 import { getEditorContext } from '../stores/editorContextStore';
+import { isCollabUri } from '../utils/collabUri';
 
 export interface DocumentContext {
   filePath: string;
@@ -59,6 +60,11 @@ interface UseDocumentContextProps {
  */
 export function detectFileType(filePath: string): string {
   if (!filePath) return 'unknown';
+
+  // Collaborative shared documents (collab:// URIs) are always markdown,
+  // but we tag them distinctly so the AI knows they live in Yjs and must be
+  // edited via applyCollabDocEdit / applyDiff (not Edit/Write).
+  if (isCollabUri(filePath)) return 'collab-markdown';
 
   const lowerPath = filePath.toLowerCase();
 

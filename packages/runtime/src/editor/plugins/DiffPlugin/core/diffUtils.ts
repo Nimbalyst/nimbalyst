@@ -505,6 +505,19 @@ export function applyMarkdownReplace(
     return;
   }
 
+  // Normalize leading/trailing whitespace on newMarkdown so the TARGET editor
+  // it produces has a canonical empty-paragraph count. Without this, the
+  // markdown parser's quirk of emitting an extra empty paragraph compounds
+  // every edit: SOURCE (clone of LIVE) keeps whatever leading empties already
+  // exist, TARGET (parse(newMarkdown)) gains one more, and TreeMatcher inserts
+  // the difference. In Files mode the drift is masked by save/reload through
+  // disk; in collab the empties become permanent Y.Doc inserts and accumulate
+  // visibly at the top of the document. Normalizing here forces TARGET toward
+  // zero leading/trailing empties, so each edit also cleans up prior drift.
+  // We deliberately leave originalMarkdown untouched — it's used only for
+  // text-stat reporting and error context.
+  const normalizedNewMarkdown = newMarkdown.replace(/^\s+/, '').replace(/\s+$/, '\n');
+
   // Debug: Markdown diff info
   // console.log('📝 Original markdown length:', originalMarkdown.length);
   // console.log('📝 New markdown length:', newMarkdown.length);
@@ -516,7 +529,7 @@ export function applyMarkdownReplace(
     applyMarkdownDiffToDocument(
       editor,
       originalMarkdown,
-      newMarkdown,
+      normalizedNewMarkdown,
       transformers,
     );
     // console.log('✅ applyMarkdownDiffToDocument completed successfully');
