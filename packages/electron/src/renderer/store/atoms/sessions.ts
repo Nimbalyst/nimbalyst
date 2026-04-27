@@ -225,6 +225,14 @@ export const sessionPendingPromptsRefreshAtom = atomFamily((_sessionId: string) 
  */
 const INTERACTIVE_PROMPT_TOOLS = new Set(['AskUserQuestion', 'ToolPermission', 'ExitPlanMode', 'GitCommitProposal']);
 
+// MCP tools arrive as `mcp__<server>__<toolName>` (server name may contain dashes).
+// Match the bare name first; if not found, peel off the MCP prefix and recheck.
+function isInteractivePromptTool(toolName: string): boolean {
+  if (INTERACTIVE_PROMPT_TOOLS.has(toolName)) return true;
+  const match = toolName.match(/^mcp__[^_]+(?:_[^_]+)*__(.+)$/);
+  return !!match && INTERACTIVE_PROMPT_TOOLS.has(match[1]);
+}
+
 export const refreshPendingPromptsAtom = atom(
   null,
   (get, set, sessionId: string) => {
@@ -236,13 +244,10 @@ export const refreshPendingPromptsAtom = atom(
         // Interactive prompts projected from canonical events
         if (msg.type === 'interactive_prompt' && msg.interactivePrompt?.status === 'pending') return true;
         // Interactive tools stored as tool_calls (from TranscriptTransformer)
-        if (msg.toolCall?.toolName && INTERACTIVE_PROMPT_TOOLS.has(msg.toolCall.toolName) && !msg.toolCall.result) return true;
+        if (msg.toolCall?.toolName && isInteractivePromptTool(msg.toolCall.toolName) && !msg.toolCall.result) return true;
         return false;
       }
     );
-    // DEBUG: temp instrumentation for awaiting-input regression
-    console.warn('[DEBUG-PENDING] refreshPendingPromptsAtom writing', { sessionId: sessionId.slice(0, 8), hasPendingPrompt, msgCount: messages.length });
-    console.trace('[DEBUG-PENDING] refreshPendingPromptsAtom caller');
     set(sessionHasPendingInteractivePromptAtom(sessionId), hasPendingPrompt);
   }
 );
