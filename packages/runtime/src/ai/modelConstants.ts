@@ -228,6 +228,64 @@ export const DEFAULT_MODELS = {
   'openai-codex': 'openai-codex:gpt-5.4',
   'openai-codex-acp': 'openai-codex-acp:gpt-5.4',
   lmstudio: 'lmstudio:local-model',
-  opencode: 'opencode:default',
+  opencode: 'opencode:anthropic/claude-sonnet-4-5',
   'copilot-cli': 'copilot-cli:default',
 };
+
+/**
+ * Curated preset list of models for the OpenCode agent.
+ *
+ * OpenCode itself uses `<providerID>/<modelID>` (e.g. `anthropic/claude-sonnet-4-5`).
+ * In Nimbalyst's model registry we wrap that with the `opencode:` prefix so the
+ * provider-router knows which agent to dispatch to. The OpenCode protocol layer
+ * strips the prefix before forwarding to the SDK.
+ *
+ * Keep this list small -- OpenCode supports hundreds of models. These are the
+ * defaults users see in the picker before they configure custom providers.
+ */
+export interface OpenCodePresetModel {
+  /** Full id with the `opencode:` registry prefix. */
+  id: string;
+  /** Human-readable label shown in pickers. */
+  name: string;
+  /** OpenCode provider id (the segment before the `/`). */
+  providerID: string;
+  /** OpenCode model id (the segment after the `/`). */
+  modelID: string;
+}
+
+export const OPENCODE_PRESET_MODELS: OpenCodePresetModel[] = [
+  {
+    id: 'opencode:anthropic/claude-sonnet-4-5',
+    name: 'Claude Sonnet 4.5',
+    providerID: 'anthropic',
+    modelID: 'claude-sonnet-4-5',
+  },
+  {
+    id: 'opencode:anthropic/claude-opus-4-1',
+    name: 'Claude Opus 4.1',
+    providerID: 'anthropic',
+    modelID: 'claude-opus-4-1',
+  },
+  {
+    id: 'opencode:openai/gpt-5',
+    name: 'GPT-5',
+    providerID: 'openai',
+    modelID: 'gpt-5',
+  },
+  {
+    id: 'opencode:openai/gpt-5-mini',
+    name: 'GPT-5 Mini',
+    providerID: 'openai',
+    modelID: 'gpt-5-mini',
+  },
+  {
+    id: 'opencode:google/gemini-2.5-pro',
+    name: 'Gemini 2.5 Pro',
+    providerID: 'google',
+    modelID: 'gemini-2.5-pro',
+  },
+];
+
+/** OpenCode provider id reserved for an LM Studio bridge written into opencode.json. */
+export const OPENCODE_LMSTUDIO_PROVIDER_ID = 'lmstudio';

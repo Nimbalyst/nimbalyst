@@ -65,6 +65,7 @@ import {
     getAppSetting
 } from './utils/store';
 import { registerMCPConfigHandlers } from './ipc/MCPConfigHandlers';
+import { getOpenCodeConfigService, registerOpenCodeConfigHandlers } from './ipc/OpenCodeConfigHandlers';
 import { registerClaudeCodePluginHandlers } from './ipc/ClaudeCodePluginHandlers';
 import { registerExportHandlers } from './ipc/ExportHandlers';
 import { registerShareHandlers } from './ipc/ShareHandlers';
@@ -1075,6 +1076,7 @@ app.whenReady().then(async () => {
     registerProjectMigrationHandlers();
     registerSuperLoopHandlers();
     registerMCPConfigHandlers();
+    registerOpenCodeConfigHandlers();
     registerClaudeCodePluginHandlers();
     registerDatabaseBrowserHandlers();
     registerTerminalHandlers();
@@ -1259,6 +1261,10 @@ app.whenReady().then(async () => {
     OpenAICodexACPProvider.setEnhancedPathLoader(() => getEnhancedPath());
     OpenCodeProvider.setEnhancedPathLoader(() => getEnhancedPath());
     CopilotCLIProvider.setEnhancedPathLoader(() => getEnhancedPath());
+
+    // Inject opencode.json loader so OpenCodeProvider.getModels() can surface
+    // user-configured providers (e.g. an LM Studio bridge) in the model picker.
+    OpenCodeProvider.setConfigLoader(() => getOpenCodeConfigService().readConfig());
 
     // Inject SDK module loader for packaged builds where dynamic import('@openai/codex-sdk')
     // can't resolve the package from within app.asar.

@@ -256,6 +256,26 @@ async function loadOpenCodeSdkModule(): Promise<{ createOpencodeClient: OpenCode
 }
 
 /**
+ * Convert a Nimbalyst-style OpenCode model id (e.g. `opencode:anthropic/claude-sonnet-4-5`
+ * or just `anthropic/claude-sonnet-4-5`) into the `{ providerID, modelID }` shape
+ * the OpenCode SDK expects in the prompt body. Returns null when the id can't be
+ * parsed -- callers should omit the field so OpenCode picks its config default.
+ */
+export function parseOpenCodeModelId(
+  rawModel: string | undefined
+): { providerID: string; modelID: string } | null {
+  if (!rawModel) return null;
+  const stripped = rawModel.startsWith('opencode:') ? rawModel.slice('opencode:'.length) : rawModel;
+  if (!stripped || stripped === 'default') return null;
+  const slashIdx = stripped.indexOf('/');
+  if (slashIdx <= 0 || slashIdx === stripped.length - 1) return null;
+  return {
+    providerID: stripped.slice(0, slashIdx),
+    modelID: stripped.slice(slashIdx + 1),
+  };
+}
+
+/**
  * OpenCode SDK Protocol Adapter
  *
  * Provides a normalized interface to the OpenCode SDK, handling:
@@ -433,13 +453,22 @@ export class OpenCodeSDKProtocol implements AgentProtocol {
     let usage: { input_tokens: number; output_tokens: number; total_tokens: number } | undefined;
 
     try {
-      // Send the prompt (non-blocking -- events arrive via SSE)
+      const sessionOptions = session.raw?.options as SessionOptions | undefined;
+      const modelSelector = parseOpenCodeModelId(sessionOptions?.model);
+
+      // Send the prompt (non-blocking -- events arrive via SSE).
+      // The `model` field is optional -- when omitted, OpenCode falls back to
+      // the default model from its config file (~/.config/opencode/opencode.json).
+      const promptBody: Record<string, unknown> = {
+        parts: [{ type: 'text', text: message.content }],
+      };
+      if (modelSelector) {
+        promptBody.model = modelSelector;
+      }
       const promptPromise = client.session.prompt({
         path: { id: sessionId },
-        query: { directory: (session.raw?.options as SessionOptions)?.workspacePath },
-        body: {
-          parts: [{ type: 'text', text: message.content }],
-        },
+        query: { directory: sessionOptions?.workspacePath },
+        body: promptBody,
       });
 
       // Process SSE events
@@ -651,14 +680,32 @@ export class OpenCodeSDKProtocol implements AgentProtocol {
         break;
       }
 
-      // Session error
+      // Session error.
+      // OpenCode shapes errors as `{ name: 'UnknownError' | ..., data: { message } }`
+      // for runtime errors bubbled up from the model provider, plus simpler
+      // shapes for SDK-level errors. Try the most specific path first so the
+      // user actually sees what went wrong (context-too-small, auth, etc.)
+      // instead of a generic "Unknown error".
       case 'session.error': {
         const errorObj = props.error as Record<string, unknown> | string | undefined;
         let errorMsg: string;
         if (typeof errorObj === 'string') {
           errorMsg = errorObj;
         } else if (errorObj && typeof errorObj === 'object') {
-          errorMsg = (errorObj as any).message || (errorObj as any).type || 'Unknown error';
+          const data = (errorObj as any).data;
+          const dataMessage = typeof data === 'object' && data !== null
+            ? (data.message as string | undefined)
+            : (typeof data === 'string' ? data : undefined);
+          errorMsg = dataMessage
+            || (errorObj as any).message
+            || (errorObj as any).name
+            || (errorObj as any).type
+            || 'Unknown error';
+          // Strip wrapping quotes that some providers (e.g. llama.cpp via LM Studio)
+          // include when forwarding raw model-server messages.
+          if (typeof errorMsg === 'string') {
+            errorMsg = errorMsg.replace(/^"|"$/g, '');
+          }
         } else {
           errorMsg = 'Unknown error';
         }

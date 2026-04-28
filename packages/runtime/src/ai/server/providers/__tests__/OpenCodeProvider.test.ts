@@ -83,17 +83,36 @@ describe('OpenCodeProvider', () => {
     OpenCodeProvider.setMcpConfigLoader(null);
     OpenCodeProvider.setShellEnvironmentLoader(null);
     OpenCodeProvider.setEnhancedPathLoader(null);
+    OpenCodeProvider.setConfigLoader(null);
   });
 
-  it('returns static model list from getModels', async () => {
+  it('returns the curated preset model list from getModels when no opencode.json exists', async () => {
     const models = await OpenCodeProvider.getModels();
 
-    expect(models).toHaveLength(4);
+    expect(models.length).toBeGreaterThan(0);
     expect(models).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'opencode:default', provider: 'opencode' }),
-      expect.objectContaining({ id: 'opencode:claude-sonnet', provider: 'opencode' }),
-      expect.objectContaining({ id: 'opencode:gpt-5', provider: 'opencode' }),
-      expect.objectContaining({ id: 'opencode:gemini-pro', provider: 'opencode' }),
+      expect.objectContaining({ id: 'opencode:anthropic/claude-sonnet-4-5', provider: 'opencode' }),
+      expect.objectContaining({ id: 'opencode:openai/gpt-5', provider: 'opencode' }),
+      expect.objectContaining({ id: 'opencode:google/gemini-2.5-pro', provider: 'opencode' }),
+    ]));
+  });
+
+  it('appends user-configured providers from opencode.json to the preset list', async () => {
+    OpenCodeProvider.setConfigLoader(async () => ({
+      provider: {
+        lmstudio: {
+          name: 'LM Studio (local)',
+          npm: '@ai-sdk/openai-compatible',
+          options: { baseURL: 'http://127.0.0.1:1234/v1' },
+          models: { 'qwen2.5-coder-7b-instruct': { name: 'Qwen 2.5 Coder 7B' } },
+        },
+      },
+    }));
+
+    const models = await OpenCodeProvider.getModels();
+
+    expect(models).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'opencode:lmstudio/qwen2.5-coder-7b-instruct', provider: 'opencode' }),
     ]));
   });
 

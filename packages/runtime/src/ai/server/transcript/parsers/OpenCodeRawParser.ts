@@ -41,9 +41,16 @@ interface AssistantTokenSnapshot {
 export class OpenCodeRawParser implements IRawMessageParser {
   private toolIdCounter = 0;
   // Set of message IDs confirmed as assistant via message.updated events.
-  // Text/reasoning parts are only emitted when their parent messageID is in
-  // this set, so user message parts never leak through.
+  // Used to short-circuit the user-message check when we have positive proof.
   private assistantMessageIds = new Set<string>();
+  // Set of message IDs confirmed as user-role. Deltas referencing these are
+  // suppressed so user-message parts don't leak through as assistant text.
+  // Tracked separately so we default to emitting when role is unknown -- the
+  // transformer creates a fresh parser per batch, so a message.updated arriving
+  // before its deltas in one batch won't be remembered in the next batch's
+  // parser instance. Defaulting to emit + explicit user-suppression matches
+  // real OpenCode traffic, where only assistant messages ever stream deltas.
+  private userMessageIds = new Set<string>();
   // Latest token snapshot per assistant message ID, captured from
   // message.updated. Used to populate turn_ended on session.idle.
   private assistantTokens = new Map<string, AssistantTokenSnapshot>();
@@ -187,7 +194,13 @@ export class OpenCodeRawParser implements IRawMessageParser {
 
     const id = typeof info.id === 'string' ? info.id : '';
     const role = info.role;
-    if (!id || role !== 'assistant') return [];
+    if (!id) return [];
+
+    if (role === 'user') {
+      this.userMessageIds.add(id);
+      return [];
+    }
+    if (role !== 'assistant') return [];
 
     this.assistantMessageIds.add(id);
 
@@ -236,7 +249,12 @@ export class OpenCodeRawParser implements IRawMessageParser {
     if (!delta) return [];
 
     const messageID = typeof props.messageID === 'string' ? props.messageID : '';
-    if (!messageID || !this.assistantMessageIds.has(messageID)) return [];
+    if (!messageID) return [];
+    // Suppress only when we have positive proof this is a user-message part.
+    // Otherwise emit -- real-time streaming routinely splits message.updated
+    // and its deltas across separate transformer batches, and a fresh parser
+    // instance won't remember the assistant-role assertion from a prior batch.
+    if (this.userMessageIds.has(messageID)) return [];
 
     return [{
       type: 'assistant_message',

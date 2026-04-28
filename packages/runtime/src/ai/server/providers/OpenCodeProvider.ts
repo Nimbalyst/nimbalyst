@@ -16,7 +16,7 @@
 import { BaseAgentProvider } from './BaseAgentProvider';
 import { buildUserMessageAddition } from './documentContextUtils';
 import { buildClaudeCodeSystemPrompt } from '../../prompt';
-import { DEFAULT_MODELS } from '../../modelConstants';
+import { DEFAULT_MODELS, OPENCODE_PRESET_MODELS } from '../../modelConstants';
 import {
   ProviderConfig,
   DocumentContext,
@@ -35,6 +35,32 @@ import { TranscriptMigrationRepository } from '../../../storage/repositories/Tra
 
 interface OpenCodeProviderDeps {
   protocol?: OpenCodeSDKProtocol;
+}
+
+/**
+ * Subset of OpenCode's `opencode.json` schema we care about for surfacing
+ * configured providers/models to the picker. OpenCode accepts many more
+ * fields -- we only read what we need and pass everything else through
+ * untouched on writes.
+ */
+export interface OpenCodeFileProviderModel {
+  name?: string;
+}
+
+export interface OpenCodeFileProvider {
+  name?: string;
+  npm?: string;
+  options?: Record<string, unknown>;
+  models?: Record<string, OpenCodeFileProviderModel>;
+}
+
+export interface OpenCodeFileConfig {
+  $schema?: string;
+  model?: string;
+  autoupdate?: boolean;
+  share?: 'manual' | 'auto' | 'disabled';
+  provider?: Record<string, OpenCodeFileProvider>;
+  [key: string]: unknown;
 }
 
 export class OpenCodeProvider extends BaseAgentProvider {
@@ -59,6 +85,11 @@ export class OpenCodeProvider extends BaseAgentProvider {
 
   // MCP config loader (injected from electron main process)
   private static mcpConfigLoader: ((workspacePath?: string) => Promise<Record<string, MCPServerConfig>>) | null = null;
+
+  // OpenCode config loader (injected from electron main process). Returns the
+  // parsed opencode.json so we can surface user-configured providers/models in
+  // the picker. Optional -- if missing we just return the preset list.
+  private static configLoader: (() => Promise<OpenCodeFileConfig | null>) | null = null;
 
   // Shell environment loader (injected from electron main process)
   private static shellEnvironmentLoader: (() => Record<string, string> | null) | null = null;
@@ -127,6 +158,10 @@ export class OpenCodeProvider extends BaseAgentProvider {
     OpenCodeProvider.enhancedPathLoader = loader;
   }
 
+  public static setConfigLoader(loader: (() => Promise<OpenCodeFileConfig | null>) | null): void {
+    OpenCodeProvider.configLoader = loader;
+  }
+
   getDisplayName(): string {
     return 'OpenCode';
   }
@@ -163,32 +198,44 @@ export class OpenCodeProvider extends BaseAgentProvider {
 
   /**
    * Get available models from OpenCode.
-   * OpenCode supports multiple providers (Claude, OpenAI, Gemini, local),
-   * so models depend on user configuration.
+   *
+   * Returns the curated preset list (Claude/GPT/Gemini) plus any models the
+   * user has wired up in their `opencode.json` -- e.g. an LM Studio bridge.
+   * Configured models are deduplicated against the presets by id.
    */
   static async getModels(): Promise<AIModel[]> {
-    return [
-      {
-        id: 'opencode:default',
-        name: 'Default (OpenCode configured)',
-        provider: 'opencode' as AIProviderType,
-      },
-      {
-        id: 'opencode:claude-sonnet',
-        name: 'Claude Sonnet (via OpenCode)',
-        provider: 'opencode' as AIProviderType,
-      },
-      {
-        id: 'opencode:gpt-5',
-        name: 'GPT-5 (via OpenCode)',
-        provider: 'opencode' as AIProviderType,
-      },
-      {
-        id: 'opencode:gemini-pro',
-        name: 'Gemini Pro (via OpenCode)',
-        provider: 'opencode' as AIProviderType,
-      },
-    ];
+    const provider = 'opencode' as AIProviderType;
+    const presets: AIModel[] = OPENCODE_PRESET_MODELS.map((m) => ({
+      id: m.id,
+      name: m.name,
+      provider,
+    }));
+
+    const config = await OpenCodeProvider.configLoader?.().catch(() => null);
+    if (!config?.provider) {
+      return presets;
+    }
+
+    const seen = new Set(presets.map((m) => m.id));
+    const configured: AIModel[] = [];
+
+    for (const [providerID, providerEntry] of Object.entries(config.provider)) {
+      const providerLabel = providerEntry.name || providerID;
+      const models = providerEntry.models;
+      if (!models) continue;
+      for (const [modelID, modelEntry] of Object.entries(models)) {
+        const id = `opencode:${providerID}/${modelID}`;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        configured.push({
+          id,
+          name: modelEntry?.name ? `${modelEntry.name} (${providerLabel})` : `${modelID} (${providerLabel})`,
+          provider,
+        });
+      }
+    }
+
+    return [...presets, ...configured];
   }
 
   /**

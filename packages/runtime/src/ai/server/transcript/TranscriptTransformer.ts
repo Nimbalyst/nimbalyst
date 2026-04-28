@@ -78,7 +78,21 @@ export type OnCanonicalEventWritten = (event: TranscriptEvent) => void;
 // ---------------------------------------------------------------------------
 
 export class TranscriptTransformer {
-  /** Version for transformer-managed sessions. Bump to force re-transformation. */
+  /**
+   * Version for transformer-managed sessions.
+   *
+   * DO NOT BUMP THIS to "fix" a parser bug or refresh a single session's
+   * transcript. Bumping this number forces a full re-transform of EVERY
+   * historical session for EVERY provider on the user's machine -- including
+   * sessions that have nothing to do with the change. That's an enormous,
+   * irreversible blast radius for a one-off fix.
+   *
+   * This number is reserved for incompatible changes to the canonical event
+   * shape itself. If you're tempted to bump it because new sessions look
+   * wrong with an old parser, ship the parser fix instead and accept that
+   * already-broken sessions stay broken until the user starts a new one.
+   * Tell the user that explicitly -- don't paper over it with a re-transform.
+   */
   static readonly CURRENT_VERSION = 4;
 
   /**
