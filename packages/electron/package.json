@@ -180,8 +180,8 @@
     "asarUnpack": [
       "node_modules/**/*.node",
       "node_modules/@anthropic-ai/**/*",
-      "node_modules/@openai/codex-*/*",
-      "node_modules/@openai/codex-sdk/**/*",
+      "node_modules/@openai/**/*",
+      "node_modules/@opencode-ai/**/*",
       "node_modules/@vscode/ripgrep/**/*",
       "node_modules/@zed-industries/**/*",
       "node_modules/openai/**/*",
@@ -194,8 +194,11 @@
       "!node_modules/**/*",
       "node_modules/@anthropic-ai/claude-agent-sdk/**/*",
       "node_modules/@anthropic-ai/claude-agent-sdk-*/**/*",
+      "node_modules/@openai/codex/**/*",
+      "node_modules/@openai/codex-*/**/*",
       "node_modules/@zed-industries/codex-acp/**/*",
       "node_modules/@zed-industries/codex-acp-*/**/*",
+      "node_modules/@opencode-ai/sdk/**/*",
       "node_modules/@vscode/ripgrep/**/*",
       "node_modules/electron-store/**/*",
       "node_modules/conf/**/*",
@@ -229,14 +232,6 @@
       {
         "from": "../../node_modules/node-pty",
         "to": "node-pty"
-      },
-      {
-        "from": "node_modules/@openai/codex-sdk",
-        "to": "app.asar.unpacked/node_modules/@openai/codex-sdk"
-      },
-      {
-        "from": "node_modules/@openai",
-        "to": "app.asar.unpacked/node_modules/@openai"
       },
       {
         "from": "../../node_modules/@img",
@@ -343,6 +338,10 @@
         {
           "from": "../../node_modules/@anthropic-ai/claude-agent-sdk-darwin-${arch}",
           "to": "app.asar.unpacked/node_modules/@anthropic-ai/claude-agent-sdk-darwin-${arch}"
+        },
+        {
+          "from": "../../node_modules/@openai/codex-darwin-${arch}",
+          "to": "app.asar.unpacked/node_modules/@openai/codex-darwin-${arch}"
         }
       ],
       "target": [

@@ -77,6 +77,8 @@ export default defineConfig(({ mode }) => ({
         '@electric-sql/pglite',
         '@anthropic-ai/sdk',
         '@openai/codex-sdk',
+        '@opencode-ai/sdk',
+        '@opencode-ai/sdk/client',
         'openai',
         'yjs',
         'y-websocket',

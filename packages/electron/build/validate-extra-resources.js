@@ -36,6 +36,25 @@ function expandMacros(str, platformMacro) {
     .replace(/\$\{os\}/g, platformMacro || process.platform);
 }
 
+// Mirror of getCodexTargetTriple in packages/runtime/src/ai/server/providers/codex/codexBinaryPath.ts.
+// Keep these in sync: the validator must check the same vendored-binary path
+// the runtime resolves at runtime.
+function codexTargetTriple(plat, arch) {
+  if (plat === 'darwin') {
+    if (arch === 'x64') return 'x86_64-apple-darwin';
+    if (arch === 'arm64') return 'aarch64-apple-darwin';
+  }
+  if (plat === 'linux') {
+    if (arch === 'x64') return 'x86_64-unknown-linux-musl';
+    if (arch === 'arm64') return 'aarch64-unknown-linux-musl';
+  }
+  if (plat === 'win32') {
+    if (arch === 'x64') return 'x86_64-pc-windows-msvc';
+    if (arch === 'arm64') return 'aarch64-pc-windows-msvc';
+  }
+  return undefined;
+}
+
 function collectEntries() {
   const out = [];
   const top = packageJson.build?.extraResources;
@@ -132,6 +151,29 @@ for (const { entry, platformMacro } of allEntries) {
       accept: (f) => f === binName,
       cause: 'cross-arch install step failed to land the binary at root node_modules/, or npm pruned the cpu-mismatched optional dep',
       fix: `npm install --no-save --force @anthropic-ai/claude-agent-sdk-${plat}-${buildArch}@<sdk-version>`,
+    });
+  }
+  // @openai/codex-<platform>-<arch>: the native `codex` binary sits at
+  // vendor/<target-triple>/codex (see codexBinaryPath.ts). Same cross-arch
+  // failure mode as claude-agent-sdk -- if the package exists but the
+  // vendored binary is missing, the cross-arch install step broke.
+  const codexMatch = rawFrom.match(/@openai\/codex-([a-z0-9]+)-\$\{arch\}$/);
+  if (codexMatch) {
+    const plat = codexMatch[1];
+    const dir = path.resolve(packageDir, expandMacros(rawFrom, platformMacro));
+    const triple = codexTargetTriple(plat, buildArch);
+    const binName = plat === 'win32' ? 'codex.exe' : 'codex';
+    binaryChecks.push({
+      label: `@openai/codex-${plat}-${buildArch}`,
+      dir,
+      candidatePaths: triple ? [
+        path.join(dir, 'vendor', triple, 'codex', binName),
+        path.join(dir, 'vendor', triple, binName),
+      ] : [],
+      cause: triple
+        ? `cross-arch install step failed to land the codex binary at vendor/${triple}/, or npm pruned the cpu-mismatched optional dep`
+        : `unsupported codex target for plat=${plat}, arch=${buildArch}`,
+      fix: `npm install --no-save --force @openai/codex-${plat}-${buildArch}@<codex-version>`,
     });
   }
   // node-pty: the loadable native module must exist at one of three paths

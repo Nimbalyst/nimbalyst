@@ -1,8 +1,15 @@
 // afterPack.js - Post-packaging hook
-// Prunes unused platform binaries to reduce app size
+// Prunes unused platform binaries to reduce app size, then validates that
+// every dynamically-imported SDK and every spawnable native binary actually
+// resolves from inside the packaged tree. The validator catches the failure
+// class where the build is green but the feature is broken in production
+// because the SDK's package.json/exports map is missing or unresolvable --
+// something `validate-extra-resources.js` (input-only validation) cannot
+// detect.
 
 const path = require('path');
 const fs = require('fs');
+const { spawnSync } = require('child_process');
 
 exports.default = async function(context) {
   const { appOutDir, packager } = context;
@@ -75,6 +82,26 @@ exports.default = async function(context) {
     if (removedCount > 0) {
       console.log(`AfterPack: Pruned ${removedCount} non-target SDK platform packages from asar`);
     }
+  }
+
+  // Validate the packaged tree by exercising real ESM `import()` against
+  // app.asar.unpacked/node_modules and verifying every native binary is
+  // present + executable. Fails the build on any miss -- this is the gate
+  // that catches the "build green, feature broken" failure class.
+  const packagedAppPath = packager.platform.name === 'mac'
+    ? path.join(appOutDir, `${packager.appInfo.productName}.app`)
+    : appOutDir;
+
+  console.log(`AfterPack: Validating packaged SDKs at ${packagedAppPath}`);
+  const validatorScript = path.join(__dirname, 'validate-packaged-sdks.js');
+  const result = spawnSync(process.execPath, [validatorScript, packagedAppPath], {
+    stdio: 'inherit',
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `AfterPack: validate-packaged-sdks reported missing runtime dependencies in the packaged app. ` +
+      `The build cannot continue -- shipping it would produce a broken release. See output above.`,
+    );
   }
 
   console.log('AfterPack: Complete');

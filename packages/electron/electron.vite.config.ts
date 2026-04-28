@@ -148,6 +148,8 @@ export default defineConfig({
         external: [
           '@anthropic-ai/claude-agent-sdk', // Exclude from bundle - loaded dynamically at runtime
           '@openai/codex-sdk', // Exclude from bundle - SDK resolves a vendored codex binary relative to its own package path
+          '@opencode-ai/sdk', // Exclude from bundle - loaded dynamically at runtime via @opencode-ai/sdk/client
+          '@opencode-ai/sdk/client',
           // All JS packages are now bundled to avoid npm workspaces hoisting issues.
           // Only native modules and renderer-only packages are kept external.
           // Renderer-only packages (loaded in browser context)
