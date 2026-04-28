@@ -342,6 +342,10 @@
         {
           "from": "../../node_modules/@openai/codex-darwin-${arch}",
           "to": "app.asar.unpacked/node_modules/@openai/codex-darwin-${arch}"
+        },
+        {
+          "from": "../../node_modules/@zed-industries/codex-acp-darwin-${arch}",
+          "to": "app.asar.unpacked/node_modules/@zed-industries/codex-acp-darwin-${arch}"
         }
       ],
       "target": [

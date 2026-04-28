@@ -202,7 +202,21 @@ jobs:
             CODEX_SPEC=""
           fi
 
-          # Install both cross-arch native binaries in a SINGLE npm invocation.
+          # Codex ACP native binary version (same pattern as @openai/codex).
+          if [ -f "packages/electron/node_modules/@zed-industries/codex-acp/package.json" ]; then
+            CODEX_ACP_PKG_JSON="packages/electron/node_modules/@zed-industries/codex-acp/package.json"
+          elif [ -f "node_modules/@zed-industries/codex-acp/package.json" ]; then
+            CODEX_ACP_PKG_JSON="node_modules/@zed-industries/codex-acp/package.json"
+          else
+            CODEX_ACP_PKG_JSON=""
+          fi
+          if [ -n "$CODEX_ACP_PKG_JSON" ]; then
+            CODEX_ACP_SPEC=$(node -p "require(require('path').resolve('${CODEX_ACP_PKG_JSON}')).optionalDependencies?.['@zed-industries/codex-acp-${NPM_PLATFORM}-${TARGET_ARCH}'] || ''")
+          else
+            CODEX_ACP_SPEC=""
+          fi
+
+          # Install all cross-arch native binaries in a SINGLE npm invocation.
           # Running separate `npm install --no-save` calls causes npm to prune
           # the previously-installed cross-arch dep as "extraneous" (it's not
           # in package.json, and --no-save keeps it that way), so the second
@@ -215,6 +229,11 @@ jobs:
             CODEX_PKG="@openai/codex-${NPM_PLATFORM}-${TARGET_ARCH}@${CODEX_SPEC}"
             INSTALL_ARGS+=("${CODEX_PKG}")
             echo "Installing ${CODEX_PKG}"
+          fi
+          if [ -n "$CODEX_ACP_SPEC" ]; then
+            CODEX_ACP_PKG="@zed-industries/codex-acp-${NPM_PLATFORM}-${TARGET_ARCH}@${CODEX_ACP_SPEC}"
+            INSTALL_ARGS+=("${CODEX_ACP_PKG}")
+            echo "Installing ${CODEX_ACP_PKG}"
           fi
           npm install --no-save --force "${INSTALL_ARGS[@]}"
 
