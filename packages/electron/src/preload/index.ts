@@ -146,6 +146,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('open-keyboard-shortcuts', callback);
     return () => ipcRenderer.removeListener('open-keyboard-shortcuts', callback);
   },
+  onOpenFeedback: (callback: () => void) => {
+    ipcRenderer.on('open-feedback', callback);
+    return () => ipcRenderer.removeListener('open-feedback', callback);
+  },
   onFileDeleted: (callback: (data: { filePath: string }) => void) => {
     const handler = (_event: any, data: any) => callback(data);
     ipcRenderer.on('file-deleted', handler);

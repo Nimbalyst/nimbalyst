@@ -10,7 +10,10 @@ import { registerDialog } from '../contexts/DialogContext';
 import type { DialogConfig } from '../contexts/DialogContext.types';
 import { KeyboardShortcutsDialog } from '../components/KeyboardShortcutsDialog/KeyboardShortcutsDialog';
 import { DiscordInvitation } from '../components/DiscordInvitation/DiscordInvitation';
-import { PostHogSurvey } from '../components/PostHogSurvey/PostHogSurvey';
+import {
+  FeedbackIntakeDialog,
+  type FeedbackIntakeLaunchOptions,
+} from '../components/Feedback';
 import { ApiKeyDialog } from '../components/ApiKeyDialog';
 import { ShareDialog } from '../components/ShareDialog/ShareDialog';
 import { DIALOG_IDS } from './registry';
@@ -25,8 +28,9 @@ export interface DiscordInvitationData {
   onDismiss: () => void;
 }
 
-export interface PostHogSurveyData {
-  // No additional data needed - onClose is handled by the wrapper
+export interface FeedbackIntakeData {
+  /** Called when the user picks a path. The host launches the agent session and switches modes. */
+  onLaunch: (options: FeedbackIntakeLaunchOptions) => void;
 }
 
 export interface ApiKeyDialogData {
@@ -74,18 +78,22 @@ function DiscordInvitationWrapper({
   );
 }
 
-function PostHogSurveyWrapper({
+function FeedbackIntakeWrapper({
   isOpen,
   onClose,
+  data,
 }: {
   isOpen: boolean;
   onClose: () => void;
-  data: PostHogSurveyData;
+  data: FeedbackIntakeData;
 }) {
-  // PostHogSurvey doesn't have an isOpen prop - it's always rendered when mounted
-  // We'll conditionally render it based on isOpen
-  if (!isOpen) return null;
-  return <PostHogSurvey onClose={onClose} />;
+  return (
+    <FeedbackIntakeDialog
+      isOpen={isOpen}
+      onClose={onClose}
+      onLaunch={data.onLaunch}
+    />
+  );
 }
 
 function ApiKeyDialogWrapper({
@@ -148,11 +156,11 @@ export function registerSimpleDialogs() {
     priority: 150,
   });
 
-  registerDialog<PostHogSurveyData>({
-    id: DIALOG_IDS.POSTHOG_SURVEY,
+  registerDialog<FeedbackIntakeData>({
+    id: DIALOG_IDS.FEEDBACK_INTAKE,
     group: 'feedback',
     component:
-      PostHogSurveyWrapper as DialogConfig<PostHogSurveyData>['component'],
+      FeedbackIntakeWrapper as DialogConfig<FeedbackIntakeData>['component'],
     priority: 150,
   });
 

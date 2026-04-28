@@ -23,7 +23,7 @@ export {
   registerSimpleDialogs,
   type KeyboardShortcutsData,
   type DiscordInvitationData,
-  type PostHogSurveyData,
+  type FeedbackIntakeData,
   type ApiKeyDialogData,
   type ShareDialogData,
 } from './simpleDialogs';

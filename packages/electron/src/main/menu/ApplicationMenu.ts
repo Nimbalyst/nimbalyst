@@ -1596,6 +1596,40 @@ export async function createApplicationMenu() {
                 },
                 { type: 'separator' },
                 {
+                    label: 'Send Feedback...',
+                    click: async () => {
+                        AnalyticsService.getInstance().sendEvent('help_accessed', {
+                            helpType: 'feedback',
+                            context: 'menu',
+                        });
+                        const focusedWindow = getFocusedWindow();
+                        if (focusedWindow) {
+                            focusedWindow.webContents.send('open-feedback');
+                        }
+                    }
+                },
+                {
+                    label: 'Browse Issues on GitHub',
+                    click: async () => {
+                        AnalyticsService.getInstance().sendEvent('help_accessed', {
+                            helpType: 'github_issues',
+                            context: 'menu',
+                        });
+                        shell.openExternal('https://github.com/nimbalyst/nimbalyst/issues');
+                    }
+                },
+                {
+                    label: 'GitHub Discussions',
+                    click: async () => {
+                        AnalyticsService.getInstance().sendEvent('help_accessed', {
+                            helpType: 'github_discussions',
+                            context: 'menu',
+                        });
+                        shell.openExternal('https://github.com/nimbalyst/nimbalyst/discussions');
+                    }
+                },
+                { type: 'separator' },
+                {
                     label: 'Community',
                     submenu: [
                         {
@@ -1720,6 +1754,40 @@ export async function createApplicationMenu() {
                         if (focusedWindow) {
                             focusedWindow.webContents.send('open-keyboard-shortcuts');
                         }
+                    }
+                },
+                { type: 'separator' },
+                {
+                    label: 'Send Feedback...',
+                    click: async () => {
+                        AnalyticsService.getInstance().sendEvent('help_accessed', {
+                            helpType: 'feedback',
+                            context: 'menu',
+                        });
+                        const focusedWindow = getFocusedWindow();
+                        if (focusedWindow) {
+                            focusedWindow.webContents.send('open-feedback');
+                        }
+                    }
+                },
+                {
+                    label: 'Browse Issues on GitHub',
+                    click: async () => {
+                        AnalyticsService.getInstance().sendEvent('help_accessed', {
+                            helpType: 'github_issues',
+                            context: 'menu',
+                        });
+                        shell.openExternal('https://github.com/nimbalyst/nimbalyst/issues');
+                    }
+                },
+                {
+                    label: 'GitHub Discussions',
+                    click: async () => {
+                        AnalyticsService.getInstance().sendEvent('help_accessed', {
+                            helpType: 'github_discussions',
+                            context: 'menu',
+                        });
+                        shell.openExternal('https://github.com/nimbalyst/nimbalyst/discussions');
                     }
                 },
                 { type: 'separator' },

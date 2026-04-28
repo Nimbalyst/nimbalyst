@@ -67,6 +67,7 @@ interface UseIPCHandlersProps {
   handleSaveAs: () => Promise<void>;
   handleWorkspaceFileSelect: (filePath: string) => Promise<void>;
   openWelcomeTab: () => Promise<void>;
+  openFeedback: () => void;
   handleNextTab?: () => void;
   handlePreviousTab?: () => void;
 
@@ -129,6 +130,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     handleSaveAs,
     handleWorkspaceFileSelect,
     openWelcomeTab,
+    openFeedback,
     handleNextTab,
     handlePreviousTab,
 
@@ -178,6 +180,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     handleSaveAs,
     handleWorkspaceFileSelect,
     openWelcomeTab,
+    openFeedback,
     handleNextTab,
     handlePreviousTab,
     setIsApiKeyDialogOpen,
@@ -210,6 +213,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     handleSaveAs,
     handleWorkspaceFileSelect,
     openWelcomeTab,
+    openFeedback,
     handleNextTab,
     handlePreviousTab,
     setIsApiKeyDialogOpen,
@@ -910,6 +914,14 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
         if (dialogRef.current) {
           dialogRef.current.open(DIALOG_IDS.KEYBOARD_SHORTCUTS, {});
         }
+      }));
+    }
+
+    // Handle open feedback dialog from menu
+    if ((window.electronAPI as any).onOpenFeedback) {
+      cleanupFns.push((window.electronAPI as any).onOpenFeedback(() => {
+        console.log('Open feedback dialog command received from menu');
+        handlersRef.current.openFeedback();
       }));
     }
 

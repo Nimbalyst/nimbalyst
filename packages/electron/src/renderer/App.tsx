@@ -124,7 +124,7 @@ import { ExtensionHostComponents } from './components/ExtensionHostComponents';
 import { UpdateToast } from './components/UpdateToast';
 import { ProjectTrustToast } from './components/ProjectTrustToast';
 import { getTextSelection } from './components/UnifiedAI/TextSelectionIndicator';
-// NOTE: PostHogSurvey now managed by DialogProvider
+// NOTE: FeedbackIntakeDialog now managed by DialogProvider
 import OnboardingService from './services/OnboardingService';
 import { WalkthroughProvider } from './walkthroughs';
 import { TipProvider } from './tips';
@@ -400,7 +400,7 @@ export default function App() {
   // These are kept for potential single-file mode or agent mode use
   const [isAIChatCollapsed, setIsAIChatCollapsed] = useState(false);
   const [aiChatWidth, setAIChatWidth] = useState<number>(350);
-  // NOTE: KeyboardShortcutsDialog, DiscordInvitation, PostHogSurvey, ApiKeyDialog are now managed by DialogProvider
+  // NOTE: KeyboardShortcutsDialog, DiscordInvitation, FeedbackIntakeDialog, ApiKeyDialog are now managed by DialogProvider
   // NOTE: WindowsClaudeCodeWarning now managed by DialogProvider via useOnboarding hook
   const [isAIChatStateLoaded, setIsAIChatStateLoaded] = useState(false);
   // Planning mode for AI sidebar (Claude Code safety). Default ON
@@ -916,6 +916,29 @@ export default function App() {
       }
     }, 100);
   }, [workspacePath]);
+
+  // Open the feedback intake dialog. Shared by the gutter button, the Help menu,
+  // and any future entry points (e.g. error toasts that say "Report this").
+  const handleOpenFeedback = useCallback(() => {
+    if (!dialogRef.current) return;
+    dialogRef.current.open(DIALOG_IDS.FEEDBACK_INTAKE, {
+      onLaunch: ({ kind, mayGatherLogs }: { kind: 'bug' | 'feature'; mayGatherLogs: boolean }) => {
+        const command =
+          kind === 'bug'
+            ? '/nimbalyst-feedback:bug-report'
+            : '/nimbalyst-feedback:feature-request';
+        const consent = mayGatherLogs ? 'allowed' : 'not allowed';
+        const draft = `${command}\n\nLog gathering: ${consent}\n`;
+
+        if (activeModeStateRef.current !== 'agent') {
+          setActiveMode('agent');
+        }
+        setTimeout(() => {
+          agentModeRef.current?.createNewSession?.(draft);
+        }, 100);
+      },
+    });
+  }, []);
 
   // Wrapper for workspace file selection - delegates to EditorMode
   // CRITICAL: Use activeModeStateRef.current to avoid stale closure bugs
@@ -1535,6 +1558,7 @@ export default function App() {
     handleSaveAs,
     handleWorkspaceFileSelect,
     openWelcomeTab,
+    openFeedback: handleOpenFeedback,
     handleNextTab,
     handlePreviousTab,
 
@@ -1832,11 +1856,7 @@ export default function App() {
           incrementSettingsKey(); // Force SettingsView remount
           setTimeout(() => setActiveMode('settings'), 0);
         }}
-        onOpenFeedback={() => {
-          if (dialogRef.current) {
-            dialogRef.current.open(DIALOG_IDS.POSTHOG_SURVEY, {});
-          }
-        }}
+        onOpenFeedback={handleOpenFeedback}
         onChangeTrustMode={() => {
           // Show the trust toast so user can pick a new mode
           setForceShowTrustToast(true);
@@ -2118,7 +2138,7 @@ export default function App() {
         forceShow={forceShowTrustToast}
         onDismiss={() => setForceShowTrustToast(false)}
       />
-      {/* PostHogSurvey is now managed by DialogProvider */}
+      {/* FeedbackIntakeDialog is now managed by DialogProvider */}
     </div>
     </TipProvider>
     </WalkthroughProvider>

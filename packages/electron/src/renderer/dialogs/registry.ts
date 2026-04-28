@@ -33,7 +33,7 @@ export const DIALOG_IDS = {
   DISCORD_INVITATION: 'discord-invitation',
 
   // Feedback group
-  POSTHOG_SURVEY: 'posthog-survey',
+  FEEDBACK_INTAKE: 'feedback-intake',
 
   // Onboarding group
   ONBOARDING: 'onboarding',

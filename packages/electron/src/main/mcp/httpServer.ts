@@ -51,6 +51,12 @@ import {
   handleGitCommitProposal,
   getInteractiveToolSchemas,
 } from "./tools/interactiveToolHandlers";
+import {
+  handleFeedbackAnonymizeText,
+  handleFeedbackGetEnvironment,
+  handleFeedbackOpenGithubIssue,
+  feedbackToolSchemas,
+} from "./tools/feedbackToolHandlers";
 import { handleExtensionTool } from "./tools/extensionToolHandler";
 
 // Re-export functions that don't need transport state
@@ -299,6 +305,7 @@ function createSharedMcpServer(
       ...voiceToolSchemas,
       ...getInteractiveToolSchemas(sessionId),
       ...trackerToolSchemas,
+      ...feedbackToolSchemas,
     ];
 
     // Get extension tools for the current workspace/file
@@ -399,6 +406,15 @@ function createSharedMcpServer(
 
         case "tracker_add_comment":
           return handleTrackerAddComment(args, workspacePath);
+
+        case "feedback_anonymize_text":
+          return handleFeedbackAnonymizeText(args);
+
+        case "feedback_get_environment":
+          return handleFeedbackGetEnvironment();
+
+        case "feedback_open_github_issue":
+          return await handleFeedbackOpenGithubIssue(args);
 
         default:
           return handleExtensionTool(toolName, name, args, sessionId, workspacePath);

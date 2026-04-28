@@ -59,6 +59,7 @@ interface ElectronAPI {
   onOpenWelcomeTab: (callback: () => void) => () => void;
   onOpenPlansTab: (callback: () => void) => () => void;
   onOpenKeyboardShortcuts: (callback: () => void) => () => void;
+  onOpenFeedback: (callback: () => void) => () => void;
   onThemeChange: (callback: (theme: string) => void) => () => void;
   onMcpConfigChanged: (callback: (data: { scope: 'user' | 'workspace'; workspacePath?: string }) => void) => () => void;
 

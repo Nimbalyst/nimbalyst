@@ -10,7 +10,7 @@ export type DialogGroup =
   | 'onboarding' // FeatureWalkthrough, OnboardingDialog - sequential flow
   | 'settings' // ApiKeyDialog
   | 'help' // KeyboardShortcutsDialog - can appear over navigation
-  | 'feedback' // PostHogSurvey
+  | 'feedback' // FeedbackIntakeDialog
   | 'promotion' // DiscordInvitation
   | 'system'; // ProjectSelectionDialog
 

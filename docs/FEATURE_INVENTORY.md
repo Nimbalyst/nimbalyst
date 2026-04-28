@@ -340,6 +340,15 @@ A concise reference of all features in the product. Keep this up to date as feat
 - Keyboard shortcuts dialog (Cmd+?)
 - Community channels popup (Discord, YouTube, LinkedIn, X, TikTok, Instagram)
 
+## Feedback & Bug Reporting
+
+- In-app feedback intake dialog (gutter feedback button) with two paths: Report a bug, Request a feature
+- Inline log-gathering consent checkbox with anonymization warning
+- Each path launches a guided Claude agent session via the `nimbalyst-feedback` claude-plugin (`/nimbalyst-feedback:bug-report` and `/nimbalyst-feedback:feature-request`)
+- Two-pass anonymization: regex pass via `feedback_anonymize_text` MCP tool, then LLM second-pass review before any redacted text is shown to the user
+- Issue posting via `feedback_open_github_issue` MCP tool, which opens a pre-filled `github.com/nimbalyst/nimbalyst/issues/new` URL using the right template (`bug_report.md` or `feature_request.md`); falls back to copy-paste when the body exceeds the safe URL length
+- Secondary links: Browse existing issues, Discuss on GitHub Discussions, Email private feedback to support@nimbalyst.com
+
 ## Analytics
 
 - PostHog integration (opt-in, anonymous)

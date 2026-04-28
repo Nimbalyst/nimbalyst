@@ -30,7 +30,7 @@ When adding or modifying events:
 
 3. **Determining the public release version:**
   - Check which public release contains your commit: `git tag --contains <commit-hash> --sort=version:refname | head -1`
-  - Then verify if that version is a public release (check https://github.com/Nimbalyst/nimbalyst/releases)
+  - https://github.com/Nimbalyst/nimbalyst/releases)Then verify if that version is a public release (check https://github.com/Nimbalyst/nimbalyst/releases)
   - If the internal version isn't publicly released yet, find the next public release that contains it
 
 4. **Public release versions** (as of this writing):
@@ -293,9 +293,8 @@ The `known_error` event uses an `errorId` property to identify specific error co
 
 | Event Name | File(s) | Trigger | Properties | First Added (Public) | Significant Changes |
 | --- | --- | --- | --- | --- | --- |
-| `survey shown` | `PostHogSurvey.tsx:85` | PostHog API survey is displayed to user | `$survey_id`<br/>`$survey_name` | (pending release) |  |
-| `survey dismissed` | `PostHogSurvey.tsx:95` | User dismisses survey without submitting | `$survey_id`<br/>`$survey_name` | (pending release) |  |
-| `survey sent` | `PostHogSurvey.tsx:122`<br/>`App.tsx` | User submits survey response | `$survey_id`<br/>`$survey_name`<br/>`$survey_response` (single question)<br/>`$survey_response_N` (multi-question) | (pending release) | (pending release): Added programmatic submission from onboarding for "Onboarding Profile Survey" (019becdc-8139-0000-0946-e76c18c36ef7) |
+| `feedback_intake_launched` | `FeedbackIntakeDialog.tsx` | User picks a path in the feedback intake dialog (bug or feature). Spawns a guided agent session. | `kind` (`'bug' \ | 'feature'`)<br/>`mayGatherLogs` (boolean — whether the user opted in to log gathering on the intake screen) | (pending release) | (pending release): Replaces the legacy PostHog `survey shown/dismissed/sent` events. |
+| `feedback_external_link_clicked` | `FeedbackIntakeDialog.tsx` | User clicks one of the secondary links in the feedback dialog footer (existing issues, discussions, support email). | `target` (`'issues' \ | 'discussions' \ | 'email'`) | (pending release) |  |
 
 ### Permissions
 
