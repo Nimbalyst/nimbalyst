@@ -17,7 +17,9 @@ https://github.com/user-attachments/assets/b0ef69a4-d426-4c5c-8f64-be920fb431cc
 - 🐛 **Found a bug?** → [Open an issue](https://github.com/Nimbalyst/nimbalyst/issues/new?template=bug_report.yml)
 - ✨ **Have a concrete feature request?** → [Open an issue](https://github.com/Nimbalyst/nimbalyst/issues/new?template=feature_request.yml)
 - 💡 **Have a vague idea or question?** → [Join the discussion](https://github.com/Nimbalyst/nimbalyst/discussions)
-- 🗺️ **Curious what we're building?** → [See the roadmap](TBD-PROJECT-URL)
+- 🗺️ **Curious what we're building?** → [See the roadmap](https://github.com/orgs/Nimbalyst/projects/4/views/1)
+- 🤝 **Want to help with roadmap work?** → [Community view](https://github.com/orgs/Nimbalyst/projects/4/views/2)
+- 🌱 **Looking for a smaller place to start?** → [Good first issues](https://github.com/orgs/Nimbalyst/projects/4/views/4)
 
 We rank features and bugs by 👍 reactions. Don't comment "+1" — react with 👍 instead.
 [Sort issues by reactions →](https://github.com/Nimbalyst/nimbalyst/issues?q=is%3Aissue+is%3Aopen+sort%3Areactions-%2B1-desc)
