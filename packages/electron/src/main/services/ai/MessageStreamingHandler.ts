@@ -35,6 +35,7 @@ import { getSessionStateManager } from '@nimbalyst/runtime/ai/server/SessionStat
 import { isBedrockToolSearchError } from '@nimbalyst/runtime/ai/server/utils/errorDetection';
 import { parseEffortLevel } from '@nimbalyst/runtime/ai/server/effortLevels';
 import type { RawDocumentContext, DocumentContextService } from '@nimbalyst/runtime';
+import { AISessionsRepository } from '@nimbalyst/runtime';
 import { toolRegistry } from './tools';
 import { extractFilePath } from './tools/extractFilePath';
 import { SoundNotificationService } from '../SoundNotificationService';
@@ -145,6 +146,20 @@ function extractApplyPatchEntryType(args: any, filePath: string): string | null 
   if (!entry || typeof entry !== 'object') return null;
   const type = (entry as { type?: unknown }).type;
   return typeof type === 'string' ? type : null;
+}
+
+// Notification listeners outlive the local `session` reference loaded at the top
+// of `sendMessage`, and SessionManager.updateSessionTitle creates a new session
+// object rather than mutating the existing one. Reading from the DB at notify
+// time picks up SessionNamingService renames that happen mid-turn.
+async function getCurrentSessionTitle(sessionId: string, fallback = 'AI Session'): Promise<string> {
+  try {
+    const fresh = await AISessionsRepository.get(sessionId);
+    if (fresh?.title) return fresh.title;
+  } catch {
+    // Ignore - fall back below
+  }
+  return fallback;
 }
 
 export class MessageStreamingHandler {
@@ -545,7 +560,7 @@ export class MessageStreamingHandler {
     };
 
     // Listen for ExitPlanMode confirmation requests and forward to renderer
-    const onExitPlanModeConfirm = (data: { requestId: string; sessionId: string; planSummary: string; timestamp: number }) => {
+    const onExitPlanModeConfirm = async (data: { requestId: string; sessionId: string; planSummary: string; timestamp: number }) => {
       logger.main.info('[AIService] ExitPlanMode confirmation requested:', data.requestId);
       safeSend(event, 'ai:exitPlanModeConfirm', data);
       syncPendingPrompt(data.sessionId, true);
@@ -560,7 +575,7 @@ export class MessageStreamingHandler {
       });
 
       // Show OS notification if app is backgrounded
-      const sessionTitle = session.title || 'AI Session';
+      const sessionTitle = await getCurrentSessionTitle(data.sessionId);
       notificationService.showBlockedNotification(
         data.sessionId,
         sessionTitle,
@@ -572,7 +587,7 @@ export class MessageStreamingHandler {
     provider.on('exitPlanMode:confirm', onExitPlanModeConfirm);
 
     // Listen for AskUserQuestion requests and forward to renderer
-    const onAskUserQuestion = (data: { questionId: string; sessionId: string; questions: any[]; timestamp: number }) => {
+    const onAskUserQuestion = async (data: { questionId: string; sessionId: string; questions: any[]; timestamp: number }) => {
       // logger.main.info('[AIService] AskUserQuestion requested:', data.questionId);
       safeSend(event, 'ai:askUserQuestion', data);
       syncPendingPrompt(data.sessionId, true);
@@ -587,7 +602,7 @@ export class MessageStreamingHandler {
       });
 
       // Show OS notification if app is backgrounded
-      const sessionTitle = session.title || 'AI Session';
+      const sessionTitle = await getCurrentSessionTitle(data.sessionId);
       notificationService.showBlockedNotification(
         data.sessionId,
         sessionTitle,
@@ -616,7 +631,7 @@ export class MessageStreamingHandler {
     provider.on('askUserQuestion:answered', onAskUserQuestionAnswered);
 
     // Listen for tool permission requests and forward to renderer
-    const onToolPermissionPending = (data: { requestId: string; sessionId: string; workspacePath: string; request: any; timestamp: number }) => {
+    const onToolPermissionPending = async (data: { requestId: string; sessionId: string; workspacePath: string; request: any; timestamp: number }) => {
       logger.main.info('[AIService] Tool permission requested:', data.requestId);
       safeSend(event, 'ai:toolPermission', data);
       syncPendingPrompt(data.sessionId, true);
@@ -630,18 +645,18 @@ export class MessageStreamingHandler {
         logger.main.error('[AIService] Failed to update session status to waiting_for_input:', err);
       });
 
+      // Play permission request sound (don't block on async title lookup)
+      const soundService = SoundNotificationService.getInstance();
+      soundService.playPermissionSound(data.workspacePath);
+
       // Show OS notification if app is backgrounded
-      const sessionTitle = session.title || 'AI Session';
+      const sessionTitle = await getCurrentSessionTitle(data.sessionId);
       notificationService.showBlockedNotification(
         data.sessionId,
         sessionTitle,
         'permission',
         data.workspacePath
       );
-
-      // Play permission request sound
-      const soundService = SoundNotificationService.getInstance();
-      soundService.playPermissionSound(data.workspacePath);
     };
     provider.removeAllListeners('toolPermission:pending');
     provider.on('toolPermission:pending', onToolPermissionPending);
