@@ -183,6 +183,7 @@
       "node_modules/@openai/codex-*/*",
       "node_modules/@openai/codex-sdk/**/*",
       "node_modules/@vscode/ripgrep/**/*",
+      "node_modules/@zed-industries/**/*",
       "node_modules/openai/**/*",
       "node_modules/heic-decode/**/*"
     ],
@@ -193,6 +194,8 @@
       "!node_modules/**/*",
       "node_modules/@anthropic-ai/claude-agent-sdk/**/*",
       "node_modules/@anthropic-ai/claude-agent-sdk-*/**/*",
+      "node_modules/@zed-industries/codex-acp/**/*",
+      "node_modules/@zed-industries/codex-acp-*/**/*",
       "node_modules/@vscode/ripgrep/**/*",
       "node_modules/electron-store/**/*",
       "node_modules/conf/**/*",
