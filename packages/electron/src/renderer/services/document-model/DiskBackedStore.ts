@@ -75,6 +75,8 @@ export class DiskBackedStore implements DocumentBackingStore {
    */
   private setupFileWatcher(): void {
     const emitChange = async (checkPendingTags: boolean) => {
+      const tStart = performance.now();
+      console.log('[diff-trace] DiskBackedStore.emitChange start', { path: this.filePath, checkPendingTags, t: tStart });
       let content: string;
       try {
         const result = await window.electronAPI.readFileContent(this.filePath);
@@ -84,6 +86,14 @@ export class DiskBackedStore implements DocumentBackingStore {
         console.error('[DiskBackedStore] Failed to read file after change:', err);
         return;
       }
+      console.log('[diff-trace] DiskBackedStore.emitChange read', {
+        path: this.filePath,
+        checkPendingTags,
+        contentLen: content.length,
+        contentHead: content.slice(0, 80),
+        readMs: performance.now() - tStart,
+        t: performance.now(),
+      });
 
       const info: ExternalChangeInfo = {
         content,

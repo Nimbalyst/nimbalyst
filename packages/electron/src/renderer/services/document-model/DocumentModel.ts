@@ -393,10 +393,20 @@ export class DocumentModel {
   private async handleExternalChange(info: ExternalChangeInfo): Promise<void> {
     if (this.disposed) return;
 
+    const lastLen = typeof this.lastPersistedContent === 'string' ? this.lastPersistedContent.length : -1;
+    console.log('[diff-trace] DocumentModel.handleExternalChange enter', {
+      path: this.filePath,
+      checkPendingTags: info.checkPendingTags,
+      contentLen: typeof info.content === 'string' ? info.content.length : -1,
+      lastPersistedLen: lastLen,
+      t: performance.now(),
+    });
+
     // Echo suppression: skip if content matches last-persisted.
     // This catches our own saves echoing back through the file watcher.
     const isEcho = this.lastPersistedContent !== null && info.content === this.lastPersistedContent;
     if (isEcho && !info.checkPendingTags) {
+      console.log('[diff-trace] DocumentModel.handleExternalChange echo-skip', { path: this.filePath, t: performance.now() });
       return;
     }
 
@@ -408,6 +418,14 @@ export class DocumentModel {
       (tag: { id: string; sessionId: string; createdAt?: string; status?: string }) =>
         (tag as any).status !== 'reviewed' && (tag as any).status !== 'rejected',
     );
+    console.log('[diff-trace] DocumentModel.handleExternalChange tags', {
+      path: this.filePath,
+      activeTagCount: activeTags.length,
+      isEcho,
+      checkPendingTags: info.checkPendingTags,
+      branch: activeTags.length > 0 ? 'diff' : 'fileChanged',
+      t: performance.now(),
+    });
 
     if (activeTags.length > 0) {
       // Enter diff mode
@@ -432,6 +450,18 @@ export class DocumentModel {
         createdAt: tag.createdAt ? new Date(tag.createdAt).getTime() : Date.now(),
       };
 
+      console.log('[diff-trace] DocumentModel diff-state set', {
+        path: this.filePath,
+        tagId: tag.id,
+        oldLen: oldContent.length,
+        oldHead: oldContent.slice(0, 80),
+        newLen: typeof newContent === 'string' ? newContent.length : -1,
+        newHead: typeof newContent === 'string' ? newContent.slice(0, 80) : '',
+        sameOldNew: oldContent === newContent,
+        attachCount: this.attachments.size,
+        t: performance.now(),
+      });
+
       this.emit('diff-state-changed');
 
       // Notify all editors about diff mode
@@ -447,6 +477,11 @@ export class DocumentModel {
     } else {
       // Normal external change -- update persisted content and notify editors.
       // (Echo suppression already ran above for non-tag-check events.)
+      console.log('[diff-trace] DocumentModel notifyFileChanged (no active tags)', {
+        path: this.filePath,
+        contentLen: typeof info.content === 'string' ? info.content.length : -1,
+        t: performance.now(),
+      });
       this.lastPersistedContent = info.content;
       this.notifyFileChanged(info.content);
     }

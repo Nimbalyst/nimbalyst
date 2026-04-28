@@ -30,12 +30,14 @@ export function initFileChangeListeners(): () => void {
 
   const u1 = window.electronAPI?.on?.('file-changed-on-disk', (data: { path: string }) => {
     if (!data?.path) return;
+    console.log('[diff-trace] IPC file-changed-on-disk', { path: data.path, t: performance.now() });
     store.set(fileChangedOnDiskAtomFamily(data.path), (v) => v + 1);
   });
   if (typeof u1 === 'function') cleanups.push(u1);
 
   const u2 = window.electronAPI?.on?.('history:pending-tag-created', (data: { path: string }) => {
     if (!data?.path) return;
+    console.log('[diff-trace] IPC history:pending-tag-created', { path: data.path, t: performance.now() });
     store.set(historyPendingTagCreatedAtomFamily(data.path), (v) => v + 1);
   });
   if (typeof u2 === 'function') cleanups.push(u2);

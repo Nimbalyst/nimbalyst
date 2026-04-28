@@ -223,6 +223,22 @@ export function DiffPlugin(): JSX.Element | null {
             return r as TextReplacement;
           });
 
+          try {
+            const firstNew = normalizedReplacements[0]?.newText ?? '';
+            const firstOld = normalizedReplacements[0]?.oldText ?? '';
+            console.log('[diff-trace] DiffPlugin APPLY_MARKDOWN_REPLACE_COMMAND', {
+              originalLen: originalMarkdown.length,
+              originalHead: originalMarkdown.slice(0, 80),
+              firstOldLen: firstOld.length,
+              firstNewLen: firstNew.length,
+              firstNewHead: firstNew.slice(0, 80),
+              originalEqualsNewText: originalMarkdown === firstNew,
+              originalEqualsOldText: originalMarkdown === firstOld,
+              replacementCount: normalizedReplacements.length,
+              t: typeof performance !== 'undefined' ? performance.now() : Date.now(),
+            });
+          } catch { /* logging only */ }
+
           // Apply the replacements - applyMarkdownReplace does its own editor.update() internally
           try {
             applyMarkdownReplace(

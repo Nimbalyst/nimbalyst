@@ -998,13 +998,47 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       handle.onFileChanged((content) => {
         if (typeof content !== 'string') return;
 
+        console.log('[diff-trace] TabEditor.onFileChanged fired', {
+          filePath,
+          isCustom,
+          isMarkdown,
+          contentLen: content.length,
+          contentHead: content.slice(0, 80),
+          sameAsLastSaved: content === lastSavedContentRef.current,
+          isApplyingDiff: isApplyingDiffRef.current,
+          hasPendingTag: !!pendingAIEditTagRef.current,
+          t: performance.now(),
+        });
+
         // Custom editors are notified via EditorHost.subscribeToFileChanges (separate subscription).
         if (isCustom) return;
+
+        // Guard: don't clobber the editor's content while a diff is being applied
+        // (the onDiffRequested handler resets to oldContent then waits 250ms before
+        // dispatching the replacement; a racing onFileChanged would replace the
+        // pre-edit content with post-edit content, leaving additions unmarked).
+        // Also bail if a pending AI edit tag is already tracked for this tab —
+        // diff resolution will route the final content through notifyFileChanged.
+        if (isApplyingDiffRef.current || pendingAIEditTagRef.current) {
+          console.log('[diff-trace] TabEditor.onFileChanged SKIP (diff in flight)', {
+            filePath,
+            isApplyingDiff: isApplyingDiffRef.current,
+            hasPendingTag: !!pendingAIEditTagRef.current,
+            t: performance.now(),
+          });
+          return;
+        }
 
         // Skip if content is identical to what we already have.
         // This prevents unnecessary Lexical reloads that destroy cursor position
         // (e.g. when a sibling saves content we already have).
         if (content === lastSavedContentRef.current) return;
+
+        console.log('[diff-trace] TabEditor.onFileChanged WILL REPLACE editor content', {
+          filePath,
+          isApplyingDiff: isApplyingDiffRef.current,
+          t: performance.now(),
+        });
 
         // Guard: suppress the Lexical onChange -> setDirty(true) that fires
         // from the programmatic content update below.
@@ -1045,6 +1079,42 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       handle.onDiffRequested((diffState) => {
         const { tagId, sessionId, oldContent, newContent, createdAt } = diffState;
         const tagInfo = { tagId, sessionId, filePath };
+
+        console.log('[diff-trace] TabEditor.onDiffRequested fired', {
+          filePath,
+          isCustom,
+          isMarkdown,
+          tagId,
+          oldLen: typeof oldContent === 'string' ? oldContent.length : -1,
+          oldHead: typeof oldContent === 'string' ? oldContent.slice(0, 80) : '',
+          newLen: typeof newContent === 'string' ? newContent.length : -1,
+          newHead: typeof newContent === 'string' ? newContent.slice(0, 80) : '',
+          sameOldNew: oldContent === newContent,
+          isApplyingDiff: isApplyingDiffRef.current,
+          alreadyTrackingTag: pendingAIEditTagRef.current?.tagId === tagId,
+          t: performance.now(),
+        });
+
+        // Coalesce: if a diff for this exact tag is already being applied or
+        // already on screen, skip the duplicate invocation. The two IPC events
+        // (history:pending-tag-created + file-changed-on-disk) both route through
+        // diff mode and would otherwise re-run the 250ms reset+dispatch, racing
+        // each other and leaving the editor in inconsistent states.
+        // The first event wins; the second is a no-op.
+        // Diff state is still kept fresh in DocumentModel for resolveDiff.
+        if (
+          (oldContent === newContent) ||
+          (pendingAIEditTagRef.current?.tagId === tagId && isApplyingDiffRef.current)
+        ) {
+          console.log('[diff-trace] TabEditor.onDiffRequested SKIP duplicate', {
+            filePath,
+            tagId,
+            sameOldNew: oldContent === newContent,
+            alreadyApplying: isApplyingDiffRef.current,
+            t: performance.now(),
+          });
+          return;
+        }
 
         // Route through custom editor diff callback if available
         if (diffRequestCallbackRef.current) {
@@ -1098,6 +1168,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               if (isMarkdown) {
                 // Lexical: load old content, then apply diff replacement
                 const transformers = getEditorTransformers();
+                console.log('[diff-trace] TabEditor.onDiffRequested resetting editor to oldContent', { filePath, oldLen: oldContent.length, t: performance.now() });
                 editorRef.current.update(() => {
                   const root = $getRoot();
                   root.clear();
@@ -1106,10 +1177,30 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
                 await new Promise((resolve) => setTimeout(resolve, 250));
 
+                // Snapshot what's actually in the editor right before we dispatch,
+                // to catch races where onFileChanged replaced the content during the wait.
+                let preDispatchMarkdown = '';
+                try {
+                  preDispatchMarkdown = editorRef.current.getEditorState().read(() => {
+                    return $convertToEnhancedMarkdownString(transformers);
+                  });
+                } catch (err) {
+                  console.log('[diff-trace] TabEditor pre-dispatch read failed', err);
+                }
+                console.log('[diff-trace] TabEditor.onDiffRequested pre-dispatch editor state', {
+                  filePath,
+                  preDispatchLen: preDispatchMarkdown.length,
+                  preDispatchHead: preDispatchMarkdown.slice(0, 80),
+                  matchesOld: preDispatchMarkdown === oldContent,
+                  matchesNew: preDispatchMarkdown === newContent,
+                  t: performance.now(),
+                });
+
                 editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, [{ newText: newContent }]);
                 fetchDiffSessionInfo(sessionId, createdAt);
 
                 await new Promise((resolve) => setTimeout(resolve, 100));
+                console.log('[diff-trace] TabEditor.onDiffRequested post-dispatch settle done', { filePath, t: performance.now() });
               } else if (editorRef.current.showDiff) {
                 // Monaco: use built-in diff viewer
                 editorRef.current.showDiff(oldContent, newContent);
