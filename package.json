@@ -8,7 +8,7 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/stravu/nimbalyst.git"
+    "url": "https://github.com/nimbalyst/nimbalyst.git"
   },
   "scripts": {
     "build": "npm run build --prefix packages/runtime",
