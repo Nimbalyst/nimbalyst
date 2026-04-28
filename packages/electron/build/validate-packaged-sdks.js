@@ -21,14 +21,20 @@
  * 2. Each native binary that the runtime spawns exists at the path the
  *    runtime expects AND is executable.
  *
- * Run: node validate-packaged-sdks.js <path-to-packaged-app>
+ * Run: node validate-packaged-sdks.js <path-to-packaged-app> [--platform <p>] [--arch <a>]
  *   - macOS:   /path/to/Nimbalyst.app
  *   - Linux:   /path/to/Nimbalyst-Linux.AppImage (extracted dir)
  *   - Windows: /path/to/install/dir
  *
+ * Pass --platform/--arch when the caller knows the build target (afterPack
+ * does); otherwise the validator infers from the appPath, falling back to
+ * the host platform/arch. The fallback is unsafe for cross-arch builds where
+ * electron-builder uses an unsuffixed output dir (e.g. release/mac/ for the
+ * default-arch mac build) -- the validator then checks the host arch's
+ * binary, which afterPack has already pruned for being non-target.
+ *
  * Wired into:
- *   - packages/electron/package.json scripts (build:mac:local, build:dist)
- *   - .github/workflows/electron-build.yml after the electron-builder step
+ *   - packages/electron/build/afterPack.js (passes --platform/--arch)
  *
  * Exit codes:
  *   0 = all checks pass
@@ -40,9 +46,20 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const appPath = process.argv[2];
+function parseArgs(argv) {
+  const out = { positional: [], platform: undefined, arch: undefined };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--platform' && i + 1 < argv.length) { out.platform = argv[++i]; continue; }
+    if (a === '--arch' && i + 1 < argv.length) { out.arch = argv[++i]; continue; }
+    out.positional.push(a);
+  }
+  return out;
+}
+const args = parseArgs(process.argv.slice(2));
+const appPath = args.positional[0];
 if (!appPath) {
-  console.error('usage: validate-packaged-sdks.js <path-to-packaged-app>');
+  console.error('usage: validate-packaged-sdks.js <path-to-packaged-app> [--platform <p>] [--arch <a>]');
   process.exit(1);
 }
 
@@ -77,21 +94,33 @@ if (!fs.existsSync(nodeModulesPath)) {
 
 console.log(`[validate-packaged-sdks] node_modules: ${nodeModulesPath}`);
 
-// Detect target platform/arch from the path so we check the right native
-// binary triple. Falls back to host.
+// Prefer explicit --platform/--arch from the caller (afterPack passes them
+// from electron-builder's authoritative context). Fall back to detection
+// from the appPath only for direct CLI use, and refuse to use the host
+// values silently -- a cross-arch build whose output dir lacks an arch
+// token (e.g. release/mac/ for default-arch mac) would otherwise check
+// the wrong arch and report an already-pruned package as missing.
 function detectArchFromPath(p) {
   if (/[-_/]arm64/.test(p)) return 'arm64';
   if (/[-_/](x64|x86_64)/.test(p)) return 'x64';
-  return process.arch;
+  return null;
 }
 function detectPlatformFromPath(p) {
   if (/Contents[/\\]MacOS/.test(p) || p.endsWith('.app') || /[-_/]mac/.test(p)) return 'darwin';
   if (/[-_/]win/.test(p) || p.endsWith('.exe')) return 'win32';
   if (/[-_/]linux/.test(p)) return 'linux';
-  return process.platform;
+  return null;
 }
-const targetArch = detectArchFromPath(appPath);
-const targetPlatform = detectPlatformFromPath(appPath);
+const targetArch = args.arch || detectArchFromPath(appPath);
+const targetPlatform = args.platform || detectPlatformFromPath(appPath);
+if (!targetArch || !targetPlatform) {
+  console.error(
+    `[validate-packaged-sdks] cannot determine target platform/arch from "${appPath}". ` +
+    `Pass --platform <darwin|win32|linux> --arch <x64|arm64> explicitly. ` +
+    `(Refusing to fall back to the host -- that produces false negatives on cross-arch builds.)`,
+  );
+  process.exit(1);
+}
 console.log(`[validate-packaged-sdks] target: ${targetPlatform}-${targetArch}`);
 
 // Mirror of getCodexTargetTriple in codexBinaryPath.ts.

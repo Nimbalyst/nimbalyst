@@ -92,11 +92,18 @@ exports.default = async function(context) {
     ? path.join(appOutDir, `${packager.appInfo.productName}.app`)
     : appOutDir;
 
-  console.log(`AfterPack: Validating packaged SDKs at ${packagedAppPath}`);
+  // Pass the target platform/arch explicitly. The validator otherwise has
+  // to guess from appOutDir, which silently falls back to the host arch
+  // when electron-builder uses an unsuffixed output dir (e.g. release/mac/
+  // for the default x64 mac build on an arm64 runner). That false negative
+  // is exactly what `afterPack` already knows authoritatively from context.
+  console.log(`AfterPack: Validating packaged SDKs at ${packagedAppPath} (${platformName}-${arch})`);
   const validatorScript = path.join(__dirname, 'validate-packaged-sdks.js');
-  const result = spawnSync(process.execPath, [validatorScript, packagedAppPath], {
-    stdio: 'inherit',
-  });
+  const result = spawnSync(
+    process.execPath,
+    [validatorScript, packagedAppPath, '--platform', platformName, '--arch', arch],
+    { stdio: 'inherit' },
+  );
   if (result.status !== 0) {
     throw new Error(
       `AfterPack: validate-packaged-sdks reported missing runtime dependencies in the packaged app. ` +
