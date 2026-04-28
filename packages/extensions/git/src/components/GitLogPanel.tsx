@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useFloating, offset, flip, shift, FloatingPortal,
+  useDismiss, useInteractions, autoUpdate,
+} from '@floating-ui/react';
 import type { PanelHostProps } from '@nimbalyst/extension-sdk';
 import { CommitHoverCard } from './CommitHoverCard';
 import { CommitContextMenu } from './CommitContextMenu';
@@ -135,12 +139,15 @@ export function GitLogPanel({ host }: PanelHostProps) {
   const [activeTab, setActiveTab] = useState<GitTab>('log');
   const { entries: logEntries, clearLog, withLog } = useOperationLog();
 
-  // Changes tab: file mask filter (per-workspace persistence)
+  // Changes tab: file mask filter (active value per-workspace, history shared globally)
   const [fileMaskEnabled, setFileMaskEnabled] = useState<boolean>(
     () => host.storage.get<boolean>('changesFileMaskEnabled') ?? false
   );
   const [fileMaskInput, setFileMaskInput] = useState<string>(
     () => host.storage.get<string>('changesFileMask') ?? ''
+  );
+  const [fileMaskHistory, setFileMaskHistory] = useState<string[]>(
+    () => host.storage.getGlobal<string[]>('changesFileMaskHistory') ?? []
   );
   const updateFileMaskEnabled = useCallback((enabled: boolean) => {
     setFileMaskEnabled(enabled);
@@ -149,6 +156,22 @@ export function GitLogPanel({ host }: PanelHostProps) {
   const updateFileMaskInput = useCallback((value: string) => {
     setFileMaskInput(value);
     void host.storage.set('changesFileMask', value);
+  }, [host.storage]);
+  const commitFileMaskToHistory = useCallback((value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    setFileMaskHistory(prev => {
+      const next = [trimmed, ...prev.filter(v => v !== trimmed)].slice(0, 10);
+      void host.storage.setGlobal('changesFileMaskHistory', next);
+      return next;
+    });
+  }, [host.storage]);
+  const removeFileMaskHistoryEntry = useCallback((value: string) => {
+    setFileMaskHistory(prev => {
+      const next = prev.filter(v => v !== value);
+      void host.storage.setGlobal('changesFileMaskHistory', next);
+      return next;
+    });
   }, [host.storage]);
 
   const handleDetailResizeStart = useCallback((e: React.MouseEvent) => {
@@ -639,35 +662,15 @@ export function GitLogPanel({ host }: PanelHostProps) {
 
         {/* Changes-specific filters (only shown on changes tab) */}
         {activeTab === 'changes' && (
-          <div className="git-log-toolbar-filters">
-            <label className="git-changes-mask-toggle" title="Filter visible files by glob patterns">
-              <input
-                type="checkbox"
-                checked={fileMaskEnabled}
-                onChange={e => updateFileMaskEnabled(e.target.checked)}
-              />
-              <span>File mask:</span>
-            </label>
-            <input
-              className="git-log-input git-log-input--search"
-              type="text"
-              placeholder="*.ts,*.tsx"
-              value={fileMaskInput}
-              onChange={e => updateFileMaskInput(e.target.value)}
-              onFocus={() => { if (!fileMaskEnabled) updateFileMaskEnabled(true); }}
-              spellCheck={false}
-            />
-            {fileMaskInput && (
-              <button
-                type="button"
-                className="git-changes-mask-clear"
-                onClick={() => updateFileMaskInput('')}
-                title="Clear mask"
-              >
-                &#10005;
-              </button>
-            )}
-          </div>
+          <FileMaskFilter
+            enabled={fileMaskEnabled}
+            value={fileMaskInput}
+            history={fileMaskHistory}
+            onEnabledChange={updateFileMaskEnabled}
+            onValueChange={updateFileMaskInput}
+            onCommitToHistory={commitFileMaskToHistory}
+            onRemoveHistoryEntry={removeFileMaskHistoryEntry}
+          />
         )}
       </div>
 
@@ -823,6 +826,138 @@ export function GitLogPanel({ host }: PanelHostProps) {
           entries={logEntries}
           onClear={clearLog}
         />
+      )}
+    </div>
+  );
+}
+
+interface FileMaskFilterProps {
+  enabled: boolean;
+  value: string;
+  history: string[];
+  onEnabledChange: (enabled: boolean) => void;
+  onValueChange: (value: string) => void;
+  onCommitToHistory: (value: string) => void;
+  onRemoveHistoryEntry: (value: string) => void;
+}
+
+function FileMaskFilter({
+  enabled,
+  value,
+  history,
+  onEnabledChange,
+  onValueChange,
+  onCommitToHistory,
+  onRemoveHistoryEntry,
+}: FileMaskFilterProps) {
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  const { refs, floatingStyles, context } = useFloating({
+    open: historyOpen,
+    onOpenChange: setHistoryOpen,
+    placement: 'bottom-start',
+    whileElementsMounted: autoUpdate,
+    middleware: [offset(4), flip({ padding: 8 }), shift({ padding: 8 })],
+  });
+  const dismiss = useDismiss(context, { escapeKey: true, outsidePress: true });
+  const { getFloatingProps } = useInteractions([dismiss]);
+
+  const commit = useCallback(() => {
+    onCommitToHistory(value);
+  }, [onCommitToHistory, value]);
+
+  return (
+    <div className="git-log-toolbar-filters" ref={refs.setReference}>
+      <label className="git-changes-mask-toggle" title="Filter visible files by glob patterns">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={e => onEnabledChange(e.target.checked)}
+        />
+        <span>File mask:</span>
+      </label>
+      <div className="git-changes-mask-input-wrap">
+        <input
+          className="git-log-input git-log-input--search git-changes-mask-input"
+          type="text"
+          placeholder="*.ts,*.tsx"
+          value={value}
+          onChange={e => onValueChange(e.target.value)}
+          onFocus={() => { if (!enabled) onEnabledChange(true); }}
+          onBlur={commit}
+          onKeyDown={e => {
+            if (e.key === 'Enter') {
+              commit();
+              (e.currentTarget as HTMLInputElement).blur();
+            } else if (e.key === 'ArrowDown' && history.length > 0) {
+              e.preventDefault();
+              setHistoryOpen(true);
+            }
+          }}
+          spellCheck={false}
+        />
+        {history.length > 0 && (
+          <button
+            type="button"
+            className="git-changes-mask-history-btn"
+            onClick={() => setHistoryOpen(o => !o)}
+            title="Recent file masks"
+            aria-label="Recent file masks"
+          >
+            <span className="git-changes-mask-history-chevron">▾</span>
+          </button>
+        )}
+      </div>
+      {value && (
+        <button
+          type="button"
+          className="git-changes-mask-clear"
+          onClick={() => onValueChange('')}
+          title="Clear mask"
+        >
+          &#10005;
+        </button>
+      )}
+
+      {historyOpen && history.length > 0 && (
+        <FloatingPortal>
+          <div
+            ref={refs.setFloating}
+            style={floatingStyles}
+            className="git-changes-mask-history-menu"
+            {...getFloatingProps()}
+          >
+            <div className="git-changes-mask-history-header">Recent file masks</div>
+            {history.map(entry => (
+              <div key={entry} className="git-changes-mask-history-row">
+                <button
+                  type="button"
+                  className="git-changes-mask-history-item"
+                  onClick={() => {
+                    onValueChange(entry);
+                    if (!enabled) onEnabledChange(true);
+                    setHistoryOpen(false);
+                  }}
+                  title={entry}
+                >
+                  {entry}
+                </button>
+                <button
+                  type="button"
+                  className="git-changes-mask-history-remove"
+                  onClick={e => {
+                    e.stopPropagation();
+                    onRemoveHistoryEntry(entry);
+                  }}
+                  title="Remove from history"
+                  aria-label="Remove from history"
+                >
+                  &#10005;
+                </button>
+              </div>
+            ))}
+          </div>
+        </FloatingPortal>
       )}
     </div>
   );

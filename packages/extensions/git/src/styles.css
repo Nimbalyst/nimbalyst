@@ -1057,6 +1057,105 @@
   background: var(--nim-bg-tertiary);
 }
 
+/* File mask history dropdown */
+.git-changes-mask-input-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.git-changes-mask-input-wrap .git-changes-mask-input {
+  padding-right: 22px;
+}
+
+.git-changes-mask-history-btn {
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--nim-text-faint);
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 1;
+  border-radius: 3px;
+}
+
+.git-changes-mask-history-btn:hover {
+  color: var(--nim-text);
+  background: var(--nim-bg-tertiary);
+}
+
+.git-changes-mask-history-chevron {
+  display: inline-block;
+}
+
+.git-changes-mask-history-menu {
+  background: var(--nim-bg-secondary);
+  border: 1px solid var(--nim-border);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  min-width: 200px;
+  max-width: 360px;
+  max-height: 280px;
+  overflow-y: auto;
+  z-index: 1000;
+  padding: 4px 0;
+  font-size: 11px;
+}
+
+.git-changes-mask-history-header {
+  padding: 4px 10px;
+  color: var(--nim-text-faint);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.git-changes-mask-history-row {
+  display: flex;
+  align-items: stretch;
+}
+
+.git-changes-mask-history-row:hover {
+  background: var(--nim-bg-tertiary);
+}
+
+.git-changes-mask-history-item {
+  flex: 1;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--nim-text);
+  cursor: pointer;
+  padding: 4px 10px;
+  font-family: var(--nim-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.git-changes-mask-history-remove {
+  background: none;
+  border: none;
+  color: var(--nim-text-faint);
+  cursor: pointer;
+  padding: 0 8px;
+  font-size: 10px;
+  opacity: 0;
+}
+
+.git-changes-mask-history-row:hover .git-changes-mask-history-remove {
+  opacity: 1;
+}
+
+.git-changes-mask-history-remove:hover {
+  color: var(--nim-text);
+}
+
 /* Group action danger variant (Discard) */
 .git-changes-group-action--danger {
   color: var(--nim-error, #ef4444);
