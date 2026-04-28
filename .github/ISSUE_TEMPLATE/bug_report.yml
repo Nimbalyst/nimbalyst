@@ -11,24 +11,22 @@ body:
   - type: textarea
     id: problem
     attributes:
-      label: What happened, and what did you expect to happen?
-      description: Describe the bug and what you expected instead.
+      label: Describe the bug
+      description: Put everything in one place: what happened, what you expected, how to reproduce it, and any logs or screenshots.
       placeholder: |
         What happened:
         The app crashed when I ...
 
         What I expected:
         I expected ...
-    validations:
-      required: true
-  - type: textarea
-    id: repro
-    attributes:
-      label: Steps to reproduce
-      placeholder: |
+
+        Steps to reproduce:
         1. Open ...
         2. Click ...
         3. See error
+
+        Logs / screenshots:
+        Paste logs here or attach screenshots below.
     validations:
       required: true
   - type: input
@@ -50,8 +48,3 @@ body:
         - Other
     validations:
       required: true
-  - type: textarea
-    id: logs
-    attributes:
-      label: Logs / screenshots (optional)
-      description: Paste relevant logs or attach screenshots.
