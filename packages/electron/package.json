@@ -1,7 +1,8 @@
 {
   "name": "@nimbalyst/electron",
-  "version": "0.58.4",
+  "version": "0.58.5",
   "private": true,
+  "license": "MIT",
   "description": "Electron app for Nimbalyst",
   "main": "out/main/index.js",
   "bin": {
