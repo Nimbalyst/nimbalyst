@@ -147,6 +147,17 @@ function PendingBadge() {
   );
 }
 
+function TeamPricingNotice() {
+  return (
+    <div className="mt-2.5 flex items-start gap-1.5 text-[12px] leading-relaxed text-[var(--nim-text-faint)]">
+      <MaterialSymbol icon="info" size={13} className="mt-[2px] shrink-0" />
+      <span>
+        Nimbalyst Teams is <span className="text-[var(--nim-text-muted)]">free during alpha</span>. We plan to introduce a paid subscription tier for teams in the future; existing teams will get advance notice before any pricing change.
+      </span>
+    </div>
+  );
+}
+
 function EncryptionCard() {
   return (
     <div className="p-3.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded-lg">
@@ -1094,6 +1105,7 @@ export function TeamPanel({ workspacePath }: TeamPanelProps) {
           <p className="provider-panel-description text-[13px] leading-relaxed text-[var(--nim-text-muted)]">
             Create a team to collaborate on shared tracker items and documents with end-to-end encryption.
           </p>
+          <TeamPricingNotice />
         </div>
         <div className="p-6 bg-[var(--nim-bg-secondary)] rounded-lg text-center">
           <div className="w-12 h-12 mx-auto mb-3 bg-[rgba(96,165,250,0.15)] rounded-xl flex items-center justify-center">
@@ -1126,6 +1138,7 @@ export function TeamPanel({ workspacePath }: TeamPanelProps) {
         <p className="provider-panel-description text-[13px] leading-relaxed text-[var(--nim-text-muted)]">
           Create a team to collaborate on shared tracker items and documents with end-to-end encryption.
         </p>
+        <TeamPricingNotice />
         {userEmail && team && (
           <div className="flex items-center gap-1.5 mt-2 text-[12px] text-[var(--nim-text-faint)]">
             <MaterialSymbol icon="person" size={13} />

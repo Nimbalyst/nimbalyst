@@ -368,7 +368,7 @@ packages/electron/marketing/
     light/    # WebM - hero ambient light theme
 ```
 
-For the marketing website, swap `dark/` and `light/` directories based on theme toggle. All filenames are identical between themes. See [docs/MARKETING_SCREENSHOTS.md](./docs/MARKETING_SCREENSHOTS.md) for the full output inventory and architecture.
+For the marketing website, swap `dark/` and `light/` directories based on theme toggle. All filenames are identical between themes. See [MARKETING_SCREENSHOTS.md](./docs/MARKETING_SCREENSHOTS.md) for the full output inventory and architecture.
 
 ### Testing
 
@@ -433,6 +433,14 @@ import { Nimbalyst, type EditorConfig } from 'nimbalyst';
 - **File System Access API**: Chrome 86+, Edge 86+
 - **Origin Private File System**: Chrome 86+, Firefox with flag
 - **Electron**: All supported Electron versions
+
+## Telemetry
+
+Nimbalyst sends **anonymous usage analytics** to PostHog so we can understand how the app is used and prioritize improvements. We are careful to never never collect your content, such as prompts, chat content, usernames, emails, or IP addresses, file contents or file paths, API keys or authentication tokens.
+
+A randomly-generated anonymous ID is used to correlate events from the same install. You can opt out at any time in **Settings -> Advanced -> Analytics**.
+
+For the complete list of every event we send and its properties, see [POSTHOG_EVENTS.md](./docs/POSTHOG_EVENTS.md). For the privacy rules our analytics code follows, see [ANALYTICS_GUIDE.md](./docs/ANALYTICS_GUIDE.md).
 
 ## Contributing
 

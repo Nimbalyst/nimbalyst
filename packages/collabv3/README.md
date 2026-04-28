@@ -320,4 +320,13 @@ wrangler tail
 
 ## License
 
-Private - Nimbalyst internal use only.
+`packages/collabv3/` is dual-licensed:
+
+- **GNU Affero General Public License v3.0** — see [LICENSE](./LICENSE).
+- **Commercial license** from Nimbalyst Inc. for use cases incompatible with
+  the AGPL (e.g. proprietary deployments, closed-source modifications).
+
+For commercial licensing options, contact `sales@nimbalyst.com`.
+
+See [../../LICENSING.md](../../LICENSING.md) for details on the dual-license
+structure.

@@ -1,92 +1,21 @@
-PROPRIETARY SOFTWARE LICENSE
+MIT License
 
-Copyright (c) 2024-2025 Nimbalyst Inc. All Rights Reserved.
+Copyright (c) 2024-2026 Nimbalyst Inc.
 
-NOTICE: This is proprietary software. All source code, documentation, and
-associated materials in this repository are the exclusive property of
-Nimbalyst Inc. and are protected by copyright law and international treaties.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-1. OWNERSHIP
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-All intellectual property rights in and to this software, including but not
-limited to patents, copyrights, trade secrets, and trademarks, are and shall
-remain the exclusive property of Nimbalyst Inc.
-
-2. RESTRICTIONS
-
-You may NOT, without the prior written consent of Nimbalyst Inc.:
-
-   a) Copy, modify, adapt, translate, or create derivative works of this
-      software or any portion thereof;
-
-   b) Reverse engineer, disassemble, decompile, or otherwise attempt to
-      derive the source code of this software;
-
-   c) Distribute, sublicense, lease, rent, loan, or otherwise transfer this
-      software or any rights therein to any third party;
-
-   d) Remove, alter, or obscure any proprietary notices, labels, or marks
-      on this software;
-
-   e) Use this software for any commercial purpose without a valid license
-      agreement with Nimbalyst Inc.;
-
-   f) Publish, disclose, or otherwise make available any portion of this
-      software's source code to any third party.
-
-3. CONFIDENTIALITY
-
-This software contains trade secrets and confidential information of
-Nimbalyst Inc. You agree to maintain the confidentiality of this software
-and not to disclose it to any third party without the prior written consent
-of Nimbalyst Inc.
-
-4. NO LICENSE GRANTED
-
-Except as expressly set forth in a separate written agreement signed by
-Nimbalyst Inc., no license, express or implied, by estoppel or otherwise,
-is granted to you under any patents, copyrights, trademarks, trade secrets,
-or other intellectual property rights of Nimbalyst Inc.
-
-5. UNAUTHORIZED ACCESS
-
-If you have obtained access to this software without authorization from
-Nimbalyst Inc., you are required to:
-
-   a) Immediately cease all use of this software;
-   b) Delete all copies in your possession;
-   c) Notify Nimbalyst Inc. at karl@nimbalyst.com.
-
-Unauthorized access, use, or distribution of this software may result in
-civil and criminal penalties.
-
-6. DISCLAIMER OF WARRANTIES
-
-THIS SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
-
-7. LIMITATION OF LIABILITY
-
-IN NO EVENT SHALL NIMBALYST INC. BE LIABLE FOR ANY INDIRECT, INCIDENTAL,
-SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES ARISING OUT OF OR IN CONNECTION
-WITH THIS SOFTWARE.
-
-8. GOVERNING LAW
-
-This license shall be governed by and construed in accordance with the laws
-of the State of Delaware, United States, without regard to its conflicts of
-law provisions.
-
-9. CONTACT
-
-For licensing inquiries, please contact:
-
-Nimbalyst Inc.
-karl@nimbalyst.com
-
----
-
-This software is NOT open source. No rights are granted to use, copy, modify,
-or distribute this software except under a separate written agreement with
-Nimbalyst Inc.
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
