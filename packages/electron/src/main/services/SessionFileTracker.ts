@@ -73,9 +73,24 @@ function getLinkTypeForTool(toolName: string): FileLinkType | null {
 // in packages/electron/src/main/services/ai/tools/extractFilePath.ts
 
 /**
+ * Codex `apply_patch` carries per-file change descriptors under
+ * `args.changes: { [path]: { type: 'add'|'update'|'delete'|'move' } }`.
+ * Returns the type for a given path, or null if args don't match the shape.
+ */
+function extractApplyPatchEntryType(args: any, filePath: string | null): string | null {
+  if (!filePath) return null;
+  const changes = args?.changes;
+  if (!changes || typeof changes !== 'object' || Array.isArray(changes)) return null;
+  const entry = (changes as Record<string, unknown>)[filePath];
+  if (!entry || typeof entry !== 'object') return null;
+  const type = (entry as { type?: unknown }).type;
+  return typeof type === 'string' ? type : null;
+}
+
+/**
  * Extract metadata for edited files
  */
-function extractEditMetadata(toolName: string, args: any, result: any): EditedFileMetadata {
+function extractEditMetadata(toolName: string, args: any, result: any, filePath?: string): EditedFileMetadata {
   const metadata: EditedFileMetadata = {
     toolName
   };
@@ -83,7 +98,18 @@ function extractEditMetadata(toolName: string, args: any, result: any): EditedFi
   // Determine operation type
   if (toolName === 'Write' || toolName === 'writeFile' || toolName === 'file_write' || toolName === 'file_create') {
     metadata.operation = 'create';
-  } else if (toolName === 'Edit' || toolName === 'editFile' || toolName === 'applyDiff' || toolName === 'file_edit' || toolName === 'patch' || toolName === 'ApplyPatch') {
+  } else if (toolName === 'ApplyPatch') {
+    // Codex apply_patch tells us add/update/delete per-file in args.changes.
+    // Without that, default to 'edit' (the most common case).
+    const patchType = extractApplyPatchEntryType(args, filePath ?? null);
+    if (patchType === 'add') {
+      metadata.operation = 'create';
+    } else if (patchType === 'delete') {
+      metadata.operation = 'delete';
+    } else {
+      metadata.operation = 'edit';
+    }
+  } else if (toolName === 'Edit' || toolName === 'editFile' || toolName === 'applyDiff' || toolName === 'file_edit' || toolName === 'patch') {
     metadata.operation = 'edit';
   } else if (toolName === 'Bash' || toolName === 'shell') {
     // For Bash/shell, store the command for reference
@@ -281,7 +307,7 @@ export class SessionFileTracker {
       // Prepare metadata based on link type
       let metadata: any = {};
       if (linkType === 'edited') {
-        metadata = extractEditMetadata(toolName, args, result);
+        metadata = extractEditMetadata(toolName, args, result, filePath);
         if (toolUseId) {
           metadata.toolUseId = toolUseId;
         }

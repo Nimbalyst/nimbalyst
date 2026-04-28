@@ -132,6 +132,21 @@ interface AIServiceInternal {
   ): Promise<void>;
 }
 
+/**
+ * Codex `apply_patch` tool args carry per-file change descriptors under
+ * `changes: { [path]: { type: 'add'|'update'|'delete'|'move', unified_diff?, move_path? } }`.
+ * Returns the entry's type for a given file path, or null if the args don't
+ * match the apply_patch shape (e.g. a non-Codex tool).
+ */
+function extractApplyPatchEntryType(args: any, filePath: string): string | null {
+  const changes = args?.changes;
+  if (!changes || typeof changes !== 'object' || Array.isArray(changes)) return null;
+  const entry = (changes as Record<string, unknown>)[filePath];
+  if (!entry || typeof entry !== 'object') return null;
+  const type = (entry as { type?: unknown }).type;
+  return typeof type === 'string' ? type : null;
+}
+
 export class MessageStreamingHandler {
   private readonly svc: AIServiceInternal;
 
@@ -1110,11 +1125,28 @@ export class MessageStreamingHandler {
                       : false;
                     if (editFilePath && watcherEntry && isInWorkspace) {
                       try {
-                        let beforeContent = await watcherEntry.cache.getBeforeState(editFilePath);
-                        if (beforeContent === null) {
-                          // File not in cache -- read from disk (file hasn't been modified yet
-                          // because OpenCode sends running state before executing the tool)
-                          beforeContent = await readFileContentOrNull(editFilePath) ?? '';
+                        // Codex ApplyPatch is unique: by the time the ACP tool_call event
+                        // arrives, Codex has already written the file. So both the
+                        // FileSnapshotCache and disk read return the *post*-write content,
+                        // not the baseline. For type:'add' (new file) we know the baseline
+                        // is empty by definition -- force it so the diff renders correctly.
+                        // (For type:'update' the true baseline would require reverse-applying
+                        // the unified_diff; not handled here yet.)
+                        const codexApplyPatchType = isCodexAcpEdit && trackToolName === 'ApplyPatch'
+                          ? extractApplyPatchEntryType(trackArgs, editFilePath)
+                          : null;
+
+                        let beforeContent: string;
+                        if (codexApplyPatchType === 'add') {
+                          beforeContent = '';
+                        } else {
+                          let cached = await watcherEntry.cache.getBeforeState(editFilePath);
+                          if (cached === null) {
+                            // File not in cache -- read from disk (file hasn't been modified yet
+                            // because OpenCode sends running state before executing the tool)
+                            cached = await readFileContentOrNull(editFilePath) ?? '';
+                          }
+                          beforeContent = cached;
                         }
                         const editToolUseId = toolUseId || `${session.provider}-edit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
                         const tagId = `ai-edit-pending-${session.id}-${editToolUseId}`;

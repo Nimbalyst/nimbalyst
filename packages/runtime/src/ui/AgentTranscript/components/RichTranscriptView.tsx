@@ -652,10 +652,14 @@ const extractApplyPatchChanges = (changes: unknown): any[] => {
     const unifiedDiff = typeof entry.unified_diff === 'string' ? entry.unified_diff : undefined;
 
     if (kind === 'add') {
-      // New file: prefer the post-image of the unified diff (the `+` lines).
-      // Falls back to whatever string-shaped content is present.
+      // Codex apply_patch carries the full new-file body as `content` for
+      // type: 'add'. Older variants (or other apply_patch implementations)
+      // may instead provide a unified_diff whose `+` lines comprise the
+      // file -- prefer `content` but fall back to extracting from the diff.
       let content = '';
-      if (unifiedDiff) {
+      if (typeof entry.content === 'string') {
+        content = entry.content;
+      } else if (unifiedDiff) {
         content = unifiedDiff
           .split('\n')
           .filter((l) => l.startsWith('+') && !l.startsWith('+++'))

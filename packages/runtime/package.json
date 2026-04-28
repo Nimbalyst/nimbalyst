@@ -2,6 +2,7 @@
   "name": "@nimbalyst/runtime",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "Shared Nimbalyst runtime: sessions, collab, AI hooks, plugins, and Lexical-based editor",
   "type": "module",
   "main": "./dist/index.js",

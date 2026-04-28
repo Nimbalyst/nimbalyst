@@ -121,6 +121,39 @@ describe('extractEditsFromToolMessage', () => {
     expect(edits[0].content).toBe('Hello\nWorld');
   });
 
+  it('uses changes[path].content (full file body) for type:add when present (real Codex shape)', () => {
+    // Codex's apply_patch gives type:'add' entries a `content` field with the
+    // full new-file body (not a unified_diff). Verified from real session
+    // ai_agent_messages payloads.
+    const message = makeTestMessage({
+      toolCall: {
+        toolName: 'ApplyPatch',
+        toolDisplayName: 'ApplyPatch',
+        status: 'completed',
+        description: null,
+        arguments: {
+          changes: {
+            '/repo/foo.test.ts': {
+              type: 'add',
+              content: "import { describe } from 'vitest';\n\ndescribe('x', () => {});\n",
+            },
+          },
+        },
+        targetFilePath: '/repo/foo.test.ts',
+        mcpServer: null,
+        mcpTool: null,
+        providerToolCallId: 'call_real',
+        progress: [],
+        result: JSON.stringify({ success: true }),
+      },
+    });
+
+    const edits = extractEditsFromToolMessage(message);
+    expect(edits).toHaveLength(1);
+    expect(edits[0].operation).toBe('create');
+    expect(edits[0].content).toBe("import { describe } from 'vitest';\n\ndescribe('x', () => {});\n");
+  });
+
   describe('parseUnifiedDiffToReplacements', () => {
     it('returns one replacement per hunk and includes context lines on both sides', () => {
       const diff = '@@ -1,3 +1,3 @@\n line1\n-old\n+new\n line3\n@@ -10 +10,2 @@\n-x\n+y\n+z\n';
