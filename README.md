@@ -42,7 +42,7 @@
 - Use embedded ghostty terminal
 - Leverage workstrees
   
-![Nimbalyst Agent](https://raw.githubusercontent.com/Nimbalyst/nimbalyst/main/developers_dark.webp)
+![Nimbalyst Agent](https://raw.githubusercontent.com/Nimbalyst/nimbalyst/main/developers-dark.webp)
 
 <b>Mobile app</b>
 - Session dashboard: see which agents need you and which are still working
