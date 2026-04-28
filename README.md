@@ -1,9 +1,10 @@
 # Nimbalyst is the visual workspace for building with Codex and Claude Code
 
-[Nimbalyst](https://nimbalyst.com) is a free, local, interactive visual editor & session manager where builders maximize speed, bandwidth, and context with Codex and Claude Code by collaborating visually on files, sessions, and tasks:
-- Iterate visually with Codex and Claude Code in your markdown, mockups, diagrams, csv, Excalidraw, data models, and code. Approve the coding agent's changes in red/green WYSIWYG, edit, annotate, iterate visually. 
-- Manage multiple sessions in parallel and in kanban. Search, resume, link sessions to files and files to sessions. For developers we include git management, AI commit, workstreams, worktrees, and terminal.
+[Nimbalyst](https://nimbalyst.com) is a free, local, interactive visual editor & session manager where builders maximize speed, bandwidth, and context with Codex, Claude Code, Opencode(alpha), Copilot(alpha) by collaborating visually on files, sessions, and tasks:
+- Iterate visually with coding agents in your markdown, mockups, diagrams, csv, Excalidraw, data models, and code. Approve the coding agent's changes in red/green WYSIWYG, edit, annotate. 
+- Manage multiple sessions in parallel and in kanban. Search, resume, link sessions to files and files to sessions.For developers we include git management, AI commit, workstreams, worktrees, and terminal.
 - Manage tasks. Keep track of your plans, bugs, todos, etc..  Have the agent edit tasks and items, add them, move them, and execute them. Human see and edit this as well.
+- Extend Nimbalyst. Build your own custom editors and visual interfaces integrated with the rest of Nimbalyst and your agents. 
 - Mobile app. Start, manage, and respond to your Codex and Claude Code sessions while on the go.
 
 ![Version](https://img.shields.io/github/v/release/nimbalyst/nimbalyst)
@@ -11,38 +12,58 @@
 
 
 ## Features
-- Files Mode: Visual Editor with Codex and Claude Code
-  - Edit markdown in a local, WYSIWIG, agentic editor powered by Codex and Claude Code. Review AI changes as red/green diffs.
-  - Iterate with coding agents on html mockups. Annotate, edit, embed, & use to code.
-  - Use coding agents to build excalidraw drawings and Mermaid diagrams. Visually edit yourself. Ask AI to edit them.
-  - View CSV file, work with coding agents in the CSV file, track changes.
-  - Build your data model with AI based on your code and docs. Use it to write better code.
-  - Work in a Monaco code editor, see changes, approve them
-- Agents Mode: Manage coding agents' work across parallel sessions in a UI
-  - Link sessions to files and files to sessions
-  - Open files in your sessions. Group files touched by a session
-  - Run parallel sessions
-  - Search and resume sessions
-  - Manage in a Kanban board
-- Task Mode: Keep track of your plans, bugs, todos etc..
-  - Have agent edit tasks, add them, move them, and execute them
-  - Human view and edit them too
-- For developers
-  - Manage git state
-  - Use AI to git commit
-  - Use embedded ghostty terminal
-  - Leverage workstrees
-- Mobile app
-  - Session dashboard: see which agents need you and which are still working
-  - Reply to questions via text or voice, agents resume immediately
-  - Visual diff review: swipe through changes, tap to approve
-  - Queue next tasks: keep the pipeline full, don't let agents sit idle
-  - Push notifications: agents tell you when they need you
-- Open storage of content and status in markdown, workflow in / commands, and plain files on disk or in git
-
-## ScreenShots
+<b>Visual Editors:</b> Built-in WYSIWYG editors where you and your coding agents collaborate visually. Approve agent changes as red/green diffs, edit, annotate, and iterate.
+- Markdown
+- Mockups with annotations
+- Mermaid
+- Excalidraw
+- CSV
+- Data Models
+- Code with Monaco
+  
 ![Nimbalyst File](https://github.com/Nimbalyst/nimbalyst/blob/main/Nimbalyst%20Hero%20Files%20Dev%20Dark-%20Social.png)
+
+<b>Session Management:</b> Manage coding agents' work across parallel sessions in a UI
+- Link sessions to files and files to sessions
+- Open files in your sessions. Group files touched by a session
+- Run parallel sessions
+- Search and resume sessions
+- Manage in a Kanban board
+  
 ![Nimbalyst Agent](https://raw.githubusercontent.com/Nimbalyst/nimbalyst/main/Sessions_kanban_dark.webp)
+
+<b>Task Tracking:</b> Keep track of your plans, bugs, features, todos etc..
+- Have agent edit tasks, add them, move them, and execute them
+- Human view and edit them too
+
+<b>For developers</b>
+- Manage git state
+- Use AI to git commit
+- Use embedded ghostty terminal
+- Leverage workstrees
+  
+![Nimbalyst Agent](https://raw.githubusercontent.com/Nimbalyst/nimbalyst/main/developers_dark.webp)
+
+<b>Mobile app</b>
+- Session dashboard: see which agents need you and which are still working
+- Reply to questions via text or voice, agents resume immediately
+- Visual diff review: swipe through changes, tap to approve
+- Queue next tasks: keep the pipeline full, don't let agents sit idle
+- Push notifications: agents tell you when they need you
+
+<b>Open</b> storage of content and status in markdown, workflow in / commands, and plain files on disk or in git
+
+<b>Extension system</b>
+- Pluggable editors for any file type. Every editor (including built-ins) goes through the same EditorHost contract, so custom editors are first-class.
+- Current extensions include an Astro website editor, visual git log, mindmap, slides, and a 3D object editor.
+  
+![Nimbalyst Agent](https://raw.githubusercontent.com/Nimbalyst/nimbalyst/main/extension-marketplace-dark.png)
+
+<b>Supported coding agents </b>
+- Codex
+- Claude Code
+- Opencode(alpha)
+- Copilot(alpha)
 
 ## Download
 
