@@ -1,0 +1,33 @@
+name: Feature request
+description: Suggest a concrete new feature or capability
+title: "[Feature]: "
+labels: ["type:feature", "status:needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a vague idea or "wouldn't it be cool if..."? Start in [Discussions → Ideas](https://github.com/Nimbalyst/nimbalyst/discussions/categories/ideas) instead.
+        This template is for concrete feature requests with a clear problem and proposed solution.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the user pain or workflow gap. Avoid jumping to a solution.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What would you build? Sketch the UX or behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered (optional)
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else (optional)
+      description: Mockups, links to similar features in other tools, related issues.

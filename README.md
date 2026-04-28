@@ -12,6 +12,16 @@
 
 https://github.com/user-attachments/assets/b0ef69a4-d426-4c5c-8f64-be920fb431cc
 
+## Contributing
+
+- 🐛 **Found a bug?** → [Open an issue](https://github.com/Nimbalyst/nimbalyst/issues/new?template=bug_report.yml)
+- ✨ **Have a concrete feature request?** → [Open an issue](https://github.com/Nimbalyst/nimbalyst/issues/new?template=feature_request.yml)
+- 💡 **Have a vague idea or question?** → [Join the discussion](https://github.com/Nimbalyst/nimbalyst/discussions)
+- 🗺️ **Curious what we're building?** → [See the roadmap](TBD-PROJECT-URL)
+
+We rank features and bugs by 👍 reactions. Don't comment "+1" — react with 👍 instead.
+[Sort issues by reactions →](https://github.com/Nimbalyst/nimbalyst/issues?q=is%3Aissue+is%3Aopen+sort%3Areactions-%2B1-desc)
+
 ## Features
 <b>Visual Editors:</b> Built-in WYSIWYG editors where you and your coding agents collaborate visually. Approve agent changes as red/green diffs, edit, annotate, and iterate.
 - Markdown
@@ -89,10 +99,6 @@ Download the latest version for your platform:
 ## Auto-Updates
 
 Nimbalyst automatically checks for updates and notifies you when a new version is available. You can also manually check via Help → Check for Updates.
-
-## Bug Reports & Feature Requests
-
-Found a bug or have a feature request? Please [create an issue](https://github.com/nimbalyst/nimbalyst/issues/new/choose).
 
 ## Community
 - [Documentation](https://docs.nimbalyst.com/) - Watch videos and read documentation
