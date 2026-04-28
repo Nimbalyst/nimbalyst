@@ -156,7 +156,17 @@ bundle-analysis.json
 worktrees/
 
 .nimbalyst/
-nimalyst-local/
+nimbalyst-local/
+
+# MCP config (may contain personal API tokens)
+.mcp.json
+
+# Database recovery dumps (one-off triage artifacts, never publish)
+recovered-data/
+recovered-data-recent/
+
+# iOS build artifacts
+*.ipa
 
 # E2E test output (screenshots, videos, etc.)
 e2e_test_output/
