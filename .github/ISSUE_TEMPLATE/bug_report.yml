@@ -12,7 +12,7 @@ body:
     id: problem
     attributes:
       label: Describe the bug
-      description: Put everything in one place: what happened, what you expected, how to reproduce it, and any logs or screenshots.
+      description: "Put everything in one place: what happened, what you expected, how to reproduce it, and any logs or screenshots."
       placeholder: |
         What happened:
         The app crashed when I ...
