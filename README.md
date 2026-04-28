@@ -42,7 +42,7 @@
 
 ## ScreenShots
 ![Nimbalyst File](https://github.com/Nimbalyst/nimbalyst/blob/main/Nimbalyst%20Hero%20Files%20Dev%20Dark-%20Social.png)
-![Nimbalyst Agent](https://raw.githubusercontent.com/Nimbalyst/nimbalyst/main/Nimbalyst%20Hero%20Agent%20Dark.png)
+![Nimbalyst Agent](https://raw.githubusercontent.com/Nimbalyst/nimbalyst/main/Sessions_kanban_dark.webp)
 
 ## Download
 
