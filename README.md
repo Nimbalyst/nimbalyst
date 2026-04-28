@@ -10,6 +10,7 @@
 ![Version](https://img.shields.io/github/v/release/nimbalyst/nimbalyst)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 
+[![Nimbalyst Demo Video](https://img.youtube.com/vi/mdm_3htBaVU/0.jpg)](https://www.youtube.com/watch?v=mdm_3htBaVU)
 
 ## Features
 <b>Visual Editors:</b> Built-in WYSIWYG editors where you and your coding agents collaborate visually. Approve agent changes as red/green diffs, edit, annotate, and iterate.
