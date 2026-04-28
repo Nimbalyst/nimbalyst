@@ -364,7 +364,11 @@ describe('Codex ACP transcript end-to-end', () => {
           source: message.source,
           direction: message.direction,
           content: message.content,
-          createdAt: message.createdAt,
+          createdAt: message.createdAt instanceof Date
+            ? message.createdAt
+            : message.createdAt
+              ? new Date(message.createdAt)
+              : new Date(),
           metadata: message.metadata,
           hidden: message.hidden ?? false,
         });
@@ -415,7 +419,7 @@ describe('Codex ACP transcript end-to-end', () => {
 
     BaseAgentProvider.setTrustChecker(() => ({ trusted: true, mode: 'allow-all' }));
     BaseAgentProvider.setPermissionPatternSaver(() => Promise.resolve());
-    BaseAgentProvider.setPermissionPatternChecker(() => Promise.resolve(null));
+    BaseAgentProvider.setPermissionPatternChecker(() => Promise.resolve(false));
 
     const protocol = new CodexACPProtocol('test-key', {
       command: process.execPath,
