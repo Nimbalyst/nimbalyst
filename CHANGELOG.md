@@ -20,6 +20,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.58.6] - 2026-04-28
+
+
+### Added
+- OpenCode provider gets configurable models, an LM Studio bridge, and real error surfacing: replaces the hardcoded preset stubs with a curated model list and merges in any providers/models the user has configured in `opencode.json`. The OpenCode panel writes a `provider.lmstudio` block into `~/.config/opencode/opencode.json` after discovering loaded models via `/v1/models`, so no separate Nimbalyst LM Studio toggle is required. Adds a "Disable auto-update" toggle that writes `autoupdate: false` into `opencode.json` so OpenCode does not surprise-upgrade between sessions. Picker selection now passes through to OpenCode prompt body as `{ providerID, modelID }` (previously the model field was silently ignored and OpenCode always used its config default). The real `session.error` message from OpenCode is surfaced instead of "Unknown error" by drilling into `error.data.message` first.
+- Extension SDK declares app compatibility: new `nimbalyst.minAppVersion` (0.58.5) field in the SDK package so extension authors can see the minimum host version per release. Adds a compatibility table to the SDK CHANGELOG; SDK semver stays independent of the app version.
+
+### Changed
+- OSS prep: document MIT license (Nimbalyst Inc., 2024-2026) at the repo root, AGPL-3.0 for the dual-licensed `collabv3` sync server, and a new top-level `LICENSING.md` explaining the MIT vs AGPL-or-commercial dual structure. README adds a Telemetry section pointing at `docs/POSTHOG_EVENTS.md`. `TeamPanel` shows an in-app notice that Nimbalyst Teams is free during alpha and will move to a paid subscription tier in the future. Repository URL aligned to `nimbalyst/nimbalyst` so npm provenance attestations match the public repo.
+- OSS prep: gitignore local-only paths and untrack `nimbalyst-local/`. Fixes the typo `nimalyst-local/` -> `nimbalyst-local/` that was why the directory had been getting committed despite the rule against it. Adds `.mcp.json`, `recovered-data/`, `recovered-data-recent/`, and `*.ipa` to `.gitignore`. Untracks 67 previously-committed files under `nimbalyst-local/` (files remain on disk, just no longer tracked). History still contains the same paths in older commits; that will be handled separately via `git-filter-repo` before the public push.
+- Loud warning in `TranscriptTransformer.CURRENT_VERSION` to never bump it for parser bugfixes, since it triggers a global reparse across every provider's historical sessions.
+
+### Fixed
+- Keep AI red/green diff on open files: open files were sometimes losing the green-addition decorations when Claude Agent edited them, while deletions still rendered red (closed files were unaffected because the on-mount diff path runs against fresh state). Two races in the live path: `onFileChanged` could clobber the editor with post-edit content during the 250ms window `onDiffRequested` uses to reset the editor to `oldContent`, after which `APPLY_MARKDOWN_REPLACE_COMMAND` saw `originalMarkdown == newText` and produced no additions to mark; and the two IPC events (`history:pending-tag-created` plus `file-changed-on-disk`) both routed through diff mode, so the same tag was applied twice with overlapping reset+dispatch sequences. `TabEditor.onFileChanged` now bails when `isApplyingDiffRef` or `pendingAIEditTagRef` are set so the diff in flight wins, and `onDiffRequested` coalesces duplicate invocations for the same tag and ignores empty diffs (`oldContent === newContent`). Adds `[diff-trace]` logging across the IPC listener, `DiskBackedStore.emitChange`, `DocumentModel.handleExternalChange`, `TabEditor.onFileChanged`/`onDiffRequested`, and the `DiffPlugin` `APPLY_MARKDOWN_REPLACE_COMMAND` handler.
+- Ship the `codex-acp` native binary in packaged builds (NIM-388): Codex ACP failed in packaged builds with `spawn codex-acp ENOENT` because `@zed-industries/codex-acp` was excluded from the build entirely and `CodexACPProtocol` fell through to spawning the literal name on PATH. Adds `@zed-industries/**` to `asarUnpack` so the binary is extractable, and allows `@zed-industries/codex-acp{,-*}` in `build.files` so npm's platform-specific optionalDeps land in the package via the wildcard. Covers host-arch builds on every platform; Mac cross-arch x64 still needs a follow-up (CI cross-arch install + `extraResources` entry).
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.58.5] - 2026-04-28
 
 
