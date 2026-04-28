@@ -8,3 +8,4 @@
 export * from './ProtocolInterface';
 export { ClaudeSDKProtocol } from './ClaudeSDKProtocol';
 export { CodexSDKProtocol } from './CodexSDKProtocol';
+export { CodexACPProtocol } from './CodexACPProtocol';

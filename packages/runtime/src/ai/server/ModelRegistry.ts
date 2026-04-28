@@ -56,6 +56,10 @@ export class ModelRegistry {
           const { OpenAICodexProvider } = await import('./providers/OpenAICodexProvider');
           models = await OpenAICodexProvider.getModels(apiKey);
           break;
+        case 'openai-codex-acp':
+          const { OpenAICodexACPProvider } = await import('./providers/OpenAICodexACPProvider');
+          models = await OpenAICodexACPProvider.getModels(apiKey);
+          break;
         case 'opencode':
           const { OpenCodeProvider } = await import('./providers/OpenCodeProvider');
           models = await OpenCodeProvider.getModels();
@@ -104,6 +108,7 @@ export class ModelRegistry {
     if (shouldFetch('claude-code')) promises.push(this.getModelsForProvider('claude-code'));
     if (shouldFetch('openai')) promises.push(this.getModelsForProvider('openai', apiKeys['openai']));
     if (shouldFetch('openai-codex')) promises.push(this.getModelsForProvider('openai-codex', apiKeys['openai']));
+    if (shouldFetch('openai-codex-acp')) promises.push(this.getModelsForProvider('openai-codex-acp', apiKeys['openai']));
     if (shouldFetch('opencode')) promises.push(this.getModelsForProvider('opencode'));
     if (shouldFetch('lmstudio')) promises.push(this.getModelsForProvider('lmstudio', undefined, apiKeys['lmstudio_url']));
     if (shouldFetch('copilot-cli')) promises.push(this.getModelsForProvider('copilot-cli'));
@@ -136,6 +141,9 @@ export class ModelRegistry {
       case 'openai-codex':
         const { OpenAICodexProvider } = await import('./providers/OpenAICodexProvider');
         return OpenAICodexProvider.getDefaultModel();
+      case 'openai-codex-acp':
+        const { OpenAICodexACPProvider } = await import('./providers/OpenAICodexACPProvider');
+        return OpenAICodexACPProvider.getDefaultModel();
       case 'opencode':
         const { OpenCodeProvider: OCP } = await import('./providers/OpenCodeProvider');
         return OCP.DEFAULT_MODEL;

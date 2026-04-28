@@ -19,6 +19,7 @@ import { TranscriptWriter } from './TranscriptWriter';
 import type { ITranscriptEventStore, TranscriptEvent } from './types';
 import { ClaudeCodeRawParser } from './parsers/ClaudeCodeRawParser';
 import { CodexRawParser } from './parsers/CodexRawParser';
+import { CodexACPRawParser } from './parsers/CodexACPRawParser';
 import { CopilotRawParser } from './parsers/CopilotRawParser';
 import { OpenCodeRawParser } from './parsers/OpenCodeRawParser';
 import type {
@@ -372,6 +373,9 @@ export class TranscriptTransformer {
     }
     if (provider === 'openai-codex') {
       return new CodexRawParser();
+    }
+    if (provider === 'openai-codex-acp') {
+      return new CodexACPRawParser();
     }
     if (provider === 'opencode') {
       return new OpenCodeRawParser();

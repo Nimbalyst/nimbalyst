@@ -5,6 +5,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import type { TranscriptViewMessage } from '../TranscriptProjector';
+import { TranscriptProjector } from '../TranscriptProjector';
+import type { TranscriptEvent } from '../types';
 import { parseToolResult } from '../toolResultParser';
 
 function makeViewMessage(overrides: Partial<TranscriptViewMessage> & { type: TranscriptViewMessage['type'] }): TranscriptViewMessage {
@@ -222,5 +224,48 @@ describe('parseToolResult', () => {
   it('returns undefined for null/undefined', () => {
     expect(parseToolResult(undefined)).toBeUndefined();
     expect(parseToolResult(undefined)).toBeUndefined();
+  });
+});
+
+describe('TranscriptProjector.project', () => {
+  it('coalesces adjacent assistant messages into one rendered message', () => {
+    const events: TranscriptEvent[] = [
+      {
+        id: 1,
+        sessionId: 'session-1',
+        provider: 'openai-codex-acp',
+        eventType: 'assistant_message',
+        sequence: 0,
+        searchable: true,
+        searchableText: 'I',
+        payload: { mode: 'agent' },
+        providerToolCallId: null,
+        parentEventId: null,
+        subagentId: null,
+        createdAt: new Date('2026-04-27T00:00:00Z'),
+      },
+      {
+        id: 2,
+        sessionId: 'session-1',
+        provider: 'openai-codex-acp',
+        eventType: 'assistant_message',
+        sequence: 1,
+        searchable: true,
+        searchableText: "'m reading the repo instructions first, hi",
+        payload: { mode: 'agent' },
+        providerToolCallId: null,
+        parentEventId: null,
+        subagentId: null,
+        createdAt: new Date('2026-04-27T00:00:01Z'),
+      },
+    ];
+
+    const projected = TranscriptProjector.project(events);
+
+    expect(projected.messages).toHaveLength(1);
+    expect(projected.messages[0]).toMatchObject({
+      type: 'assistant_message',
+      text: "I'm reading the repo instructions first, hi",
+    });
   });
 });

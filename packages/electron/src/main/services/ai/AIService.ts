@@ -2593,6 +2593,11 @@ export class AIService {
         // provider-id level so untouched providers are preserved on disk.
         // Each incoming slice replaces the stored slice wholesale -- the
         // renderer owns the full config for any provider it sends.
+        //
+        // Cache invalidation order matters: getNormalizedProviderSettings()
+        // re-populates the cache from disk, so we must invalidate AFTER the
+        // disk write or subsequent reads return the pre-save snapshot
+        // (toggled-off providers reappear as enabled, etc.).
         this.cachedNormalizedProviderSettings = null;
         const currentProviderSettings = this.getNormalizedProviderSettings();
         const mergedProviderSettings: Record<string, unknown> = {
@@ -2601,6 +2606,7 @@ export class AIService {
         };
 
         this.getSettingsStore().set('providerSettings', this.normalizeProviderSettings(mergedProviderSettings));
+        this.cachedNormalizedProviderSettings = null;
       }
 
       if (settings.showToolCalls !== undefined) {
@@ -2958,6 +2964,10 @@ export class AIService {
         'openai-codex': {
           // Codex SDK uses its own auth (codex auth login), API key is optional
           enabled: providerSettings['openai-codex']?.enabled === true,
+        },
+        'openai-codex-acp': {
+          // Codex ACP uses the codex-acp binary directly; API key is optional
+          enabled: providerSettings['openai-codex-acp']?.enabled === true,
         },
         'opencode': {
           // OpenCode uses its own config, API key is optional

@@ -6,6 +6,7 @@ import {
   codexUsageIndicatorEnabledAtom,
   setCodexUsageIndicatorEnabledAtom,
 } from '../../../store/atoms/codexUsageAtoms';
+import { getProviderConfigAtom, setProviderConfigAtom } from '../../../store/atoms/appSettings';
 
 interface OpenAICodexPanelProps {
   config: ProviderConfig;
@@ -29,6 +30,16 @@ export function OpenAICodexPanel({
 }: OpenAICodexPanelProps) {
   const usageIndicatorEnabled = useAtomValue(codexUsageIndicatorEnabledAtom);
   const setUsageIndicatorEnabled = useSetAtom(setCodexUsageIndicatorEnabledAtom);
+
+  const acpConfig = useAtomValue(getProviderConfigAtom('openai-codex-acp'));
+  const setProviderConfig = useSetAtom(setProviderConfigAtom);
+  const acpEnabled = acpConfig?.enabled === true;
+  const handleAcpToggle = (enabled: boolean) => {
+    setProviderConfig({
+      providerId: 'openai-codex-acp',
+      config: { enabled },
+    });
+  };
 
   return (
     <div className="provider-panel flex flex-col">
@@ -73,6 +84,30 @@ export function OpenAICodexPanel({
         checked={usageIndicatorEnabled}
         onChange={setUsageIndicatorEnabled}
       />
+
+      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)]">
+        <h4 className="provider-panel-section-title text-base font-semibold mb-3 text-[var(--nim-text)]">
+          ACP Transport <span className="text-xs font-normal text-[var(--nim-text-muted)]">(experimental)</span>
+        </h4>
+        <p className="text-[13px] text-[var(--nim-text-muted)] mb-3 leading-relaxed">
+          When enabled, <strong>OpenAI Codex (ACP)</strong> becomes available as a separate provider
+          in the model selector. ACP gives Nimbalyst native file-edit hooks for accurate pre-edit
+          baselines, exact diffs in the transcript, and reliable session-linked local history.
+        </p>
+        <p className="text-[13px] text-[var(--nim-text-muted)] mb-3 leading-relaxed">
+          You can keep both transports enabled and choose per session. Experimental: transcript reload
+          and packaged-build support are still being validated. Requires the bundled
+          <code className="text-[12px] font-mono mx-1">@zed-industries/codex-acp</code> binary
+          (installed automatically with Nimbalyst).
+        </p>
+        <SettingsToggle
+          variant="enable"
+          name="Enable ACP transport"
+          description="Adds 'OpenAI Codex (ACP)' as a peer provider"
+          checked={acpEnabled}
+          onChange={handleAcpToggle}
+        />
+      </div>
 
       {config.enabled && (
         <>

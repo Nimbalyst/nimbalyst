@@ -95,7 +95,11 @@ import { codexUsageService } from './services/CodexUsageService';
 import { registerExtensionHandlers, getClaudePluginPaths, initializeExtensionFileTypes } from './ipc/ExtensionHandlers';
 import { queueMarketplaceInstallRequest, registerExtensionMarketplaceHandlers, runExtensionAutoUpdate } from './ipc/ExtensionMarketplaceHandlers';
 import { getRegisteredExtensions } from './extensions/RegisteredFileTypes';
-import { ClaudeCodeProvider, OpenAICodexProvider, OpenCodeProvider, CopilotCLIProvider } from '@nimbalyst/runtime/ai/server';
+import { ClaudeCodeProvider, OpenAICodexProvider, OpenAICodexACPProvider, OpenCodeProvider, CopilotCLIProvider } from '@nimbalyst/runtime/ai/server';
+import { sessionFileTracker } from './services/SessionFileTracker';
+import { historyManager } from './HistoryManager';
+import { readFileContentOrNull } from './services/ai/aiServiceUtils';
+import { AISessionsRepository } from '@nimbalyst/runtime/storage/repositories/AISessionsRepository';
 import { isMCPServerEnabledForProvider, MCP_PROVIDER_IDS } from '@nimbalyst/runtime/types/MCPServerConfig';
 import type { MCPServerConfig } from '@nimbalyst/runtime/types/MCPServerConfig';
 import { logger, overrideConsole } from './utils/logger';
@@ -1161,6 +1165,30 @@ app.whenReady().then(async () => {
         }
         return enabledServers;
     });
+    // Codex ACP shares the Codex MCP enablement filter -- it's the same Codex
+    // CLI under the hood, just with a different transport.
+    OpenAICodexACPProvider.setMCPConfigLoader(async (workspacePath?: string) => {
+        if (!mcpConfigService) {
+            throw new Error('MCP config service not initialized');
+        }
+        const mergedConfig = await mcpConfigService.getMergedConfig(workspacePath);
+        const allServers = mergedConfig.mcpServers || {};
+
+        const enabledServers: Record<string, any> = {};
+        for (const [name, config] of Object.entries(allServers)) {
+            if (isMCPServerEnabledForProvider(config as MCPServerConfig, MCP_PROVIDER_IDS.CODEX)) {
+                const isAuthorized = await mcpConfigService.isOAuthAuthorized(config as MCPServerConfig, {
+                    useMcpRemoteForNativeOAuth: true,
+                });
+                if (!isAuthorized) {
+                    logger.mcp.info(`[MCP] Skipping unauthorized OAuth server for Codex ACP: ${name}`);
+                    continue;
+                }
+                enabledServers[name] = mcpConfigService.processServerConfigForRuntime(config as any);
+            }
+        }
+        return enabledServers;
+    });
     CopilotCLIProvider.setMCPConfigLoader(async (workspacePath?: string) => {
         if (!mcpConfigService) {
             throw new Error('MCP config service not initialized');
@@ -1207,12 +1235,17 @@ app.whenReady().then(async () => {
         const settingsManager = ClaudeSettingsManager.getInstance();
         return settingsManager.getUserLevelEnv();
     });
+    OpenAICodexACPProvider.setClaudeSettingsEnvLoader(async () => {
+        const settingsManager = ClaudeSettingsManager.getInstance();
+        return settingsManager.getUserLevelEnv();
+    });
 
     // Inject shell environment loader to pass the user's full login shell env vars
     // (AWS credentials, NODE_EXTRA_CA_CERTS, etc.) to the Claude Code subprocess.
     // Without this, Dock/Finder-launched Nimbalyst has a minimal environment.
     ClaudeCodeProvider.setShellEnvironmentLoader(() => getShellEnvironment());
     OpenAICodexProvider.setShellEnvironmentLoader(() => getShellEnvironment());
+    OpenAICodexACPProvider.setShellEnvironmentLoader(() => getShellEnvironment());
     OpenCodeProvider.setShellEnvironmentLoader(() => getShellEnvironment());
     CopilotCLIProvider.setShellEnvironmentLoader(() => getShellEnvironment());
 
@@ -1223,6 +1256,7 @@ app.whenReady().then(async () => {
     // found in $PATH: npx" otherwise when Nimbalyst is launched from Dock.
     ClaudeCodeProvider.setEnhancedPathLoader(() => getEnhancedPath());
     OpenAICodexProvider.setEnhancedPathLoader(() => getEnhancedPath());
+    OpenAICodexACPProvider.setEnhancedPathLoader(() => getEnhancedPath());
     OpenCodeProvider.setEnhancedPathLoader(() => getEnhancedPath());
     CopilotCLIProvider.setEnhancedPathLoader(() => getEnhancedPath());
 
@@ -1317,6 +1351,7 @@ app.whenReady().then(async () => {
       };
       ClaudeCodeProvider.setSecurityLogger(securityLogger);
       OpenAICodexProvider.setSecurityLogger(securityLogger);
+      OpenAICodexACPProvider.setSecurityLogger(securityLogger);
     }
 
     ClaudeCodeProvider.setClaudeSettingsPatternSaver(patternSaver);
@@ -1326,6 +1361,69 @@ app.whenReady().then(async () => {
     OpenAICodexProvider.setPermissionPatternSaver(patternSaver);
     OpenAICodexProvider.setPermissionPatternChecker(patternChecker);
     OpenAICodexProvider.setTrustChecker(trustChecker);
+
+    OpenAICodexACPProvider.setPermissionPatternSaver(patternSaver);
+    OpenAICodexACPProvider.setPermissionPatternChecker(patternChecker);
+    OpenAICodexACPProvider.setTrustChecker(trustChecker);
+
+    // ACP exposes pre/post file-write hooks. Wire them so Codex ACP edits
+    // produce the same FilesEditedSidebar entries and pre-edit baselines as
+    // Claude Code edits, even when Codex routes the write through
+    // fs/write_text_file (which doesn't always emit a session/tool_call).
+    OpenAICodexACPProvider.setOnBeforeFileWrite(async (filePath, sessionId) => {
+      if (!sessionId) return;
+      try {
+        const session = await AISessionsRepository.get(sessionId);
+        const workspacePath = session?.workspacePath;
+        if (!workspacePath) return;
+
+        const beforeContent = (await readFileContentOrNull(filePath)) ?? '';
+        const toolUseId = `codex-acp-write-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const tagId = `ai-edit-pending-${sessionId}-${toolUseId}`;
+
+        await historyManager.createTag(
+          workspacePath,
+          filePath,
+          tagId,
+          beforeContent,
+          sessionId,
+          toolUseId,
+        );
+
+        await sessionFileTracker.trackToolExecution(
+          sessionId,
+          workspacePath,
+          'Write',
+          { path: filePath },
+          undefined,
+          toolUseId,
+          findWindowByWorkspace(workspacePath),
+        );
+      } catch (error) {
+        const errorStr = String(error);
+        if (!errorStr.includes('unique') && !errorStr.includes('UNIQUE') && !errorStr.includes('duplicate')) {
+          logger.ai.error('[CodexACP] onBeforeFileWrite hook failed:', error);
+        }
+      }
+    });
+
+    OpenAICodexACPProvider.setOnTurnFilesEdited(async (filePaths, sessionId) => {
+      if (!sessionId || filePaths.size === 0) return;
+      try {
+        const session = await AISessionsRepository.get(sessionId);
+        const workspacePath = session?.workspacePath;
+        if (!workspacePath) return;
+        // The turn-end snapshot pass is handled by the watcher pipeline; the
+        // hook just emits a renderer notification so the FilesEditedSidebar
+        // refreshes after a multi-file turn completes.
+        const window = findWindowByWorkspace(workspacePath);
+        if (window && !window.isDestroyed()) {
+          window.webContents.send('session-files:updated', sessionId);
+        }
+      } catch (error) {
+        logger.ai.error('[CodexACP] onTurnFilesEdited hook failed:', error);
+      }
+    });
 
     // Inject image compressor
     // Compresses images to fit within Claude API 5MB base64 limit
@@ -1390,6 +1488,7 @@ app.whenReady().then(async () => {
         // Inject the port into ClaudeCodeProvider so it can configure the MCP server
         ClaudeCodeProvider.setMcpServerPort(result.port);
         OpenAICodexProvider.setMcpServerPort(result.port);
+        OpenAICodexACPProvider.setMcpServerPort(result.port);
         OpenCodeProvider.setMcpServerPort(result.port);
         CopilotCLIProvider.setMcpServerPort(result.port);
     } catch (error) {
@@ -1422,6 +1521,7 @@ app.whenReady().then(async () => {
         const result = await startSessionContextServer();
         ClaudeCodeProvider.setSessionContextServerPort(result.port);
         OpenAICodexProvider.setSessionContextServerPort(result.port);
+        OpenAICodexACPProvider.setSessionContextServerPort(result.port);
         OpenCodeProvider.setSessionContextServerPort(result.port);
         CopilotCLIProvider.setSessionContextServerPort(result.port);
     } catch (error) {
@@ -2157,6 +2257,7 @@ app.on('before-quit', async (event) => {
         await Promise.race([shutdownPromise, timeoutPromise]);
         ClaudeCodeProvider.setSessionContextServerPort(null);
         OpenAICodexProvider.setSessionContextServerPort(null);
+        OpenAICodexACPProvider.setSessionContextServerPort(null);
         OpenCodeProvider.setSessionContextServerPort(null);
         CopilotCLIProvider.setSessionContextServerPort(null);
         console.log('[QUIT] Session context MCP server shutdown complete');
@@ -2171,6 +2272,7 @@ app.on('before-quit', async (event) => {
         await Promise.race([shutdownPromise, timeoutPromise]);
         ClaudeCodeProvider.setMetaAgentServerPort(null);
         OpenAICodexProvider.setMetaAgentServerPort(null);
+        OpenAICodexACPProvider.setMetaAgentServerPort(null);
         console.log('[QUIT] Meta-agent MCP server shutdown complete');
     } catch (error) {
         console.error('[QUIT] Error closing meta-agent MCP server:', error);

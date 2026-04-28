@@ -234,9 +234,9 @@ export function supportsEffortLevel(modelId?: string): boolean {
   if (!modelId) return false;
   const variant = extractClaudeCodeVariant(modelId);
   if (variant === 'opus' || variant === 'opus-4-6' || variant === 'sonnet') return true;
-  // OpenAI Codex models support reasoning effort
+  // OpenAI Codex models support reasoning effort (both SDK and ACP transports)
   const parsed = ModelIdentifier.tryParse(modelId);
-  if (parsed?.provider === 'openai-codex') return true;
-  if (modelId.startsWith('openai-codex:')) return true;
+  if (parsed?.provider === 'openai-codex' || parsed?.provider === 'openai-codex-acp') return true;
+  if (modelId.startsWith('openai-codex:') || modelId.startsWith('openai-codex-acp:')) return true;
   return false;
 }

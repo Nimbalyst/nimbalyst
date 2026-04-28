@@ -2,7 +2,7 @@ import path from 'path';
 import { BrowserWindow } from 'electron';
 import { randomUUID } from 'crypto';
 import { safeHandle } from '../utils/ipcRegistry';
-import { ClaudeCodeProvider, OpenAICodexProvider, SessionManager } from '@nimbalyst/runtime/ai/server';
+import { ClaudeCodeProvider, OpenAICodexProvider, OpenAICodexACPProvider, SessionManager } from '@nimbalyst/runtime/ai/server';
 import type { AIProviderType } from '@nimbalyst/runtime/ai/server/types';
 import { ModelIdentifier } from '@nimbalyst/runtime/ai/server/types';
 import { AISessionsRepository, AgentMessagesRepository, SessionFilesRepository } from '@nimbalyst/runtime';
@@ -141,6 +141,7 @@ export class MetaAgentService {
 
       ClaudeCodeProvider.setMetaAgentServerPort(result.port);
       OpenAICodexProvider.setMetaAgentServerPort(result.port);
+      OpenAICodexACPProvider.setMetaAgentServerPort(result.port);
 
       this.unsubscribeStateListener = getSessionStateManager().subscribe((event) => {
         if (event.type === 'session:completed' || event.type === 'session:error' || event.type === 'session:waiting' || event.type === 'session:interrupted') {
@@ -171,6 +172,7 @@ export class MetaAgentService {
     await shutdownMetaAgentServer();
     ClaudeCodeProvider.setMetaAgentServerPort(null);
     OpenAICodexProvider.setMetaAgentServerPort(null);
+    OpenAICodexACPProvider.setMetaAgentServerPort(null);
     this.serverPort = null;
     this.started = false;
   }

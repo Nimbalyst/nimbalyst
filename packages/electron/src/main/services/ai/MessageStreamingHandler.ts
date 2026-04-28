@@ -318,6 +318,10 @@ export class MessageStreamingHandler {
           // Codex SDK uses its own auth (codex auth login), API key is optional
           requiresApiKey = false;
           break;
+        case 'openai-codex-acp':
+          // Codex ACP uses the codex-acp binary's own auth, API key is optional
+          requiresApiKey = false;
+          break;
         case 'opencode':
           // OpenCode uses its own config, API key is optional
           requiresApiKey = false;
@@ -1087,8 +1091,14 @@ export class MessageStreamingHandler {
                   // OpenCode emits tool_call with status='running' BEFORE the file is modified,
                   // so we can snapshot the current disk content as the before-state.
                   // Tool names: edit, write, create (with filePath in arguments)
+                  // Codex ACP emits the same shape via writeTextFile pre-edit hooks plus
+                  // session/tool_call events for Edit/Write tools. The tool name list is
+                  // kept separate per provider to avoid cross-talk if vocabularies diverge.
                   const OPENCODE_EDIT_TOOLS = ['edit', 'write', 'create'];
-                  if (OPENCODE_EDIT_TOOLS.includes(trackToolName) && session.provider === 'opencode') {
+                  const CODEX_ACP_EDIT_TOOLS = ['Edit', 'Write', 'ApplyPatch', 'edit', 'write', 'apply_patch'];
+                  const isOpenCodeEdit = OPENCODE_EDIT_TOOLS.includes(trackToolName) && session.provider === 'opencode';
+                  const isCodexAcpEdit = CODEX_ACP_EDIT_TOOLS.includes(trackToolName) && session.provider === 'openai-codex-acp';
+                  if (isOpenCodeEdit || isCodexAcpEdit) {
                     const editFilePath = extractFilePath(trackArgs);
                     const watcherEntry = this.svc.hooklessWatcher.getEntry(session.id);
                     // Only create the pre-edit tag for paths inside the workspace —
@@ -1106,7 +1116,7 @@ export class MessageStreamingHandler {
                           // because OpenCode sends running state before executing the tool)
                           beforeContent = await readFileContentOrNull(editFilePath) ?? '';
                         }
-                        const editToolUseId = toolUseId || `opencode-edit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                        const editToolUseId = toolUseId || `${session.provider}-edit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
                         const tagId = `ai-edit-pending-${session.id}-${editToolUseId}`;
                         await historyManager.createTag(
                           effectiveWorkspacePath,
@@ -1119,7 +1129,7 @@ export class MessageStreamingHandler {
                       } catch (preEditError) {
                         const errorStr = String(preEditError);
                         if (!errorStr.includes('unique') && !errorStr.includes('UNIQUE') && !errorStr.includes('duplicate')) {
-                          logger.ai.error('[AIService] Failed to create pre-edit tag for OpenCode edit:', preEditError);
+                          logger.ai.error(`[AIService] Failed to create pre-edit tag for ${session.provider} edit:`, preEditError);
                         }
                       }
                     }

@@ -1082,6 +1082,7 @@ async function getAvailableModelsForMobile(): Promise<{ models: Array<{ id: stri
     if (providerSettings['claude-code']?.enabled !== false) enabledSet.add('claude-code');
     if (providerSettings['openai']?.enabled === true && !!apiKeys['openai']) enabledSet.add('openai');
     if (providerSettings['openai-codex']?.enabled === true) enabledSet.add('openai-codex');
+    if (providerSettings['openai-codex-acp']?.enabled === true) enabledSet.add('openai-codex-acp');
     if (providerSettings['lmstudio']?.enabled === true) enabledSet.add('lmstudio');
 
     const modelsConfig = {

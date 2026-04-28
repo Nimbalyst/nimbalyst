@@ -26,7 +26,17 @@ function stripOuterQuotes(s: string): string {
  *
  * Display-only — does not modify stored data.
  */
-export function unwrapShellCommand(command: string): string {
+export function unwrapShellCommand(command: string | string[] | unknown): string {
+  // ACP (and some Codex tool calls) send command as an argv array, e.g.
+  // ["/bin/zsh", "-lc", "actual command"]. Join into a single string so the
+  // existing wrapper regexes can strip the shell layer.
+  if (Array.isArray(command)) {
+    command = command.map(part => String(part ?? '')).join(' ');
+  }
+  if (typeof command !== 'string') {
+    return String(command ?? '');
+  }
+
   // Try cmd.exe wrapper
   const cmdMatch = command.match(CMD_EXE_REGEX);
   if (cmdMatch) {

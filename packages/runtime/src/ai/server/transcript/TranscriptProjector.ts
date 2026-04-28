@@ -139,7 +139,7 @@ export class TranscriptProjector {
       }
     }
 
-    return { messages: topLevel };
+    return { messages: coalesceAdjacentAssistantMessages(topLevel) };
   }
 
   /**
@@ -155,6 +155,30 @@ export class TranscriptProjector {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function coalesceAdjacentAssistantMessages(
+  messages: TranscriptViewMessage[],
+): TranscriptViewMessage[] {
+  const coalesced: TranscriptViewMessage[] = [];
+
+  for (const message of messages) {
+    const previous = coalesced[coalesced.length - 1];
+    if (
+      previous &&
+      previous.type === 'assistant_message' &&
+      message.type === 'assistant_message' &&
+      previous.subagentId === message.subagentId &&
+      previous.mode === message.mode
+    ) {
+      previous.text = `${previous.text ?? ''}${message.text ?? ''}`;
+      continue;
+    }
+
+    coalesced.push(message);
+  }
+
+  return coalesced;
+}
 
 function projectEvent(
   event: TranscriptEvent,
@@ -291,4 +315,3 @@ function interactivePromptToToolCall(
     progress: [],
   };
 }
-

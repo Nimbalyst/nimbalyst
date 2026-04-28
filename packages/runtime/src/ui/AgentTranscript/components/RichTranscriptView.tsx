@@ -456,7 +456,14 @@ const defaultSettings: TranscriptSettings = {
   showSessionInit: false,
 };
 
-const EDIT_TOOL_NAMES = new Set(['edit', 'write', 'multi-edit', 'multiedit', 'multi_edit']);
+// Lowercased tool names that should render with EditToolResultCard.
+// 'applypatch'/'apply_patch' covers Codex ACP's apply_patch tool, which
+// emits its diff via a `changes: { [path]: { type, unified_diff } }` shape
+// (parsed in extractEditsFromToolMessage).
+const EDIT_TOOL_NAMES = new Set([
+  'edit', 'write', 'multi-edit', 'multiedit', 'multi_edit',
+  'applypatch', 'apply_patch',
+]);
 
 const isEditToolName = (name?: string): boolean => {
   if (!name) return false;
@@ -579,6 +586,102 @@ const buildEditSignature = (edit: Record<string, any>): string => {
     applied: edit.applied,
     type: edit.type,
   });
+};
+
+/**
+ * Parse a unified diff string into the `replacements: [{oldText, newText}]`
+ * shape DiffViewer expects. Hunks are split on `@@` headers; one replacement
+ * is emitted per hunk so the rendered diff preserves hunk boundaries.
+ *
+ * Used to bridge Codex ACP's `apply_patch` tool output (which carries hunks
+ * as a single unified diff string) into the same renderer Claude's Edit uses.
+ */
+export const parseUnifiedDiffToReplacements = (
+  unifiedDiff: string
+): Array<{ oldText: string; newText: string }> => {
+  if (!unifiedDiff) return [];
+  const lines = unifiedDiff.split('\n');
+  const replacements: Array<{ oldText: string; newText: string }> = [];
+  let oldBuf: string[] = [];
+  let newBuf: string[] = [];
+  let inHunk = false;
+
+  const flush = () => {
+    if (oldBuf.length === 0 && newBuf.length === 0) return;
+    replacements.push({ oldText: oldBuf.join('\n'), newText: newBuf.join('\n') });
+    oldBuf = [];
+    newBuf = [];
+  };
+
+  for (const line of lines) {
+    if (line.startsWith('@@')) {
+      flush();
+      inHunk = true;
+      continue;
+    }
+    if (!inHunk) continue;
+    if (line === '') continue; // trailing newline / blank between hunks
+    if (line.startsWith('\\ ')) continue; // "\ No newline at end of file"
+    if (line.startsWith('-')) {
+      oldBuf.push(line.slice(1));
+    } else if (line.startsWith('+')) {
+      newBuf.push(line.slice(1));
+    } else {
+      const ctx = line.startsWith(' ') ? line.slice(1) : line;
+      oldBuf.push(ctx);
+      newBuf.push(ctx);
+    }
+  }
+  flush();
+  return replacements;
+};
+
+/**
+ * Detect Codex `apply_patch`'s `changes` shape -- a record keyed by file
+ * path whose values are `{ type: 'add'|'update'|'delete'|'move',
+ * unified_diff?: string, move_path?: string|null }`. Returns one synthesized
+ * edit per entry, ready for EditToolResultCard.
+ */
+const extractApplyPatchChanges = (changes: unknown): any[] => {
+  if (!changes || typeof changes !== 'object' || Array.isArray(changes)) return [];
+  const out: any[] = [];
+  for (const [path, raw] of Object.entries(changes as Record<string, unknown>)) {
+    if (!raw || typeof raw !== 'object') continue;
+    const entry = raw as Record<string, unknown>;
+    const kind = typeof entry.type === 'string' ? entry.type : undefined;
+    const unifiedDiff = typeof entry.unified_diff === 'string' ? entry.unified_diff : undefined;
+
+    if (kind === 'add') {
+      // New file: prefer the post-image of the unified diff (the `+` lines).
+      // Falls back to whatever string-shaped content is present.
+      let content = '';
+      if (unifiedDiff) {
+        content = unifiedDiff
+          .split('\n')
+          .filter((l) => l.startsWith('+') && !l.startsWith('+++'))
+          .map((l) => l.slice(1))
+          .join('\n');
+      }
+      out.push({ filePath: path, type: 'add', operation: 'create', content });
+      continue;
+    }
+
+    if (kind === 'delete') {
+      out.push({ filePath: path, type: 'delete', operation: 'delete', content: '' });
+      continue;
+    }
+
+    if (unifiedDiff) {
+      const replacements = parseUnifiedDiffToReplacements(unifiedDiff);
+      out.push({
+        filePath: path,
+        type: kind ?? 'update',
+        operation: 'edit',
+        replacements,
+      });
+    }
+  }
+  return out;
 };
 
 export const extractEditsFromToolMessage = (message: TranscriptViewMessage): any[] => {
@@ -714,6 +817,22 @@ export const extractEditsFromToolMessage = (message: TranscriptViewMessage): any
       }
     });
   };
+
+  // Codex ACP `apply_patch` carries its diff under `changes: { [path]: { type, unified_diff } }`
+  // in either args or result. Detect first so the rest of the recursive walk
+  // doesn't fall back to dumping the raw JSON.
+  const fromArgs = extractApplyPatchChanges((args as any)?.changes);
+  if (fromArgs.length > 0) {
+    return fromArgs;
+  }
+  const resultObj =
+    typeof tool.result === 'string' && looksLikeJson(tool.result)
+      ? safeParseJson(tool.result)
+      : tool.result;
+  const fromResult = extractApplyPatchChanges((resultObj as any)?.changes);
+  if (fromResult.length > 0) {
+    return fromResult;
+  }
 
   // Note: toolCall.changes contains {path, patch} metadata -- not edit instructions.
   // Edits are extracted from tool arguments and result payloads via visit() below.

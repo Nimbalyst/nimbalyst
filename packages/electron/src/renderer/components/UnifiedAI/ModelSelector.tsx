@@ -131,6 +131,9 @@ export function ModelSelector({
       case 'copilot-cli':
       case 'lmstudio':
         return provider;
+      case 'openai-codex-acp':
+        // Settings still live under the OpenAI Codex panel.
+        return 'openai-codex';
       default:
         return 'claude-code';
     }
@@ -168,6 +171,7 @@ export function ModelSelector({
       case 'claude-code': return 'Claude Agent (Claude Code Based)';
       case 'openai': return 'OpenAI';
       case 'openai-codex': return 'OpenAI Codex';
+      case 'openai-codex-acp': return 'OpenAI Codex (ACP)';
       case 'opencode': return 'OpenCode';
       case 'copilot-cli': return 'GitHub Copilot';
       case 'lmstudio': return 'LMStudio';

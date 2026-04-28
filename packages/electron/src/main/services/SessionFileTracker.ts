@@ -45,6 +45,9 @@ function extractFileMentions(message: string): string[] {
 function getLinkTypeForTool(toolName: string): FileLinkType | null {
   const editTools = [
     'Write', 'Edit', 'NotebookEdit', 'writeFile', 'editFile', 'applyDiff', 'streamContent', 'Bash', 'file_change',
+    // Codex ACP: kind:'edit'/'delete'/'move' tool calls map to 'ApplyPatch' in
+    // CodexACPProtocol.deriveToolName; the path is forwarded from ACP locations[].
+    'ApplyPatch',
     // OpenCode tool names (short names from real SDK: edit, write, patch, shell)
     'file_write', 'file_edit', 'file_create', 'shell', 'patch',
     'edit', 'write', 'create',
@@ -80,7 +83,7 @@ function extractEditMetadata(toolName: string, args: any, result: any): EditedFi
   // Determine operation type
   if (toolName === 'Write' || toolName === 'writeFile' || toolName === 'file_write' || toolName === 'file_create') {
     metadata.operation = 'create';
-  } else if (toolName === 'Edit' || toolName === 'editFile' || toolName === 'applyDiff' || toolName === 'file_edit' || toolName === 'patch') {
+  } else if (toolName === 'Edit' || toolName === 'editFile' || toolName === 'applyDiff' || toolName === 'file_edit' || toolName === 'patch' || toolName === 'ApplyPatch') {
     metadata.operation = 'edit';
   } else if (toolName === 'Bash' || toolName === 'shell') {
     // For Bash/shell, store the command for reference
