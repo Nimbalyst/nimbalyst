@@ -10,7 +10,7 @@
 ![Version](https://img.shields.io/github/v/release/nimbalyst/nimbalyst)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 
-[![Nimbalyst Demo Video](https://img.youtube.com/vi/mdm_3htBaVU/0.jpg)](https://www.youtube.com/watch?v=mdm_3htBaVU)
+https://github.com/user-attachments/assets/b0ef69a4-d426-4c5c-8f64-be920fb431cc
 
 ## Features
 <b>Visual Editors:</b> Built-in WYSIWYG editors where you and your coding agents collaborate visually. Approve agent changes as red/green diffs, edit, annotate, and iterate.
@@ -37,7 +37,7 @@
 - Have agent edit tasks, add them, move them, and execute them
 - Human view and edit them too
 
-<b>For developers</b>
+<b>For Developers</b>
 - Manage git state
 - Use AI to git commit
 - Use embedded ghostty terminal
@@ -45,7 +45,7 @@
   
 ![Nimbalyst Agent](https://raw.githubusercontent.com/Nimbalyst/nimbalyst/main/developers-dark.webp)
 
-<b>Mobile app</b>
+<b>Mobile App</b>
 - Session dashboard: see which agents need you and which are still working
 - Reply to questions via text or voice, agents resume immediately
 - Visual diff review: swipe through changes, tap to approve
@@ -54,13 +54,13 @@
 
 <b>Open</b> storage of content and status in markdown, workflow in / commands, and plain files on disk or in git
 
-<b>Extension system</b>
+<b>Extension System</b>
 - Pluggable editors for any file type. Every editor (including built-ins) goes through the same EditorHost contract, so custom editors are first-class.
 - Current extensions include an Astro website editor, visual git log, mindmap, slides, and a 3D object editor.
   
 ![Nimbalyst Agent](https://raw.githubusercontent.com/Nimbalyst/nimbalyst/main/extension-marketplace-dark.png)
 
-<b>Supported coding agents </b>
+<b>Supported Coding Agents </b>
 - Codex
 - Claude Code
 - Opencode(alpha)
