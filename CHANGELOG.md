@@ -20,6 +20,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.58.7] - 2026-04-28
+
+
+### Added
+- Recent file masks in the git Changes tab: persists a global history of up to 10 recent file masks with a dropdown next to the file mask input to pick or remove past entries. Values commit to history on blur or Enter, deduped, most-recent-first.
+- Guided agent bug-report flow replaces the PostHog feedback survey: new `FeedbackIntakeDialog` with bug/feature paths and inline log-gathering consent, opened from the gutter button and a new Help > Send Feedback menu item. Picking a path spawns a Claude Code session seeded with `/nimbalyst-feedback:bug-report` or `:feature-request`, plus the user's log-consent flag. New `nimbalyst-feedback` claude-plugin (commands + skill) guides report drafting, anonymization review, and GitHub Issues posting against `nimbalyst/nimbalyst` with `bug_report.md` / `feature_request.md` templates. New MCP tools: `feedback_anonymize_text` (regex pass for paths, emails, API keys, JWTs, Stytch IDs, private IPs), `feedback_get_environment`, `feedback_open_github_issue` (falls back to title-only URL when body exceeds safe length). Help menus get Send Feedback, Browse Issues, GitHub Discussions; the PostHog survey component, registration, and CSS are removed.
+
+### Changed
+- `POSTHOG_EVENTS.md` and `FEATURE_INVENTORY.md` updated to reflect the new feedback flow.
+
+### Fixed
+- Ship `@opencode-ai/sdk` and gate every build on real packaging output validation: OpenCode sessions failed in packaged builds with "Failed to load @opencode-ai/sdk" because the SDK was never bundled into `app.asar.unpacked`. The same failure class has shipped repeatedly (`@zed-industries/codex-acp` in NIM-388, `@openai/codex-sdk` twice, ripgrep on Win ARM64) -- input-only validation passed each time because it only checked that source paths existed, never that the packaged tree could actually load them at runtime. Adds `@opencode-ai/sdk` to `files` + `asarUnpack`, externalizes it in main and runtime vite configs so dynamic `import()` survives bundling. Migrates `@openai/codex-sdk` + `@openai/codex` + host-arch binary off the fragile `extraResources` pattern onto `files` + `asarUnpack`, matching the `@anthropic-ai/claude-agent-sdk` and `@zed-industries/codex-acp` siblings; cross-arch (`mac.extraResources` with `${arch}`) added so x64 Mac cross-builds still get the right binary. Extends `validate-extra-resources` to also check the codex vendored binary at `vendor/<triple>/codex/<bin>`. New `validate-packaged-sdks` resolves each dynamically-imported SDK using real ESM `import()` in an isolated temp dir whose only `node_modules` is a symlink to the packaged tree (prevents Node from walking up to host `node_modules` and producing a false pass), checks `import.meta.resolve` URL is inside the packaged tree, and verifies every spawnable native binary exists with execute bits. Wires `validate-packaged-sdks` into `afterPack` so it runs as part of every build (mac/win/linux) and throws on failure -- broken releases can no longer ship green.
+- Use latest session title in blocked-state OS notifications: notifications for `AskUserQuestion`, `ExitPlanMode`, and `ToolPermission` showed "New Session" on the first turn instead of the real session name. The listeners closed over a local session reference loaded at the start of `sendMessage`, but `SessionManager.updateSessionTitle` creates a new session object rather than mutating the original, so `SessionNamingService` renames that happen mid-turn never reached the notification path. Now fetches the current title from the repository at notify time, matching the pattern already used for git commit notifications.
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.58.6] - 2026-04-28
 
 
