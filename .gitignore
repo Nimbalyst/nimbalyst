@@ -158,6 +158,13 @@ worktrees/
 .nimbalyst/
 nimbalyst-local/
 
+# Personal/agent plan documents (Nimbalyst planning feature stores these at
+# workspace root; they're personal working files, not source).
+plans/
+
+# Stray patch files (working snapshots, never source)
+*.patch
+
 # MCP config (may contain personal API tokens)
 .mcp.json
 
