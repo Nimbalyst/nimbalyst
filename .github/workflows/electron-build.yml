@@ -422,11 +422,11 @@ jobs:
           CSC_LINK: ${{ secrets.MACOS_CERTIFICATE }}
           CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
           # Windows signing is handled post-build by DigiCert KeyLocker
-          # CRITICAL: GH_TOKEN is required for electron-builder to publish releases
-          # The package.json "publish" config points to nimbalyst/nimbalyst (public repo)
-          # electron-builder creates the GitHub Release on tag push and attaches the
-          # built artifacts.
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GH_TOKEN is intentionally unset: electron-builder is invoked with
+          # --publish never on all platforms below, so GitHub Release creation
+          # does not happen at the build step. The dedicated `Create GitHub
+          # Release` step later in this workflow is the only path to public
+          # GitHub Releases, and it runs only when create_github_release=true.
           # Require notarization for release builds
           # Release builds require notarization (push to tag, or explicit release input)
           REQUIRE_NOTARIZE: ${{ github.ref_type == 'tag' || inputs.release == true || inputs.release == 'true' }}
@@ -437,20 +437,24 @@ jobs:
           BUILD_ARCH: ${{ matrix.arch }}
         working-directory: packages/electron
         run: |
+          # --publish never on every platform: artifacts are uploaded to R2
+          # for the alpha channel by a later step, and to GitHub Releases only
+          # when create_github_release=true (also a later step). electron-builder
+          # must not create GitHub Releases on its own.
           if [ "${{ matrix.platform }}" == "mac" ]; then
             if [ "${{ github.ref_type }}" == "tag" ] || [ "${{ inputs.release }}" == "true" ]; then
-              npm run build:mac:notarized -- --${{ matrix.arch }} --mac dmg zip
+              npm run build:mac:notarized -- --${{ matrix.arch }} --mac dmg zip --publish never
             else
-              npm run build:mac:local -- --${{ matrix.arch }} --mac dmg zip
+              npm run build:mac:local -- --${{ matrix.arch }} --mac dmg zip --publish never
             fi
           elif [ "${{ matrix.platform }}" == "win" ]; then
             if [ "${{ matrix.arch }}" == "arm64" ]; then
-              npm run build:win:arm64
+              npm run build:win:arm64 -- --publish never
             else
-              npm run build:win
+              npm run build:win -- --publish never
             fi
           else
-            npm run build:linux
+            npm run build:linux -- --publish never
           fi
         shell: bash
 
@@ -772,15 +776,18 @@ jobs:
           fi
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
-      # GitHub Release is created for tag pushes (required for /release-public workflow)
-      # or when explicitly requested via workflow_dispatch
+      # GitHub Release creation is opt-in only. Tag pushes always build and
+      # upload to R2 (alpha channel); promotion to a public GitHub Release
+      # requires re-running this workflow via workflow_dispatch with
+      # create_github_release=true. Releases are created as drafts so they
+      # require an explicit Publish click in the GH UI before being visible.
       - name: Create GitHub Release
-        if: github.ref_type == 'tag' || inputs.create_github_release == true || inputs.create_github_release == 'true'
+        if: inputs.create_github_release == true || inputs.create_github_release == 'true'
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.get_version.outputs.VERSION }}
           name: Release ${{ steps.get_version.outputs.VERSION }}
-          draft: false
+          draft: true
           prerelease: false
           files: release-files/*
           generate_release_notes: false
@@ -809,11 +816,12 @@ jobs:
           echo "   6. Check for updates (should find version $VERSION)"
           echo ""
           if [[ "${{ inputs.create_github_release }}" == "true" ]]; then
-            echo "✅ GitHub Release created at:"
+            echo "📝 Draft GitHub Release created at:"
             echo "   https://github.com/nimbalyst/nimbalyst/releases/tag/$VERSION"
+            echo "   Click 'Publish release' in the GH UI to make it visible."
           else
             echo "ℹ️  GitHub Release NOT created (alpha testing only)"
-            echo "   To promote to stable, re-run workflow with create_github_release=true"
+            echo "   To promote to public, re-run workflow with create_github_release=true"
           fi
 
       - name: Notify Slack - Release Published
