@@ -1581,3 +1581,46 @@ describe('UpdateSessionMetaWidget', () => {
   });
 });
 
+describe('EditorScreenshotWidget', () => {
+  let EditorScreenshotWidget: React.FC<CustomToolWidgetProps>;
+
+  beforeEach(async () => {
+    const mod = await import('../CustomToolWidgets/EditorScreenshotWidget');
+    EditorScreenshotWidget = mod.EditorScreenshotWidget;
+  });
+
+  it('renders inline image when result is the canonical JSON-stringified MCP image array', () => {
+    // Canonical transcript stores MCP content arrays as JSON strings on tool_call.result.
+    // The widget must parse the string back into an array to extract image data.
+    const mcpContent = [
+      {
+        type: 'image',
+        source: {
+          type: 'base64',
+          data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+          media_type: 'image/png',
+        },
+      },
+    ];
+    const message = makeToolMessage(
+      'mcp__nimbalyst-mcp__capture_editor_screenshot',
+      { file_path: '/tmp/feedback-intake-dialog.mockup.html' },
+      mcpContent,
+    );
+    const { container } = render(
+      <Wrapper>
+        <EditorScreenshotWidget
+          message={message}
+          isExpanded={false}
+          onToggle={() => {}}
+          sessionId="screenshot-inline"
+        />
+      </Wrapper>
+    );
+    expect(screen.getByText('feedback-intake-dialog.mockup.html')).toBeDefined();
+    const img = container.querySelector('img');
+    expect(img).not.toBeNull();
+    expect(img?.getAttribute('src')).toContain('data:image/png;base64,');
+  });
+});
+

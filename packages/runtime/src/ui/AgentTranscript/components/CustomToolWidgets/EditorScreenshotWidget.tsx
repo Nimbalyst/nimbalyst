@@ -13,6 +13,7 @@
 
 import React, { useState, useEffect } from 'react';
 import type { CustomToolWidgetProps } from './index';
+import { parseToolResult } from '../../../../ai/server/transcript/toolResultParser';
 
 /**
  * Extract a display name from a file path
@@ -255,9 +256,14 @@ export const EditorScreenshotWidget: React.FC<CustomToolWidgetProps> = ({
 
   const tool = message.toolCall;
 
+  // Canonical transcript stores tool results as strings -- JSON-stringified for
+  // MCP content arrays (including image blocks). Parse once so the array/object
+  // helpers below can match.
+  const parsedResult = tool ? parseToolResult(tool.result) : undefined;
+
   // Check if result is a persisted-output reference
-  const isPersisted = tool ? isPersistedOutput(tool.result) : false;
-  const persistedFilePath = isPersisted && tool ? extractPersistedFilePath(tool.result) : null;
+  const isPersisted = tool ? isPersistedOutput(parsedResult) : false;
+  const persistedFilePath = isPersisted && tool ? extractPersistedFilePath(parsedResult) : null;
 
   // Load image data from persisted file
   useEffect(() => {
@@ -301,7 +307,7 @@ export const EditorScreenshotWidget: React.FC<CustomToolWidgetProps> = ({
   const fileName = extractFileName(filePath);
 
   // Extract image data from result (either inline or from persisted file)
-  const inlineImageData = extractImageData(tool.result);
+  const inlineImageData = extractImageData(parsedResult);
   const imageData = inlineImageData || persistedImageData;
 
   // Log image source and size for debugging
@@ -312,8 +318,8 @@ export const EditorScreenshotWidget: React.FC<CustomToolWidgetProps> = ({
     console.log(`[EditorScreenshotWidget] Image loaded: ${sizeMB} MB, source: ${source}, mimeType: ${imageData.mimeType}`);
   }
 
-  const hasError = isToolError(tool.result, message);
-  const errorMessage = extractErrorMessage(tool.result, message) || persistedLoadError;
+  const hasError = isToolError(parsedResult, message);
+  const errorMessage = extractErrorMessage(parsedResult, message) || persistedLoadError;
 
   // Build image source URL
   const imageSrc = imageData
