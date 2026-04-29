@@ -18,10 +18,10 @@ cd "$(dirname "$0")/.."
 CONTAINER_NAME="${1:-nimbalyst-e2e-$(basename "$(pwd)")-$(date +%s)}"
 
 # Build volume flags for ALL node_modules directories (root + every workspace package)
-NODE_MODULES_VOLUMES="-v /workspaces/nimbalyst-code/node_modules"
+NODE_MODULES_VOLUMES="-v /workspaces/nimbalyst/node_modules"
 for pkg_json in $(find packages -name package.json -maxdepth 3 -not -path "*/node_modules/*"); do
   pkg_dir=$(dirname "$pkg_json")
-  NODE_MODULES_VOLUMES="$NODE_MODULES_VOLUMES -v /workspaces/nimbalyst-code/$pkg_dir/node_modules"
+  NODE_MODULES_VOLUMES="$NODE_MODULES_VOLUMES -v /workspaces/nimbalyst/$pkg_dir/node_modules"
 done
 
 echo "Starting container: ${CONTAINER_NAME}"
@@ -31,7 +31,7 @@ docker run -d \
   --name "${CONTAINER_NAME}" \
   --shm-size=2g \
   --cap-add=SYS_ADMIN \
-  -v "$(pwd):/workspaces/nimbalyst-code" \
+  -v "$(pwd):/workspaces/nimbalyst" \
   $NODE_MODULES_VOLUMES \
   -v nimbalyst-npm-cache:/root/.npm \
   -v nimbalyst-playwright-cache:/root/.cache/ms-playwright \

@@ -3,7 +3,7 @@
   "version": "0.33.1",
   "private": true,
   "description": "Monorepo for Nimbalyst - A rich text editor built with Meta's Lexical framework",
-  "author": "Stravu Team",
+  "author": "Nimbalyst Team",
   "license": "MIT",
   "type": "module",
   "repository": {

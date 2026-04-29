@@ -172,7 +172,7 @@ export default function DropDown({
   // Find the editor container to render dropdowns within
   const getPortalContainer = useCallback(() => {
     if (buttonRef.current) {
-      const editorContainer = buttonRef.current.closest('.stravu-editor');
+      const editorContainer = buttonRef.current.closest('.nimbalyst-editor');
       if (editorContainer) {
         return editorContainer;
       }

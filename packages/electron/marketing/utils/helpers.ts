@@ -321,7 +321,7 @@ async function findDevServer(): Promise<string> {
       '\n\nMarketing screenshots cannot be captured from the packaged Nimbalyst app.\n\n' +
       'You need to switch to dev mode first:\n\n' +
       '  1. Quit the packaged Nimbalyst app\n' +
-      '  2. Open a terminal and cd to the repo: cd ~/sources/stravu-editor\n' +
+      '  2. Open a terminal and cd to the repo: cd ~/sources/nimbalyst\n' +
       '  3. Pull latest and install: git pull && npm install\n' +
       '  4. Start the dev server: cd packages/electron && npm run dev\n' +
       '  5. Ask the agent in dev-mode Nimbalyst to capture the screenshots\n\n' +

@@ -6,12 +6,12 @@
  *
  */
 
-.stravu-editor .dropdown.table-of-contents {
+.nimbalyst-editor .dropdown.table-of-contents {
     max-height: 90%;
     overflow: auto;
 }
 
-.stravu-editor .dropdown .item.toc-item {
+.nimbalyst-editor .dropdown .item.toc-item {
     padding: 4px 8px;
     text-align: left;
     justify-content: flex-start;
@@ -21,14 +21,14 @@
     align-items: center;
 }
 
-.stravu-editor .dropdown .item.toc-item .text {
+.nimbalyst-editor .dropdown .item.toc-item .text {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 220px;
 }
 
-.stravu-editor .dropdown .item.toc-item-empty {
+.nimbalyst-editor .dropdown .item.toc-item-empty {
     padding: 6px 8px;
     color: #999;
     font-style: italic;
@@ -36,33 +36,33 @@
     font-size: 13px;
 }
 
-.stravu-editor .dropdown .item.toc-item-empty:hover {
+.nimbalyst-editor .dropdown .item.toc-item-empty:hover {
     background-color: transparent;
 }
 
 /* H1 - Largest, no indent */
-.stravu-editor .dropdown .item.toc-heading-1 {
+.nimbalyst-editor .dropdown .item.toc-heading-1 {
     font-weight: 600;
     padding-left: 8px;
     font-size: 14px;
 }
 
 /* H2 - Medium size, 12px indent */
-.stravu-editor .dropdown .item.toc-heading-2 {
+.nimbalyst-editor .dropdown .item.toc-heading-2 {
     font-weight: 500;
     padding-left: 20px;
     font-size: 13px;
 }
 
 /* H3 - Smallest size, 24px indent */
-.stravu-editor .dropdown .item.toc-heading-3 {
+.nimbalyst-editor .dropdown .item.toc-heading-3 {
     font-weight: 400;
     padding-left: 32px;
     font-size: 12px;
 }
 
 /* Active heading indicator */
-.stravu-editor .dropdown .item.toc-item .active-indicator {
+.nimbalyst-editor .dropdown .item.toc-item .active-indicator {
     position: absolute;
     left: -4px;
     color: #3578e5;
@@ -71,7 +71,7 @@
     line-height: 1;
 }
 
-.stravu-editor .dropdown .item.toc-item.active-heading {
+.nimbalyst-editor .dropdown .item.toc-item.active-heading {
     color: #3578e5;
     /*font-weight: 600;*/
 }

@@ -105,7 +105,7 @@ Do NOT release `/release-public` until the internal build is green.
 
 6. **Push to private repo**:
   - Push main and tag: `git push origin main && git push origin v[VERSION]`
-  - Provide link to GitHub Actions: https://github.com/nimbalyst/nimbalyst-code/actions
+  - Provide link to GitHub Actions: https://github.com/nimbalyst/nimbalyst/actions
 
 7. **Done**: Show the public release notes for reference when running `/release-public` later.
 

@@ -121,7 +121,7 @@ Stores AI chat conversation sessions with complete message history and provider 
 
 **Related Code:**
 - Implementation: `packages/electron/src/main/services/PGLiteSessionStore.ts`
-- Interface: `@stravu/runtime` package
+- Interface: `@nimbalyst/runtime` package
 
 ### session_files
 
@@ -146,7 +146,7 @@ Tracks file relationships with AI sessions (edited, referenced, or read files).
 
 **Related Code:**
 - Implementation: `packages/electron/src/main/services/PGLiteSessionFileStore.ts`
-- Interface: `@stravu/runtime` package
+- Interface: `@nimbalyst/runtime` package
 
 ### document_history
 
@@ -303,4 +303,4 @@ Document history uses binary compression (BYTEA) to minimize storage footprint w
 
 - **CLAUDE.md**: Project overview and development guidelines
 - **Migration System**: See `packages/electron/src/main/database/worker.js` for migration implementation
-- **Runtime Interfaces**: See `@stravu/runtime` package for TypeScript interfaces
+- **Runtime Interfaces**: See `@nimbalyst/runtime` package for TypeScript interfaces

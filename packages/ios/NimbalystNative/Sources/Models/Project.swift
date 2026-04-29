@@ -3,7 +3,7 @@ import GRDB
 
 /// A project represents a workspace path synced from the desktop app.
 public struct Project: Codable, Identifiable, Hashable, Sendable {
-    /// Workspace path (e.g., "/Users/ghinkle/sources/stravu-editor")
+    /// Workspace path (e.g., "/Users/alex/sources/my-project")
     public var id: String
     /// Display name (last path component)
     public var name: String

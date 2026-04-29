@@ -19,10 +19,10 @@ Validation performed:
 
 The first-run experience for external developers is broken in multiple places:
 
-- The getting started guide shows `createExtensionConfig({})` without the required `entry` option, even though the SDK helper destructures `entry` as required. See [packages/extension-sdk-docs/getting-started.md](/Users/ghinkle/sources/stravu-editor/packages/extension-sdk-docs/getting-started.md#L59) and [packages/extension-sdk/src/vite.ts](/Users/ghinkle/sources/stravu-editor/packages/extension-sdk/src/vite.ts#L97).
-- All three shipped examples call `createExtensionConfig()` with no arguments. See [packages/extension-sdk-docs/examples/minimal/vite.config.ts](/Users/ghinkle/sources/stravu-editor/packages/extension-sdk-docs/examples/minimal/vite.config.ts#L1), [packages/extension-sdk-docs/examples/custom-editor/vite.config.ts](/Users/ghinkle/sources/stravu-editor/packages/extension-sdk-docs/examples/custom-editor/vite.config.ts#L1), and [packages/extension-sdk-docs/examples/ai-tool/vite.config.ts](/Users/ghinkle/sources/stravu-editor/packages/extension-sdk-docs/examples/ai-tool/vite.config.ts#L1).
+- The getting started guide shows `createExtensionConfig({})` without the required `entry` option, even though the SDK helper destructures `entry` as required. See [packages/extension-sdk-docs/getting-started.md](./packages/extension-sdk-docs/getting-started.md#L59) and [packages/extension-sdk/src/vite.ts](./packages/extension-sdk/src/vite.ts#L97).
+- All three shipped examples call `createExtensionConfig()` with no arguments. See [packages/extension-sdk-docs/examples/minimal/vite.config.ts](./packages/extension-sdk-docs/examples/minimal/vite.config.ts#L1), [packages/extension-sdk-docs/examples/custom-editor/vite.config.ts](./packages/extension-sdk-docs/examples/custom-editor/vite.config.ts#L1), and [packages/extension-sdk-docs/examples/ai-tool/vite.config.ts](./packages/extension-sdk-docs/examples/ai-tool/vite.config.ts#L1).
 - Running `npm exec vite build` inside each example fails with `TypeError: Cannot destructure property 'entry' of 'options' as it is undefined`.
-- The docs and examples still teach the removed `CustomEditorProps` / `content` / `onChange` API instead of `EditorHostProps`. See [packages/extension-sdk-docs/getting-started.md](/Users/ghinkle/sources/stravu-editor/packages/extension-sdk-docs/getting-started.md#L119), [packages/extension-sdk-docs/custom-editors.md](/Users/ghinkle/sources/stravu-editor/packages/extension-sdk-docs/custom-editors.md#L11), and [packages/extension-sdk-docs/examples/minimal/src/MinimalEditor.tsx](/Users/ghinkle/sources/stravu-editor/packages/extension-sdk-docs/examples/minimal/src/MinimalEditor.tsx#L1).
+- The docs and examples still teach the removed `CustomEditorProps` / `content` / `onChange` API instead of `EditorHostProps`. See [packages/extension-sdk-docs/getting-started.md](./packages/extension-sdk-docs/getting-started.md#L119), [packages/extension-sdk-docs/custom-editors.md](./packages/extension-sdk-docs/custom-editors.md#L11), and [packages/extension-sdk-docs/examples/minimal/src/MinimalEditor.tsx](./packages/extension-sdk-docs/examples/minimal/src/MinimalEditor.tsx#L1).
 
 Impact:
 - A developer following the public docs will fail before they get a working extension.
@@ -32,9 +32,9 @@ Impact:
 
 The public AI tool contract in docs/examples is still based on deprecated context and result shapes:
 
-- Docs use `ToolContext` with `filePath` and `fileContent`. See [packages/extension-sdk-docs/api-reference.md](/Users/ghinkle/sources/stravu-editor/packages/extension-sdk-docs/api-reference.md#L119) and [packages/extension-sdk-docs/ai-tools.md](/Users/ghinkle/sources/stravu-editor/packages/extension-sdk-docs/ai-tools.md#L69).
-- The SDK marks that shape deprecated and says `fileContent` is not available; the current context is `AIToolContext` with `activeFilePath` and `extensionContext`. See [packages/extension-sdk/src/types/extension.ts](/Users/ghinkle/sources/stravu-editor/packages/extension-sdk/src/types/extension.ts#L338).
-- The docs examples directly access `context.fileContent` / `context.filePath` and return objects without the required `success` field. See [packages/extension-sdk-docs/examples/custom-editor/src/aiTools.ts](/Users/ghinkle/sources/stravu-editor/packages/extension-sdk-docs/examples/custom-editor/src/aiTools.ts#L22) and [packages/extension-sdk-docs/examples/ai-tool/src/index.ts](/Users/ghinkle/sources/stravu-editor/packages/extension-sdk-docs/examples/ai-tool/src/index.ts#L22).
+- Docs use `ToolContext` with `filePath` and `fileContent`. See [packages/extension-sdk-docs/api-reference.md](./packages/extension-sdk-docs/api-reference.md#L119) and [packages/extension-sdk-docs/ai-tools.md](./packages/extension-sdk-docs/ai-tools.md#L69).
+- The SDK marks that shape deprecated and says `fileContent` is not available; the current context is `AIToolContext` with `activeFilePath` and `extensionContext`. See [packages/extension-sdk/src/types/extension.ts](./packages/extension-sdk/src/types/extension.ts#L338).
+- The docs examples directly access `context.fileContent` / `context.filePath` and return objects without the required `success` field. See [packages/extension-sdk-docs/examples/custom-editor/src/aiTools.ts](./packages/extension-sdk-docs/examples/custom-editor/src/aiTools.ts#L22) and [packages/extension-sdk-docs/examples/ai-tool/src/index.ts](./packages/extension-sdk-docs/examples/ai-tool/src/index.ts#L22).
 - `npx tsc --noEmit` fails for both examples with exactly those errors.
 
 Impact:
@@ -45,11 +45,11 @@ Impact:
 
 The SDK package is supposed to be the source of truth, but its types no longer match the host implementation:
 
-- `EditorHost` in the SDK is missing `onThemeChanged`, `onDiffCleared`, and `getConfig`. Compare [packages/extension-sdk/src/types/editor.ts](/Users/ghinkle/sources/stravu-editor/packages/extension-sdk/src/types/editor.ts#L91) with [packages/runtime/src/extensions/editorHost.ts](/Users/ghinkle/sources/stravu-editor/packages/runtime/src/extensions/editorHost.ts#L68).
-- `ExtensionContributions.fileIcons` is typed as an array in the SDK, but the runtime contract uses a record/object. Compare [packages/extension-sdk/src/types/extension.ts](/Users/ghinkle/sources/stravu-editor/packages/extension-sdk/src/types/extension.ts#L81) with [packages/runtime/src/extensions/types.ts](/Users/ghinkle/sources/stravu-editor/packages/runtime/src/extensions/types.ts#L74).
-- The SDK exposes `lexicalNodes`, while the runtime uses `nodes`. Compare [packages/extension-sdk/src/types/extension.ts](/Users/ghinkle/sources/stravu-editor/packages/extension-sdk/src/types/extension.ts#L94) with [packages/runtime/src/extensions/types.ts](/Users/ghinkle/sources/stravu-editor/packages/runtime/src/extensions/types.ts#L89).
-- The SDK omits public runtime contributions entirely: `configuration`, `claudePlugin`, `themes`, `commands`, `hostComponents`, and `defaultEnabled`. See [packages/runtime/src/extensions/types.ts](/Users/ghinkle/sources/stravu-editor/packages/runtime/src/extensions/types.ts#L98).
-- `ExtensionAITool.scope` is `'global' | 'file'` in the SDK, but `'global' | 'editor'` in runtime. Compare [packages/extension-sdk/src/types/extension.ts](/Users/ghinkle/sources/stravu-editor/packages/extension-sdk/src/types/extension.ts#L391) with [packages/runtime/src/extensions/types.ts](/Users/ghinkle/sources/stravu-editor/packages/runtime/src/extensions/types.ts#L500).
+- `EditorHost` in the SDK is missing `onThemeChanged`, `onDiffCleared`, and `getConfig`. Compare [packages/extension-sdk/src/types/editor.ts](./packages/extension-sdk/src/types/editor.ts#L91) with [packages/runtime/src/extensions/editorHost.ts](./packages/runtime/src/extensions/editorHost.ts#L68).
+- `ExtensionContributions.fileIcons` is typed as an array in the SDK, but the runtime contract uses a record/object. Compare [packages/extension-sdk/src/types/extension.ts](./packages/extension-sdk/src/types/extension.ts#L81) with [packages/runtime/src/extensions/types.ts](./packages/runtime/src/extensions/types.ts#L74).
+- The SDK exposes `lexicalNodes`, while the runtime uses `nodes`. Compare [packages/extension-sdk/src/types/extension.ts](./packages/extension-sdk/src/types/extension.ts#L94) with [packages/runtime/src/extensions/types.ts](./packages/runtime/src/extensions/types.ts#L89).
+- The SDK omits public runtime contributions entirely: `configuration`, `claudePlugin`, `themes`, `commands`, `hostComponents`, and `defaultEnabled`. See [packages/runtime/src/extensions/types.ts](./packages/runtime/src/extensions/types.ts#L98).
+- `ExtensionAITool.scope` is `'global' | 'file'` in the SDK, but `'global' | 'editor'` in runtime. Compare [packages/extension-sdk/src/types/extension.ts](./packages/extension-sdk/src/types/extension.ts#L391) with [packages/runtime/src/extensions/types.ts](./packages/runtime/src/extensions/types.ts#L500).
 
 Impact:
 - External developers cannot trust the npm package typings as the canonical API.
@@ -57,9 +57,9 @@ Impact:
 
 ### 4. Medium: manifest rules are inconsistent across runtime, SDK, docs, and dev tooling
 
-- The docs describe `fileIcons` as an object map, which matches runtime, but the SDK types say array entries with `pattern/icon/color`. Compare [packages/extension-sdk-docs/manifest-reference.md](/Users/ghinkle/sources/stravu-editor/packages/extension-sdk-docs/manifest-reference.md#L240) with [packages/extension-sdk/src/types/extension.ts](/Users/ghinkle/sources/stravu-editor/packages/extension-sdk/src/types/extension.ts#L147).
-- The docs describe slash commands with `name` and `displayName`, but the SDK/runtime use `id` and `title`. Compare [packages/extension-sdk-docs/manifest-reference.md](/Users/ghinkle/sources/stravu-editor/packages/extension-sdk-docs/manifest-reference.md#L256) with [packages/extension-sdk/src/types/extension.ts](/Users/ghinkle/sources/stravu-editor/packages/extension-sdk/src/types/extension.ts#L169).
-- `apiVersion` is optional in SDK/runtime typings, but the extension dev server warns if it is missing. See [packages/extension-sdk/src/types/extension.ts](/Users/ghinkle/sources/stravu-editor/packages/extension-sdk/src/types/extension.ts#L30), [packages/runtime/src/extensions/ExtensionLoader.ts](/Users/ghinkle/sources/stravu-editor/packages/runtime/src/extensions/ExtensionLoader.ts#L143), and [packages/electron/src/main/mcp/extensionDevServer.ts](/Users/ghinkle/sources/stravu-editor/packages/electron/src/main/mcp/extensionDevServer.ts#L139).
+- The docs describe `fileIcons` as an object map, which matches runtime, but the SDK types say array entries with `pattern/icon/color`. Compare [packages/extension-sdk-docs/manifest-reference.md](./packages/extension-sdk-docs/manifest-reference.md#L240) with [packages/extension-sdk/src/types/extension.ts](./packages/extension-sdk/src/types/extension.ts#L147).
+- The docs describe slash commands with `name` and `displayName`, but the SDK/runtime use `id` and `title`. Compare [packages/extension-sdk-docs/manifest-reference.md](./packages/extension-sdk-docs/manifest-reference.md#L256) with [packages/extension-sdk/src/types/extension.ts](./packages/extension-sdk/src/types/extension.ts#L169).
+- `apiVersion` is optional in SDK/runtime typings, but the extension dev server warns if it is missing. See [packages/extension-sdk/src/types/extension.ts](./packages/extension-sdk/src/types/extension.ts#L30), [packages/runtime/src/extensions/ExtensionLoader.ts](./packages/runtime/src/extensions/ExtensionLoader.ts#L143), and [packages/electron/src/main/mcp/extensionDevServer.ts](./packages/electron/src/main/mcp/extensionDevServer.ts#L139).
 
 Impact:
 - The manifest schema is underspecified and self-contradictory.
@@ -67,9 +67,9 @@ Impact:
 
 ### 5. Medium: version guidance is internally inconsistent
 
-- The SDK package peers on Vite 7 / React plugin 5. See [packages/extension-sdk/package.json](/Users/ghinkle/sources/stravu-editor/packages/extension-sdk/package.json#L32).
-- The examples and extension-dev-kit templates still pin Vite 5. See [packages/extension-sdk-docs/examples/minimal/package.json](/Users/ghinkle/sources/stravu-editor/packages/extension-sdk-docs/examples/minimal/package.json#L12) and [packages/extensions/extension-dev-kit/src/templates.ts](/Users/ghinkle/sources/stravu-editor/packages/extensions/extension-dev-kit/src/templates.ts#L46).
-- The public manifest examples all use `"apiVersion": "1.0.0"` while the npm package version is `0.1.0`, and there is no public compatibility policy explaining the relationship. See [packages/extension-sdk/package.json](/Users/ghinkle/sources/stravu-editor/packages/extension-sdk/package.json#L2) and [packages/extension-sdk-docs/manifest-reference.md](/Users/ghinkle/sources/stravu-editor/packages/extension-sdk-docs/manifest-reference.md#L60).
+- The SDK package peers on Vite 7 / React plugin 5. See [packages/extension-sdk/package.json](./packages/extension-sdk/package.json#L32).
+- The examples and extension-dev-kit templates still pin Vite 5. See [packages/extension-sdk-docs/examples/minimal/package.json](./packages/extension-sdk-docs/examples/minimal/package.json#L12) and [packages/extensions/extension-dev-kit/src/templates.ts](./packages/extensions/extension-dev-kit/src/templates.ts#L46).
+- The public manifest examples all use `"apiVersion": "1.0.0"` while the npm package version is `0.1.0`, and there is no public compatibility policy explaining the relationship. See [packages/extension-sdk/package.json](./packages/extension-sdk/package.json#L2) and [packages/extension-sdk-docs/manifest-reference.md](./packages/extension-sdk-docs/manifest-reference.md#L60).
 
 Impact:
 - New users will get dependency mismatch warnings and unclear upgrade semantics.

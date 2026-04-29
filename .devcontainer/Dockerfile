@@ -48,4 +48,4 @@ RUN echo '#!/bin/bash\nXvfb :99 -screen 0 1920x1080x24 &\nsleep 1\nexec "$@"' > 
 RUN npm install -g npm@10
 
 # Set working directory
-WORKDIR /workspaces/nimbalyst-code
+WORKDIR /workspaces/nimbalyst

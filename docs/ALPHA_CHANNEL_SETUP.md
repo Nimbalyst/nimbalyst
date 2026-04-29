@@ -29,7 +29,7 @@ You need to add three secrets to your GitHub repository for the workflow to uplo
 
 ### Navigate to Secrets Settings
 
-1. Go to: https://github.com/nimbalyst/nimbalyst-code/settings/secrets/actions
+1. Go to: https://github.com/nimbalyst/nimbalyst/settings/secrets/actions
 2. Click **"New repository secret"** for each of the following:
 
 ### Secret 1: R2_ACCESS_KEY_ID
@@ -66,7 +66,7 @@ After adding all three secrets, verify they appear in the repository secrets lis
 
 ### Trigger a Test Build
 
-1. Go to: https://github.com/nimbalyst/nimbalyst-code/actions
+1. Go to: https://github.com/nimbalyst/nimbalyst/actions
 2. Select "Build and Release Electron App" workflow
 3. Click "Run workflow"
 4. Set:

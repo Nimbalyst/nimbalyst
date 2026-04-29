@@ -64,7 +64,7 @@ Publish the tested internal release to the public repository as a **draft releas
 ```bash
     gh workflow run publish-public.yml -f version=[VERSION]
 ```
-  - This triggers: https://github.com/nimbalyst/nimbalyst-code/actions/workflows/publish-public.yml
+  - This triggers: https://github.com/nimbalyst/nimbalyst/actions/workflows/publish-public.yml
   - The workflow will:
     - Fetch PUBLIC_RELEASE_NOTES.md from the repo
     - Download artifacts from private release

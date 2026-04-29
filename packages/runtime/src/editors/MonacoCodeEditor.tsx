@@ -4,7 +4,7 @@
  * This component wraps Monaco Editor to provide:
  * - Normal editing mode with syntax highlighting
  * - Diff mode for AI-generated changes
- * - Same interface as StravuEditor for seamless TabEditor integration
+ * - Same interface as NimbalystEditor for seamless TabEditor integration
  *
  * Content Ownership Pattern:
  * - This editor OWNS its content state

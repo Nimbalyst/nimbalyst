@@ -17,7 +17,7 @@ import type { ConfigTheme } from '@nimbalyst/runtime';
 import { DocumentPathProvider, MarkdownEditor, MonacoEditor, MonacoCodeEditor } from '@nimbalyst/runtime';
 import { useTheme } from '../../hooks/useTheme';
 import {
-  StravuEditor,
+  NimbalystEditor,
   $convertFromEnhancedMarkdownString,
   $convertToEnhancedMarkdownString,
   getEditorTransformers,

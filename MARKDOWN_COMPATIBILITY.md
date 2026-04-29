@@ -1,6 +1,6 @@
 # Markdown Compatibility Philosophy
 
-Stravu Editor is a markdown‑native editor designed for editing valid Markdown. While we do support extended and custom Markdown syntax, we intentionally exclude features that cannot be easily or reliably expressed in some Markdown syntax.
+Nimbalyst is a markdown‑native editor designed for editing valid Markdown. While we do support extended and custom Markdown syntax, we intentionally exclude features that cannot be easily or reliably expressed in some Markdown syntax.
 
 Our goal is to make Markdown the single source of truth: what you see and edit in the UI must map cleanly to a concrete Markdown representation, and round‑trip back without surprises.
 
@@ -31,7 +31,7 @@ Examples of extension patterns we embrace:
 
 - Fenced code blocks for domain‑specific content (e.g., diagram languages or drawings), possibly paired with companion assets.
 - Frontmatter blocks for document‑level metadata when appropriate.
-- Link/reference conventions that remain valid Markdown even outside Stravu.
+- Link/reference conventions that remain valid Markdown even outside Nimbalyst.
 
 ## Exclusions and Non‑Goals
 
@@ -62,4 +62,4 @@ When proposing or implementing an extension, please ensure:
 
 ***
 
-This policy helps us keep Stravu Editor fast, portable, and friendly to the broader Markdown ecosystem while still enabling powerful workflows through well‑behaved extensions.
+This policy helps us keep Nimbalyst fast, portable, and friendly to the broader Markdown ecosystem while still enabling powerful workflows through well‑behaved extensions.

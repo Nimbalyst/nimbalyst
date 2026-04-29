@@ -65,7 +65,7 @@ export default defineConfig(({ mode }) => ({
         index: resolve(__dirname, 'src/index.ts'),
         'ui/index': resolve(__dirname, 'src/ui/index.ts'),
       },
-      name: 'StravuRuntime',
+      name: 'NimbalystRuntime',
       formats: ['es']
     },
     rollupOptions: {

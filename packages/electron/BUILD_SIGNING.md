@@ -1,6 +1,6 @@
 # Code Signing and Notarization Guide
 
-This guide explains how to build, sign, and notarize the Stravu Editor for macOS distribution.
+This guide explains how to build, sign, and notarize the Nimbalyst for macOS distribution.
 
 ## Prerequisites
 
@@ -104,17 +104,17 @@ After building, verify the signature:
 
 ```bash
 # Check code signature
-codesign -dv --verbose=4 "release/mac/Stravu Editor.app"
+codesign -dv --verbose=4 "release/mac/Nimbalyst.app"
 
 # Verify notarization
-spctl -a -vvv -t exec "release/mac/Stravu Editor.app"
+spctl -a -vvv -t exec "release/mac/Nimbalyst.app"
 ```
 
 ## Distribution
 
 The signed and notarized app will be in:
 ```
-release/mac/Stravu Editor.app
+release/mac/Nimbalyst.app
 ```
 
 You can:
@@ -126,5 +126,5 @@ You can:
 
 Current configuration:
 - **Team ID**: 3GYP4YJ3DH
-- **App ID**: com.stravu.editor
-- **Product Name**: Stravu Editor
+- **App ID**: com.nimbalyst.electron
+- **Product Name**: Nimbalyst

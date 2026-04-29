@@ -11,8 +11,8 @@ import {useCallback, useEffect, useRef, useState, useMemo, useImperativeHandle, 
 
 import type {SearchMatch} from './index';
 
-const SEARCH_HISTORY_KEY = 'stravu-search-history';
-const REPLACE_HISTORY_KEY = 'stravu-replace-history';
+const SEARCH_HISTORY_KEY = 'nimbalyst-search-history';
+const REPLACE_HISTORY_KEY = 'nimbalyst-replace-history';
 const MAX_HISTORY_ITEMS = 10;
 
 function getHistory(key: string): string[] {
@@ -99,8 +99,8 @@ export const SearchReplaceDialog = forwardRef<SearchReplaceDialogHandle, SearchR
     searchInputRef.current?.focus();
     searchInputRef.current?.select();
 
-    // Detect theme from .stravu-editor element
-    const editorElement = document.querySelector('.stravu-editor');
+    // Detect theme from .nimbalyst-editor element
+    const editorElement = document.querySelector('.nimbalyst-editor');
     if (editorElement) {
       const currentTheme = editorElement.getAttribute('data-theme') || 'light';
       setTheme(currentTheme);

@@ -18,8 +18,8 @@ interface SearchMatch {
   text: string;
 }
 
-const SEARCH_HISTORY_KEY = 'stravu-search-history';
-const REPLACE_HISTORY_KEY = 'stravu-replace-history';
+const SEARCH_HISTORY_KEY = 'nimbalyst-search-history';
+const REPLACE_HISTORY_KEY = 'nimbalyst-replace-history';
 const MAX_HISTORY_ITEMS = 10;
 
 function getHistory(key: string): string[] {

@@ -2,19 +2,19 @@
 
 ## Overview
 
-The Stravu Editor uses a multi-layered logging system that captures both main process and renderer process logs. All browser console output is automatically captured and written to log files, making it accessible for debugging and AI-assisted development.
+The Nimbalyst uses a multi-layered logging system that captures both main process and renderer process logs. All browser console output is automatically captured and written to log files, making it accessible for debugging and AI-assisted development.
 
 ## Log File Locations
 
 ### macOS
-- **Renderer Console Log**: `~/Library/Application Support/@stravu-editor/electron/renderer-console.log`
+- **Renderer Console Log**: `~/Library/Application Support/@nimbalyst/electron/renderer-console.log`
 - **Main Process Log**: Application logs are also output to the terminal when running in development mode
 
 ### Windows
-- **Renderer Console Log**: `%APPDATA%/@stravu-editor/electron/renderer-console.log`
+- **Renderer Console Log**: `%APPDATA%/@nimbalyst/electron/renderer-console.log`
 
 ### Linux
-- **Renderer Console Log**: `~/.config/@stravu-editor/electron/renderer-console.log`
+- **Renderer Console Log**: `~/.config/@nimbalyst/electron/renderer-console.log`
 
 ## Logging Levels
 
@@ -87,7 +87,7 @@ if (ENABLE_AUTOSAVE_LOGS) {
 
 **All browser console output is automatically captured to a file.** This is crucial for AI-assisted development:
 
-1. **Claude Code Integration**: The AI assistant can read the log file at `~/Library/Application Support/@stravu-editor/electron/renderer-console.log` to understand application behavior and debug issues.
+1. **Claude Code Integration**: The AI assistant can read the log file at `~/Library/Application Support/@nimbalyst/electron/renderer-console.log` to understand application behavior and debug issues.
 
 2. **Why File Logging**: Since Claude Code cannot directly access the browser's DevTools console, all console output is mirrored to a file that the AI can read. This allows Claude to:
    - Debug runtime errors
@@ -118,17 +118,17 @@ Current categories used in the codebase:
 
 1. **Tail the log file** to see real-time output:
    ```bash
-   tail -f ~/Library/Application\ Support/@stravu-editor/electron/renderer-console.log
+   tail -f ~/Library/Application\ Support/@nimbalyst/electron/renderer-console.log
    ```
 
 2. **Search for specific errors**:
    ```bash
-   grep "ERROR" ~/Library/Application\ Support/@stravu-editor/electron/renderer-console.log
+   grep "ERROR" ~/Library/Application\ Support/@nimbalyst/electron/renderer-console.log
    ```
 
 3. **Filter by component**:
    ```bash
-   grep "\[AUTOSAVE\]" ~/Library/Application\ Support/@stravu-editor/electron/renderer-console.log
+   grep "\[AUTOSAVE\]" ~/Library/Application\ Support/@nimbalyst/electron/renderer-console.log
    ```
 
 ## Configuration

@@ -34,13 +34,13 @@
     "ELECTRON_DISABLE_SECURITY_WARNINGS": "1"
   },
   "mounts": [
-    "source=${localWorkspaceFolder},target=/workspaces/nimbalyst-code,type=bind,consistency=cached",
-    "target=/workspaces/nimbalyst-code/node_modules,type=volume",
-    "target=/workspaces/nimbalyst-code/packages/electron/node_modules,type=volume",
-    "target=/workspaces/nimbalyst-code/packages/runtime/node_modules,type=volume",
-    "target=/workspaces/nimbalyst-code/packages/collabv3/node_modules,type=volume",
-    "target=/workspaces/nimbalyst-code/packages/extension-sdk/node_modules,type=volume",
-    "target=/workspaces/nimbalyst-code/packages/ios/node_modules,type=volume"
+    "source=${localWorkspaceFolder},target=/workspaces/nimbalyst,type=bind,consistency=cached",
+    "target=/workspaces/nimbalyst/node_modules,type=volume",
+    "target=/workspaces/nimbalyst/packages/electron/node_modules,type=volume",
+    "target=/workspaces/nimbalyst/packages/runtime/node_modules,type=volume",
+    "target=/workspaces/nimbalyst/packages/collabv3/node_modules,type=volume",
+    "target=/workspaces/nimbalyst/packages/extension-sdk/node_modules,type=volume",
+    "target=/workspaces/nimbalyst/packages/ios/node_modules,type=volume"
   ],
   "runArgs": [
     "--shm-size=2g",

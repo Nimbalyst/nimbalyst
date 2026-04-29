@@ -8,7 +8,7 @@ const path = require('path');
 
 async function dumpToJSON() {
   const dbPath = '/Users/ghinkle/Library/Application Support/@nimbalyst/electron/pglite-db-old';
-  const outputDir = '/Users/ghinkle/sources/stravu-editor/recovered-data';
+  const outputDir = './recovered-data';
 
   console.log('Dumping database to JSON files...');
   console.log('Database path:', dbPath);

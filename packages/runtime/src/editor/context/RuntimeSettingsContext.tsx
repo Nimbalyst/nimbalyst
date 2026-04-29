@@ -1,5 +1,5 @@
 /**
- * Runtime Settings Context for Stravu Editor
+ * Runtime Settings Context for Nimbalyst
  * 
  * This context manages settings that can be changed at runtime without
  * requiring a full component re-render. These are typically UI toggles

@@ -103,17 +103,17 @@ export default function Modal({
   title: string;
 }): JSX.Element {
   const getPortalContainer = useCallback(() => {
-    // Try to find the nearest .stravu-editor container
+    // Try to find the nearest .nimbalyst-editor container
     const activeElement = document.activeElement;
     if (activeElement) {
-      const editorContainer = activeElement.closest('.stravu-editor');
+      const editorContainer = activeElement.closest('.nimbalyst-editor');
       if (editorContainer) {
         return editorContainer;
       }
     }
 
-    // Fallback: look for any .stravu-editor container in the document
-    const editorContainer = document.querySelector('.stravu-editor');
+    // Fallback: look for any .nimbalyst-editor container in the document
+    const editorContainer = document.querySelector('.nimbalyst-editor');
     if (editorContainer) {
       return editorContainer;
     }

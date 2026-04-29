@@ -511,7 +511,7 @@ export function KanbanBoardPlugin(): JSX.Element | null {
         setCurrentEditCardKey(null);
     };
 
-    const editorContainer = document.querySelector('.stravu-editor.active');
+    const editorContainer = document.querySelector('.nimbalyst-editor.active');
     const portalTarget = editorContainer || document.body;
 
     return (

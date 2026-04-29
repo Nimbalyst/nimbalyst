@@ -9,7 +9,7 @@ const path = require('path');
 
 async function attemptRecovery() {
   const dbPath = '/Users/ghinkle/Library/Application Support/@nimbalyst/electron/pglite-db-old';
-  const outputPath = '/Users/ghinkle/sources/stravu-editor/corrupted-db-dump.sql';
+  const outputPath = './corrupted-db-dump.sql';
 
   console.log('Attempting to recover data using pg_dump...');
   console.log('Database path:', dbPath);

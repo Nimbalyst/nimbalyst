@@ -5,7 +5,7 @@ import type { Provider } from '@lexical/yjs';
 import type { Doc } from 'yjs';
 
 /**
- * Configuration interface for the Stravu Editor component.
+ * Configuration interface for the Nimbalyst component.
  * This replaces the reactive settings system with static configuration props.
  */
 
@@ -31,7 +31,7 @@ export interface UploadedEditorAsset {
  * - isCharLimit: Can be external
  * - isCharLimitUtf8: Can be external
  *
- * - isCollab: Not supported yet in Stravu Editor (See Lexical Playground)
+ * - isCollab: Not supported yet in Nimbalyst (See Lexical Playground)
  *
  * - shouldUseLexicalContextMenu: Not implemented as pluggable (or that useful)
  *

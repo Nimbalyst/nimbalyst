@@ -735,7 +735,7 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
                 )}
               </div>
             ) : selectedVersions.length === 1 ? (
-              <div className="history-preview-content nim-scrollbar flex-1 overflow-auto [&:has(.monaco-editor)]:overflow-hidden [&:has(.stravu-editor-root)]:overflow-hidden">
+              <div className="history-preview-content nim-scrollbar flex-1 overflow-auto [&:has(.monaco-editor)]:overflow-hidden [&:has(.nimbalyst-editor-root)]:overflow-hidden">
                 {fileType === 'image' ? (
                   <div className="image-preview flex items-center justify-center w-full h-full bg-[var(--nim-bg-tertiary)] p-4 [&_img]:max-w-full [&_img]:max-h-full [&_img]:object-contain">
                     <img src={`file://${filePath}`} alt="Preview" />

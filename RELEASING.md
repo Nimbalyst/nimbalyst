@@ -77,7 +77,7 @@ git push origin v0.42.61
 Pushing the tag triggers the GitHub Actions workflow which:
 1. Builds for macOS (arm64 + x64), Windows (x64 + arm64), and Linux (x64)
 2. Signs and notarizes macOS builds; signs Windows builds via DigiCert KeyLocker
-3. Creates release in `nimbalyst/nimbalyst-code` (private repo)
+3. Creates release in `nimbalyst/nimbalyst` (private repo)
 4. Uploads build artifacts
 
 **Windows artifacts:** Two installers ship per release. `Nimbalyst-Windows-x64.exe`
@@ -123,7 +123,7 @@ This command will:
 Follow the command's guidance to either:
 
 **Option A: GitHub Actions Workflow (Recommended)**
-1. Visit: https://github.com/nimbalyst/nimbalyst-code/actions/workflows/publish-public.yml
+1. Visit: https://github.com/nimbalyst/nimbalyst/actions/workflows/publish-public.yml
 2. Click "Run workflow"
 3. Enter the version tag (e.g., v0.42.61)
 4. Paste the public release notes from the `/release-public` command
@@ -259,7 +259,7 @@ If notes are missing, the workflow will fall back to extracting from CHANGELOG.m
 ### Build Failed on GitHub Actions
 
 Check the Actions tab in GitHub:
-- https://github.com/nimbalyst/nimbalyst-code/actions
+- https://github.com/nimbalyst/nimbalyst/actions
 
 Common issues:
 - Code signing certificates expired

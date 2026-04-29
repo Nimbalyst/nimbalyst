@@ -159,7 +159,7 @@ function analyzeRelease() {
   
   // Find .app bundle
   const macPath = path.join(releasePath, 'mac-arm64');
-  const appPath = path.join(macPath, 'Stravu Editor.app');
+  const appPath = path.join(macPath, 'Nimbalyst.app');
   
   if (fs.existsSync(appPath)) {
     console.log(`\n${colors.bright}📱 App Bundle Analysis:${colors.reset}\n`);
@@ -214,7 +214,7 @@ function analyzeRelease() {
  * Main function
  */
 function main() {
-  console.log(`${colors.bright}${colors.blue}🔍 Stravu Editor Size Analysis${colors.reset}\n`);
+  console.log(`${colors.bright}${colors.blue}🔍 Nimbalyst Size Analysis${colors.reset}\n`);
   
   analyzeNodeModules();
   analyzeRelease();

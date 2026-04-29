@@ -2,7 +2,7 @@
  * DocumentPathContext - Provides the current document's file path to the editor tree.
  *
  * This context is used by decorator nodes (like DataModelNode) to resolve
- * relative paths correctly. Each TabEditor wraps its StravuEditor with this
+ * relative paths correctly. Each TabEditor wraps its NimbalystEditor with this
  * provider, so each editor instance has access to its own document path
  * regardless of which tab is currently active.
  */

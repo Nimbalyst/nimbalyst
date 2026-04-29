@@ -72,7 +72,7 @@ test('should switch editor theme immediately when menu item is clicked', async (
   await openFileFromTree(page, 'doc-switch.md');
   await page.waitForSelector(ACTIVE_EDITOR_SELECTOR, { timeout: TEST_TIMEOUTS.medium });
 
-  const editor = page.locator('.stravu-editor').first();
+  const editor = page.locator('.nimbalyst-editor').first();
   await expect(editor).toBeVisible({ timeout: TEST_TIMEOUTS.medium });
 
   // Switch to dark theme
@@ -123,7 +123,7 @@ test('should switch theme across multiple tabs', async () => {
   });
 
   // Check all editor instances have dark theme
-  const editors = page.locator('.stravu-editor');
+  const editors = page.locator('.nimbalyst-editor');
   const editorCount = await editors.count();
 
   for (let i = 0; i < editorCount; i++) {
@@ -163,8 +163,8 @@ test('should preserve edited content after theme switch', async () => {
     });
   });
 
-  const stravuEditor = page.locator('.stravu-editor').first();
-  await expect(stravuEditor).toHaveClass(/dark-theme/, { timeout: 2000 });
+  const editor = page.locator('.nimbalyst-editor').first();
+  await expect(editor).toHaveClass(/dark-theme/, { timeout: 2000 });
 
   // Verify content preserved
   await expect(editor).toContainText(testContent, { timeout: 2000 });
@@ -235,7 +235,7 @@ test.skip('should apply Solarized Dark theme background to Lexical editor', asyn
   await openFileFromTree(page, 'bgcolor-test.md');
   await page.waitForSelector(ACTIVE_EDITOR_SELECTOR, { timeout: TEST_TIMEOUTS.medium });
 
-  const editor = page.locator('.stravu-editor').first();
+  const editor = page.locator('.nimbalyst-editor').first();
   await expect(editor).toBeVisible({ timeout: TEST_TIMEOUTS.medium });
 
   await electronApp.evaluate(({ BrowserWindow }) => {
@@ -264,8 +264,8 @@ test('should apply built-in dark theme correctly', async () => {
   // Built-in dark theme bg is #2d2d2d = rgb(45, 45, 45)
   await expect.poll(async () => {
     return await editor.evaluate((el) => {
-      const stravu = el.closest('.stravu-editor') || el.querySelector('.stravu-editor') || el;
-      return window.getComputedStyle(stravu).backgroundColor;
+      const editor = el.closest('.nimbalyst-editor') || el.querySelector('.nimbalyst-editor') || el;
+      return window.getComputedStyle(editor).backgroundColor;
     });
   }, { timeout: 2000 }).toBe('rgb(45, 45, 45)');
 });
@@ -275,7 +275,7 @@ test.skip('should apply built-in crystal-dark theme correctly', async () => {
   await openFileFromTree(page, 'bgcolor-test.md');
   await page.waitForSelector(ACTIVE_EDITOR_SELECTOR, { timeout: TEST_TIMEOUTS.medium });
 
-  const editor = page.locator('.stravu-editor').first();
+  const editor = page.locator('.nimbalyst-editor').first();
   await expect(editor).toBeVisible({ timeout: TEST_TIMEOUTS.medium });
 
   await electronApp.evaluate(({ BrowserWindow }) => {
@@ -304,8 +304,8 @@ test('should apply built-in light theme correctly', async () => {
   // Light theme bg is #ffffff = rgb(255, 255, 255)
   await expect.poll(async () => {
     return await editor.evaluate((el) => {
-      const stravu = el.closest('.stravu-editor') || el.querySelector('.stravu-editor') || el;
-      return window.getComputedStyle(stravu).backgroundColor;
+      const editor = el.closest('.nimbalyst-editor') || el.querySelector('.nimbalyst-editor') || el;
+      return window.getComputedStyle(editor).backgroundColor;
     });
   }, { timeout: 2000 }).toBe('rgb(255, 255, 255)');
 });

@@ -71,11 +71,11 @@ function extractAttrs(serialized: SerializedLexicalNode): Record<string, any> | 
 
 ## Files Modified
 
-1. `/Users/ghinkle/sources/stravu-editor/packages/rexical/src/plugins/DiffPlugin/core/canonicalTree.ts`
+1. `./packages/rexical/src/plugins/DiffPlugin/core/canonicalTree.ts`
    - Added `serialized.children` population in `buildCanonicalTree`
    - Excluded `$` field from `extractAttrs`
 
-2. `/Users/ghinkle/sources/stravu-editor/packages/rexical/src/plugins/DiffPlugin/core/TreeMatcher.ts`
+2. `./packages/rexical/src/plugins/DiffPlugin/core/TreeMatcher.ts`
    - Added check to skip exact matches (isExact && similarity === 1.0)
    - Added debug logging for similarity calculations
 
@@ -95,4 +95,4 @@ npx vitest run src/plugins/DiffPlugin/__tests__/integration/exact-match.test.ts
 
 ## Next Steps
 
-The core issues are fixed, but there are still some edge cases in the accept/reject cycle that need investigation. The test framework in `/Users/ghinkle/sources/stravu-editor/packages/rexical/src/plugins/DiffPlugin/__tests__/integration/` provides comprehensive testing infrastructure for continued work.
+The core issues are fixed, but there are still some edge cases in the accept/reject cycle that need investigation. The test framework in `./packages/rexical/src/plugins/DiffPlugin/__tests__/integration/` provides comprehensive testing infrastructure for continued work.

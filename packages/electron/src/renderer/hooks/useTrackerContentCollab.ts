@@ -7,7 +7,7 @@
  * For team-synced items, resolves a CollabDocumentConfig for a DocumentRoom
  * keyed by `tracker-content/{itemId}`, creates a DocumentSyncProvider +
  * CollabLexicalProvider, and returns the collaboration config needed by
- * StravuEditor's CollaborationPlugin.
+ * NimbalystEditor's CollaborationPlugin.
  *
  * PGLite persistence is handled by TrackerItemDetail via onGetContent/onDirtyChange
  * on the editor config. Bootstrap from PGLite markdown is handled by

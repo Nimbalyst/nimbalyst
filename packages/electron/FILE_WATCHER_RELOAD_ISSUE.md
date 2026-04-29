@@ -29,7 +29,7 @@ We have two conflicting requirements:
 4. If external, calls `applyReload()` to update editor content
 
 ### Editor Mounting
-- `StravuEditor` component uses React `key` to control remounting
+- `NimbalystEditor` component uses React `key` to control remounting
 - Key format: `${filePath}-theme-${theme}`
 - When key changes, React creates a new component instance (remount)
 - `initialContent` prop is only used on initial mount
@@ -189,7 +189,7 @@ This SHOULD work! But tests show it's not working.
 
 - `/packages/electron/src/renderer/components/TabEditor/TabEditor.tsx` - Editor component with file watching
 - `/packages/electron/src/main/file/ChokidarFileWatcher.ts` - Main process file watcher
-- `/packages/rexical/src/StravuEditor.tsx` - Editor component
+- `/packages/rexical/src/NimbalystEditor.tsx` - Editor component
 - `/packages/electron/e2e/files/file-watcher-updates.spec.ts` - External change tests
 - `/packages/electron/e2e/files/autosave-focus.spec.ts` - Autosave focus tests
 

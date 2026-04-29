@@ -2,7 +2,7 @@
 
 ## Overview
 
-The markdown system in Stravu Editor is designed to support both core markdown functionality and plugin-specific extensions. The architecture separates transformers into two categories to prepare for future plugin-based configuration.
+The markdown system in Nimbalyst is designed to support both core markdown functionality and plugin-specific extensions. The architecture separates transformers into two categories to prepare for future plugin-based configuration.
 
 ## Structure
 
@@ -30,11 +30,11 @@ These transformers require specific plugins to be loaded:
 Currently, all transformers are loaded together:
 
 ```typescript
-import { STRAVU_TRANSFORMERS } from '@/markdown';
+import { NIMBALYST_TRANSFORMERS } from '@/markdown';
 
 // Use in markdown conversion
-$convertFromEnhancedMarkdownString(content, STRAVU_TRANSFORMERS);
-$convertToEnhancedMarkdownString(STRAVU_TRANSFORMERS);
+$convertFromEnhancedMarkdownString(content, NIMBALYST_TRANSFORMERS);
+$convertToEnhancedMarkdownString(NIMBALYST_TRANSFORMERS);
 ```
 
 ## Future Plugin-Based Architecture

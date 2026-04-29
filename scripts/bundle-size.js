@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Bundle size analysis tool for Stravu Editor
+ * Bundle size analysis tool for Nimbalyst
  * 
  * Usage:
  *   node scripts/bundle-size.js          # Basic analysis

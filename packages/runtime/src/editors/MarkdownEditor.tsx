@@ -16,7 +16,7 @@
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
-  StravuEditor,
+  NimbalystEditor,
   type EditorConfig,
   type ConfigTheme,
   type UploadedEditorAsset,
@@ -257,7 +257,7 @@ export function MarkdownEditor({
     host.openHistory();
   }, [host]);
 
-  // Build config for StravuEditor
+  // Build config for NimbalystEditor
   // Note: We use config.theme directly in dependencies because host.theme is a getter
   // that reads from a ref, so it won't trigger re-computation when the ref changes.
   const editorConfig = useMemo(
@@ -358,8 +358,8 @@ export function MarkdownEditor({
     );
   }
 
-  // Render StravuEditor with EditorHost integration
-  return <StravuEditor config={editorConfig} />;
+  // Render NimbalystEditor with EditorHost integration
+  return <NimbalystEditor config={editorConfig} />;
 }
 
 export default MarkdownEditor;

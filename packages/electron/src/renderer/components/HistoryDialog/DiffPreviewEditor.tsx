@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { StravuEditor, pluginRegistry } from '@nimbalyst/runtime';
+import { NimbalystEditor, pluginRegistry } from '@nimbalyst/runtime';
 import {
   APPLY_MARKDOWN_REPLACE_COMMAND,
   groupDiffChanges,
@@ -343,7 +343,7 @@ export function DiffPreviewEditor({
   return (
     <div className={`diff-preview-editor w-full h-full flex flex-col ${!isReady ? 'opacity-0' : ''}`}>
       <div className="diff-preview-editor-container flex-1 flex flex-col overflow-auto transition-opacity duration-150">
-        <StravuEditor
+        <NimbalystEditor
           config={{
             initialContent: oldMarkdown,
             isRichText: true,

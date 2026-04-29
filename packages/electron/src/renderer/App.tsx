@@ -177,8 +177,8 @@ import {
 } from './store/atoms/terminals';
 
 logger.ui.info('App.tsx loading');
-logger.ui.info('About to import StravuEditor');
-logger.ui.info('StravuEditor imported');
+logger.ui.info('About to import NimbalystEditor');
+logger.ui.info('NimbalystEditor imported');
 
 // aiChatBridge has been replaced by editorRegistry - no global setup needed
 
@@ -1656,7 +1656,7 @@ export default function App() {
     theme
   });
 
-  logger.ui.info('About to render StravuEditor');
+  logger.ui.info('About to render NimbalystEditor');
 
   // Debug: expose values for testing (in useEffect to run after state updates)
   // NOTE: These are set imperatively and may not update on every render

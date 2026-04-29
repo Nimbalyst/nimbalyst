@@ -79,7 +79,7 @@ CONTAINER_NAME=$(bash .devcontainer/create-container.sh "${CONTAINER_NAME}")
 
 ```bash
 echo "Running container setup (npm ci, build, etc.)..."
-docker exec -w /workspaces/nimbalyst-code "${CONTAINER_NAME}" bash .devcontainer/post-create.sh
+docker exec -w /workspaces/nimbalyst "${CONTAINER_NAME}" bash .devcontainer/post-create.sh
 ```
 
 This takes several minutes as it:
@@ -94,11 +94,11 @@ Run the tests using the provided pattern or all tests if no pattern specified:
 
 ```bash
 # For specific tests:
-docker exec -w /workspaces/nimbalyst-code "${CONTAINER_NAME}" \
+docker exec -w /workspaces/nimbalyst "${CONTAINER_NAME}" \
   bash .devcontainer/run-e2e-tests.sh e2e/core/app-startup.spec.ts
 
 # For all tests:
-docker exec -w /workspaces/nimbalyst-code "${CONTAINER_NAME}" \
+docker exec -w /workspaces/nimbalyst "${CONTAINER_NAME}" \
   bash .devcontainer/run-e2e-tests.sh
 ```
 

@@ -1,5 +1,5 @@
 /**
- * Stravu Editor - Main library entry point
+ * Nimbalyst - Main library entry point
  *
  * A rich text editor built with Meta's Lexical framework, featuring markdown support,
  * tables, and comprehensive editing capabilities.
@@ -13,7 +13,7 @@ import { registerBuiltinPlugins } from './plugins/registerBuiltinPlugins';
 registerBuiltinPlugins();
 
 // Main editor components
-export { StravuEditor, type StravuEditorProps } from './StravuEditor';
+export { NimbalystEditor, type NimbalystEditorProps } from './NimbalystEditor';
 export { default as Editor } from './Editor';
 
 // Configuration

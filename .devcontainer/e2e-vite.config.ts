@@ -64,9 +64,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@nimbalyst/runtime': runtimeSrcDir,
-      '@stravu-editor/runtime': runtimeSrcDir,
-      '@stravu/runtime': runtimeSrcDir
+      '@nimbalyst/runtime': runtimeSrcDir
     },
     dedupe: [
       'react',

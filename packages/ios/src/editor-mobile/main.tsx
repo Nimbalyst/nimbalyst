@@ -29,7 +29,7 @@ import ReactDOM from 'react-dom/client';
 // (which transitively imports Excalidraw, Mermaid, etc. = ~25MB).
 // The editor barrel registers built-in plugins and imports editor CSS.
 import {
-  StravuEditor,
+  NimbalystEditor,
   type EditorConfig,
   $convertToEnhancedMarkdownString,
   $convertFromEnhancedMarkdownString,
@@ -206,7 +206,7 @@ function EditorApp(): React.ReactElement {
     postToNative({ type: 'dirty', isDirty });
   }, []);
 
-  // Handle getContent callback from StravuEditor
+  // Handle getContent callback from NimbalystEditor
   const handleGetContent = useCallback((fn: () => string) => {
     getContentRef.current = fn;
   }, []);
@@ -248,7 +248,7 @@ function EditorApp(): React.ReactElement {
 
   return (
     <div className="mobile-editor">
-      <StravuEditor config={editorConfig} />
+      <NimbalystEditor config={editorConfig} />
     </div>
   );
 }

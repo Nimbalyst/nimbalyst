@@ -9,7 +9,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
-import { StravuEditor, MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
+import { NimbalystEditor, MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
 import type { EditorConfig } from '@nimbalyst/runtime/editor';
 import { $convertFromEnhancedMarkdownString, getEditorTransformers } from '@nimbalyst/runtime/editor';
 import { $getRoot } from 'lexical';
@@ -841,7 +841,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
               className="tracker-content-editor border border-nim rounded bg-nim min-h-[200px] overflow-hidden"
               data-testid="tracker-detail-content-editor"
             >
-              <StravuEditor key={item.id} config={localEditorConfig} />
+              <NimbalystEditor key={item.id} config={localEditorConfig} />
             </div>
           ) : contentMode === 'collaborative' && collabEditorConfig ? (
             <div
@@ -882,7 +882,7 @@ export const TrackerItemDetail: React.FC<TrackerItemDetailProps> = ({
                   </button>
                 </div>
               )}
-              <StravuEditor key={`collab-${item.id}-${providerEpoch}`} config={collabEditorConfig} />
+              <NimbalystEditor key={`collab-${item.id}-${providerEpoch}`} config={collabEditorConfig} />
             </div>
           ) : (contentMode === 'local-pglite' || contentMode === 'collaborative') && !contentLoaded ? (
             <div className="text-sm text-nim-faint py-4 text-center">Loading...</div>

@@ -71,7 +71,7 @@ if (isDevelopment) {
     }).unref();
   } else {
     // Linux
-    appExecutable = '/usr/local/bin/stravu-editor';
+    appExecutable = '/usr/local/bin/nimbalyst';
     
     if (!fs.existsSync(appExecutable)) {
       // Try AppImage location

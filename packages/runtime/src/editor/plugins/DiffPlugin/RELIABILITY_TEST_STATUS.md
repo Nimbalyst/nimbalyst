@@ -231,7 +231,7 @@ DIFF_TELEMETRY=true npx vitest run src/plugins/DiffPlugin/__tests__
 ### Enable Telemetry
 ```typescript
 // In code
-import { diffTelemetry } from '@stravu/rexical/plugins/DiffPlugin/core/DiffTelemetry';
+import { diffTelemetry } from '@nimbalyst/runtime/plugins/DiffPlugin/core/DiffTelemetry';
 diffTelemetry.enable();
 
 // Via environment variable

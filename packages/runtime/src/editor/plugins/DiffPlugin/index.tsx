@@ -2,7 +2,7 @@
  * Lexical Diff Plugin
  *
  * Provides visual diff functionality with approve/reject capabilities
- * for the Stravu Editor. This plugin handles:
+ * for the Nimbalyst. This plugin handles:
  * - Visual diff rendering with CSS classes
  * - Approve/reject commands
  * - Diff toolbar component

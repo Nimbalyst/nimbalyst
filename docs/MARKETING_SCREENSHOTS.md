@@ -45,7 +45,7 @@ nvm install 22
 
 2. **Pull the latest code and install dependencies:**
 ```bash
-   cd ~/sources/stravu-editor    # or wherever you cloned the repo
+   cd ~/sources/nimbalyst    # or wherever you cloned the repo
    git pull
    npm install
 ```

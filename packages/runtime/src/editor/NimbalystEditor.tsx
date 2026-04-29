@@ -31,11 +31,11 @@ import EditorNodes from "./nodes/EditorNodes";
 import { pluginRegistry } from './plugins/PluginRegistry';
 import { getEditorTransformers } from './markdown';
 
-export interface StravuEditorProps {
+export interface NimbalystEditorProps {
     config?: EditorConfig;
 }
 
-function StravuEditor({config}: StravuEditorProps): JSX.Element {
+function NimbalystEditor({config}: NimbalystEditorProps): JSX.Element {
     // Merge provided config with defaults
     const mergedConfig = {
         ...DEFAULT_EDITOR_CONFIG,
@@ -87,7 +87,7 @@ function StravuEditor({config}: StravuEditorProps): JSX.Element {
     return (
         <div
             ref={containerRef}
-            className={`stravu-editor ${widthClass} ${isDark ? 'dark-theme' : ''}`}
+            className={`nimbalyst-editor ${widthClass} ${isDark ? 'dark-theme' : ''}`}
             data-theme={theme}
         >
             <RuntimeSettingsProvider>
@@ -135,4 +135,4 @@ function buildImportMap(): DOMConversionMap {
 }
 
 // Export the main component
-export { StravuEditor };
+export { NimbalystEditor };

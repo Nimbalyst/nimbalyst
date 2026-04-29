@@ -1,7 +1,7 @@
 import { resolve } from 'path'
 import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
-import viteStravuPlugin from '../shared/viteStravuPlugin.ts'
+import viteNimbalystPlugin from '../shared/viteNimbalystPlugin.ts'
 import { viteStaticCopy } from 'vite-plugin-static-copy'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import fs from 'fs'
@@ -130,9 +130,6 @@ export default defineConfig({
     plugins: [resolveWorkspaceSubpaths()],
     resolve: {
       alias: {
-        // Normalize legacy names to current
-        '@stravu-editor/runtime': '@nimbalyst/runtime',
-        '@stravu/runtime': '@nimbalyst/runtime',
         // Always use src for bundling - simpler than dealing with ESM/CJS issues
         '@nimbalyst/runtime': runtimeSrcDir
       }
@@ -170,8 +167,6 @@ export default defineConfig({
   preload: {
     resolve: {
       alias: {
-        '@stravu-editor/runtime': '@nimbalyst/runtime',
-        '@stravu/runtime': '@nimbalyst/runtime',
         '@nimbalyst/runtime': runtimeSrcDir
       }
     },
@@ -206,7 +201,7 @@ export default defineConfig({
         include: [],
         protocolImports: false,
       }),
-      viteStravuPlugin(),
+      viteNimbalystPlugin(),
       react(),
       optimizeExcalidrawPlugin(),
       optimizeShikiPlugin(),
@@ -282,8 +277,6 @@ export default defineConfig({
     resolve: {
       alias: {
         // Ensure renderer also points runtime imports at source
-        '@stravu-editor/runtime': '@nimbalyst/runtime',
-        '@stravu/runtime': '@nimbalyst/runtime',
         '@nimbalyst/runtime': runtimeSrcDir
       },
       dedupe: [
@@ -411,9 +404,7 @@ export default defineConfig({
       exclude: [
         '@shikijs/langs',
         'prettier',
-        '@nimbalyst/runtime',
-        '@stravu/runtime',
-        '@stravu-editor/runtime'
+        '@nimbalyst/runtime'
       ],
       esbuildOptions: {
         target: 'chrome109'

@@ -1,8 +1,8 @@
-# Stravu Editor Release Guide
+# Nimbalyst Release Guide
 
 ## Overview
 
-Stravu Editor uses an automated release system that builds, signs, notarizes, and distributes the application through GitHub Releases. The auto-update system allows users to seamlessly receive updates.
+Nimbalyst uses an automated release system that builds, signs, notarizes, and distributes the application through GitHub Releases. The auto-update system allows users to seamlessly receive updates.
 
 ## Release Process
 
@@ -63,8 +63,8 @@ The workflow (`/.github/workflows/electron-build.yml`) automatically:
    "publish": [
      {
        "provider": "github",
-       "owner": "stravu",
-       "repo": "preditor"
+       "owner": "nimbalyst",
+       "repo": "nimbalyst"
      }
    ]
 ```
@@ -244,7 +244,7 @@ If automation fails, create release manually:
 
 ### Logs
 
-- **Main process**: `~/Library/Logs/stravu-editor/main.log`
+- **Main process**: `~/Library/Logs/Nimbalyst/main.log`
 - **Updater logs**: Included in main.log
 - **Development**: Check console output
 

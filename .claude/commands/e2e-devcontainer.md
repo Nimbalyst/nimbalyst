@@ -66,11 +66,11 @@ CONTAINER_NAME=$(bash .devcontainer/create-container.sh "${CONTAINER_NAME}")
 
 # 4. Run setup (always run on fresh container)
 echo "Running container setup..."
-docker exec -w /workspaces/nimbalyst-code "${CONTAINER_NAME}" bash .devcontainer/post-create.sh
+docker exec -w /workspaces/nimbalyst "${CONTAINER_NAME}" bash .devcontainer/post-create.sh
 
 # 5. Run tests
 echo "Running tests..."
-docker exec -w /workspaces/nimbalyst-code "${CONTAINER_NAME}" \
+docker exec -w /workspaces/nimbalyst "${CONTAINER_NAME}" \
   bash .devcontainer/run-e2e-tests.sh [test-pattern]
 
 # Save exit code

@@ -1,5 +1,5 @@
 /**
- * Plugin Package System for Stravu Editor
+ * Plugin Package System for Nimbalyst
  *
  * This system allows plugins to be self-contained units that bring their own:
  * - React component (the actual plugin)

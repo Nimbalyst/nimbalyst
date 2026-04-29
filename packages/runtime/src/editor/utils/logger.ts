@@ -1,5 +1,5 @@
 /**
- * Simple logger for stravu-editor package
+ * Simple logger for the @nimbalyst/runtime editor
  * Syncs with the main logger if available
  */
 

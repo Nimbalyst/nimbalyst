@@ -9,7 +9,7 @@
 @import 'https://fonts.googleapis.com/css?family=Reenie+Beanie';
 @import './themes/NimbalystTheme.css';
 
-.stravu-editor {
+.nimbalyst-editor {
   margin: 0;
   padding: 0;
   height: 100%;
@@ -29,7 +29,7 @@
   height: 100%;
 }
 
-.stravu-editor header {
+.nimbalyst-editor header {
   max-width: 580px;
   margin: auto;
   position: relative;
@@ -37,13 +37,13 @@
   justify-content: center;
 }
 
-.stravu-editor header a {
+.nimbalyst-editor header a {
   max-width: 220px;
   margin: 20px 0 0 0;
   display: block;
 }
 
-.stravu-editor header img {
+.nimbalyst-editor header img {
   display: block;
   height: 100%;
   width: 100%;
@@ -56,7 +56,7 @@ header h1 {
   margin: 20px 0 0 0;
 }
 
-.stravu-editor .editor-shell {
+.nimbalyst-editor .editor-shell {
   margin: 0;
   border-radius: 0;
   width: 100%;
@@ -71,7 +71,7 @@ header h1 {
   min-height: 0;
 }
 
-.stravu-editor .editor-shell .editor-container {
+.nimbalyst-editor .editor-shell .editor-container {
   background: var(--nim-bg);
   position: relative;
   display: block;
@@ -82,7 +82,7 @@ header h1 {
   min-height: 0;
 }
 
-.stravu-editor .editor-shell .editor-container.tree-view {
+.nimbalyst-editor .editor-shell .editor-container.tree-view {
   border-radius: 0;
 }
 
@@ -91,7 +91,7 @@ header h1 {
   border-top-right-radius: 0;
 }
 
-.stravu-editor .editor-scroller {
+.nimbalyst-editor .editor-scroller {
   height: 100%;
   max-width: 100%;
   border: 0;
@@ -106,7 +106,7 @@ header h1 {
   background: var(--nim-bg);
 }
 
-.stravu-editor .editor {
+.nimbalyst-editor .editor {
   flex: auto;
   max-width: 100%;
   height: 100%;
@@ -116,7 +116,7 @@ header h1 {
 
 /* Collaboration cursors container - positioned inside editor content
    so cursors scroll with the document */
-.stravu-editor .collab-cursors-container {
+.nimbalyst-editor .collab-cursors-container {
   position: absolute;
   top: 0;
   left: 0;
@@ -129,12 +129,12 @@ header h1 {
 /* Cursor elements (caret + name label + selection highlights).
    Lexical portals a <div> inside our container; each remote cursor's
    selection rects are direct children of that inner div. */
-.stravu-editor .collab-cursors-container > div > span {
+.nimbalyst-editor .collab-cursors-container > div > span {
   transition: opacity 0.6s ease;
 }
 
 /* Fade cursors after a period of inactivity */
-.stravu-editor .collab-cursors-container.collab-cursors-faded > div > span {
+.nimbalyst-editor .collab-cursors-container.collab-cursors-faded > div > span {
   opacity: 0.15;
 }
 
@@ -143,7 +143,7 @@ header h1 {
   width: 100%;
 }
 
-.stravu-editor pre {
+.nimbalyst-editor pre {
   line-height: 1.1;
   background: #222;
   color: #fff;
@@ -171,17 +171,17 @@ header h1 {
     height: 90%;
 }
 
-.stravu-editor pre::-webkit-scrollbar {
+.nimbalyst-editor pre::-webkit-scrollbar {
   background: transparent;
   width: 10px;
 }
 
-.stravu-editor pre::-webkit-scrollbar-thumb {
+.nimbalyst-editor pre::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
   border-radius: 4px;
 }
 
-.stravu-editor pre::-webkit-scrollbar-thumb:hover {
+.nimbalyst-editor pre::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover);
 }
 
@@ -671,7 +671,7 @@ i.page-break,
 }
 
 .link-editor .button.active,
-.stravu-editor .toolbar .button.active {
+.nimbalyst-editor .toolbar .button.active {
   background-color: rgb(223, 232, 250);
 }
 
@@ -808,7 +808,7 @@ i.page-break,
   color: red;
 }
 
-.stravu-editor .dropdown {
+.nimbalyst-editor .dropdown {
   z-index: 100;
   display: block;
   position: fixed;
@@ -819,11 +819,11 @@ i.page-break,
   background-color: var(--nim-bg);
 }
 
-.stravu-editor .dropdown.table-cell-action-menu-dropdown {
+.nimbalyst-editor .dropdown.table-cell-action-menu-dropdown {
   position: absolute;
 }
 
-.stravu-editor .dropdown .item {
+.nimbalyst-editor .dropdown .item {
   margin: 0 8px 0 8px;
   padding: 8px;
   color: var(--nim-text);
@@ -842,12 +842,12 @@ i.page-break,
   min-width: 100px;
 }
 
-.stravu-editor .dropdown .item.wide {
+.nimbalyst-editor .dropdown .item.wide {
   align-items: center;
   width: 260px;
 }
 
-.stravu-editor .dropdown .item.wide .icon-text-container {
+.nimbalyst-editor .dropdown .item.wide .icon-text-container {
   display: flex;
 
   .text {
@@ -855,38 +855,38 @@ i.page-break,
   }
 }
 
-.stravu-editor .dropdown .item .shortcut {
+.nimbalyst-editor .dropdown .item .shortcut {
   color: var(--nim-text-faint);
   align-self: flex-end;
 }
 
-.stravu-editor .dropdown .item .active {
+.nimbalyst-editor .dropdown .item .active {
   display: flex;
   width: 20px;
   height: 20px;
   background-size: contain;
 }
 
-.stravu-editor .dropdown .item:first-child {
+.nimbalyst-editor .dropdown .item:first-child {
   margin-top: 8px;
 }
 
-.stravu-editor .dropdown .item:last-child {
+.nimbalyst-editor .dropdown .item:last-child {
   margin-bottom: 8px;
 }
 
-.stravu-editor .dropdown .item:hover {
+.nimbalyst-editor .dropdown .item:hover {
   background-color: var(--nim-bg-hover);
 }
 
-.stravu-editor .dropdown .item .text {
+.nimbalyst-editor .dropdown .item .text {
   display: flex;
   line-height: 20px;
   flex-grow: 1;
   min-width: 150px;
 }
 
-.stravu-editor .dropdown .item .icon {
+.nimbalyst-editor .dropdown .item .icon {
   display: flex;
   width: 20px;
   height: 20px;
@@ -898,7 +898,7 @@ i.page-break,
   background-repeat: no-repeat;
 }
 
-.stravu-editor .dropdown .divider {
+.nimbalyst-editor .dropdown .divider {
   width: auto;
   background-color: var(--nim-border);
   margin: 4px 8px;
@@ -906,19 +906,19 @@ i.page-break,
 }
 
 @media screen and (max-width: 1100px) {
-  .stravu-editor .dropdown-button-text {
+  .nimbalyst-editor .dropdown-button-text {
     display: none !important;
   }
 
-  .stravu-editor .dialog-dropdown > .dropdown-button-text {
+  .nimbalyst-editor .dialog-dropdown > .dropdown-button-text {
     display: flex !important;
   }
 
-  .stravu-editor .font-size .dropdown-button-text {
+  .nimbalyst-editor .font-size .dropdown-button-text {
     display: flex !important;
   }
 
-  .stravu-editor .code-language .dropdown-button-text {
+  .nimbalyst-editor .code-language .dropdown-button-text {
     display: flex !important;
   }
 }
@@ -975,7 +975,7 @@ i.page-break,
 }
 
 .icon.table-of-contents,
-.stravu-editor .toolbar .toolbar-item .icon.table-of-contents {
+.nimbalyst-editor .toolbar .toolbar-item .icon.table-of-contents {
   background-image: url(./images/icons/table-of-contents.svg);
   background-size: contain;
   background-repeat: no-repeat;
@@ -1575,7 +1575,7 @@ button.action-button:disabled {
   text-align: right;
 }
 
-.stravu-editor .toolbar {
+.nimbalyst-editor .toolbar {
   display: flex;
   margin-bottom: 1px;
   background: var(--nim-toolbar-bg);
@@ -1592,7 +1592,7 @@ button.action-button:disabled {
   overflow-y: hidden; /* disable vertical scroll*/
 }
 
-.stravu-editor button.toolbar-item {
+.nimbalyst-editor button.toolbar-item {
   border: 0;
   display: flex;
   background: none;
@@ -1605,15 +1605,15 @@ button.action-button:disabled {
   justify-content: space-between;
 }
 
-.stravu-editor button.toolbar-item:disabled {
+.nimbalyst-editor button.toolbar-item:disabled {
   cursor: not-allowed;
 }
 
-.stravu-editor button.toolbar-item.spaced {
+.nimbalyst-editor button.toolbar-item.spaced {
   margin-right: 2px;
 }
 
-.stravu-editor button.toolbar-item i.format {
+.nimbalyst-editor button.toolbar-item i.format {
   background-size: contain;
   display: inline-block;
   height: 18px;
@@ -1623,35 +1623,35 @@ button.action-button:disabled {
   opacity: 0.6;
 }
 
-.stravu-editor button.toolbar-item:disabled .icon,
-.stravu-editor button.toolbar-item:disabled .text,
-.stravu-editor button.toolbar-item:disabled i.format,
-.stravu-editor button.toolbar-item:disabled .chevron-down {
+.nimbalyst-editor button.toolbar-item:disabled .icon,
+.nimbalyst-editor button.toolbar-item:disabled .text,
+.nimbalyst-editor button.toolbar-item:disabled i.format,
+.nimbalyst-editor button.toolbar-item:disabled .chevron-down {
   opacity: 0.2;
 }
 
-.stravu-editor button.toolbar-item.active {
+.nimbalyst-editor button.toolbar-item.active {
   background-color: var(--nim-toolbar-active);
 }
 
-.stravu-editor button.toolbar-item.active i {
+.nimbalyst-editor button.toolbar-item.active i {
   opacity: 1;
 }
 
-.stravu-editor .toolbar-item:hover:not([disabled]) {
+.nimbalyst-editor .toolbar-item:hover:not([disabled]) {
   background-color: var(--nim-toolbar-hover);
 }
 
-.stravu-editor .toolbar-item.font-family .text {
+.nimbalyst-editor .toolbar-item.font-family .text {
   display: block;
   max-width: 40px;
 }
 
-.stravu-editor .toolbar .code-language {
+.nimbalyst-editor .toolbar .code-language {
   width: 150px;
 }
 
-.stravu-editor .toolbar .toolbar-item .text {
+.nimbalyst-editor .toolbar .toolbar-item .text {
   display: flex;
   line-height: 20px;
   vertical-align: middle;
@@ -1664,7 +1664,7 @@ button.action-button:disabled {
   padding-right: 10px;
 }
 
-.stravu-editor .toolbar .toolbar-item .icon {
+.nimbalyst-editor .toolbar .toolbar-item .icon {
   display: flex;
   width: 20px;
   height: 20px;
@@ -1674,8 +1674,8 @@ button.action-button:disabled {
   background-size: contain;
 }
 
-.stravu-editor .toolbar i.chevron-down,
-.stravu-editor .toolbar-item i.chevron-down {
+.nimbalyst-editor .toolbar i.chevron-down,
+.nimbalyst-editor .toolbar-item i.chevron-down {
   margin-top: 3px;
   width: 16px;
   height: 16px;
@@ -1683,7 +1683,7 @@ button.action-button:disabled {
   user-select: none;
 }
 
-.stravu-editor .toolbar i.chevron-down.inside {
+.nimbalyst-editor .toolbar i.chevron-down.inside {
   width: 16px;
   height: 16px;
   display: flex;
@@ -1693,97 +1693,97 @@ button.action-button:disabled {
   pointer-events: none;
 }
 
-.stravu-editor .toolbar .divider {
+.nimbalyst-editor .toolbar .divider {
   width: 1px;
   background-color: #eee;
   margin: 0 4px;
 }
 
 /* Responsive toolbar groups - display as flex to maintain layout */
-.stravu-editor .toolbar .toolbar-file,
-.stravu-editor .toolbar .toolbar-font,
-.stravu-editor .toolbar .toolbar-formatting,
-.stravu-editor .toolbar .toolbar-colors,
-.stravu-editor .toolbar .toolbar-additional,
-.stravu-editor .toolbar .toolbar-insert,
-.stravu-editor .toolbar .toolbar-alignment,
-.stravu-editor .toolbar .toolbar-code-language,
-.stravu-editor .toolbar .toolbar-code-theme {
+.nimbalyst-editor .toolbar .toolbar-file,
+.nimbalyst-editor .toolbar .toolbar-font,
+.nimbalyst-editor .toolbar .toolbar-formatting,
+.nimbalyst-editor .toolbar .toolbar-colors,
+.nimbalyst-editor .toolbar .toolbar-additional,
+.nimbalyst-editor .toolbar .toolbar-insert,
+.nimbalyst-editor .toolbar .toolbar-alignment,
+.nimbalyst-editor .toolbar .toolbar-code-language,
+.nimbalyst-editor .toolbar .toolbar-code-theme {
   display: flex;
   align-items: center;
 }
 
 /* Responsive toolbar - hide less important elements based on editor container width */
 /* Medium: hide text formatting tools and color pickers */
-.stravu-editor.editor-width-medium .toolbar .toolbar-formatting,
-.stravu-editor.editor-width-small .toolbar .toolbar-formatting,
-.stravu-editor.editor-width-very-small .toolbar .toolbar-formatting,
-.stravu-editor.editor-width-extra-small .toolbar .toolbar-formatting {
+.nimbalyst-editor.editor-width-medium .toolbar .toolbar-formatting,
+.nimbalyst-editor.editor-width-small .toolbar .toolbar-formatting,
+.nimbalyst-editor.editor-width-very-small .toolbar .toolbar-formatting,
+.nimbalyst-editor.editor-width-extra-small .toolbar .toolbar-formatting {
   display: none;
 }
 
-.stravu-editor.editor-width-medium .toolbar .toolbar-colors,
-.stravu-editor.editor-width-small .toolbar .toolbar-colors,
-.stravu-editor.editor-width-very-small .toolbar .toolbar-colors,
-.stravu-editor.editor-width-extra-small .toolbar .toolbar-colors {
+.nimbalyst-editor.editor-width-medium .toolbar .toolbar-colors,
+.nimbalyst-editor.editor-width-small .toolbar .toolbar-colors,
+.nimbalyst-editor.editor-width-very-small .toolbar .toolbar-colors,
+.nimbalyst-editor.editor-width-extra-small .toolbar .toolbar-colors {
   display: none;
 }
 
 /* Small: also hide font family and font size */
-.stravu-editor.editor-width-small .toolbar .toolbar-font,
-.stravu-editor.editor-width-very-small .toolbar .toolbar-font,
-.stravu-editor.editor-width-extra-small .toolbar .toolbar-font {
+.nimbalyst-editor.editor-width-small .toolbar .toolbar-font,
+.nimbalyst-editor.editor-width-very-small .toolbar .toolbar-font,
+.nimbalyst-editor.editor-width-extra-small .toolbar .toolbar-font {
   display: none;
 }
 
-.stravu-editor.editor-width-small .toolbar .toolbar-font-divider,
-.stravu-editor.editor-width-very-small .toolbar .toolbar-font-divider,
-.stravu-editor.editor-width-extra-small .toolbar .toolbar-font-divider {
+.nimbalyst-editor.editor-width-small .toolbar .toolbar-font-divider,
+.nimbalyst-editor.editor-width-very-small .toolbar .toolbar-font-divider,
+.nimbalyst-editor.editor-width-extra-small .toolbar .toolbar-font-divider {
   display: none;
 }
 
-.stravu-editor.editor-width-small .toolbar .toolbar-code-theme,
-.stravu-editor.editor-width-very-small .toolbar .toolbar-code-theme,
-.stravu-editor.editor-width-extra-small .toolbar .toolbar-code-theme {
+.nimbalyst-editor.editor-width-small .toolbar .toolbar-code-theme,
+.nimbalyst-editor.editor-width-very-small .toolbar .toolbar-code-theme,
+.nimbalyst-editor.editor-width-extra-small .toolbar .toolbar-code-theme {
   display: none;
 }
 
 /* Very small: hide insert menu and additional formatting */
-.stravu-editor.editor-width-very-small .toolbar .toolbar-insert,
-.stravu-editor.editor-width-extra-small .toolbar .toolbar-insert {
+.nimbalyst-editor.editor-width-very-small .toolbar .toolbar-insert,
+.nimbalyst-editor.editor-width-extra-small .toolbar .toolbar-insert {
   display: none;
 }
 
-.stravu-editor.editor-width-very-small .toolbar .toolbar-insert-divider,
-.stravu-editor.editor-width-extra-small .toolbar .toolbar-insert-divider {
+.nimbalyst-editor.editor-width-very-small .toolbar .toolbar-insert-divider,
+.nimbalyst-editor.editor-width-extra-small .toolbar .toolbar-insert-divider {
   display: none;
 }
 
-.stravu-editor.editor-width-very-small .toolbar .toolbar-additional,
-.stravu-editor.editor-width-extra-small .toolbar .toolbar-additional {
+.nimbalyst-editor.editor-width-very-small .toolbar .toolbar-additional,
+.nimbalyst-editor.editor-width-extra-small .toolbar .toolbar-additional {
   display: none;
 }
 
-.stravu-editor.editor-width-very-small .toolbar .toolbar-alignment,
-.stravu-editor.editor-width-extra-small .toolbar .toolbar-alignment {
+.nimbalyst-editor.editor-width-very-small .toolbar .toolbar-alignment,
+.nimbalyst-editor.editor-width-extra-small .toolbar .toolbar-alignment {
   display: none;
 }
 
-.stravu-editor.editor-width-very-small .toolbar .toolbar-alignment-divider,
-.stravu-editor.editor-width-extra-small .toolbar .toolbar-alignment-divider {
+.nimbalyst-editor.editor-width-very-small .toolbar .toolbar-alignment-divider,
+.nimbalyst-editor.editor-width-extra-small .toolbar .toolbar-alignment-divider {
   display: none;
 }
 
 /* Extra small: hide everything except basic block formatting and undo/redo */
-.stravu-editor.editor-width-extra-small .toolbar .toolbar-code-language {
+.nimbalyst-editor.editor-width-extra-small .toolbar .toolbar-code-language {
   display: none;
 }
 
-.stravu-editor.editor-width-extra-small .toolbar .toolbar-file {
+.nimbalyst-editor.editor-width-extra-small .toolbar .toolbar-file {
   display: none;
 }
 
-.stravu-editor.editor-width-extra-small .toolbar .toolbar-file-divider {
+.nimbalyst-editor.editor-width-extra-small .toolbar .toolbar-file-divider {
   display: none;
 }
 
@@ -1937,11 +1937,11 @@ button.item i {
   opacity: 0.6;
 }
 
-.stravu-editor button.item.dropdown-item-active {
+.nimbalyst-editor button.item.dropdown-item-active {
   background-color: var(--nim-toolbar-active);
 }
 
-.stravu-editor button.item.dropdown-item-active i {
+.nimbalyst-editor button.item.dropdown-item-active i {
   opacity: 1;
 }
 
@@ -1967,12 +1967,12 @@ button.item i {
   width: 100%;
 }
 
-.stravu-editor .toolbar .block-controls {
+.nimbalyst-editor .toolbar .block-controls {
   display: flex;
   align-items: center;
 }
 
-.stravu-editor .toolbar .block-controls .dropdown-button-text {
+.nimbalyst-editor .toolbar .block-controls .dropdown-button-text {
   width: 7em;
   text-align: left;
   overflow: hidden;
@@ -1982,104 +1982,104 @@ button.item i {
 }
 
 /* Dark theme icon inversions - shared across all dark themes */
-.stravu-editor.dark-theme #options-button::after,
-.stravu-editor.dark-theme #test-recorder-button::after,
-.stravu-editor.dark-theme #paste-log-button::after,
-.stravu-editor.dark-theme #docs-button::after,
-.stravu-editor.dark-theme #test-recorder-button-snapshot::after,
-.stravu-editor.dark-theme #test-recorder-button-copy::after,
-.stravu-editor.dark-theme #test-recorder-button-download::after,
-.stravu-editor.dark-theme i.palette,
-.stravu-editor.dark-theme i.bucket,
-.stravu-editor.dark-theme i.bold,
-.stravu-editor.dark-theme i.italic,
-.stravu-editor.dark-theme i.clear,
-.stravu-editor.dark-theme i.code,
-.stravu-editor.dark-theme i.underline,
-.stravu-editor.dark-theme i.uppercase,
-.stravu-editor.dark-theme i.lowercase,
-.stravu-editor.dark-theme i.capitalize,
-.stravu-editor.dark-theme i.strikethrough,
-.stravu-editor.dark-theme i.subscript,
-.stravu-editor.dark-theme i.superscript,
-.stravu-editor.dark-theme i.highlight,
-.stravu-editor.dark-theme i.link,
-.stravu-editor.dark-theme i.horizontal-rule,
-.stravu-editor.dark-theme i.plus,
-.stravu-editor.dark-theme .icon.plus,
-.stravu-editor.dark-theme i.caret-right,
-.stravu-editor.dark-theme i.dropdown-more,
-.stravu-editor.dark-theme .icon.dropdown-more,
-.stravu-editor.dark-theme i.font-color,
-.stravu-editor.dark-theme i.font-family,
-.stravu-editor.dark-theme .icon.font-family,
-.stravu-editor.dark-theme i.bg-color,
-.stravu-editor.dark-theme i.image,
-.stravu-editor.dark-theme i.table,
-.stravu-editor.dark-theme i.close,
-.stravu-editor.dark-theme i.figma,
-.stravu-editor.dark-theme i.poll,
-.stravu-editor.dark-theme i.columns,
-.stravu-editor.dark-theme i.tweet,
-.stravu-editor.dark-theme i.youtube,
-.stravu-editor.dark-theme i.align-left,
-.stravu-editor.dark-theme .icon.left-align,
-.stravu-editor.dark-theme i.left-align,
-.stravu-editor.dark-theme i.align-center,
-.stravu-editor.dark-theme .icon.center-align,
-.stravu-editor.dark-theme i.center-align,
-.stravu-editor.dark-theme i.align-right,
-.stravu-editor.dark-theme .icon.right-align,
-.stravu-editor.dark-theme i.right-align,
-.stravu-editor.dark-theme i.align-justify,
-.stravu-editor.dark-theme .icon.justify-align,
-.stravu-editor.dark-theme i.justify-align,
-.stravu-editor.dark-theme i.vertical-align-top,
-.stravu-editor.dark-theme i.vertical-align-middle,
-.stravu-editor.dark-theme i.vertical-align-bottom,
-.stravu-editor.dark-theme i.indent,
-.stravu-editor.dark-theme i.markdown,
-.stravu-editor.dark-theme i.outdent,
-.stravu-editor.dark-theme i.bug,
-.stravu-editor.dark-theme i.undo,
-.stravu-editor.dark-theme i.redo,
-.stravu-editor.dark-theme i.sticky,
-.stravu-editor.dark-theme i.mic,
-.stravu-editor.dark-theme i.import,
-.stravu-editor.dark-theme i.export,
-.stravu-editor.dark-theme i.send,
-.stravu-editor.dark-theme i.diagram-2,
-.stravu-editor.dark-theme i.user,
-.stravu-editor.dark-theme i.equation,
-.stravu-editor.dark-theme i.gif,
-.stravu-editor.dark-theme i.copy,
-.stravu-editor.dark-theme i.clipboard,
-.stravu-editor.dark-theme i.success,
-.stravu-editor.dark-theme i.prettier,
-.stravu-editor.dark-theme i.prettier-error,
-.stravu-editor.dark-theme i.cut,
-.stravu-editor.dark-theme .icon.paragraph,
-.stravu-editor.dark-theme .icon.h1,
-.stravu-editor.dark-theme .icon.h2,
-.stravu-editor.dark-theme .icon.h3,
-.stravu-editor.dark-theme .icon.h4,
-.stravu-editor.dark-theme .icon.h5,
-.stravu-editor.dark-theme .icon.h6,
-.stravu-editor.dark-theme .icon.bullet-list,
-.stravu-editor.dark-theme .icon.bullet,
-.stravu-editor.dark-theme .icon.check-list,
-.stravu-editor.dark-theme .icon.check,
-.stravu-editor.dark-theme .icon.numbered-list,
-.stravu-editor.dark-theme .icon.number,
-.stravu-editor.dark-theme .icon.quote,
-.stravu-editor.dark-theme .icon.code,
-.stravu-editor.dark-theme .icon.table-of-contents,
-.stravu-editor.dark-theme i.file-text,
-.stravu-editor.dark-theme span.file-text {
+.nimbalyst-editor.dark-theme #options-button::after,
+.nimbalyst-editor.dark-theme #test-recorder-button::after,
+.nimbalyst-editor.dark-theme #paste-log-button::after,
+.nimbalyst-editor.dark-theme #docs-button::after,
+.nimbalyst-editor.dark-theme #test-recorder-button-snapshot::after,
+.nimbalyst-editor.dark-theme #test-recorder-button-copy::after,
+.nimbalyst-editor.dark-theme #test-recorder-button-download::after,
+.nimbalyst-editor.dark-theme i.palette,
+.nimbalyst-editor.dark-theme i.bucket,
+.nimbalyst-editor.dark-theme i.bold,
+.nimbalyst-editor.dark-theme i.italic,
+.nimbalyst-editor.dark-theme i.clear,
+.nimbalyst-editor.dark-theme i.code,
+.nimbalyst-editor.dark-theme i.underline,
+.nimbalyst-editor.dark-theme i.uppercase,
+.nimbalyst-editor.dark-theme i.lowercase,
+.nimbalyst-editor.dark-theme i.capitalize,
+.nimbalyst-editor.dark-theme i.strikethrough,
+.nimbalyst-editor.dark-theme i.subscript,
+.nimbalyst-editor.dark-theme i.superscript,
+.nimbalyst-editor.dark-theme i.highlight,
+.nimbalyst-editor.dark-theme i.link,
+.nimbalyst-editor.dark-theme i.horizontal-rule,
+.nimbalyst-editor.dark-theme i.plus,
+.nimbalyst-editor.dark-theme .icon.plus,
+.nimbalyst-editor.dark-theme i.caret-right,
+.nimbalyst-editor.dark-theme i.dropdown-more,
+.nimbalyst-editor.dark-theme .icon.dropdown-more,
+.nimbalyst-editor.dark-theme i.font-color,
+.nimbalyst-editor.dark-theme i.font-family,
+.nimbalyst-editor.dark-theme .icon.font-family,
+.nimbalyst-editor.dark-theme i.bg-color,
+.nimbalyst-editor.dark-theme i.image,
+.nimbalyst-editor.dark-theme i.table,
+.nimbalyst-editor.dark-theme i.close,
+.nimbalyst-editor.dark-theme i.figma,
+.nimbalyst-editor.dark-theme i.poll,
+.nimbalyst-editor.dark-theme i.columns,
+.nimbalyst-editor.dark-theme i.tweet,
+.nimbalyst-editor.dark-theme i.youtube,
+.nimbalyst-editor.dark-theme i.align-left,
+.nimbalyst-editor.dark-theme .icon.left-align,
+.nimbalyst-editor.dark-theme i.left-align,
+.nimbalyst-editor.dark-theme i.align-center,
+.nimbalyst-editor.dark-theme .icon.center-align,
+.nimbalyst-editor.dark-theme i.center-align,
+.nimbalyst-editor.dark-theme i.align-right,
+.nimbalyst-editor.dark-theme .icon.right-align,
+.nimbalyst-editor.dark-theme i.right-align,
+.nimbalyst-editor.dark-theme i.align-justify,
+.nimbalyst-editor.dark-theme .icon.justify-align,
+.nimbalyst-editor.dark-theme i.justify-align,
+.nimbalyst-editor.dark-theme i.vertical-align-top,
+.nimbalyst-editor.dark-theme i.vertical-align-middle,
+.nimbalyst-editor.dark-theme i.vertical-align-bottom,
+.nimbalyst-editor.dark-theme i.indent,
+.nimbalyst-editor.dark-theme i.markdown,
+.nimbalyst-editor.dark-theme i.outdent,
+.nimbalyst-editor.dark-theme i.bug,
+.nimbalyst-editor.dark-theme i.undo,
+.nimbalyst-editor.dark-theme i.redo,
+.nimbalyst-editor.dark-theme i.sticky,
+.nimbalyst-editor.dark-theme i.mic,
+.nimbalyst-editor.dark-theme i.import,
+.nimbalyst-editor.dark-theme i.export,
+.nimbalyst-editor.dark-theme i.send,
+.nimbalyst-editor.dark-theme i.diagram-2,
+.nimbalyst-editor.dark-theme i.user,
+.nimbalyst-editor.dark-theme i.equation,
+.nimbalyst-editor.dark-theme i.gif,
+.nimbalyst-editor.dark-theme i.copy,
+.nimbalyst-editor.dark-theme i.clipboard,
+.nimbalyst-editor.dark-theme i.success,
+.nimbalyst-editor.dark-theme i.prettier,
+.nimbalyst-editor.dark-theme i.prettier-error,
+.nimbalyst-editor.dark-theme i.cut,
+.nimbalyst-editor.dark-theme .icon.paragraph,
+.nimbalyst-editor.dark-theme .icon.h1,
+.nimbalyst-editor.dark-theme .icon.h2,
+.nimbalyst-editor.dark-theme .icon.h3,
+.nimbalyst-editor.dark-theme .icon.h4,
+.nimbalyst-editor.dark-theme .icon.h5,
+.nimbalyst-editor.dark-theme .icon.h6,
+.nimbalyst-editor.dark-theme .icon.bullet-list,
+.nimbalyst-editor.dark-theme .icon.bullet,
+.nimbalyst-editor.dark-theme .icon.check-list,
+.nimbalyst-editor.dark-theme .icon.check,
+.nimbalyst-editor.dark-theme .icon.numbered-list,
+.nimbalyst-editor.dark-theme .icon.number,
+.nimbalyst-editor.dark-theme .icon.quote,
+.nimbalyst-editor.dark-theme .icon.code,
+.nimbalyst-editor.dark-theme .icon.table-of-contents,
+.nimbalyst-editor.dark-theme i.file-text,
+.nimbalyst-editor.dark-theme span.file-text {
   filter: invert(1);
 }
 
-.stravu-editor.dark-theme i.chevron-down {
+.nimbalyst-editor.dark-theme i.chevron-down {
   filter: invert(1);
 }
 

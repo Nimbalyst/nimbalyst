@@ -27,7 +27,7 @@ _Coming soon_
 
 1. Clone the monorepo and install dependencies:
    ```bash
-   git clone https://github.com/stravu/nimbalyst.git
+   git clone https://github.com/nimbalyst/nimbalyst.git
    cd nimbalyst
    npm install
    ```
