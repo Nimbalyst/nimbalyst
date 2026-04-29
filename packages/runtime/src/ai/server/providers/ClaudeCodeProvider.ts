@@ -48,7 +48,9 @@ import { AgentMessagesRepository } from '../../../storage/repositories/AgentMess
 import { TeammateManager, type TeammateToLeadMessage } from './TeammateManager';
 import path from 'path';
 import os from 'os';
-import { app } from 'electron';
+import { app, BrowserWindow } from 'electron';
+import { SessionWakeupScheduler } from '../../../../../electron/src/main/services/SessionWakeupScheduler';
+import { getSessionWakeupsStore } from '../../../../../electron/src/main/services/RepositoryManager';
 import { buildClaudeCodeSystemPrompt, buildMetaAgentSystemPrompt } from '../../prompt';
 
 import { SessionManager } from '../SessionManager';
@@ -823,6 +825,15 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
 
                 if (toolName === 'TodoWrite' && args?.todos) {
                   this.emitTodoUpdate(sessionId, args.todos as any[]).catch(() => {});
+                }
+
+                // The CLI emits ScheduleWakeup tool calls but its tool_result is informational only --
+                // nothing in the SDK actually fires the wakeup. Route through Nimbalyst's
+                // SessionWakeupScheduler so the prompt is re-queued at fire time.
+                if (toolName === 'ScheduleWakeup' && sessionId && workspacePath) {
+                  this.handleScheduleWakeupTool(sessionId, workspacePath, args || {}).catch(err => {
+                    console.error('[CLAUDE-CODE] handleScheduleWakeupTool failed:', err);
+                  });
                 }
 
                 const isSdkNativeTool = SDK_NATIVE_TOOLS.includes(toolName);
@@ -1670,6 +1681,51 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
    * Update session metadata with current todos
    * Uses the existing metadata update mechanism instead of custom IPC events
    */
+  private async handleScheduleWakeupTool(
+    sessionId: string,
+    workspacePath: string,
+    args: { delaySeconds?: unknown; prompt?: unknown; reason?: unknown }
+  ): Promise<void> {
+    const rawDelay = args.delaySeconds;
+    const delaySeconds = typeof rawDelay === 'number' ? rawDelay : Number(rawDelay);
+    const prompt = typeof args.prompt === 'string' ? args.prompt : '';
+    const reason = typeof args.reason === 'string' ? args.reason : '';
+
+    if (!Number.isFinite(delaySeconds) || delaySeconds < 60 || delaySeconds > 604800) {
+      console.warn(`[CLAUDE-CODE] ScheduleWakeup ignored: invalid delaySeconds=${rawDelay}`);
+      return;
+    }
+    if (!prompt) {
+      console.warn('[CLAUDE-CODE] ScheduleWakeup ignored: missing prompt');
+      return;
+    }
+
+    const id = `wakeup-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const fireAt = new Date(Date.now() + delaySeconds * 1000);
+
+    const row = await getSessionWakeupsStore().create({
+      id,
+      sessionId,
+      workspaceId: workspacePath,
+      prompt,
+      reason,
+      fireAt,
+    });
+    SessionWakeupScheduler.getInstance().onCreated(row);
+
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) {
+        try {
+          window.webContents.send('wakeup:changed', row);
+        } catch {
+          // ignore destroyed window
+        }
+      }
+    }
+
+    console.log(`[CLAUDE-CODE] ScheduleWakeup -> session=${sessionId} fireAt=${fireAt.toISOString()} delay=${delaySeconds}s`);
+  }
+
   private async emitTodoUpdate(sessionId: string | undefined, todos: any[]): Promise<void> {
 
     if (!sessionId) {
