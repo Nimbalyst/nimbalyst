@@ -20,6 +20,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.58.11] - 2026-04-29
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Fire `ScheduleWakeup` tool calls in Claude Code sessions: the CLI emits a tool_result that looks successful but nothing in the SDK actually fires the wakeup. Intercept `ScheduleWakeup` in the `tool_use` stream and route it through `SessionWakeupScheduler` so the prompt is re-queued at fire time.
+- Spawn-safe paths for codex-acp and Copilot install detection in packaged builds. `resolveCodexAcpBinary` returned a path inside `app.asar` (require.resolve in packaged Electron resolves through the asar virtual filesystem); `spawn`'s native `execve` walks the real disk, hits `app.asar` (a regular file), and fails with `ENOTDIR`. Now rewrites `app.asar` -> `app.asar.unpacked`, mirroring what the claude and codex resolvers already do. The Copilot settings panel's "is it installed?" check used the enhanced PATH (Homebrew, npm-global) while `CopilotCLIProvider.isCopilotInstalled` used bare PATH, so a packaged macOS app launched from Finder/Dock (with only `/usr/bin:/bin:/usr/sbin:/sbin`) disagreed with itself; both paths now use the same `enhancedPathLoader`.
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.58.10] - 2026-04-28
 
 
