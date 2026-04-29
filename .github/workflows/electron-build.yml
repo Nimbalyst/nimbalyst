@@ -281,6 +281,9 @@ jobs:
         working-directory: packages/runtime
         env:
           NODE_ENV: production
+          # 2GB default OOMs on the GitHub-hosted mac runner; mirror the
+          # electron build script's bump.
+          NODE_OPTIONS: --max-old-space-size=8192
         run: npm run build
 
       - name: Build extensions
