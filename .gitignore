@@ -180,3 +180,22 @@ e2e_test_output/
 e2e-screenshots/
 test-results/
 .superloop/
+
+# Generated marketing assets
+packages/electron/marketing/output/
+packages/electron/marketing/screenshots/
+packages/electron/marketing/videos/
+
+# Test screenshots
+packages/electron/e2e/permissions/screenshots/
+packages/ios/screenshots/
+
+# Auto-generated platform artifacts
+packages/android/app/schemas/
+packages/marketplace/.wrangler/
+
+# Scratch/working directories at repo root (not source)
+/marketing/
+/e2e/
+/tests/
+/test-offscreen-editors/
