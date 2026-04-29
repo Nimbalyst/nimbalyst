@@ -103,6 +103,8 @@ Download the latest version for your platform:
 
 Nimbalyst automatically checks for updates and notifies you when a new version is available. You can also manually check via Help → Check for Updates.
 
+By default, fresh installs are on the **stable** release channel and only receive promoted releases. If you want early-access builds, switch to the **alpha** channel under **Settings → Advanced → Release Channel**. Alpha builds are rougher and may break; revert to stable any time.
+
 ## Telemetry
 
 Nimbalyst sends **anonymous usage analytics** to PostHog so we can understand how the app is used and prioritize improvements. We never collect:
