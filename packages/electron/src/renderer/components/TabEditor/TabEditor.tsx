@@ -146,31 +146,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   // Detect file type (markdown vs code vs image vs custom)
   // Re-computed when registry changes (registryVersion dependency)
   const fileType = useMemo(() => {
-    // Extract extension and check if custom editor is registered
-    // Handle compound extensions like .mockup.html by checking multiple levels
-    const checkCustomEditor = (ext: string): boolean => {
-      const lastDot = filePath.lastIndexOf('.');
-      if (lastDot <= 0) return false;
-
-      const singleExt = filePath.substring(lastDot).toLowerCase();
-
-      // Check single extension first (e.g., .html)
-      if (customEditorRegistry.hasEditor(singleExt)) {
-        return true;
-      }
-
-      // Check compound extension (e.g., .mockup.html)
-      const secondLastDot = filePath.lastIndexOf('.', lastDot - 1);
-      if (secondLastDot > 0) {
-        const compoundExt = filePath.substring(secondLastDot).toLowerCase();
-        if (customEditorRegistry.hasEditor(compoundExt)) {
-          return true;
-        }
-      }
-
-      return false;
-    };
-
+    const checkCustomEditor = (): boolean =>
+      customEditorRegistry.findRegistrationForFile(filePath) !== undefined;
     return getFileType(filePath, checkCustomEditor);
   }, [filePath, registryVersion]);
 
@@ -181,25 +158,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   // Get the custom editor registration for this file (used for source mode and storage)
   const customEditorRegistration = useMemo(() => {
     if (!isCustom) return null;
-
-    // Try to find the editor registration for this file
-    const lastDot = filePath.lastIndexOf('.');
-    if (lastDot <= 0) return null;
-
-    // Try single extension first
-    const singleExt = filePath.substring(lastDot).toLowerCase();
-    let registration = customEditorRegistry.getRegistration(singleExt);
-
-    // Try compound extension if single didn't match
-    if (!registration) {
-      const secondLastDot = filePath.lastIndexOf('.', lastDot - 1);
-      if (secondLastDot > 0) {
-        const compoundExt = filePath.substring(secondLastDot).toLowerCase();
-        registration = customEditorRegistry.getRegistration(compoundExt);
-      }
-    }
-
-    return registration;
+    return customEditorRegistry.findRegistrationForFile(filePath) ?? null;
   }, [isCustom, filePath, registryVersion]);
 
   // Check if the custom editor supports source mode (from registry)
@@ -242,20 +201,19 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     if (isActive && isEditorReady && hasTrackedOpenRef.current !== filePath) {
       hasTrackedOpenRef.current = filePath;
 
-      // Determine file extension for tracking (handles compound extensions like .mockup.html)
-      const lowerPath = filePath.toLowerCase();
+      // Determine file extension and editor category for tracking.
+      // For custom editors, prefer the registered key (e.g., '.reddit.watch.json',
+      // '.mockup.html') so analytics reflects the compound extension the editor
+      // was matched on, not just the file's final segment.
+      const customMatch = customEditorRegistry.findMatchForFile(filePath);
       let fileExtension: string;
-
-      // Check for compound extensions first
-      if (lowerPath.endsWith('.mockup.html')) {
-        fileExtension = '.mockup.html';
+      if (customMatch) {
+        fileExtension = customMatch.key;
       } else {
-        // Standard single extension
         const lastDot = filePath.lastIndexOf('.');
         fileExtension = lastDot >= 0 ? filePath.substring(lastDot).toLowerCase() : '';
       }
 
-      // Determine editor category
       let editorCategory = 'monaco'; // default for code files
       let hasMermaid = false;
       let hasDataModel = false;
@@ -274,8 +232,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         editorCategory = 'image';
       } else if (isCustom) {
         // Use the registered editor name (e.g., "Spreadsheet Editor", "PDF Viewer")
-        const registration = customEditorRegistry.getRegistration(fileExtension);
-        editorCategory = registration?.name || 'custom';
+        editorCategory = customMatch?.registration.name || 'custom';
       }
 
       posthog?.capture('editor_type_opened', {
@@ -2332,25 +2289,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               );
             }
 
-            // Render custom editor if one is registered for this file type
-            // Check for compound extensions like .mockup.html
-            const lastDot = filePath.lastIndexOf('.');
-            let registration = null;
-
-            if (lastDot > 0) {
-              // Try single extension first
-              const singleExt = filePath.substring(lastDot).toLowerCase();
-              registration = customEditorRegistry.getRegistration(singleExt);
-
-              // Try compound extension if single didn't match
-              if (!registration) {
-                const secondLastDot = filePath.lastIndexOf('.', lastDot - 1);
-                if (secondLastDot > 0) {
-                  const compoundExt = filePath.substring(secondLastDot).toLowerCase();
-                  registration = customEditorRegistry.getRegistration(compoundExt);
-                }
-              }
-            }
+            // Render custom editor if one is registered for this file's
+            // extension. Supports compound extensions of any depth via
+            // longest-suffix match (e.g. .mockup.html, .reddit.watch.json).
+            const registration = customEditorRegistry.findRegistrationForFile(filePath) ?? null;
 
             if (registration) {
               // Mark editor as ready when custom editor mounts

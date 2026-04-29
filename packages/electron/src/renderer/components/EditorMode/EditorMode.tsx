@@ -314,7 +314,6 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   useEffect(() => {
     if (!currentFilePath || !workspacePath) return;
 
-    // Check if this is a custom editor file
     const lastDot = currentFilePath.lastIndexOf('.');
     if (lastDot <= 0) return;
 
@@ -323,18 +322,9 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     // Skip markdown files - they update MCP state via useIPCHandlers
     if (ext === '.md' || ext === '.markdown') return;
 
-    // Check if it's a custom editor (either single or compound extension)
-    const isCustom = customEditorRegistry.hasEditor(ext) ||
-      (() => {
-        const secondLastDot = currentFilePath.lastIndexOf('.', lastDot - 1);
-        if (secondLastDot > 0) {
-          const compoundExt = currentFilePath.substring(secondLastDot).toLowerCase();
-          return customEditorRegistry.hasEditor(compoundExt);
-        }
-        return false;
-      })();
-
-    if (!isCustom) return;
+    // Longest-suffix match handles single and arbitrary-depth compound
+    // extensions (.mockup.html, .reddit.watch.json, etc.)
+    if (!customEditorRegistry.findRegistrationForFile(currentFilePath)) return;
 
     // Update MCP document state for custom editor
     if (window.electronAPI?.updateMcpDocumentState) {

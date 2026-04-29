@@ -101,6 +101,37 @@ class CustomEditorRegistry {
   }
 
   /**
+   * Find the best match for a file path by longest-suffix match across all
+   * registered keys. Supports compound extensions of any depth
+   * (e.g. `.reddit.watch.json`). Returns the matched key alongside the
+   * registration, or undefined if no key is a suffix of the filename.
+   */
+  findMatchForFile(
+    filePath: string
+  ): { key: string; registration: CustomEditorRegistration } | undefined {
+    const lastSlash = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+    const basename = (lastSlash >= 0 ? filePath.substring(lastSlash + 1) : filePath).toLowerCase();
+
+    let bestKey: string | undefined;
+    for (const key of this.registrations.keys()) {
+      if (basename.endsWith(key) && (!bestKey || key.length > bestKey.length)) {
+        bestKey = key;
+      }
+    }
+    if (!bestKey) return undefined;
+    const registration = this.registrations.get(bestKey);
+    return registration ? { key: bestKey, registration } : undefined;
+  }
+
+  /**
+   * Convenience wrapper around `findMatchForFile` that returns just the
+   * registration, for callers that don't need the matched key.
+   */
+  findRegistrationForFile(filePath: string): CustomEditorRegistration | undefined {
+    return this.findMatchForFile(filePath)?.registration;
+  }
+
+  /**
    * Unregister a custom editor for specific extensions
    */
   unregister(extensions: string[]): void {
