@@ -1191,7 +1191,14 @@ export class CodexACPProtocol implements AgentProtocol {
     try {
       const require = createRequire(import.meta.url);
       const packageJsonPath = require.resolve(`@zed-industries/${packageName}/package.json`);
-      const candidate = path.join(path.dirname(packageJsonPath), 'bin', binaryName);
+      // In packaged Electron builds, require.resolve returns a path inside
+      // app.asar (a regular file on disk that Electron's fs reads through
+      // virtually). spawn() goes through the native execve, which walks
+      // path components and fails with ENOTDIR when it hits app.asar. The
+      // real binary lives in app.asar.unpacked, so rewrite the path before
+      // returning.
+      const rewritten = packageJsonPath.replace(/app\.asar(?=[/\\])/, 'app.asar.unpacked');
+      const candidate = path.join(path.dirname(rewritten), 'bin', binaryName);
       if (existsSync(candidate)) {
         return candidate;
       }

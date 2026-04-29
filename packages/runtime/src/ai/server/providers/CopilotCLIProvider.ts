@@ -391,8 +391,23 @@ export class CopilotCLIProvider extends BaseAgentProvider {
 
   private static isCopilotInstalled(): boolean {
     const command = CopilotCLIProvider.copilotPathLoader?.() || 'copilot';
+    // Use the enhanced PATH (Homebrew, npm-global, etc.) so the runtime
+    // check matches what the settings panel sees. A packaged macOS app
+    // launched from Finder/Dock has only /usr/bin:/bin:/usr/sbin:/sbin in
+    // process.env.PATH, which misses every place copilot is typically
+    // installed -- so without this the panel reports "Installed" while
+    // the provider says "not installed", or the provider fails after the
+    // user installs successfully.
+    let env: NodeJS.ProcessEnv | undefined;
+    if (CopilotCLIProvider.enhancedPathLoader) {
+      try {
+        env = { ...process.env, PATH: CopilotCLIProvider.enhancedPathLoader() };
+      } catch {
+        // fall through to default env
+      }
+    }
     try {
-      execFileSync(command, ['--version'], { stdio: 'pipe', timeout: 5000 });
+      execFileSync(command, ['--version'], { stdio: 'pipe', timeout: 5000, env });
       return true;
     } catch {
       return false;
