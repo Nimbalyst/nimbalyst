@@ -305,6 +305,7 @@ tracker_create({
 - **Never use emojis** - Not in commits, code, or documentation unless explicitly requested
 - **Never use overly enthusiastic phrases** like "Perfect!", "Terrific!", etc.
 - **Never commit changes unless explicitly asked**
+- **Never commit files under `nimbalyst-local/`** - This directory contains local-only plans, diagrams, and working files that are never checked into git. Do not stage or include them in any commit.
 - **Never provide time or effort estimates**
 - **Don't disable tests without asking first**
 - **Don't run \****`npm run dev`**\*\* yourself** - User always does that

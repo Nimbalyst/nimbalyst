@@ -164,7 +164,7 @@ Register custom editors for matching file types.
 | `displayName` | `string` | Name shown in the editor selector |
 | `component` | `string` | Key in your exported `components` object |
 | `supportsSourceMode` | `boolean` | Enables the host's source-mode toggle |
-| `supportsDiffMode` | `boolean` | Enables the host's AI diff review mode. Defaults to `true` when omitted |
+| `supportsDiffMode` | `boolean` | Enables the host's AI diff review mode (approve/reject bar). Defaults to `false` - must be explicitly set to `true` to enable. |
 | `showDocumentHeader` | `boolean` | Shows the host-provided document header above the editor. Defaults to `true` when omitted |
 
 ### `documentHeaders`

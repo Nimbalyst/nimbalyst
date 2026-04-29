@@ -14,4 +14,8 @@ describe('getMonacoTheme', () => {
   it('preserves support for legacy namespaced theme IDs', () => {
     expect(getMonacoTheme('light', undefined, 'sample-themes:monokai')).toBe('monokai');
   });
+
+  it('maps crystal-dark to Monaco dark theme', () => {
+    expect(getMonacoTheme('crystal-dark')).toBe('vs-dark');
+  });
 });
