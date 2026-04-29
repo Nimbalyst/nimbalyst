@@ -2,6 +2,7 @@
   "name": "@nimbalyst/collabv3",
   "version": "0.1.63",
   "private": true,
+  "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --local --ip 0.0.0.0",
