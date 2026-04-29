@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
-## [0.58.13] - 2026-04-29
+## [0.58.14] - 2026-04-29
 
 
 ### Added
@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Final Stravu -> Nimbalyst rename ahead of OSS launch: rename `StravuEditor` component, `viteStravuPlugin`, and the `.stravu-editor` CSS class (~250 selectors), drop legacy `@stravu/runtime` path-alias compat shims, dedupe remaining `@nimbalyst/runtime` aliases. GitHub publish target and dev paths align to `nimbalyst/nimbalyst` (collapses prior `nimbalyst-code/nimbalyst` dual-repo split). Renames localStorage keys, the `~/Library/Logs` path, and the bin path; converts absolute markdown links to relative paths. iOS crypto test fixtures left as-is (encryption vectors are computed against the literal old path).
 - OSS prep: import public-repo assets and merge launch README (issue/PR templates, marketing hero images, telemetry section, dual-license note); add community health files (CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md); declare AGPL-3.0-only on `@nimbalyst/collabv3`; move marketing images to `.github/assets/`; point CI at the public repo and drop the obsolete `publish-public` workflow; gitignore generated outputs (marketing screenshots/videos, e2e permissions screenshots, Android Room schemas, wrangler local state) and root scratch dirs; stop tracking root-level working docs and old plan files; document stable vs alpha update channel in README.
+- Make GitHub Release promotion opt-in: tag pushes now build and upload to the R2 alpha channel only; creating a public GitHub Release requires explicitly running `electron-build.yml` with `create_github_release=true`. Releases are created as drafts so they require an explicit Publish click before becoming visible. Pass `--publish never` to electron-builder on every platform so the build step never creates a Release on its own.
 - Loud warning in extension SDK manifest reference: `supportsDiffMode` defaults to `false` and must be explicitly set to `true`.
 - iOS: stop committing the built `transcript-dist` and `editor-dist` bundles (Xcode pre-build script regenerates them; was adding ~7.5MB of churn per Vite content-hashed rebuild).
 
@@ -39,6 +40,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 - Unused `PostHogSurvey` component (replaced by `FeedbackIntakeDialog` flow in v0.58.10; no remaining references).
+
+<!--
+NOTE: v0.58.13 was tagged but never shipped to R2 -- the release build hit a
+403 (Resource not accessible by integration) at electron-builder's GitHub
+publish step because CI ran on nimbalyst-code with a token that can't write
+to nimbalyst/nimbalyst. The "Make GitHub Release promotion opt-in" change
+above (--publish never) is the fix; v0.58.14 bundles all of v0.58.13's
+intended changes plus that fix.
+-->
+
 
 ## [0.58.12] - 2026-04-29
 
