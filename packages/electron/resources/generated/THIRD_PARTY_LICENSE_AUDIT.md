@@ -2,31 +2,36 @@
 
 Generated from `package-lock.json` and installed package legal files.
 
-- Packages scanned: 738
-- Review required: 4
+- Packages scanned: 766
+- Review required: 0
+- Approved exceptions: 3
 
 ## License Counts
 
-- Apache-2.0: 29
-- BlueOak-1.0.0: 8
-- BSD-2-Clause: 4
-- BSD-3-Clause: 27
+- Apache-2.0: 37
+- BlueOak-1.0.0: 9
+- BSD-2-Clause: 5
+- BSD-3-Clause: 28
 - CC0-1.0: 1
 - EPL-2.0: 1
-- ISC: 56
+- ISC: 55
 - LGPL-3.0: 1
-- MIT: 607
+- MIT: 626
 - Python-2.0: 1
 - SEE LICENSE IN README.md: 1
-- Unknown: 1
 - Unlicense: 1
 
 ## Review Required
 
-- @anthropic-ai/claude-agent-sdk@0.2.87: License references an external file but could not be inferred: SEE LICENSE IN README.md; Unable to determine a concrete license from package metadata or legal files
-- elkjs@0.11.0: Manual review required for license EPL-2.0
-- format@0.2.2: Unable to determine a concrete license from package metadata or legal files
-- libheif-js@1.19.8: Manual review required for license LGPL-3.0
+- None
+
+## Approved Exceptions
+
+Packages with non-permissive licenses that have been manually reviewed and approved. See `packages/electron/build/license-approvals.json` for the source of truth.
+
+- **@anthropic-ai/claude-agent-sdk@0.2.117** (Anthropic Commercial): Anthropic commercial license (https://code.claude.com/docs/en/legal-and-compliance). Permits use by developers writing code locally, which is exactly how Nimbalyst integrates the SDK. Used unmodified.
+- **elkjs@0.11.1** (EPL-2.0): Eclipse Public License 2.0. Bundled unmodified as a JavaScript library. EPL-2.0 is a file-level weak copyleft that permits this without affecting Nimbalyst's licensing; only modifications to elkjs itself would need to be released under EPL-2.0.
+- **libheif-js@1.19.8** (LGPL-3.0): GNU Lesser GPL 3.0. Bundled unmodified as a JavaScript module loaded at runtime from node_modules; users can substitute their own build. License text is included in THIRD_PARTY_NOTICES.txt. No copyleft contagion to Nimbalyst's source.
 
 ## Output Files
 

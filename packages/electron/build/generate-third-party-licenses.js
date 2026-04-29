@@ -8,6 +8,7 @@ const noticesPath = path.join(outputDir, 'THIRD_PARTY_NOTICES.txt');
 const inventoryPath = path.join(outputDir, 'THIRD_PARTY_LICENSES.json');
 const auditPath = path.join(outputDir, 'THIRD_PARTY_LICENSE_AUDIT.md');
 const lockfilePath = path.join(repoRoot, 'package-lock.json');
+const approvalsPath = path.join(electronRoot, 'build', 'license-approvals.json');
 
 const reviewMode = process.argv.includes('--check');
 
@@ -35,6 +36,7 @@ const REVIEW_LICENSE_PATTERNS = [
 
 function main() {
   const lockfile = JSON.parse(fs.readFileSync(lockfilePath, 'utf8'));
+  const approvals = loadApprovals();
   const workspaceRoots = getWorkspaceRoots();
   const packages = lockfile.packages || {};
   const visited = new Set();
@@ -48,6 +50,8 @@ function main() {
     a.name.localeCompare(b.name) ||
     a.version.localeCompare(b.version)
   );
+
+  applyApprovals(records, approvals);
 
   const summary = buildSummary(records);
   const inventory = {
@@ -76,6 +80,31 @@ function main() {
       console.error(`- ${pkg.name}@${pkg.version}: ${pkg.reviewReasons.join('; ')}`);
     }
     process.exitCode = 1;
+  }
+}
+
+function loadApprovals() {
+  if (!fs.existsSync(approvalsPath)) return new Map();
+  const raw = JSON.parse(fs.readFileSync(approvalsPath, 'utf8'));
+  const entries = Array.isArray(raw.approvals) ? raw.approvals : [];
+  const map = new Map();
+  for (const entry of entries) {
+    if (entry && typeof entry.name === 'string' && typeof entry.reason === 'string') {
+      map.set(entry.name, { license: entry.license || null, reason: entry.reason });
+    }
+  }
+  return map;
+}
+
+function applyApprovals(records, approvals) {
+  for (const record of records) {
+    const approval = approvals.get(record.name);
+    if (!approval) continue;
+    record.approved = true;
+    record.approvalReason = approval.reason;
+    record.approvalLicense = approval.license;
+    record.reviewRequired = false;
+    record.reviewReasons = [];
   }
 }
 
@@ -151,7 +180,7 @@ function parentKey(key) {
 function buildPackageRecord(key, info) {
   const packageDir = path.join(repoRoot, key);
   const packageName = getPackageNameFromKey(key);
-  const rawLicense = normalizeLicenseString(info.license);
+  const rawLicense = normalizeLicenseString(info.license) || readLegacyLicense(packageDir);
   const licenseArtifacts = findLegalArtifacts(packageDir, ['license', 'licence', 'copying']);
   const noticeArtifacts = findLegalArtifacts(packageDir, ['notice']);
   const inferredFromText = detectLicenseFromArtifacts(licenseArtifacts);
@@ -185,6 +214,9 @@ function buildPackageRecord(key, info) {
     selectedLicense,
     reviewRequired: reviewReasons.length > 0,
     reviewReasons,
+    approved: false,
+    approvalReason: null,
+    approvalLicense: null,
     issues,
     installPaths: [key],
     resolved: info.resolved || null,
@@ -202,6 +234,29 @@ function normalizeLicenseString(value) {
   if (!value || typeof value !== 'string') return null;
   const trimmed = value.trim();
   return trimmed.length ? trimmed : null;
+}
+
+function readLegacyLicense(packageDir) {
+  const manifestPath = path.join(packageDir, 'package.json');
+  if (!fs.existsSync(manifestPath)) return null;
+  let manifest;
+  try {
+    manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  } catch {
+    return null;
+  }
+  const legacy = manifest.licenses;
+  if (Array.isArray(legacy) && legacy.length > 0) {
+    const types = legacy
+      .map((entry) => (entry && typeof entry === 'object' ? entry.type : entry))
+      .filter((value) => typeof value === 'string' && value.trim().length);
+    if (types.length === 1) return types[0].trim();
+    if (types.length > 1) return `(${types.map((t) => t.trim()).join(' OR ')})`;
+  }
+  if (legacy && typeof legacy === 'object' && typeof legacy.type === 'string') {
+    return legacy.type.trim() || null;
+  }
+  return null;
 }
 
 function findLegalArtifacts(packageDir, prefixes) {
@@ -316,6 +371,7 @@ function buildSummary(records) {
   return {
     packageCount: records.length,
     reviewRequiredCount: records.filter((record) => record.reviewRequired).length,
+    approvedExceptionCount: records.filter((record) => record.approved).length,
     licenseCounts: Object.fromEntries(Object.entries(licenseCounts).sort(([a], [b]) => a.localeCompare(b))),
     reviewRequiredPackages: records
       .filter((record) => record.reviewRequired)
@@ -323,6 +379,14 @@ function buildSummary(records) {
         name: record.name,
         version: record.version,
         reasons: record.reviewReasons,
+      })),
+    approvedExceptions: records
+      .filter((record) => record.approved)
+      .map((record) => ({
+        name: record.name,
+        version: record.version,
+        license: record.approvalLicense || record.selectedLicense || record.rawLicense || 'Unknown',
+        reason: record.approvalReason,
       })),
   };
 }
@@ -336,6 +400,7 @@ function renderNotices(records, summary) {
     '',
     `Package count: ${summary.packageCount}`,
     `Packages requiring manual review: ${summary.reviewRequiredCount}`,
+    `Approved exceptions (non-permissive licenses, manually reviewed): ${summary.approvedExceptionCount}`,
     '',
   ];
 
@@ -347,12 +412,23 @@ function renderNotices(records, summary) {
     sections.push('');
   }
 
+  if (summary.approvedExceptions.length > 0) {
+    sections.push('Approved exceptions:');
+    for (const pkg of summary.approvedExceptions) {
+      sections.push(`- ${pkg.name}@${pkg.version} (${pkg.license}): ${pkg.reason}`);
+    }
+    sections.push('');
+  }
+
   for (const record of records) {
     sections.push('='.repeat(80));
     sections.push(`${record.name}@${record.version}`);
     sections.push(`Selected license: ${record.selectedLicense || 'Unknown'}`);
     sections.push(`Declared license: ${record.rawLicense || 'Not declared'}`);
     sections.push(`Install paths: ${record.installPaths.join(', ')}`);
+    if (record.approved) {
+      sections.push(`Approved exception: ${record.approvalReason}`);
+    }
     if (record.reviewRequired) {
       sections.push(`Review required: ${record.reviewReasons.join('; ')}`);
     }
@@ -392,6 +468,7 @@ function renderAudit(records, summary) {
     '',
     `- Packages scanned: ${summary.packageCount}`,
     `- Review required: ${summary.reviewRequiredCount}`,
+    `- Approved exceptions: ${summary.approvedExceptionCount}`,
     '',
     '## License Counts',
     '',
@@ -410,6 +487,20 @@ function renderAudit(records, summary) {
   } else {
     for (const pkg of summary.reviewRequiredPackages) {
       lines.push(`- ${pkg.name}@${pkg.version}: ${pkg.reasons.join('; ')}`);
+    }
+  }
+
+  lines.push('');
+  lines.push('## Approved Exceptions');
+  lines.push('');
+  lines.push('Packages with non-permissive licenses that have been manually reviewed and approved. See `packages/electron/build/license-approvals.json` for the source of truth.');
+  lines.push('');
+
+  if (summary.approvedExceptions.length === 0) {
+    lines.push('- None');
+  } else {
+    for (const pkg of summary.approvedExceptions) {
+      lines.push(`- **${pkg.name}@${pkg.version}** (${pkg.license}): ${pkg.reason}`);
     }
   }
 
