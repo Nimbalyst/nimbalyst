@@ -44,6 +44,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const { spawnSync } = require('child_process');
 
 function parseArgs(argv) {
@@ -181,9 +182,18 @@ function runEsmImportChecks(specs) {
   const tmpNodeModules = path.join(tmpRoot, 'node_modules');
   const harnessPath = path.join(tmpRoot, '_validate.mjs');
 
-  fs.symlinkSync(path.resolve(nodeModulesPath), tmpNodeModules, 'dir');
+  // Windows can't create 'dir' symlinks without admin/Developer Mode, but
+  // 'junction' works without elevation and is what npm/yarn use internally.
+  // 'junction' is a no-op alias for 'dir' on POSIX, so we use it everywhere.
+  fs.symlinkSync(path.resolve(nodeModulesPath), tmpNodeModules, 'junction');
 
-  const expectedPrefix = 'file://' + path.resolve(nodeModulesPath);
+  // Build the prefix using pathToFileURL so it matches the form produced by
+  // import.meta.resolve. Hand-concatenating "file://" + an OS path breaks on
+  // Windows because (a) file URLs need three slashes for a drive letter
+  // ("file:///D:/...") and (b) Windows OS paths use backslashes, but file
+  // URLs always use forward slashes -- so a startsWith check on the wrong
+  // form falsely reports every resolved import as "outside the tree".
+  const expectedPrefix = pathToFileURL(path.resolve(nodeModulesPath)).href;
   const source = `
 import { createRequire } from 'node:module';
 const specs = ${JSON.stringify(specs)};
