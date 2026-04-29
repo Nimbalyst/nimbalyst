@@ -1219,6 +1219,37 @@ app.whenReady().then(async () => {
     // Uses main-process-native implementation that reads extension manifests directly
     ClaudeCodeProvider.setExtensionPluginsLoader(getClaudePluginPaths);
 
+    // ScheduleWakeup handler: the CLI emits ScheduleWakeup tool calls but its tool_result is
+    // informational only. Re-queue the prompt at fire time via SessionWakeupScheduler.
+    // Lives here in main because runtime is cross-platform (Capacitor/mobile too) and must
+    // not import Electron-only services.
+    ClaudeCodeProvider.setScheduleWakeupHandler(async ({ sessionId, workspacePath, delaySeconds, prompt, reason }) => {
+        const id = `wakeup-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        const fireAt = new Date(Date.now() + delaySeconds * 1000);
+
+        const row = await getSessionWakeupsStore().create({
+            id,
+            sessionId,
+            workspaceId: workspacePath,
+            prompt,
+            reason,
+            fireAt,
+        });
+        SessionWakeupScheduler.getInstance().onCreated(row);
+
+        for (const window of BrowserWindow.getAllWindows()) {
+            if (!window.isDestroyed()) {
+                try {
+                    window.webContents.send('wakeup:changed', row);
+                } catch {
+                    // ignore destroyed window
+                }
+            }
+        }
+
+        console.log(`[CLAUDE-CODE] ScheduleWakeup -> session=${sessionId} fireAt=${fireAt.toISOString()} delay=${delaySeconds}s`);
+    });
+
     // Inject Claude Code settings loader
     // This allows user/project commands to be enabled/disabled via settings
     ClaudeCodeProvider.setClaudeCodeSettingsLoader(async () => {

@@ -48,9 +48,6 @@ import { AgentMessagesRepository } from '../../../storage/repositories/AgentMess
 import { TeammateManager, type TeammateToLeadMessage } from './TeammateManager';
 import path from 'path';
 import os from 'os';
-import { app, BrowserWindow } from 'electron';
-import { SessionWakeupScheduler } from '../../../../../electron/src/main/services/SessionWakeupScheduler';
-import { getSessionWakeupsStore } from '../../../../../electron/src/main/services/RepositoryManager';
 import { buildClaudeCodeSystemPrompt, buildMetaAgentSystemPrompt } from '../../prompt';
 
 import { SessionManager } from '../SessionManager';
@@ -132,6 +129,14 @@ const SDK_NATIVE_TOOLS: readonly string[] = [
  */
 // CLAUDE_CODE_VARIANT_VERSIONS and CLAUDE_CODE_MODEL_LABELS now live in
 // `modelConstants.ts` so the renderer can share them — see comment there.
+
+export interface ScheduleWakeupRequest {
+  sessionId: string;
+  workspacePath: string;
+  delaySeconds: number;
+  prompt: string;
+  reason: string;
+}
 
 export class ClaudeCodeProvider extends BaseAgentProvider {
   private currentMode?: 'planning' | 'agent'; // Track session mode for prompt customization and tool filtering
@@ -368,6 +373,11 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   public static setClaudeSettingsPatternChecker(checker: ((workspacePath: string, pattern: string) => Promise<boolean>) | null): void { ClaudeCodeDeps.setClaudeSettingsPatternChecker(checker); }
   public static setTrustChecker(checker: ((workspacePath: string) => { trusted: boolean; mode: 'ask' | 'allow-all' | 'bypass-all' | null }) | null): void { BaseAgentProvider.setTrustChecker(checker); }
   public static setExtensionFileTypesLoader(loader: (() => Set<string>) | null): void { ClaudeCodeDeps.setExtensionFileTypesLoader(loader); }
+
+  private static scheduleWakeupHandler: ((request: ScheduleWakeupRequest) => Promise<void>) | null = null;
+  public static setScheduleWakeupHandler(handler: ((request: ScheduleWakeupRequest) => Promise<void>) | null): void {
+    ClaudeCodeProvider.scheduleWakeupHandler = handler;
+  }
 
   async initialize(config: ProviderConfig): Promise<void> {
     const safeConfig = { ...config, apiKey: config.apiKey ? '***' : undefined };
@@ -1700,30 +1710,13 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       return;
     }
 
-    const id = `wakeup-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-    const fireAt = new Date(Date.now() + delaySeconds * 1000);
-
-    const row = await getSessionWakeupsStore().create({
-      id,
-      sessionId,
-      workspaceId: workspacePath,
-      prompt,
-      reason,
-      fireAt,
-    });
-    SessionWakeupScheduler.getInstance().onCreated(row);
-
-    for (const window of BrowserWindow.getAllWindows()) {
-      if (!window.isDestroyed()) {
-        try {
-          window.webContents.send('wakeup:changed', row);
-        } catch {
-          // ignore destroyed window
-        }
-      }
+    const handler = ClaudeCodeProvider.scheduleWakeupHandler;
+    if (!handler) {
+      console.warn('[CLAUDE-CODE] ScheduleWakeup ignored: no handler registered');
+      return;
     }
 
-    console.log(`[CLAUDE-CODE] ScheduleWakeup -> session=${sessionId} fireAt=${fireAt.toISOString()} delay=${delaySeconds}s`);
+    await handler({ sessionId, workspacePath, delaySeconds, prompt, reason });
   }
 
   private async emitTodoUpdate(sessionId: string | undefined, todos: any[]): Promise<void> {
