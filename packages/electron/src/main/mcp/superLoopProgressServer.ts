@@ -233,7 +233,7 @@ function createSuperLoopProgressMcpServer(aiSessionId: string): Server {
     }
   );
 
-  server.onerror = (error) => {
+  (server as { onerror?: (error: Error) => void }).onerror = (error: Error) => {
     console.error("[MCP:nimbalyst-super-loop-progress] Server error:", error);
   };
 

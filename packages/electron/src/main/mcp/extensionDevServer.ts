@@ -855,7 +855,7 @@ function createExtensionDevMcpServer(
     }
   );
 
-  server.onerror = (error) => {
+  (server as { onerror?: (error: Error) => void }).onerror = (error: Error) => {
     console.error("[MCP:nimbalyst-extension-dev] Server error:", error);
   };
 

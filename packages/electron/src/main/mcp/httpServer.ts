@@ -288,7 +288,7 @@ function createSharedMcpServer(
     { capabilities: { tools: { listChanged: true } } }
   );
 
-  server.onerror = (error) => {
+  (server as { onerror?: (error: Error) => void }).onerror = (error: Error) => {
     console.error("[MCP:nimbalyst-mcp] Server error:", error);
   };
 

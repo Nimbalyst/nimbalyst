@@ -270,7 +270,7 @@ function createSessionNamingMcpServer(aiSessionId: string): Server {
     }
   );
 
-  server.onerror = (error) => {
+  (server as { onerror?: (error: Error) => void }).onerror = (error: Error) => {
     console.error("[MCP:nimbalyst-session-naming] Server error:", error);
   };
 
