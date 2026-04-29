@@ -42,6 +42,17 @@ function classifyUpdateError(error: Error): string {
   return 'unknown';
 }
 
+// Antivirus on Windows often holds a transient handle on the freshly-downloaded
+// installer, causing electron-updater's temp -> final rename to fail with EPERM
+// (occasionally EBUSY). The fix is to wait briefly and retry the download once.
+function isWindowsRenameLockError(err: Error): boolean {
+  if (process.platform !== 'win32') return false;
+  const msg = err.message || '';
+  if (/\bEPERM\b.*\brename\b/i.test(msg)) return true;
+  if (/\bEBUSY\b/i.test(msg)) return true;
+  return false;
+}
+
 export class AutoUpdaterService {
   private updateCheckInterval: NodeJS.Timeout | null = null;
   private isCheckingForUpdate = false;
@@ -49,6 +60,7 @@ export class AutoUpdaterService {
   private static isUpdating = false;
   private pendingUpdateInfo: { version: string; releaseNotes?: string; releaseDate?: string } | null = null;
   private downloadStartTime: number | null = null; // Track download start time for duration analytics
+  private downloadRetryAttempted = false; // Windows EPERM rename retry guard (one retry per user-initiated download)
 
   constructor() {
     // Configure electron-updater logger
@@ -127,7 +139,7 @@ export class AutoUpdaterService {
           log.error('Error fetching release notes from R2:', err);
         }
       } else {
-        log.info('Not fetching from R2 - either not alpha channel or releaseNotes already present');
+        log.debug('Not fetching from R2 - either not alpha channel or releaseNotes already present');
       }
 
       log.info(`Final releaseNotes being sent to window: "${releaseNotes?.substring(0, 100)}..."`);
@@ -171,15 +183,32 @@ export class AutoUpdaterService {
       this.isCheckingForUpdate = false;
       this.isManualCheck = false; // Reset manual check flag
 
+      // Windows-only: antivirus often holds a transient handle on the freshly
+      // downloaded installer, so electron-updater's temp -> final rename throws
+      // EPERM. Clean the pending dir and retry once after a short delay.
+      const wasDownloading = this.downloadStartTime !== null;
+      if (wasDownloading && !this.downloadRetryAttempted && isWindowsRenameLockError(err)) {
+        this.downloadRetryAttempted = true;
+        log.warn('Windows rename lock during update; cleaning pending dir and retrying once');
+        this.cleanupWindowsPendingDirectory();
+        setTimeout(() => {
+          autoUpdater.downloadUpdate().catch(retryErr => {
+            log.error('Retry of downloadUpdate failed:', retryErr);
+          });
+        }, 3000);
+        return;
+      }
+
       // Track update error - determine stage based on context
       // If downloadStartTime is set, we were downloading; otherwise it was a check error
-      const stage = this.downloadStartTime ? 'download' : 'check';
+      const stage = wasDownloading ? 'download' : 'check';
       AnalyticsService.getInstance().sendEvent('update_error', {
         stage,
         error_type: classifyUpdateError(err),
         release_channel: getReleaseChannel()
       });
       this.downloadStartTime = null;
+      this.downloadRetryAttempted = false;
 
       // Send error to frontmost window via toast system
       this.sendToFrontmostWindow('update-toast:error', {
@@ -218,6 +247,9 @@ export class AutoUpdaterService {
       });
       this.downloadStartTime = null;
 
+      // Reset retry guard now that we have a successful download in pending
+      this.downloadRetryAttempted = false;
+
       // Send ready notification to frontmost window via toast system
       this.sendToFrontmostWindow('update-toast:show-ready', {
         version: info.version
@@ -225,6 +257,35 @@ export class AutoUpdaterService {
 
       this.sendToAllWindows('update-downloaded', info);
     });
+  }
+
+  /**
+   * Compute the electron-updater pending download directory on Windows.
+   * Mirrors electron-updater's path resolution: `${baseCachePath}\${appName}-updater\pending`,
+   * where baseCachePath on Windows is %LOCALAPPDATA% and appName is `app.getName()`.
+   */
+  private getWindowsPendingDirectory(): string | null {
+    if (process.platform !== 'win32') return null;
+    const baseCachePath = process.env['LOCALAPPDATA'] || path.join(app.getPath('home'), 'AppData', 'Local');
+    return path.join(baseCachePath, `${app.getName()}-updater`, 'pending');
+  }
+
+  /**
+   * Delete the pending download directory on Windows. Stale or AV-locked files
+   * here are the most common cause of EPERM on the final temp -> installer rename.
+   * Non-fatal: best-effort, logs and continues on failure.
+   */
+  private cleanupWindowsPendingDirectory(): void {
+    const pendingDir = this.getWindowsPendingDirectory();
+    if (!pendingDir) return;
+    try {
+      if (fs.existsSync(pendingDir)) {
+        log.info(`Removing stale pending update directory: ${pendingDir}`);
+        fs.rmSync(pendingDir, { recursive: true, force: true });
+      }
+    } catch (err) {
+      log.warn('Failed to clean pending update directory:', err);
+    }
   }
 
   /**
@@ -365,10 +426,15 @@ export class AutoUpdaterService {
 
         // Track download started (user action tracking is done in renderer)
         this.downloadStartTime = Date.now();
+        this.downloadRetryAttempted = false;
         AnalyticsService.getInstance().sendEvent('update_download_started', {
           release_channel: getReleaseChannel(),
           new_version: this.pendingUpdateInfo?.version || 'unknown'
         });
+
+        // Windows: clear out any stale/locked installer left in the pending dir
+        // before starting a fresh download, to avoid EPERM on the final rename.
+        this.cleanupWindowsPendingDirectory();
 
         // In test mode, skip the actual download (tests will manually trigger progress)
         if (process.env.NODE_ENV !== 'test' && process.env.PLAYWRIGHT !== '1') {
