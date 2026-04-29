@@ -423,9 +423,9 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
           # Windows signing is handled post-build by DigiCert KeyLocker
           # CRITICAL: GH_TOKEN is required for electron-builder to publish releases
-          # The package.json "publish" config points to nimbalyst/nimbalyst-code (private repo)
-          # This enables electron-builder to create releases in the PRIVATE repo for internal testing
-          # Public releases are created separately via the publish-public.yml workflow
+          # The package.json "publish" config points to nimbalyst/nimbalyst (public repo)
+          # electron-builder creates the GitHub Release on tag push and attaches the
+          # built artifacts.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Require notarization for release builds
           # Release builds require notarization (push to tag, or explicit release input)
@@ -810,7 +810,7 @@ jobs:
           echo ""
           if [[ "${{ inputs.create_github_release }}" == "true" ]]; then
             echo "✅ GitHub Release created at:"
-            echo "   https://github.com/nimbalyst/nimbalyst-code/releases/tag/$VERSION"
+            echo "   https://github.com/nimbalyst/nimbalyst/releases/tag/$VERSION"
           else
             echo "ℹ️  GitHub Release NOT created (alpha testing only)"
             echo "   To promote to stable, re-run workflow with create_github_release=true"
