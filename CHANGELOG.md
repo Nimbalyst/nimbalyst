@@ -20,6 +20,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.58.13] - 2026-04-29
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+- Final Stravu -> Nimbalyst rename ahead of OSS launch: rename `StravuEditor` component, `viteStravuPlugin`, and the `.stravu-editor` CSS class (~250 selectors), drop legacy `@stravu/runtime` path-alias compat shims, dedupe remaining `@nimbalyst/runtime` aliases. GitHub publish target and dev paths align to `nimbalyst/nimbalyst` (collapses prior `nimbalyst-code/nimbalyst` dual-repo split). Renames localStorage keys, the `~/Library/Logs` path, and the bin path; converts absolute markdown links to relative paths. iOS crypto test fixtures left as-is (encryption vectors are computed against the literal old path).
+- OSS prep: import public-repo assets and merge launch README (issue/PR templates, marketing hero images, telemetry section, dual-license note); add community health files (CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md); declare AGPL-3.0-only on `@nimbalyst/collabv3`; move marketing images to `.github/assets/`; point CI at the public repo and drop the obsolete `publish-public` workflow; gitignore generated outputs (marketing screenshots/videos, e2e permissions screenshots, Android Room schemas, wrangler local state) and root scratch dirs; stop tracking root-level working docs and old plan files; document stable vs alpha update channel in README.
+- Loud warning in extension SDK manifest reference: `supportsDiffMode` defaults to `false` and must be explicitly set to `true`.
+- iOS: stop committing the built `transcript-dist` and `editor-dist` bundles (Xcode pre-build script regenerates them; was adding ~7.5MB of churn per Vite content-hashed rebuild).
+
+### Fixed
+- Restore inline screenshot preview in the agent transcript: the canonicalization refactor changed `tool_call.result` from a structured value to a JSON-stringified string, but `EditorScreenshotWidget` kept reading it as an array/object and silently dropped the image bytes -- the header rendered without the screenshot below it. Now parses `tool.result` via `parseToolResult()` before extracting image data, persisted-output references, and error info; regression test feeds the canonical JSON-stringified MCP image array and asserts a `data:` URL `<img>` is rendered.
+- Windows update download: recover from `EPERM` (or `EBUSY`) rename on antivirus-locked installer. Antivirus often holds a transient handle on the freshly downloaded installer, causing electron-updater's temp -> final rename to fail. Mitigate by cleaning the pending dir before each download and retrying once after a short delay when the rename lock is detected.
+- ScheduleWakeup runtime/Electron layering for vitest: `ClaudeCodeProvider` was importing `BrowserWindow` and Electron-only services (`SessionWakeupScheduler`, `RepositoryManager`) directly. Loading those modules in vitest's Node environment triggered electron-log to call `app.getPath()` with no app context, crashing 5 provider test files. Moves wakeup row creation, scheduler call, and IPC broadcast into a static handler the Electron main process registers at startup, mirroring the existing `setEnhancedPathLoader` pattern. Runtime stays cross-platform; the feature behavior is unchanged.
+
+### Removed
+- Unused `PostHogSurvey` component (replaced by `FeedbackIntakeDialog` flow in v0.58.10; no remaining references).
+
 ## [0.58.12] - 2026-04-29
 
 
