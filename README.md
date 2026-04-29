@@ -35,7 +35,7 @@ We rank features and bugs by 👍 reactions. Don't comment "+1" — react with �
 - Data Models
 - Code with Monaco
 
-![Nimbalyst files and editors](<./Nimbalyst Hero Files Dev Dark- Social.png>)
+![Nimbalyst files and editors](./.github/assets/nimbalyst-hero-files-dev-dark.png)
 
 **Session Management:** Manage coding agents' work across parallel sessions in a UI
 - Link sessions to files and files to sessions
@@ -44,7 +44,7 @@ We rank features and bugs by 👍 reactions. Don't comment "+1" — react with �
 - Search and resume sessions
 - Manage in a Kanban board
 
-![Nimbalyst session kanban](./Sessions_kanban_dark.webp)
+![Nimbalyst session kanban](./.github/assets/sessions-kanban-dark.webp)
 
 **Task Tracking:** Keep track of your plans, bugs, features, todos etc.
 - Have the agent edit tasks, add them, move them, and execute them
@@ -56,7 +56,7 @@ We rank features and bugs by 👍 reactions. Don't comment "+1" — react with �
 - Use the embedded ghostty terminal
 - Leverage worktrees
 
-![Nimbalyst developer view](./developers-dark.webp)
+![Nimbalyst developer view](./.github/assets/developers-dark.webp)
 
 **Mobile App**
 - Session dashboard: see which agents need you and which are still working
@@ -71,7 +71,7 @@ We rank features and bugs by 👍 reactions. Don't comment "+1" — react with �
 - Pluggable editors for any file type. Every editor (including built-ins) goes through the same `EditorHost` contract, so custom editors are first-class.
 - Current extensions include an Astro website editor, visual git log, mindmap, slides, and a 3D object editor.
 
-![Nimbalyst extension marketplace](./extension-marketplace-dark.png)
+![Nimbalyst extension marketplace](./.github/assets/extension-marketplace-dark.png)
 
 **Supported Coding Agents**
 - Codex
