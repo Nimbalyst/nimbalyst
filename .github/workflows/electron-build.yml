@@ -2,8 +2,12 @@ name: Build and Release Electron App
 
 on:
   push:
-    tags:
-      - 'v*'
+    # TEMP: tags trigger disabled during OSS-launch force-push so old tags
+    # (v0.58.5..v0.58.13) being repointed to dev SHAs don't each fire a
+    # ~30-min CI run. Restore in the follow-up commit once tags are pushed
+    # and the v0.58.14 promotion workflow_dispatch has been kicked off.
+    # tags:
+    #   - 'v*'
     branches:
       - 'release/**'
   pull_request:
