@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { useFloatingMenu, FloatingPortal, virtualElement } from '../../hooks/useFloatingMenu';
@@ -39,13 +39,10 @@ export function GutterContextMenu({ x, y, onClose, targetButton, workspacePath }
 
   const menu = useFloatingMenu({
     placement: 'right-start',
+    reference: vRef,
     open: true,
     onOpenChange: (open) => { if (!open) onClose(); },
   });
-
-  useEffect(() => {
-    menu.refs.setPositionReference(vRef);
-  }, [vRef, menu.refs]);
 
   const hasHidden = hiddenButtons.length > 0;
 

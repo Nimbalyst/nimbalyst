@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useMemo } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { useFloatingMenu, FloatingPortal, virtualElement } from '../hooks/useFloatingMenu';
 
@@ -43,15 +43,13 @@ export function FileTreeFilterMenu({
   gitWorktreeCount,
   onClose
 }: FileTreeFilterMenuProps) {
+  const reference = useMemo(() => virtualElement(x, y), [x, y]);
   const menu = useFloatingMenu({
     placement: 'right-start',
+    reference,
     open: true,
     onOpenChange: (open) => { if (!open) onClose(); },
   });
-
-  useEffect(() => {
-    menu.refs.setPositionReference(virtualElement(x, y));
-  }, [x, y, menu.refs]);
 
   const handleFilterSelect = (filter: FileTreeFilter, disabled?: boolean) => {
     if (disabled) {

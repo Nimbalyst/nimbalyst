@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useMemo } from 'react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { useFloatingMenu, FloatingPortal, virtualElement } from '../../hooks/useFloatingMenu';
 
@@ -15,15 +15,13 @@ export function TerminalContextMenu({
   onClose,
   onClear,
 }: TerminalContextMenuProps) {
+  const reference = useMemo(() => virtualElement(x, y), [x, y]);
   const menu = useFloatingMenu({
     placement: 'right-start',
+    reference,
     open: true,
     onOpenChange: (open) => { if (!open) onClose(); },
   });
-
-  useEffect(() => {
-    menu.refs.setPositionReference(virtualElement(x, y));
-  }, [x, y, menu.refs]);
 
   const handleClear = () => {
     onClear();

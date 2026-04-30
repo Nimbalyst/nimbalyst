@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import type { NewFileType, ExtensionFileType } from './NewFileMenu';
@@ -44,19 +44,16 @@ export function FileContextMenu({
   const [isRenaming, setIsRenaming] = useState(false);
   const [newName, setNewName] = useState(fileName);
   const inputRef = useRef<HTMLInputElement>(null);
+  const reference = useMemo(() => virtualElement(x, y), [x, y]);
 
   const menu = useFloatingMenu({
     placement: 'right-start',
+    reference,
     open: true,
     onOpenChange: (open) => {
       if (!open && !isRenaming) onClose();
     },
   });
-
-  // Set virtual element position from click coordinates
-  useEffect(() => {
-    menu.refs.setPositionReference(virtualElement(x, y));
-  }, [x, y, menu.refs]);
 
   useEffect(() => {
     if (isRenaming && inputRef.current) {
