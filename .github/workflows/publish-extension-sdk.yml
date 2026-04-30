@@ -35,6 +35,9 @@ jobs:
           cache: 'npm'
           cache-dependency-path: '**/package-lock.json'
 
+      - name: Upgrade npm for Trusted Publishing
+        run: npm install -g npm@latest
+
       - name: Install dependencies
         run: npm ci
 
@@ -54,12 +57,10 @@ jobs:
       - name: Run public release checks
         run: npm run extension-sdk:check-public
 
-      - name: Publish to npm
+      - name: Publish to npm (Trusted Publishing via OIDC)
         if: ${{ !inputs.dry_run }}
         working-directory: packages/extension-sdk
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --provenance --access public
+        run: npm publish --access public
 
       - name: Dry run pack
         if: ${{ inputs.dry_run }}
