@@ -212,7 +212,7 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
   // All static fields and setters live in ClaudeCodeDeps.
   // These forwarding setters maintain backward compatibility for callers.
 
-  public static setCustomClaudeCodePathLoader(loader: (() => string) | null): void { ClaudeCodeDeps.setCustomClaudeCodePathLoader(loader); }
+  public static setCustomClaudeCodePathLoader(loader: ((workspacePath?: string) => string | Promise<string>) | null): void { ClaudeCodeDeps.setCustomClaudeCodePathLoader(loader); }
 
   constructor() {
     super();

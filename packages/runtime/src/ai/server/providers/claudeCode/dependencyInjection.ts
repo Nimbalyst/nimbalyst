@@ -37,7 +37,7 @@ export const ClaudeCodeDeps = {
   // Re-read on each query so changes in the UI take effect without restart.
   // Receives the active workspace path so a project-level override can take precedence
   // over the global setting; pass `undefined` to read the global value.
-  customClaudeCodePathLoader: null as ((workspacePath?: string) => string) | null,
+  customClaudeCodePathLoader: null as ((workspacePath?: string) => string | Promise<string>) | null,
 
   // ---- MCP Server Ports ----
 
@@ -120,7 +120,7 @@ export const ClaudeCodeDeps = {
   // ---- Setters ----
   // Called from electron main process at startup
 
-  setCustomClaudeCodePathLoader(loader: ((workspacePath?: string) => string) | null): void {
+  setCustomClaudeCodePathLoader(loader: ((workspacePath?: string) => string | Promise<string>) | null): void {
     this.customClaudeCodePathLoader = loader;
   },
 

@@ -63,7 +63,9 @@ import {
     clearPendingThemeFallback,
     updateWorkspaceState,
     runMigrations,
-    getAppSetting
+    getAppSetting,
+    store,
+    getAIProviderOverrides
 } from './utils/store';
 import { registerMCPConfigHandlers } from './ipc/MCPConfigHandlers';
 import { getOpenCodeConfigService, registerOpenCodeConfigHandlers } from './ipc/OpenCodeConfigHandlers';
@@ -74,7 +76,7 @@ import { MCPConfigService } from './services/MCPConfigService';
 import { registerDatabaseBrowserHandlers } from './ipc/DatabaseBrowserHandlers';
 import { registerTerminalHandlers, shutdownTerminalHandlers } from './ipc/TerminalHandlers';
 import { AIService } from './services/ai/AIService';
-import { detectFileWorkspace, suggestWorkspaceForFile, getAdditionalDirectoriesForWorkspace } from './utils/workspaceDetection';
+import { detectFileWorkspace, suggestWorkspaceForFile, getAdditionalDirectoriesForWorkspace, isWorktreePath, resolveProjectPath } from './utils/workspaceDetection';
 import { cliManager, initEnhancedPath, getEnhancedPath, getShellEnvironment } from './services/CLIManager';
 import { registerWorkspaceWindow, registerExtensionTools, shutdownHttpServer, startMcpHttpServer, updateDocumentState } from './mcp/httpServer';
 import { startSessionContextServer, cleanupSessionContextServer, shutdownSessionContextServer } from './mcp/sessionContextServer';
@@ -124,7 +126,7 @@ import { initTrackerSchemaService, updateTrackerSchemaWorkspace } from './servic
 import { registerTeamHandlers, autoMatchTeamForWorkspace } from './services/TeamService';
 import { registerOrgKeyHandlers } from './services/OrgKeyService';
 import { registerDocumentSyncHandlers } from './ipc/DocumentSyncHandlers';
-import { getPermissionService } from './services/PermissionService';
+import { getPermissionService, resolveWorkspacePathForPermissions } from './services/PermissionService';
 import { ClaudeSettingsManager } from './services/ClaudeSettingsManager';
 import { TrayManager } from './tray/TrayManager';
 import { pathToFileURL } from 'url';
@@ -1676,21 +1678,46 @@ app.whenReady().then(async () => {
     markEnd('session-restore');
 
     // Set up a loader that reads customClaudeCodePath fresh from the store on each query,
-    // so changes in the UI take effect without restarting the app. Project-level overrides
-    // take precedence over the global value when a workspace path is provided.
-    const { store, getAIProviderOverrides } = await import('./utils/store');
-    ClaudeCodeProvider.setCustomClaudeCodePathLoader((workspacePath?: string) => {
+    // so changes in the UI take effect without restarting the app. The lookup tries the
+    // incoming workspace path first (so a worktree-specific override wins) and falls back
+    // to the parent project's override when the path is a worktree, mirroring how
+    // PermissionService resolves trust. Loader is async because parent resolution may hit
+    // the database; failures degrade gracefully to the synchronous regex fallback so a
+    // session is never blocked from starting.
+    ClaudeCodeProvider.setCustomClaudeCodePathLoader(async (workspacePath?: string) => {
       const globalPath = (store.get('customClaudeCodePath', '') as string) || '';
+
       if (!workspacePath) {
         return globalPath;
       }
-      const overrides = getAIProviderOverrides(workspacePath);
-      if (overrides?.customClaudeCodePath !== undefined) {
-        return overrides.customClaudeCodePath;
+
+      const directOverride = getAIProviderOverrides(workspacePath)?.customClaudeCodePath;
+      if (directOverride !== undefined) {
+        return directOverride;
       }
+
+      if (isWorktreePath(workspacePath)) {
+        let parentPath: string;
+        try {
+          parentPath = await resolveWorkspacePathForPermissions(workspacePath);
+        } catch (error) {
+          logger.main.warn(
+            `[ClaudeCodeProvider] Failed to resolve worktree parent via DB, falling back to regex: ${(error as Error).message}`
+          );
+          parentPath = resolveProjectPath(workspacePath);
+        }
+        const parentOverride = getAIProviderOverrides(parentPath)?.customClaudeCodePath;
+        if (parentOverride !== undefined) {
+          logger.main.info(
+            `[ClaudeCodeProvider] customClaudeCodePath: worktree '${workspacePath}' inherited from parent '${parentPath}'`
+          );
+          return parentOverride;
+        }
+      }
+
       return globalPath;
     });
-    logger.main.info('[ClaudeCodeProvider] Initialized customClaudeCodePath loader (workspace-aware)');
+    logger.main.info('[ClaudeCodeProvider] Initialized customClaudeCodePath loader (workspace-aware, worktree-aware)');
 
     // Close splash screen now that initialization is done and a real window is about to show.
     // The last restored window activates the app via its own ready-to-show handler.
