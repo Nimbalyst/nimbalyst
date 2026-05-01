@@ -1702,7 +1702,7 @@ app.whenReady().then(async () => {
           parentPath = await resolveWorkspacePathForPermissions(workspacePath);
         } catch (error) {
           logger.main.warn(
-            `[ClaudeCodeProvider] Failed to resolve worktree parent via DB, falling back to regex: ${(error as Error).message}`
+            `[ClaudeCodeProvider] Failed to resolve worktree parent via DB, falling back to regex: ${error instanceof Error ? error.message : String(error)}`
           );
           parentPath = resolveProjectPath(workspacePath);
         }
