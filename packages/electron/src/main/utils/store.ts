@@ -274,6 +274,8 @@ export interface ProviderOverride {
 export interface AIProviderOverrides {
   /** Override default provider for this project */
   defaultProvider?: string;
+  /** Override the path to a custom Claude Code executable for this project (empty string = use no custom path) */
+  customClaudeCodePath?: string;
   /** Per-provider overrides */
   providers?: Record<string, ProviderOverride>;
 }
@@ -994,7 +996,7 @@ function normalizeAIProviderOverrides(overrides: AIProviderOverrides | undefined
     const { 'openai-codex': _removed, ...restProviders } = normalizedProviders;
     const nextProviders = Object.keys(restProviders).length > 0 ? restProviders : undefined;
 
-    if (!nextProviders && !overrides.defaultProvider) {
+    if (!nextProviders && !overrides.defaultProvider && overrides.customClaudeCodePath === undefined) {
       return undefined;
     }
 

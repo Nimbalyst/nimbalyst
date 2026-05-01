@@ -3454,6 +3454,11 @@ export class AIService {
       const { 'openai-codex': _removed, ...restProviders } = normalizedProviders;
       if (Object.keys(restProviders).length === 0) {
         const { providers: _unusedProviders, ...restOverrides } = overrides;
+        // Drop fields that are explicitly empty so the override object collapses
+        // when the user has cleared every meaningful field.
+        if (restOverrides.customClaudeCodePath === undefined) {
+          delete restOverrides.customClaudeCodePath;
+        }
         return Object.keys(restOverrides).length > 0 ? restOverrides : undefined;
       }
       return { ...overrides, providers: restProviders };

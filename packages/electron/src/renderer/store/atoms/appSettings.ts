@@ -1432,6 +1432,7 @@ export interface ProviderOverride {
  */
 export interface AIProviderOverrides {
   defaultProvider?: string;
+  customClaudeCodePath?: string;
   providers?: Record<string, ProviderOverride>;
 }
 

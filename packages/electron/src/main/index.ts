@@ -1673,10 +1673,21 @@ app.whenReady().then(async () => {
     markEnd('session-restore');
 
     // Set up a loader that reads customClaudeCodePath fresh from the store on each query,
-    // so changes in the UI take effect without restarting the app.
-    const { store } = await import('./utils/store');
-    ClaudeCodeProvider.setCustomClaudeCodePathLoader(() => store.get('customClaudeCodePath', '') as string);
-    logger.main.info('[ClaudeCodeProvider] Initialized customClaudeCodePath loader');
+    // so changes in the UI take effect without restarting the app. Project-level overrides
+    // take precedence over the global value when a workspace path is provided.
+    const { store, getAIProviderOverrides } = await import('./utils/store');
+    ClaudeCodeProvider.setCustomClaudeCodePathLoader((workspacePath?: string) => {
+      const globalPath = (store.get('customClaudeCodePath', '') as string) || '';
+      if (!workspacePath) {
+        return globalPath;
+      }
+      const overrides = getAIProviderOverrides(workspacePath);
+      if (overrides?.customClaudeCodePath !== undefined) {
+        return overrides.customClaudeCodePath;
+      }
+      return globalPath;
+    });
+    logger.main.info('[ClaudeCodeProvider] Initialized customClaudeCodePath loader (workspace-aware)');
 
     // Close splash screen now that initialization is done and a real window is about to show.
     // The last restored window activates the app via its own ready-to-show handler.
