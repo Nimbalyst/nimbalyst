@@ -35,7 +35,9 @@ export const ClaudeCodeDeps = {
 
   // Loader that reads the custom Claude Code executable path fresh from the settings store.
   // Re-read on each query so changes in the UI take effect without restart.
-  customClaudeCodePathLoader: null as (() => string) | null,
+  // Receives the active workspace path so a project-level override can take precedence
+  // over the global setting; pass `undefined` to read the global value.
+  customClaudeCodePathLoader: null as ((workspacePath?: string) => string) | null,
 
   // ---- MCP Server Ports ----
 
@@ -118,7 +120,7 @@ export const ClaudeCodeDeps = {
   // ---- Setters ----
   // Called from electron main process at startup
 
-  setCustomClaudeCodePathLoader(loader: (() => string) | null): void {
+  setCustomClaudeCodePathLoader(loader: ((workspacePath?: string) => string) | null): void {
     this.customClaudeCodePathLoader = loader;
   },
 

@@ -24,6 +24,10 @@ interface ClaudeCodePanelProps {
   onSelectAllModels: (selectAll: boolean) => void;
   onTestConnection: () => Promise<void>;
   onConfigChange: (updates: Partial<ProviderConfig>) => void;
+  /** Scope this panel is rendered for: 'user' edits global settings, 'project' edits the workspace override. */
+  scope?: 'user' | 'project';
+  /** Workspace path required when scope is 'project'. */
+  workspacePath?: string;
 }
 
 type AuthMethod = 'login' | 'api-key';
@@ -38,7 +42,9 @@ export function ClaudeCodePanel({
   onModelToggle,
   onSelectAllModels,
   onTestConnection,
-  onConfigChange
+  onConfigChange,
+  scope = 'user',
+  workspacePath,
 }: ClaudeCodePanelProps) {
   const [loginStatus, setLoginStatus] = useState<{
     isLoggedIn: boolean;
@@ -72,8 +78,12 @@ export function ClaudeCodePanel({
   const usageIndicatorEnabled = useAtomValue(claudeUsageIndicatorEnabledAtom);
   const setUsageIndicatorEnabled = useSetAtom(setClaudeUsageIndicatorEnabledAtom);
 
-  // Custom Claude executable path
+  // Custom Claude executable path. In project scope, `customClaudeCodePath` reflects the
+  // workspace override (empty string when no override is set, inheriting the global value);
+  // `globalCustomClaudeCodePath` carries the inherited global value to surface as placeholder.
   const [customClaudeCodePath, setCustomClaudeCodePathState] = useState('');
+  const [globalCustomClaudeCodePath, setGlobalCustomClaudeCodePath] = useState('');
+  const [hasProjectPathOverride, setHasProjectPathOverride] = useState(false);
 
   // Agent teams toggle (experimental) - stored as env var in ~/.claude/settings.json
   const [agentTeamsEnabled, setAgentTeamsEnabled] = useState(false);
@@ -147,7 +157,10 @@ export function ClaudeCodePanel({
     loadEnvVars();
 
     loadSettings();
-  }, [loadEnvVars]);
+    // loadSettings depends on scope/workspacePath; rerun when they change so the
+    // project-scoped panel reflects the active workspace's override.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadEnvVars, scope, workspacePath]);
 
   const checkLoginStatus = async () => {
     try {
@@ -187,23 +200,69 @@ export function ClaudeCodePanel({
   const loadSettings = async () => {
     try {
       const settings = await window.electronAPI.aiGetSettings();
-      setCustomClaudeCodePathState(settings?.customClaudeCodePath ?? '');
+      const globalPath = settings?.customClaudeCodePath ?? '';
+      setGlobalCustomClaudeCodePath(globalPath);
       setPlanTrackingEnabledState(settings?.planTrackingEnabled ?? true);
+
+      if (scope === 'project' && workspacePath) {
+        const result = await window.electronAPI.invoke('ai:getProjectSettings', workspacePath);
+        const projectPath = result?.success ? result?.overrides?.customClaudeCodePath : undefined;
+        if (projectPath !== undefined) {
+          setHasProjectPathOverride(true);
+          setCustomClaudeCodePathState(projectPath);
+        } else {
+          setHasProjectPathOverride(false);
+          setCustomClaudeCodePathState('');
+        }
+      } else {
+        setHasProjectPathOverride(false);
+        setCustomClaudeCodePathState(globalPath);
+      }
     } catch (error) {
       console.error('[ClaudeCodePanel] Failed to load settings:', error);
     }
   };
 
-  // Save custom Claude Code path
+  // Save custom Claude Code path. In project scope this writes to the workspace override;
+  // an empty string clears the override (the project then inherits the global value).
   const handleSaveCustomClaudeCodePath = async (newPath: string) => {
     const previousPath = customClaudeCodePath;
+    const previousHasOverride = hasProjectPathOverride;
     setCustomClaudeCodePathState(newPath);
+
+    // Guard against a project-scoped edit accidentally falling through to the
+    // global save path when workspacePath has not been threaded in yet.
+    if (scope === 'project' && !workspacePath) {
+      console.error('[ClaudeCodePanel] Project scope requires workspacePath to save customClaudeCodePath; aborting.');
+      setCustomClaudeCodePathState(previousPath);
+      setHasProjectPathOverride(previousHasOverride);
+      return;
+    }
+
     try {
-      // Send only the changed field -- ai:saveSettings handles partial updates
-      await window.electronAPI.aiSaveSettings({ customClaudeCodePath: newPath });
+      if (scope === 'project' && workspacePath) {
+        const current = await window.electronAPI.invoke('ai:getProjectSettings', workspacePath);
+        const baseOverrides = (current?.success && current?.overrides) ? { ...current.overrides } : {};
+        if (newPath === '') {
+          delete baseOverrides.customClaudeCodePath;
+          setHasProjectPathOverride(false);
+        } else {
+          baseOverrides.customClaudeCodePath = newPath;
+          setHasProjectPathOverride(true);
+        }
+        const saveResult = await window.electronAPI.invoke('ai:saveProjectSettings', workspacePath, baseOverrides);
+        if (!saveResult?.success) {
+          throw new Error(saveResult?.error || 'Failed to save project override');
+        }
+      } else {
+        // Send only the changed field -- ai:saveSettings handles partial updates
+        await window.electronAPI.aiSaveSettings({ customClaudeCodePath: newPath });
+        setGlobalCustomClaudeCodePath(newPath);
+      }
     } catch (error) {
       console.error('[ClaudeCodePanel] Failed to save custom Claude Code path:', error);
       setCustomClaudeCodePathState(previousPath);
+      setHasProjectPathOverride(previousHasOverride);
     }
   };
 
@@ -295,8 +354,9 @@ export function ClaudeCodePanel({
         <div>
           <span className="provider-enable-label text-sm font-medium text-[var(--nim-text)]">Custom Claude Installation</span>
           <p className="text-xs text-[var(--nim-text-muted)] mt-1">
-            Override the default Claude executable path. Use this to point to a custom Claude CLI wrapper
-            (e.g., for corporate SSO authentication).
+            {scope === 'project'
+              ? 'Override the Claude executable path for this project only. Leave empty to inherit the global setting.'
+              : 'Override the default Claude executable path. Use this to point to a custom Claude CLI wrapper (e.g., for corporate SSO authentication).'}
           </p>
         </div>
         <div className="flex items-center gap-2 mt-1">
@@ -311,7 +371,9 @@ export function ClaudeCodePanel({
                 (e.target as HTMLInputElement).blur();
               }
             }}
-            placeholder="/usr/local/bin/claude"
+            placeholder={scope === 'project' && globalCustomClaudeCodePath
+              ? `Inheriting: ${globalCustomClaudeCodePath}`
+              : '/usr/local/bin/claude'}
             className="flex-1 py-1.5 px-2 rounded text-sm bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] text-[var(--nim-text)] font-mono focus:border-[var(--nim-primary)] outline-none"
           />
           <button
@@ -322,7 +384,13 @@ export function ClaudeCodePanel({
           </button>
         </div>
         <p className="text-[11px] text-[var(--nim-text-faint)] leading-relaxed">
-          Leave empty to use the built-in SDK. Changes take effect on the next agent session.
+          {scope === 'project'
+            ? hasProjectPathOverride
+              ? 'Project-specific path active. Clear the field to remove the override and inherit the global value.'
+              : globalCustomClaudeCodePath
+                ? `Inheriting global path: ${globalCustomClaudeCodePath}. Type a value to override for this project only.`
+                : 'No global path set. Type a value to use a custom executable for this project only.'
+            : 'Leave empty to use the built-in SDK. Changes take effect on the next agent session.'}
         </p>
       </div>
 

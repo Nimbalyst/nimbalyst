@@ -18,6 +18,8 @@ export interface GlobalAISettings {
   showToolCalls: boolean;
   aiDebugLogging: boolean;
   showPromptAdditions: boolean;
+  /** Path to a custom Claude Code executable. Empty string means "use bundled SDK". */
+  customClaudeCodePath?: string;
 }
 
 /**
@@ -50,9 +52,11 @@ export interface EffectiveAISettings {
   showToolCalls: boolean;
   aiDebugLogging: boolean;
   showPromptAdditions: boolean;
+  customClaudeCodePath?: string;
   /** Which settings are overridden at project level */
   overrides: {
     defaultProvider: boolean;
+    customClaudeCodePath: boolean;
     providers: Record<string, { enabled?: boolean; models?: boolean; defaultModel?: boolean; apiKey?: boolean }>;
   };
 }
@@ -116,6 +120,7 @@ export function mergeAISettings(
       ...globalSettings,
       overrides: {
         defaultProvider: false,
+        customClaudeCodePath: false,
         providers: {},
       },
     };
@@ -130,6 +135,7 @@ export function mergeAISettings(
       ...globalSettings,
       overrides: {
         defaultProvider: false,
+        customClaudeCodePath: false,
         providers: {},
       },
     };
@@ -143,8 +149,10 @@ export function mergeAISettings(
     showToolCalls: globalSettings.showToolCalls,
     aiDebugLogging: globalSettings.aiDebugLogging,
     showPromptAdditions: globalSettings.showPromptAdditions,
+    customClaudeCodePath: globalSettings.customClaudeCodePath,
     overrides: {
       defaultProvider: false,
+      customClaudeCodePath: false,
       providers: {},
     },
   };
@@ -153,6 +161,12 @@ export function mergeAISettings(
   if (projectOverrides.defaultProvider !== undefined) {
     effective.defaultProvider = projectOverrides.defaultProvider;
     effective.overrides.defaultProvider = true;
+  }
+
+  // Override custom Claude Code executable path if set
+  if (projectOverrides.customClaudeCodePath !== undefined) {
+    effective.customClaudeCodePath = projectOverrides.customClaudeCodePath;
+    effective.overrides.customClaudeCodePath = true;
   }
 
   // Get all provider IDs (union of global and override)

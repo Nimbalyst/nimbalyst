@@ -525,7 +525,15 @@ export function SettingsView({
       case 'claude':
         return wrapWithOverride('claude', 'Claude', <ClaudePanel {...commonProps} />);
       case 'claude-code':
-        return wrapWithOverride('claude-code', 'Claude Agent', <ClaudeCodePanel {...commonProps} />);
+        return wrapWithOverride(
+          'claude-code',
+          'Claude Agent',
+          <ClaudeCodePanel
+            {...commonProps}
+            scope={scope === 'project' ? 'project' : 'user'}
+            workspacePath={scope === 'project' ? workspacePath ?? undefined : undefined}
+          />,
+        );
       case 'openai':
         return wrapWithOverride('openai', 'OpenAI', <OpenAIPanel {...commonProps} />);
       case 'openai-codex':
