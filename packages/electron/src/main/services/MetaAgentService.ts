@@ -89,7 +89,6 @@ export class MetaAgentService {
   private sessionManager: SessionManager | null = null;
   private unsubscribeStateListener: (() => void) | null = null;
   private notificationSignatures = new Map<string, string>();
-  private notificationCounter = 0;
   private ipcHandlersRegistered = false;
 
   private constructor() {}
@@ -191,7 +190,6 @@ export class MetaAgentService {
     this.unsubscribeStateListener?.();
     this.unsubscribeStateListener = null;
     this.notificationSignatures.clear();
-    this.notificationCounter = 0;
     await shutdownMetaAgentServer();
     ClaudeCodeProvider.setMetaAgentServerPort(null);
     OpenAICodexProvider.setMetaAgentServerPort(null);
@@ -706,12 +704,45 @@ export class MetaAgentService {
         return;
       }
 
+      // NIM-6: session:completed fires on every turn idle, not only on terminal
+      // completion. If the child still has more prompts queued AFTER the one
+      // that just finished, this idle is a between-turn pause -- another
+      // session:completed will follow once the queue drains. Suppress it; the
+      // parent will be notified on the genuinely terminal idle (queue empty).
+      //
+      // The just-finished prompt is still in `executing` status at the moment
+      // session:completed fires (MessageStreamingHandler marks it `completed`
+      // only after endSession returns). So we count only `pending` rows --
+      // counting `executing` would include the current turn itself and
+      // suppress every notification, including the final terminal one.
+      //
+      // The other event types (error/waiting/interrupted) are always
+      // meaningful and pass through.
+      if (eventType === 'session:completed') {
+        const { rows: pendingRows } = await databaseWorker.query<{ count: string }>(
+          `SELECT COUNT(*)::text AS count FROM queued_prompts
+           WHERE session_id = $1 AND status = 'pending'`,
+          [sessionId]
+        );
+        const pendingCount = Number(pendingRows[0]?.count ?? '0');
+        if (pendingCount > 0) {
+          return;
+        }
+      }
+
       const metaStatusRow = await this.getSessionStatusRow(metaSession.id, metaSession.workspacePath);
       const metaStatus = (metaStatusRow?.status || 'idle') as SessionStatusValue;
 
       const result = await this.buildSessionResultData(sessionId, session.workspacePath);
-      this.notificationCounter += 1;
-      const signature = `${eventType}:${result.status}:${result.lastActivity || 0}:${result.pendingPrompt?.promptId || ''}:${this.notificationCounter}`;
+
+      // NIM-6: real dedup gate. Drop notifications whose semantic content is
+      // identical to the last one delivered for this child. The previous code
+      // mixed in an always-incrementing counter, which made every signature
+      // unique and the dedup useless.
+      const signature = `${eventType}:${result.status}:${result.pendingPrompt?.promptId || ''}:${result.lastResponse || ''}`;
+      if (this.notificationSignatures.get(sessionId) === signature) {
+        return;
+      }
       this.notificationSignatures.set(sessionId, signature);
 
       if (result.pendingPrompt?.promptType === 'exit_plan_mode_request') {
