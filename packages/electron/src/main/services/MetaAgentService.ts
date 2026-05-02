@@ -19,6 +19,7 @@ import {
   setMetaAgentToolFns,
   shutdownMetaAgentServer,
 } from '../mcp/metaAgentServer';
+import { computeNotificationSignature } from './metaAgentNotificationSignature';
 
 type SessionStatusValue = 'idle' | 'running' | 'waiting_for_input' | 'error' | 'interrupted';
 type PromptType = 'permission_request' | 'ask_user_question_request' | 'exit_plan_mode_request';
@@ -166,6 +167,14 @@ export class MetaAgentService {
       OpenAICodexACPProvider.setMetaAgentServerPort(result.port);
 
       this.unsubscribeStateListener = getSessionStateManager().subscribe((event) => {
+        // NIM-6 follow-up: dedup signatures only describe one turn; clear them
+        // when a child becomes active again so two distinct turns whose final
+        // text happens to match (e.g. "done", "ok") still each notify the
+        // parent.
+        if (event.type === 'session:started' || event.type === 'session:streaming') {
+          this.notificationSignatures.delete(event.sessionId);
+          return;
+        }
         if (event.type === 'session:completed' || event.type === 'session:error' || event.type === 'session:waiting' || event.type === 'session:interrupted') {
           void this.handleChildSessionEvent(event.sessionId, event.type);
         }
@@ -738,8 +747,10 @@ export class MetaAgentService {
       // NIM-6: real dedup gate. Drop notifications whose semantic content is
       // identical to the last one delivered for this child. The previous code
       // mixed in an always-incrementing counter, which made every signature
-      // unique and the dedup useless.
-      const signature = `${eventType}:${result.status}:${result.pendingPrompt?.promptId || ''}:${result.lastResponse || ''}`;
+      // unique and the dedup useless. The signature is reset on
+      // session:started/session:streaming (see start()), so it only collapses
+      // duplicates within a single child turn -- not across turns.
+      const signature = computeNotificationSignature(eventType, result);
       if (this.notificationSignatures.get(sessionId) === signature) {
         return;
       }
