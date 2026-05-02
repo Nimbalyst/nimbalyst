@@ -146,6 +146,7 @@ import {ParagraphDiffHandler} from '../handlers/ParagraphDiffHandler';
 import {TableDiffHandler} from '../handlers/TableDiffHandler';
 import {CodeBlockDiffHandler} from '../handlers/CodeBlockDiffHandler';
 import {MermaidDiffHandler} from '../handlers/MermaidDiffHandler';
+import {MathDiffHandler} from '../../MathPlugin/MathDiffHandler';
 import {NodeStructureValidator} from './NodeStructureValidator';
 import {applyParsedDiffToMarkdown} from './standardDiffFormat';
 import {
@@ -170,6 +171,7 @@ export function initializeHandlers() {
   diffHandlerRegistry.register(new TableDiffHandler());
   diffHandlerRegistry.register(new CodeBlockDiffHandler());
   diffHandlerRegistry.register(new MermaidDiffHandler());
+  diffHandlerRegistry.register(new MathDiffHandler());
   diffHandlerRegistry.register(new ParagraphDiffHandler());
   diffHandlerRegistry.register(new HeadingDiffHandler());
   diffHandlerRegistry.register(new ListDiffHandler());
