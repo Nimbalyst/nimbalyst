@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- Changes to existing functionality go here -->
 
 ### Fixed
-<!-- Bug fixes go here -->
+- Open a workspace whose `.git` repo has zero commits yet without spamming a multi-line stack trace into `main.log`. `GitRefWatcher.start` was letting the "fatal: your current branch X does not have any commits yet" error from `simple-git`'s `log()` call escape into the outer catch as `[GitRefWatcher] Failed to start watching: ...`. The pre-flight branch + HEAD lookup is now wrapped in a narrow try/catch that pattern-matches that exact error, logs a one-line info message, and returns cleanly. All other errors still surface to the outer catch unchanged. Mirrors the existing detached-HEAD short-circuit. Adds unit tests for the empty-repo, unrelated-error, and detached-HEAD paths.
 
 ### Removed
 <!-- Removed features go here -->
