@@ -264,6 +264,16 @@ export async function buildSdkOptions(
     // ~112K baseline usage on new sessions. `auto:2` (20K on 1M, 4K on 200K)
     // matches the previous lazy-loading behavior we had under Sonnet 4.6.
     ENABLE_TOOL_SEARCH: 'auto:2',
+    // The bundled SDK at assistant.mjs sets CLAUDE_CODE_ENTRYPOINT to "sdk-ts"
+    // when not already set in the environment. Anthropic's backend treats
+    // `cli` traffic as first-party and `sdk-ts` traffic as third-party,
+    // which puts the latter into a deprioritized lane that gets throttled
+    // first under load. Users on Pro/Max OAuth report rate-limit errors when
+    // running Nimbalyst alongside the standalone Claude Code CLI even at low
+    // usage; setting this to `cli` aligns Nimbalyst's classification with
+    // the official CLI and removes that asymmetry. The user can still
+    // override via their own env var if they want the original sdk-ts label.
+    ...(process.env.CLAUDE_CODE_ENTRYPOINT == null && { CLAUDE_CODE_ENTRYPOINT: 'cli' }),
     // Explicitly force-clear in case the SDK overlays its own process.env view.
     // These will be re-set from config.apiKey below if the user has configured one.
     ANTHROPIC_API_KEY: '',
