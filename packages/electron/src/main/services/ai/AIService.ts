@@ -55,7 +55,7 @@ import {
   shouldShowCommunityPopup,
   wasCommunityPopupShownThisLaunch
 } from '../../utils/store';
-import { mergeAISettings } from '../../utils/aiSettingsMerge';
+import { mergeAISettings, getAIProviderOverridesWithWorktreeFallback } from '../../utils/aiSettingsMerge';
 import { DocumentContextService, type RawDocumentContext, type PreparedDocumentContext } from '@nimbalyst/runtime';
 import { getMessageSyncHandler, getSyncProvider, isDesktopTrulyAway } from '../SyncManager';
 import { normalizeCodexProviderConfig, omitModelsField, stripTransientProviderFields } from '@nimbalyst/runtime/ai/server/utils/modelConfigUtils';
@@ -164,6 +164,22 @@ export class AIService {
     for (const tool of BUILT_IN_TOOLS) {
       toolRegistry.register(tool);
     }
+
+    // Wire up the custom binary path loader so each query reads the current
+    // value fresh from the ai-settings store. This must live here (not in
+    // index.ts) because only AIService owns the ai-settings store; the
+    // store reference in index.ts points to app-settings and would always
+    // return empty string.
+    ClaudeCodeProvider.setCustomClaudeCodePathLoader((workspacePath: string) => {
+      if (!workspacePath) {
+        throw new Error('[ClaudeCodeProvider] customClaudeCodePathLoader called without a workspacePath');
+      }
+      const projectOverride = getAIProviderOverridesWithWorktreeFallback(workspacePath)?.customClaudeCodePath;
+      if (projectOverride !== undefined) {
+        return projectOverride;
+      }
+      return (this.getSettingsStore().get('customClaudeCodePath', '') as string) || '';
+    });
 
     // API keys must be explicitly set by the user in settings.
     // NEVER auto-import keys from process.env. A user's .env file with
