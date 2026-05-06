@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- Changes to existing functionality go here -->
 
 ### Fixed
-<!-- Bug fixes go here -->
+- Open file tabs no longer disappear when switching between tasks/sessions/files. The `WorkstreamEditorTabs` restore effect was running on mount before `workstreamStatesLoadedAtom` had hydrated from disk, reading `openFilePaths: []` (the atom default), restoring zero tabs, and marking restore complete. The persist effect then immediately wrote the empty list back to workspace state, replacing the saved tab list. The restore effect now also waits on `workstreamStatesLoadedAtom === true` (same hydration guard `AgentWorkstreamPanel` already uses for child sessions) before reading `openFilePaths`, so a not-yet-hydrated mount no longer overwrites saved state. Fixes #169.
 
 ### Removed
 <!-- Removed features go here -->

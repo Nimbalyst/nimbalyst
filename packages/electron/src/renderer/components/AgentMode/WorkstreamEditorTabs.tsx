@@ -17,7 +17,7 @@ import { TabsProvider, useTabs, useTabsActions } from '../../contexts/TabsContex
 import { TabManager } from '../TabManager/TabManager';
 import { TabContent } from '../TabContent/TabContent';
 import { setSessionTabCountAtom } from '../../store';
-import { workstreamStateAtom } from '../../store/atoms/workstreamState';
+import { workstreamStateAtom, workstreamStatesLoadedAtom } from '../../store/atoms/workstreamState';
 import { fileDeletedAtomFamily } from '../../store/atoms/fileWatch';
 
 // Current tab state - always kept up to date for sync flush on unmount
@@ -219,14 +219,25 @@ const WorkstreamEditorTabsInner = forwardRef<WorkstreamEditorTabsRef, Workstream
     const setTabCount = useSetAtom(setSessionTabCountAtom);
     const workstreamState = useAtomValue(workstreamStateAtom(workstreamId));
     const setWorkstreamState = useSetAtom(workstreamStateAtom(workstreamId));
+    const workstreamStatesLoaded = useAtomValue(workstreamStatesLoadedAtom);
     const prevTabCountRef = useRef(tabs.length);
     // Track restore state: 'pending' -> 'restoring' -> 'done'
     const restoreStateRef = useRef<'pending' | 'restoring' | 'done'>('pending');
 
-    // Restore tabs from workstream state on mount
+    // Restore tabs from workstream state on mount.
+    // Wait for workstream states to finish loading from IPC before reading
+    // openFilePaths. Without this gate the restore effect can read the
+    // initial empty default, mark itself done, and let the persist effect
+    // overwrite the saved tab list with []. See nimbalyst#169.
     useEffect(() => {
       if (restoreStateRef.current !== 'pending') {
         // console.log('[WorkstreamEditorTabs] Skipping restore, state:', restoreStateRef.current);
+        return;
+      }
+      if (!workstreamStatesLoaded) {
+        // Hydration from disk hasn't finished yet. Don't read openFilePaths
+        // until it has, otherwise we restore 0 tabs and trigger the persist
+        // effect to overwrite the saved list with [].
         return;
       }
       restoreStateRef.current = 'restoring';
@@ -255,7 +266,7 @@ const WorkstreamEditorTabsInner = forwardRef<WorkstreamEditorTabsRef, Workstream
       // Mark restore complete - now we can persist changes
       restoreStateRef.current = 'done';
       // console.log('[WorkstreamEditorTabs] Restore complete');
-    }, [workstreamId, workstreamState, tabsActions]);
+    }, [workstreamId, workstreamState, tabsActions, workstreamStatesLoaded]);
 
     // Sync tab count to Jotai atom and persist tabs when they change
     useEffect(() => {
