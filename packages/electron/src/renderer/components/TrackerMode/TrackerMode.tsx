@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useCallback } from 'react';
+import React, { useEffect, useMemo, useCallback, useState } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { globalRegistry, loadBuiltinTrackers } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
 import { TrackerSidebar } from './TrackerSidebar';
@@ -10,6 +10,14 @@ import {
   setTrackerModeLayoutAtom,
   type TrackerFilterChip,
 } from '../../store/atoms/trackers';
+import {
+  computeFieldLoss,
+  buildNewTypeTags,
+  regenerateKey,
+  migrateData,
+  type DraggedTrackerItem,
+} from './trackerItemDnd';
+import { TrackerItemMoveConfirm } from './TrackerItemMoveConfirm';
 
 // Ensure built-in trackers are loaded
 loadBuiltinTrackers();
@@ -73,6 +81,47 @@ export const TrackerMode: React.FC<TrackerModeProps> = ({
 
   const filterType = selectedType as TrackerItemType | 'all';
 
+  // ── Cross-type drag-and-drop move ──────────────────────────────────────────
+  const [moveConfirm, setMoveConfirm] = useState<{
+    payload: DraggedTrackerItem;
+    targetType: string;
+    lostFields: string[];
+  } | null>(null);
+
+  const handleItemMove = useCallback((payload: DraggedTrackerItem, targetType: string) => {
+    if (payload.primaryType === targetType) return;
+    const { lostFields } = computeFieldLoss(payload.currentDataKeys, targetType);
+    setMoveConfirm({ payload, targetType, lostFields });
+  }, []);
+
+  const performMove = useCallback(async () => {
+    if (!moveConfirm) return;
+    const { payload, targetType } = moveConfirm;
+    const targetModel = globalRegistry.get(targetType);
+    if (!targetModel) {
+      setMoveConfirm(null);
+      return;
+    }
+    const newTypeTags = buildNewTypeTags(payload.typeTags, payload.primaryType, targetType);
+    const newKey = payload.key ? regenerateKey(payload.key, targetModel.idPrefix) : undefined;
+    const newData = migrateData(payload.data, targetType);
+    try {
+      const updates: Record<string, any> = { typeTags: newTypeTags, ...newData };
+      for (const lostKey of moveConfirm.lostFields) {
+        updates[lostKey] = null;
+      }
+      if (newKey) updates.issueKey = newKey;
+      await (window as any).electronAPI.documentService.updateTrackerItem({
+        itemId: payload.itemId,
+        updates,
+        syncMode: undefined,
+      });
+    } catch (err) {
+      console.error('[TrackerMode] move failed', err);
+    }
+    setMoveConfirm(null);
+  }, [moveConfirm]);
+
   const sidebarContent = (
     <TrackerSidebar
       workspacePath={workspacePath || undefined}
@@ -84,6 +133,7 @@ export const TrackerMode: React.FC<TrackerModeProps> = ({
       onSelectType={handleSelectType}
       onToggleFilter={handleToggleFilter}
       onViewModeChange={handleViewModeChange}
+      onItemMove={handleItemMove}
     />
   );
 
@@ -109,6 +159,16 @@ export const TrackerMode: React.FC<TrackerModeProps> = ({
         maxWidth={350}
         onWidthChange={handleSidebarWidthChange}
       />
+      {moveConfirm && (
+        <TrackerItemMoveConfirm
+          itemKey={moveConfirm.payload.key}
+          sourceTypeId={moveConfirm.payload.primaryType}
+          targetTypeId={moveConfirm.targetType}
+          lostFields={moveConfirm.lostFields}
+          onCancel={() => setMoveConfirm(null)}
+          onConfirm={performMove}
+        />
+      )}
     </div>
   );
 };

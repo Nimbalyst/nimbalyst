@@ -57,6 +57,8 @@ interface TrackerTableProps {
   columnConfig?: import('./trackerColumns').TypeColumnConfig;
   /** Callback when column config changes (from display options panel) */
   onColumnConfigChange?: (config: import('./trackerColumns').TypeColumnConfig) => void;
+  /** Callback when user starts dragging a row (for cross-type DnD) */
+  onRowDragStart?: (e: React.DragEvent, item: TrackerRecord) => void;
 }
 
 /**
@@ -641,6 +643,7 @@ export function TrackerTable({
   searchQuery: externalSearchQuery,
   columnConfig: externalColumnConfig,
   onColumnConfigChange,
+  onRowDragStart,
 }: TrackerTableProps): JSX.Element {
   // Type filter: use prop filterType when hideTypeTabs is true, otherwise use internal state
   const [internalTypeFilter, setInternalTypeFilter] = useState<TrackerItemType | 'all'>('all');
@@ -1473,6 +1476,7 @@ export function TrackerTable({
             return (
               <div
                 key={item.id || index}
+                draggable={!!onRowDragStart}
                 className={`tracker-table-row flex items-center gap-3 px-3 py-[7px] border-b border-[var(--nim-border)] cursor-pointer transition-colors duration-100 hover:bg-[var(--nim-bg-secondary)] select-none ${
                   selectedIds.has(item.id) ? 'bg-[var(--nim-bg-secondary)]' : ''
                 } ${
@@ -1486,6 +1490,7 @@ export function TrackerTable({
                 onClick={(e) => handleRowClick(item, index, e)}
                 onDoubleClick={() => { if (item.system.documentPath) openItemInEditor(item); }}
                 onContextMenu={(e) => handleContextMenu(e, item, index)}
+                onDragStart={onRowDragStart ? (e) => onRowDragStart(e, item) : undefined}
               >
                 {/* Type icon - fixed width for alignment */}
                 <span className="shrink-0 w-5 flex items-center justify-center" style={{ color: getTypeColor(item.primaryType), opacity: 0.7 }}>

@@ -1096,12 +1096,21 @@ export class ElectronDocumentService implements DocumentService {
 
     // Handle typeTags separately -- stored in SQL column, not JSONB
     if (updates.typeTags !== undefined) {
-      const newTypeTags: string[] = Array.isArray(updates.typeTags) ? updates.typeTags : [row.type];
-      // Ensure primary type is always included
-      if (!newTypeTags.includes(row.type)) newTypeTags.unshift(row.type);
+      const newTypeTags: string[] = Array.isArray(updates.typeTags) && updates.typeTags.length > 0
+        ? updates.typeTags
+        : [row.type];
+      const newPrimary = newTypeTags[0];
       await database.query(
-        `UPDATE tracker_items SET type_tags = $1 WHERE id = $2`,
-        [newTypeTags, itemId]
+        `UPDATE tracker_items SET type_tags = $1, type = $2 WHERE id = $3`,
+        [newTypeTags, newPrimary, itemId]
+      );
+    }
+
+    // Handle issueKey separately -- stored in SQL column issue_key, not JSONB
+    if (updates.issueKey !== undefined) {
+      await database.query(
+        `UPDATE tracker_items SET issue_key = $1 WHERE id = $2`,
+        [updates.issueKey, itemId]
       );
     }
 
@@ -1113,9 +1122,10 @@ export class ElectronDocumentService implements DocumentService {
     const fieldTimestamps: Record<string, number> = data._fieldUpdatedAt || {};
     const now = Date.now();
 
-    // Merge remaining updates into data (skip typeTags since it's a column)
+    // Merge remaining updates into data (skip typeTags and issueKey since they are columns)
     for (const [key, value] of Object.entries(updates)) {
       if (key === 'typeTags') continue;
+      if (key === 'issueKey') continue;
       data[key] = value;
       fieldTimestamps[key] = now;
     }

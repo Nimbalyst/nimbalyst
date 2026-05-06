@@ -7,6 +7,7 @@ import { globalRegistry, getRoleField } from '@nimbalyst/runtime/plugins/Tracker
 import { getRecordTitle, getRecordStatus, getRecordPriority, getRecordSortOrder, getStatusOptions, getFieldByRole } from '@nimbalyst/runtime/plugins/TrackerPlugin/trackerRecordAccessors';
 import { generateKeyBetween } from '@nimbalyst/runtime/utils/fractionalIndex';
 import { UserAvatar } from '@nimbalyst/runtime/plugins/TrackerPlugin/components/UserAvatar';
+import { setDragPayload } from './trackerItemDnd';
 
 // ── Module-level drag-and-drop handler ──────────────────────────────────
 // Registered once on `document`, survives HMR. The component sets the
@@ -233,6 +234,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     dragItemRef.current = item;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', item.id);
+    setDragPayload(e, {
+      itemId: item.id,
+      primaryType: item.primaryType,
+      typeTags: item.typeTags,
+      currentDataKeys: Object.keys((item.fields as Record<string, any>) ?? {}),
+      data: (item.fields as Record<string, any>) ?? {},
+      key: item.issueKey ?? '',
+    });
   }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent, columnValue: string) => {

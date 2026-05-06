@@ -3,6 +3,7 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import type { TrackerIdentity } from '@nimbalyst/runtime';
 import type { TrackerRecord } from '@nimbalyst/runtime/core/TrackerRecord';
+import { setDragPayload } from './trackerItemDnd';
 import { getRecordTitle, getRecordPriority, getRecordStatus, getRecordFieldStr, getFieldByRole, isMyRecord } from '@nimbalyst/runtime/plugins/TrackerPlugin/trackerRecordAccessors';
 import {
   TrackerTable,
@@ -303,6 +304,17 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
     }
   }, []);
 
+  const handleRowDragStart = useCallback((e: React.DragEvent, item: TrackerRecord) => {
+    setDragPayload(e, {
+      itemId: item.id,
+      primaryType: item.primaryType,
+      typeTags: item.typeTags,
+      currentDataKeys: Object.keys((item.fields as Record<string, any>) ?? {}),
+      data: (item.fields as Record<string, any>) ?? {},
+      key: item.issueKey ?? '',
+    });
+  }, []);
+
   const handleNewItem = useCallback((type: string) => {
     setQuickAddType(type);
   }, []);
@@ -529,6 +541,7 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
               searchQuery={searchQuery}
               columnConfig={columnConfig}
               onColumnConfigChange={handleColumnConfigChange}
+              onRowDragStart={handleRowDragStart}
             />
           ) : (
             <KanbanBoard
