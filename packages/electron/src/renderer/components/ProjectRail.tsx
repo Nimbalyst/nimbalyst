@@ -29,10 +29,12 @@ import {
   isOpenProjectsAtCapAtom,
   addOpenProjectAtom,
   closeOpenProjectAtom,
-  projectActivitySummaryAtom,
   type OpenProject,
 } from '../store/atoms/openProjects';
-import { sessionRegistryAtom } from '../store/atoms/sessions';
+import {
+  globalSessionActivityAtom,
+  projectActivitySummaryAtom,
+} from '../store/atoms/sessionActivity';
 import './ProjectRail.css';
 
 const REVEAL_LABEL = (() => {
@@ -100,37 +102,43 @@ function ProjectRailIcon({
   const showBadge = !isActive && (processingCount > 0 || unreadCount > 0);
   const badgeLabel = processingCount > 0 ? `${processingCount}` : unreadCount > 0 ? `${unreadCount}` : '';
 
+  // Wrapper is a non-interactive container so the activate button and the
+  // close button can sit as siblings. Nesting a button inside a button is
+  // invalid HTML and confuses screen readers / keyboard navigation.
   return (
-    <button
-      type="button"
+    <div
       className={className}
-      onClick={handleClick}
       onContextMenu={handleContextMenu}
       data-testid="project-rail-item"
       data-project-path={project.path}
-      aria-label={`Switch to project ${project.name}`}
-      aria-current={isActive ? 'true' : undefined}
     >
-      {projectInitials(project.name)}
-      {showBadge && (
-        <span
-          className="project-rail-item-badge"
-          aria-label={processingCount > 0 ? `${processingCount} streaming session(s)` : `${unreadCount} unread`}
-        >
-          {badgeLabel}
-        </span>
-      )}
-      <span
+      <button
+        type="button"
+        className="project-rail-item-main"
+        onClick={handleClick}
+        aria-label={`Switch to project ${project.name}`}
+        aria-current={isActive ? 'true' : undefined}
+      >
+        {projectInitials(project.name)}
+        {showBadge && (
+          <span
+            className="project-rail-item-badge"
+            aria-label={processingCount > 0 ? `${processingCount} streaming session(s)` : `${unreadCount} unread`}
+          >
+            {badgeLabel}
+          </span>
+        )}
+      </button>
+      <button
+        type="button"
         className="project-rail-item-close"
-        role="button"
-        tabIndex={-1}
         onClick={handleClose}
         aria-label={`Close ${project.name}`}
       >
         ×
-      </span>
+      </button>
       <span className="project-rail-tooltip">{project.name}</span>
-    </button>
+    </div>
   );
 }
 
@@ -141,7 +149,7 @@ export function ProjectRail() {
   const atCap = useAtomValue(isOpenProjectsAtCapAtom);
   const addProject = useSetAtom(addOpenProjectAtom);
   const closeProject = useSetAtom(closeOpenProjectAtom);
-  const sessionRegistry = useAtomValue(sessionRegistryAtom);
+  const activity = useAtomValue(globalSessionActivityAtom);
   const activitySummary = useAtomValue(projectActivitySummaryAtom);
 
   const handleActivate = useCallback(
@@ -214,11 +222,12 @@ export function ProjectRail() {
 
   const handleClose = useCallback(
     async (project: OpenProject) => {
-      // Warn if there are running sessions for this project.
-      const sessionsForPath = Array.from(sessionRegistry.values()).filter(
-        (meta: any) => meta.workspaceId === project.path
-      );
-      const streaming = sessionsForPath.filter((meta: any) => meta.isStreaming || meta.processing).length;
+      // Warn if there are streaming sessions for this project. Read from the
+      // cross-workspace activity tracker (kept in sync by sessionStateListeners
+      // for every warm rail project) instead of `sessionRegistryAtom`, which
+      // only carries the active project's sessions and would silently skip
+      // the prompt when closing an inactive rail project.
+      const streaming = activity.get(project.path)?.streaming.size ?? 0;
       if (streaming > 0) {
         const proceed = window.confirm(
           `${project.name} has ${streaming} streaming session${streaming === 1 ? '' : 's'}. Close anyway? Sessions will be paused.`
@@ -234,7 +243,7 @@ export function ProjectRail() {
         console.error('[ProjectRail] unregister-additional failed:', err);
       }
     },
-    [closeProject, sessionRegistry]
+    [closeProject, activity]
   );
 
   // Right-click context menu state. Anchored to a virtual reference at the

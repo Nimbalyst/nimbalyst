@@ -52,6 +52,15 @@ const isCommittingAtomFamily = atomFamily((_workspacePath: string) =>
   atom<boolean>(false)
 );
 
+/** Drop every git-operations slot held for a workspace path. */
+export function pruneGitOperationsWorkspaceState(workspacePath: string): void {
+  gitStatusAtomFamily.remove(workspacePath);
+  gitCommitsAtomFamily.remove(workspacePath);
+  stagedFilesAtomFamily.remove(workspacePath);
+  commitMessageAtomFamily.remove(workspacePath);
+  isCommittingAtomFamily.remove(workspacePath);
+}
+
 /**
  * Git status for the active workspace. Updated by file watcher / GitRefWatcher.
  */

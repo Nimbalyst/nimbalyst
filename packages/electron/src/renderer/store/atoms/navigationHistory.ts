@@ -111,6 +111,11 @@ const navigationHistoryAtomFamily = atomFamily((_workspacePath: string) =>
   atom<NavigationHistoryState>(DEFAULT_NAVIGATION_HISTORY)
 );
 
+/** Drop the cached navigation history slot for a workspace. */
+export function pruneNavigationHistoryWorkspaceState(workspacePath: string): void {
+  navigationHistoryAtomFamily.remove(workspacePath);
+}
+
 /**
  * Read+write proxy that resolves to the active workspace's history slot.
  * Existing call sites (push, goBack, goForward) keep working unchanged.

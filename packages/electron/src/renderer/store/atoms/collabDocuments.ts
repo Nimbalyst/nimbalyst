@@ -438,8 +438,19 @@ export async function initSharedDocuments(workspacePath: string, retryCount = 0)
       },
     });
 
-    providersByPath.set(workspacePath, provider);
-    await provider.connect();
+    // Connect first; only cache the provider once it has actually attached.
+    // Caching before connect leaves a dead provider in the map if connect()
+    // throws, and `initSharedDocuments` short-circuits on subsequent calls
+    // for that path because `providersByPath.has(...)` returns true. The
+    // user is then unable to retry team sync for that workspace without
+    // reopening it.
+    try {
+      await provider.connect();
+      providersByPath.set(workspacePath, provider);
+    } catch (connectErr) {
+      provider.destroy();
+      throw connectErr;
+    }
   } catch (err) {
     console.error('[collabDocuments] Failed to initialize team sync:', err);
     store.set(teamSyncStatusAtomFamily(workspacePath), 'error');
@@ -471,4 +482,31 @@ export function destroyTeamSync(workspacePath?: string): void {
 
   store.set(teamSyncStatusAtomFamily(path), 'disconnected');
   store.set(workspaceHasTeamAtomFamily(path), false);
+}
+
+/**
+ * Drop every cached collab/team-sync slot for `workspacePath`. Use when a
+ * project is closed from the rail so we don't leak atom-family entries or
+ * a connected provider after `destroyTeamSync` has run.
+ */
+export function pruneCollabDocumentsWorkspaceState(workspacePath: string): void {
+  // Provider should already have been torn down via destroyTeamSync; if it
+  // is still around, clean it up now.
+  const provider = providersByPath.get(workspacePath);
+  if (provider) {
+    try {
+      provider.destroy();
+    } catch (err) {
+      console.error('[collabDocuments] destroy during prune failed:', err);
+    }
+    providersByPath.delete(workspacePath);
+  }
+  const retryTimer = pendingRetryTimers.get(workspacePath);
+  if (retryTimer) {
+    clearTimeout(retryTimer);
+    pendingRetryTimers.delete(workspacePath);
+  }
+  sharedDocumentsAtomFamily.remove(workspacePath);
+  teamSyncStatusAtomFamily.remove(workspacePath);
+  workspaceHasTeamAtomFamily.remove(workspacePath);
 }

@@ -18,6 +18,15 @@
   position: relative;
   width: 40px;
   height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.project-rail-item-main {
+  position: relative;
+  width: 100%;
+  height: 100%;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -33,13 +42,13 @@
   transition: border-radius 150ms ease, background-color 150ms ease, transform 150ms ease;
 }
 
-.project-rail-item:hover {
+.project-rail-item-main:hover {
   border-radius: 14px;
   background-color: var(--nim-accent, #5b8cff);
   color: var(--nim-fg-on-accent, #ffffff);
 }
 
-.project-rail-item.is-active {
+.project-rail-item.is-active .project-rail-item-main {
   border-radius: 14px;
   background-color: var(--nim-accent, #5b8cff);
   color: var(--nim-fg-on-accent, #ffffff);

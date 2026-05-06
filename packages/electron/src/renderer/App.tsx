@@ -91,6 +91,7 @@ import {
   historyDialogFileAtom,
 } from './store';
 import { initOpenProjects } from './store/atoms/openProjects';
+import { initWorkspaceStatePruner } from './store/workspaceStatePruner';
 import { initAiCommandListeners } from './store/listeners/aiCommandListeners';
 import { initAppCommandListeners } from './store/listeners/appCommandListeners';
 import { initClaudeUsageListeners } from './store/listeners/claudeUsageListeners';
@@ -272,6 +273,7 @@ export default function App() {
     // startup is not blocked by IPC. The rail consumers re-render when the
     // atoms hydrate.
     initOpenProjects();
+    initWorkspaceStatePruner();
 
     const cleanupAiCommands = initAiCommandListeners();
     const cleanupAppCommands = initAppCommandListeners();

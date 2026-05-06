@@ -110,6 +110,11 @@ export const agentModeLayoutAtomFamily = atomFamily((_workspacePath: string) =>
   atom<AgentModeLayout>(DEFAULT_LAYOUT)
 );
 
+/** Drop the cached layout slot for a workspace (called on rail close). */
+export function pruneAgentModeWorkspaceState(workspacePath: string): void {
+  agentModeLayoutAtomFamily.remove(workspacePath);
+}
+
 /**
  * Read+write proxy that resolves to the active workspace's layout slot.
  * Existing callers that import `agentModeLayoutAtom` keep working — the

@@ -125,6 +125,28 @@ function getPersistentSlot(workspacePath: string): TabsStateSlot {
   return slot;
 }
 
+/**
+ * Drop the persistent tabs slot for `workspacePath`. Called when the user
+ * closes a project from the rail so the slot, listeners, and snapshot
+ * memory are released — without this the module-level map grows
+ * unbounded across long-running sessions.
+ *
+ * Re-opening the same workspace later allocates a fresh slot; tabs that
+ * were persisted to workspace-settings still rehydrate via the normal
+ * restore path.
+ */
+export function pruneTabsSlot(workspacePath: string): void {
+  const slot = persistentSlots.get(workspacePath);
+  if (!slot) return;
+  slot.listeners.clear();
+  persistentSlots.delete(workspacePath);
+}
+
+/** Test seam: snapshot the live persistent slot map size. */
+export function getPersistentTabsSlotCount(): number {
+  return persistentSlots.size;
+}
+
 interface TabsProviderProps {
   children: React.ReactNode;
   workspacePath: string | null;

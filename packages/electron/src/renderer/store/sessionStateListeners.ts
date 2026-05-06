@@ -45,6 +45,12 @@ import { workstreamActiveChildAtom, workstreamStateAtom } from './atoms/workstre
 import { setWindowModeAtom } from './atoms/windowMode';
 import { triggerWorktreeRefreshAtom } from './atoms/gitOperations';
 import { multiProjectModeAtom, openProjectsAtom } from './atoms/openProjects';
+import {
+  markSessionStreamingAtom,
+  clearSessionStreamingAtom,
+  markSessionUnreadAtom,
+  clearSessionUnreadAtom,
+} from './atoms/sessionActivity';
 import type { TranscriptEvent } from '@nimbalyst/runtime/ai/server/transcript/types';
 import { TranscriptStreamAccumulator } from './transcriptStreamAccumulator';
 
@@ -228,18 +234,23 @@ export function initSessionStateListeners(): () => void {
       // Session is actively running
       case 'session:started':
         store.set(sessionProcessingAtom(sessionId), true);
+        store.set(markSessionStreamingAtom, { sessionId, workspacePath: resolvedWorkspacePath });
         break;
 
       case 'session:streaming':
         store.set(sessionProcessingAtom(sessionId), true);
         // AI resumed streaming - no longer waiting for user input
         store.set(sessionHasPendingInteractivePromptAtom(sessionId), false);
+        store.set(markSessionStreamingAtom, { sessionId, workspacePath: resolvedWorkspacePath });
         break;
 
       // Session is waiting for user input (AskUserQuestion, ExitPlanMode, ToolPermission)
       case 'session:waiting':
         store.set(sessionProcessingAtom(sessionId), true);
         store.set(sessionHasPendingInteractivePromptAtom(sessionId), true);
+        // Treat "waiting on user" as still processing for rail badge purposes —
+        // the user typically hasn't switched away because of the prompt.
+        store.set(markSessionStreamingAtom, { sessionId, workspacePath: resolvedWorkspacePath });
         break;
 
       // Session has finished (successfully or with error)
@@ -249,6 +260,7 @@ export function initSessionStateListeners(): () => void {
         store.set(sessionProcessingAtom(sessionId), false);
         // Also clear pending interactive prompt state - if session ended, no longer waiting
         store.set(sessionHasPendingInteractivePromptAtom(sessionId), false);
+        store.set(clearSessionStreamingAtom, { sessionId, workspacePath: resolvedWorkspacePath });
 
         // Clear any pending throttle timer for this session - the final reload below
         // will fetch the complete state, so a stale throttled reload is unnecessary
@@ -461,6 +473,7 @@ export function initSessionStateListeners(): () => void {
       // If this message is for a session that's not currently viewed, mark it as unread
       if (sessionId !== currentlyViewedSessionId) {
         store.set(sessionUnreadAtom(sessionId), true);
+        store.set(markSessionUnreadAtom, { sessionId, workspacePath });
 
         // Persist to database metadata for cross-device sync
         window.electronAPI?.invoke('ai:updateSessionMetadata', sessionId, {
@@ -473,6 +486,7 @@ export function initSessionStateListeners(): () => void {
         // devices (iOS) know the user is reading these messages in real time.
         // Without this, iOS would show the session as unread because it sees
         // lastMessageAt increasing but lastReadAt staying stale.
+        store.set(clearSessionUnreadAtom, { sessionId, workspacePath });
         const existingReadTimer = readStateSyncTimers.get(sessionId);
         if (existingReadTimer) {
           clearTimeout(existingReadTimer);

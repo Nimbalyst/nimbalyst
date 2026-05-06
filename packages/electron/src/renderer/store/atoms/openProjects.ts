@@ -15,11 +15,7 @@
 
 import { atom } from 'jotai';
 import { store } from '@nimbalyst/runtime/store';
-import {
-  sessionRegistryAtom,
-  sessionProcessingAtom,
-  sessionUnreadAtom,
-} from './sessions';
+import { clearWorkspaceActivityAtom } from './sessionActivity';
 
 export interface OpenProject {
   /** Canonical absolute path; same key used by per-workspace atom families. */
@@ -84,39 +80,6 @@ export const isOpenProjectsAtCapAtom = atom((get) => {
   return get(openProjectsAtom).length >= MAX_OPEN_PROJECTS;
 });
 
-export interface ProjectActivitySummary {
-  processing: number;
-  unread: number;
-}
-
-/**
- * Per-workspace summary of "things needing attention" in inactive
- * projects: how many sessions are streaming and how many have unread
- * messages. Drives the rail badges.
- *
- * Recomputes whenever any session's registry/processing/unread atom
- * changes. Components that only read the rail summary subscribe just to
- * this atom, not the full session graph.
- */
-export const projectActivitySummaryAtom = atom((get) => {
-  const registry = get(sessionRegistryAtom);
-  const summary = new Map<string, ProjectActivitySummary>();
-
-  for (const session of registry.values()) {
-    const path = session.workspaceId;
-    if (!path) continue;
-    const isProcessing = get(sessionProcessingAtom(session.id));
-    const isUnread = get(sessionUnreadAtom(session.id));
-    if (!isProcessing && !isUnread) continue;
-    const entry = summary.get(path) ?? { processing: 0, unread: 0 };
-    if (isProcessing) entry.processing += 1;
-    if (isUnread) entry.unread += 1;
-    summary.set(path, entry);
-  }
-
-  return summary;
-});
-
 /**
  * Add a project to the rail. No-op if it already exists. When the rail
  * has reached the cap, returns without adding (caller should show a UI
@@ -166,6 +129,13 @@ export const closeOpenProjectAtom = atom(
       const replacement = next[idx] ?? next[idx - 1] ?? next[0] ?? null;
       set(activeWorkspacePathAtom, replacement?.path ?? null);
     }
+
+    // Drop the workspace's slot in the activity tracker. Other per-workspace
+    // atom families (tabs slot, sidebar width, etc.) are pruned by the
+    // `workspaceStatePruner` subscriber that watches `openProjectsAtom` —
+    // keeping that logic outside this module avoids a cycle with the atom
+    // files that already import `activeWorkspacePathAtom`.
+    set(clearWorkspaceActivityAtom, pathToClose);
   }
 );
 

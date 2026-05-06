@@ -52,3 +52,12 @@ export const aiChatWidthAtomFamily = atomFamily((_workspacePath: string) =>
 export const aiChatCollapsedAtomFamily = atomFamily((_workspacePath: string) =>
   atom<boolean>(false)
 );
+
+/** Drop every layout slot held for a workspace path. */
+export function pruneWorkspaceLayout(workspacePath: string): void {
+  sidebarWidthAtomFamily.remove(workspacePath);
+  sidebarCollapsedAtomFamily.remove(workspacePath);
+  sidebarPreCollapseWidthAtomFamily.remove(workspacePath);
+  aiChatWidthAtomFamily.remove(workspacePath);
+  aiChatCollapsedAtomFamily.remove(workspacePath);
+}
