@@ -11,6 +11,7 @@ import { createServer, IncomingMessage, ServerResponse } from "http";
 import { parse as parseUrl } from "url";
 import { randomUUID } from "crypto";
 import { requireMcpAuth } from "./mcpAuth";
+import { resolveProjectPath } from "../utils/workspaceDetection";
 
 type CreateSessionArgs = {
   title?: string;
@@ -438,13 +439,24 @@ function createMetaAgentMcpServer(
     }
 
     try {
+      // Normalize the URL-provided workspaceId to its canonical repo path.
+      // When the caller session lives inside a git worktree, the MCP server
+      // is launched with workspaceId = worktree directory, but sessions and
+      // session-list broadcasts compare workspace ids by exact string match
+      // against the renderer's active workspace (the parent repo path). Without
+      // this rewrite, sessions created via MCP from a worktree caller never
+      // appear in the UI, and spawn_session's parent lookup fails with
+      // "Parent session not found in this workspace". Mirrors the existing
+      // worktree-path fallback used by getAIProviderOverridesWithWorktreeFallback.
+      const effectiveWorkspaceId = resolveProjectPath(workspaceId);
+
       switch (toolName) {
         case "list_worktrees":
           return {
             content: [
               {
                 type: "text",
-                text: await toolFns.listWorktrees(aiSessionId, workspaceId),
+                text: await toolFns.listWorktrees(aiSessionId, effectiveWorkspaceId),
               },
             ],
             isError: false,
@@ -454,7 +466,7 @@ function createMetaAgentMcpServer(
             content: [
               {
                 type: "text",
-                text: await toolFns.createSession(aiSessionId, workspaceId, args ?? {}),
+                text: await toolFns.createSession(aiSessionId, effectiveWorkspaceId, args ?? {}),
               },
             ],
             isError: false,
@@ -464,7 +476,7 @@ function createMetaAgentMcpServer(
             content: [
               {
                 type: "text",
-                text: await toolFns.spawnSession(aiSessionId, workspaceId, args as SpawnSessionArgs),
+                text: await toolFns.spawnSession(aiSessionId, effectiveWorkspaceId, args as SpawnSessionArgs),
               },
             ],
             isError: false,
@@ -476,7 +488,7 @@ function createMetaAgentMcpServer(
                 type: "text",
                 text: await toolFns.getSessionStatus(
                   aiSessionId,
-                  workspaceId,
+                  effectiveWorkspaceId,
                   args?.sessionId as string
                 ),
               },
@@ -490,7 +502,7 @@ function createMetaAgentMcpServer(
                 type: "text",
                 text: await toolFns.getSessionResult(
                   aiSessionId,
-                  workspaceId,
+                  effectiveWorkspaceId,
                   args?.sessionId as string
                 ),
               },
@@ -504,7 +516,7 @@ function createMetaAgentMcpServer(
                 type: "text",
                 text: await toolFns.sendPrompt(
                   aiSessionId,
-                  workspaceId,
+                  effectiveWorkspaceId,
                   args?.sessionId as string,
                   args?.prompt as string
                 ),
@@ -517,7 +529,7 @@ function createMetaAgentMcpServer(
             content: [
               {
                 type: "text",
-                text: await toolFns.respondToPrompt(aiSessionId, workspaceId, args),
+                text: await toolFns.respondToPrompt(aiSessionId, effectiveWorkspaceId, args),
               },
             ],
             isError: false,
@@ -527,7 +539,7 @@ function createMetaAgentMcpServer(
             content: [
               {
                 type: "text",
-                text: await toolFns.listSpawnedSessions(aiSessionId, workspaceId),
+                text: await toolFns.listSpawnedSessions(aiSessionId, effectiveWorkspaceId),
               },
             ],
             isError: false,

@@ -1084,10 +1084,16 @@ export const createChildSessionAtom = atom(
           childId: result.sessionId,
         });
 
-        // Update the parent's child count in the session list so the UI updates
+        // Update the parent's child count in the session list so the UI updates.
+        // Why max-with-existing: sessionChildrenAtom(parent) may not have been
+        // hydrated yet (e.g. user clicked "+" before loadSessionChildrenAtom
+        // populated it), in which case newChildren.length is 1 even though the
+        // DB has many siblings. Lowering the registry's existing childCount
+        // would mask the new child from SessionHistory's refresh check.
+        const existingChildCount = get(sessionRegistryAtom).get(parentSessionId)?.childCount ?? 0;
         set(updateSessionFullAtom, {
           id: parentSessionId,
-          childCount: newChildren.length,
+          childCount: Math.max(newChildren.length, existingChildCount + 1),
         });
 
         return result.sessionId;

@@ -433,6 +433,30 @@ export function initSessionStateListeners(): () => void {
   };
 
   /**
+   * Handle coalesced batch-write events from AgentMessageWriteQueue.
+   *
+   * The queue emits one event per affected session per flush, replacing the
+   * per-chunk `ai:message-logged` events that used to fire from
+   * `logAgentMessageNonBlocking`. Adapt the batch payload to the existing
+   * per-row handler so the same throttled reload + unread-marking logic
+   * applies. A 'mixed' direction (input + output rows in the same flush)
+   * is treated as 'output' for unread purposes since it always contains at
+   * least one output row.
+   *
+   * Hidden rows are already excluded from the batch's count by the queue,
+   * so we don't need to filter again here.
+   */
+  const handleMessagesLoggedBatch = (data: {
+    sessionId: string;
+    count: number;
+    direction: 'input' | 'output' | 'mixed';
+  }) => {
+    if (!data?.sessionId || !data.count) return;
+    const effectiveDirection = data.direction === 'input' ? 'input' : 'output';
+    handleMessageLogged({ sessionId: data.sessionId, direction: effectiveDirection });
+  };
+
+  /**
    * Handle session title updates globally.
    * This ensures the session list updates when the agent names a session via MCP tool.
    */
@@ -737,9 +761,11 @@ export function initSessionStateListeners(): () => void {
   let cleanupSyncReadState: (() => void) | undefined;
   let cleanupSyncDraftInput: (() => void) | undefined;
   let cleanupTranscriptEvent: (() => void) | undefined;
+  let cleanupMessagesLoggedBatch: (() => void) | undefined;
   if (window.electronAPI?.on) {
     cleanupTranscriptEvent = window.electronAPI.on('transcript:event', handleTranscriptEvent);
     cleanupMessageLogged = window.electronAPI.on('ai:message-logged', handleMessageLogged);
+    cleanupMessagesLoggedBatch = window.electronAPI.on('ai:messages-logged-batch', handleMessagesLoggedBatch);
     cleanupTitleUpdated = window.electronAPI.on('session:title-updated', handleTitleUpdated);
     cleanupAskUserQuestion = window.electronAPI.on('ai:askUserQuestion', handleAskUserQuestion);
     cleanupAskUserQuestionAnswered = window.electronAPI.on('ai:askUserQuestionAnswered', handleAskUserQuestionResolved);
@@ -780,6 +806,7 @@ export function initSessionStateListeners(): () => void {
     window.electronAPI.sessionState?.unsubscribe?.();
     subscribedWorkspacePath = undefined;
     cleanupMessageLogged?.();
+    cleanupMessagesLoggedBatch?.();
     cleanupTitleUpdated?.();
     cleanupAskUserQuestion?.();
     cleanupAskUserQuestionAnswered?.();

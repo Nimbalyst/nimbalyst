@@ -342,9 +342,13 @@ export class ListDiffHandler implements DiffNodeHandler {
       $setDiffState(liveNode, 'modified');
       return {handled: true, skipChildren: false}; // Let the system recurse into children
     } else {
-      // For regular list items (text, links, formatting), use the inline text diff system
+      // For regular list items (text, links, formatting), use the inline
+      // text diff system. The caller already marked liveNode as 'modified';
+      // we don't reapply it here because $applyInlineTextDiff may
+      // legitimately downgrade the state to 'removed' when it splits the
+      // list item into a removed-source / added-target sibling pair for
+      // near-complete rewrites.
       $applyInlineTextDiff(liveNode, sourceChildren, targetChildren);
-      $setDiffState(liveNode, 'modified');
       return {handled: true, skipChildren: true};
     }
   }

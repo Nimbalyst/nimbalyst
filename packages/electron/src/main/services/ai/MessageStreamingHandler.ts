@@ -19,6 +19,7 @@ import {
   ProviderFactory,
   ModelRegistry,
   isAgentProvider,
+  onAgentMessageBatch,
   type AIProvider,
   type SessionManager,
 } from '@nimbalyst/runtime/ai/server';
@@ -165,9 +166,31 @@ async function getCurrentSessionTitle(sessionId: string, fallback = 'AI Session'
 
 export class MessageStreamingHandler {
   private readonly svc: AIServiceInternal;
+  private readonly unsubscribeBatchListener: () => void;
 
   constructor(service: AIService) {
     this.svc = service as unknown as AIServiceInternal;
+
+    // The shared AgentMessageWriteQueue (in BaseAIProvider) coalesces streaming
+    // chunk writes to relieve PGLite writer-lock contention. Per-row
+    // 'message:logged' is still emitted from BaseAIProvider.logAgentMessage
+    // (awaited writes: user input, final output, errors, can_use_tool audit),
+    // but the streaming firehose no longer fires per-row. Forward one batch
+    // event per flush per session so any window viewing that session can
+    // refresh once instead of N times. The queue already excludes hidden rows
+    // from the count, so we don't filter again here.
+    this.unsubscribeBatchListener = onAgentMessageBatch((batch) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed()) {
+          window.webContents.send('ai:messages-logged-batch', batch);
+        }
+      }
+    });
+  }
+
+  /** Used by AIService teardown to unwire the singleton batch listener. */
+  destroy(): void {
+    this.unsubscribeBatchListener();
   }
 
   handle: SendMessageHandler = async (
