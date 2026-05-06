@@ -55,9 +55,15 @@ function resolveDocumentServiceForEvent(event: Electron.IpcMainInvokeEvent | Ele
 }
 
 /**
- * Ensure all services are running for `workspacePath`. Idempotent — if
- * another window already created the services, just makes sure this window
- * shows up in the additional-paths list.
+ * Ensure per-workspace services exist for `workspacePath`. Idempotent — if
+ * another window already created the services, this just makes sure the
+ * window-side state is wired up.
+ *
+ * NOTE: Does NOT start the workspace file watcher and does NOT flip the
+ * runtime-global `FileSystemService`. Both belong to the "active path" of
+ * a window and are managed by the `workspace:set-active` handler. Calling
+ * either here would tear down whatever the active path is currently using
+ * (the watcher is single-active-per-window, the FS getter is a singleton).
  */
 function ensureServicesForPath(window: BrowserWindow, workspacePath: string): void {
     if (!existsSync(workspacePath)) {
@@ -76,12 +82,7 @@ function ensureServicesForPath(window: BrowserWindow, workspacePath: string): vo
     if (!fileSystemServices.has(workspacePath)) {
         const fileSystemService = new ElectronFileSystemService(workspacePath);
         fileSystemServices.set(workspacePath, fileSystemService);
-        setFileSystemService(fileSystemService);
     }
-
-    // Workspace watcher is per-window; start one for this path so the
-    // current window receives change events for the warm project.
-    startWorkspaceWatcher(window, workspacePath);
 
     // Restore navigation history (no-op if already restored for this window).
     const windowId = getWindowId(window);
@@ -145,6 +146,18 @@ export function registerMultiProjectRailHandlers(): void {
             return { success: true, stillPrimary: true };
         }
 
+        // If the path being closed was this window's active path, tear down
+        // the active-only state (file watcher + global FS service). The
+        // renderer is expected to call `workspace:set-active` for the
+        // replacement path right after this; that call will start the
+        // watcher and flip the FS global to the new active project.
+        const wasActive = state.activeWorkspacePath === workspacePath;
+        if (wasActive) {
+            stopWorkspaceWatcher(windowId);
+            state.activeWorkspacePath = null;
+            clearFileSystemService();
+        }
+
         // Free services only if no other window references the path.
         if (!anyWindowReferencesWorkspace(workspacePath)) {
             const docService = documentServices.get(workspacePath);
@@ -157,7 +170,6 @@ export function registerMultiProjectRailHandlers(): void {
             if (fsService) {
                 fsService.destroy();
                 fileSystemServices.delete(workspacePath);
-                clearFileSystemService();
             }
 
             try {
@@ -167,9 +179,6 @@ export function registerMultiProjectRailHandlers(): void {
                 logger.main.error('[MultiProject] Error stopping MCP config watcher:', error);
             }
         }
-
-        // Stop the workspace watcher tied to this window for this path.
-        stopWorkspaceWatcher(windowId);
 
         return { success: true };
     });
@@ -193,7 +202,42 @@ export function registerMultiProjectRailHandlers(): void {
             return { success: false, error: 'workspacePath not registered in this window' };
         }
 
+        const previousActive = state.activeWorkspacePath ?? state.workspacePath;
+        if (previousActive === workspacePath) {
+            // Idempotent: already active. Make sure the global FS service is
+            // pointing at the right place (covers the case of an early call
+            // before the watcher was started, e.g. during create-window
+            // bootstrap).
+            const svc = fileSystemServices.get(workspacePath);
+            if (svc) setFileSystemService(svc);
+            return { success: true, alreadyActive: true };
+        }
+
+        // Transition: stop the watcher tied to the previous active path,
+        // start a fresh one for the new active path. The watcher API is
+        // single-active-per-window, so we always tear down + restart on
+        // every flip. Watcher is the only "active-only" main-process
+        // resource (services in `documentServices`/`fileSystemServices`
+        // remain warm for inactive rail projects).
+        stopWorkspaceWatcher(windowId);
         state.activeWorkspacePath = workspacePath;
+        startWorkspaceWatcher(window, workspacePath);
+
+        // Flip the runtime-global FileSystemService so AI tools that resolve
+        // via `getFileSystemService()` (no-arg) read from the visible
+        // project. Sessions running in inactive rail projects must resolve
+        // their FS service via the per-path map (`fileSystemServices.get`)
+        // — see docs/AI_PROVIDER_TYPES.md.
+        const fsService = fileSystemServices.get(workspacePath);
+        if (fsService) {
+            setFileSystemService(fsService);
+        } else {
+            logger.main.warn(
+                '[MultiProject] set-active without registered FileSystemService for path:',
+                workspacePath,
+            );
+        }
+
         return { success: true };
     });
 }

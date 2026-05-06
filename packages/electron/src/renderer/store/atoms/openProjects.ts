@@ -247,8 +247,28 @@ export async function initOpenProjects(): Promise<void> {
       });
     }),
     store.sub(openProjectsAtom, () => schedulePersistOpenProjects()),
-    store.sub(activeWorkspacePathAtom, () => schedulePersistActivePath()),
+    store.sub(activeWorkspacePathAtom, () => {
+      schedulePersistActivePath();
+      notifyMainSetActive();
+    }),
   );
+}
+
+/**
+ * Notify the main process about the new active workspace path so the
+ * single-active-per-window resources (file watcher, runtime-global
+ * FileSystemService) transition atomically. Centralized here so every
+ * mutation of `activeWorkspacePathAtom` (rail click, replacement after
+ * close, restore-on-launch, keyboard shortcut) goes through one path —
+ * direct callers of `electronAPI.invoke('workspace:set-active', ...)`
+ * are not necessary.
+ */
+function notifyMainSetActive(): void {
+  const path = store.get(activeWorkspacePathAtom);
+  if (!path) return;
+  window.electronAPI?.invoke?.('workspace:set-active', { workspacePath: path }).catch((err: unknown) => {
+    console.error('[openProjects] workspace:set-active failed:', err);
+  });
 }
 
 function schedulePersistOpenProjects(): void {

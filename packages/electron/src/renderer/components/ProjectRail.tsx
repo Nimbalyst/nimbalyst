@@ -147,10 +147,10 @@ export function ProjectRail() {
   const handleActivate = useCallback(
     (path: string) => {
       if (path === activePath) return;
+      // The atom subscriber in initOpenProjects() forwards the change to
+      // the main process via `workspace:set-active`, so there is no direct
+      // IPC call here.
       setActivePath(path);
-      window.electronAPI?.invoke?.('workspace:set-active', { workspacePath: path }).catch((err: unknown) => {
-        console.error('[ProjectRail] workspace:set-active failed:', err);
-      });
     },
     [activePath, setActivePath]
   );
@@ -169,9 +169,9 @@ export function ProjectRail() {
         name: workspacePath.split(/[\\/]/).filter(Boolean).pop() || workspacePath,
         openedAt: Date.now(),
       };
+      // `addOpenProjectAtom` flips `activeWorkspacePathAtom` to this path;
+      // the atom subscriber dispatches `workspace:set-active` to main.
       addProject(project);
-
-      await window.electronAPI.invoke('workspace:set-active', { workspacePath });
     } catch (err) {
       console.error('[ProjectRail] addProjectByPath failed:', err);
     }

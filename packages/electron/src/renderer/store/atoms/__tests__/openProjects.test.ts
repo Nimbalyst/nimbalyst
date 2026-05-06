@@ -1,0 +1,164 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import { createStore } from 'jotai';
+import {
+  openProjectsAtom,
+  activeWorkspacePathAtom,
+  activeOpenProjectAtom,
+  addOpenProjectAtom,
+  closeOpenProjectAtom,
+  isOpenProjectsAtCapAtom,
+  type OpenProject,
+} from '../openProjects';
+
+const MAX_OPEN_PROJECTS = 8;
+
+function project(path: string, openedAt = 0): OpenProject {
+  const name = path.split('/').filter(Boolean).pop() ?? path;
+  return { path, name, openedAt };
+}
+
+describe('openProjects atoms', () => {
+  let jotaiStore: ReturnType<typeof createStore>;
+
+  beforeEach(() => {
+    jotaiStore = createStore();
+  });
+
+  describe('addOpenProjectAtom', () => {
+    it('adds a new project and activates it', () => {
+      jotaiStore.set(addOpenProjectAtom, project('/ws/a'));
+
+      expect(jotaiStore.get(openProjectsAtom)).toEqual([project('/ws/a')]);
+      expect(jotaiStore.get(activeWorkspacePathAtom)).toBe('/ws/a');
+    });
+
+    it('appends in order for multiple distinct projects', () => {
+      jotaiStore.set(addOpenProjectAtom, project('/ws/a'));
+      jotaiStore.set(addOpenProjectAtom, project('/ws/b'));
+      jotaiStore.set(addOpenProjectAtom, project('/ws/c'));
+
+      const open = jotaiStore.get(openProjectsAtom);
+      expect(open.map((p) => p.path)).toEqual(['/ws/a', '/ws/b', '/ws/c']);
+      expect(jotaiStore.get(activeWorkspacePathAtom)).toBe('/ws/c');
+    });
+
+    it('dedups when path is already open and just activates it', () => {
+      jotaiStore.set(addOpenProjectAtom, project('/ws/a'));
+      jotaiStore.set(addOpenProjectAtom, project('/ws/b'));
+      jotaiStore.set(addOpenProjectAtom, project('/ws/a'));
+
+      const open = jotaiStore.get(openProjectsAtom);
+      expect(open).toHaveLength(2);
+      expect(open.map((p) => p.path)).toEqual(['/ws/a', '/ws/b']);
+      expect(jotaiStore.get(activeWorkspacePathAtom)).toBe('/ws/a');
+    });
+
+    it('rejects new projects beyond the cap without altering active', () => {
+      for (let i = 0; i < MAX_OPEN_PROJECTS; i++) {
+        jotaiStore.set(addOpenProjectAtom, project(`/ws/${i}`));
+      }
+      expect(jotaiStore.get(openProjectsAtom)).toHaveLength(MAX_OPEN_PROJECTS);
+      expect(jotaiStore.get(activeWorkspacePathAtom)).toBe(`/ws/${MAX_OPEN_PROJECTS - 1}`);
+
+      jotaiStore.set(addOpenProjectAtom, project('/ws/overflow'));
+
+      expect(jotaiStore.get(openProjectsAtom)).toHaveLength(MAX_OPEN_PROJECTS);
+      expect(jotaiStore.get(activeWorkspacePathAtom)).toBe(`/ws/${MAX_OPEN_PROJECTS - 1}`);
+    });
+  });
+
+  describe('closeOpenProjectAtom', () => {
+    it('removes the project from the list', () => {
+      jotaiStore.set(addOpenProjectAtom, project('/ws/a'));
+      jotaiStore.set(addOpenProjectAtom, project('/ws/b'));
+
+      jotaiStore.set(closeOpenProjectAtom, '/ws/a');
+
+      expect(jotaiStore.get(openProjectsAtom).map((p) => p.path)).toEqual(['/ws/b']);
+    });
+
+    it('promotes the next project when closing the active one', () => {
+      jotaiStore.set(addOpenProjectAtom, project('/ws/a'));
+      jotaiStore.set(addOpenProjectAtom, project('/ws/b'));
+      jotaiStore.set(addOpenProjectAtom, project('/ws/c'));
+      jotaiStore.set(activeWorkspacePathAtom, '/ws/b');
+
+      jotaiStore.set(closeOpenProjectAtom, '/ws/b');
+
+      expect(jotaiStore.get(activeWorkspacePathAtom)).toBe('/ws/c');
+    });
+
+    it('falls back to the previous project when closing the last one', () => {
+      jotaiStore.set(addOpenProjectAtom, project('/ws/a'));
+      jotaiStore.set(addOpenProjectAtom, project('/ws/b'));
+      jotaiStore.set(addOpenProjectAtom, project('/ws/c'));
+      jotaiStore.set(activeWorkspacePathAtom, '/ws/c');
+
+      jotaiStore.set(closeOpenProjectAtom, '/ws/c');
+
+      expect(jotaiStore.get(activeWorkspacePathAtom)).toBe('/ws/b');
+    });
+
+    it('clears active when the last open project is closed', () => {
+      jotaiStore.set(addOpenProjectAtom, project('/ws/only'));
+
+      jotaiStore.set(closeOpenProjectAtom, '/ws/only');
+
+      expect(jotaiStore.get(openProjectsAtom)).toHaveLength(0);
+      expect(jotaiStore.get(activeWorkspacePathAtom)).toBeNull();
+    });
+
+    it('leaves active untouched when closing an inactive project', () => {
+      jotaiStore.set(addOpenProjectAtom, project('/ws/a'));
+      jotaiStore.set(addOpenProjectAtom, project('/ws/b'));
+      jotaiStore.set(activeWorkspacePathAtom, '/ws/a');
+
+      jotaiStore.set(closeOpenProjectAtom, '/ws/b');
+
+      expect(jotaiStore.get(activeWorkspacePathAtom)).toBe('/ws/a');
+    });
+
+    it('is a no-op when path is not in the rail', () => {
+      jotaiStore.set(addOpenProjectAtom, project('/ws/a'));
+      jotaiStore.set(closeOpenProjectAtom, '/ws/missing');
+
+      expect(jotaiStore.get(openProjectsAtom).map((p) => p.path)).toEqual(['/ws/a']);
+      expect(jotaiStore.get(activeWorkspacePathAtom)).toBe('/ws/a');
+    });
+  });
+
+  describe('derived atoms', () => {
+    it('isOpenProjectsAtCapAtom flips at the cap', () => {
+      expect(jotaiStore.get(isOpenProjectsAtCapAtom)).toBe(false);
+      for (let i = 0; i < MAX_OPEN_PROJECTS - 1; i++) {
+        jotaiStore.set(addOpenProjectAtom, project(`/ws/${i}`));
+      }
+      expect(jotaiStore.get(isOpenProjectsAtCapAtom)).toBe(false);
+
+      jotaiStore.set(addOpenProjectAtom, project(`/ws/${MAX_OPEN_PROJECTS - 1}`));
+      expect(jotaiStore.get(isOpenProjectsAtCapAtom)).toBe(true);
+    });
+
+    it('activeOpenProjectAtom returns null with no active path', () => {
+      jotaiStore.set(addOpenProjectAtom, project('/ws/a'));
+      jotaiStore.set(activeWorkspacePathAtom, null);
+
+      expect(jotaiStore.get(activeOpenProjectAtom)).toBeNull();
+    });
+
+    it('activeOpenProjectAtom returns the matching project for the active path', () => {
+      jotaiStore.set(addOpenProjectAtom, project('/ws/a'));
+      jotaiStore.set(addOpenProjectAtom, project('/ws/b'));
+      jotaiStore.set(activeWorkspacePathAtom, '/ws/b');
+
+      expect(jotaiStore.get(activeOpenProjectAtom)?.path).toBe('/ws/b');
+    });
+
+    it('activeOpenProjectAtom returns null when active path is not in the rail', () => {
+      jotaiStore.set(addOpenProjectAtom, project('/ws/a'));
+      jotaiStore.set(activeWorkspacePathAtom, '/ws/zombie');
+
+      expect(jotaiStore.get(activeOpenProjectAtom)).toBeNull();
+    });
+  });
+});
