@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- Changes to existing functionality go here -->
 
 ### Fixed
-<!-- Bug fixes go here -->
+- Default `CLAUDE_CODE_ENTRYPOINT` to `'cli'` so OAuth subscription traffic (Pro and Max) is not classified as third-party by Anthropic's backend. The bundled `@anthropic-ai/claude-agent-sdk` defaults SDK consumers to `'sdk-ts'` when the env var is unset, which was sending Nimbalyst into a deprioritized throttle lane that fired before the user's documented usage quota was reached, especially when the official `claude` CLI was running concurrently under the same OAuth credentials. One-line conditional override in `sdkOptionsBuilder.ts`, conditional spread shape so any caller who explicitly sets the env var (e.g., for hook-policy enforcement per anthropics/claude-code#54541, or debugging) keeps their value. Closes #174.
 
 ### Removed
 <!-- Removed features go here -->
