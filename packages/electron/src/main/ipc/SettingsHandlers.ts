@@ -316,6 +316,37 @@ export function registerSettingsHandlers() {
         return getRecentItems('workspaces');
     });
 
+    // Multi-project rail (opt-in: hosts multiple projects in a single window)
+    safeHandle('app:get-multi-project-mode', async () => {
+        const { getMultiProjectMode } = await import('../utils/store');
+        return getMultiProjectMode();
+    });
+
+    safeHandle('app:set-multi-project-mode', async (_event, enabled: boolean) => {
+        const { setMultiProjectMode } = await import('../utils/store');
+        setMultiProjectMode(enabled);
+    });
+
+    safeHandle('app:get-open-projects', async () => {
+        const { getOpenProjectPaths } = await import('../utils/store');
+        return getOpenProjectPaths();
+    });
+
+    safeHandle('app:set-open-projects', async (_event, paths: string[]) => {
+        const { setOpenProjectPaths } = await import('../utils/store');
+        setOpenProjectPaths(Array.isArray(paths) ? paths : []);
+    });
+
+    safeHandle('app:get-active-project-path', async () => {
+        const { getActiveProjectPath } = await import('../utils/store');
+        return getActiveProjectPath();
+    });
+
+    safeHandle('app:set-active-project-path', async (_event, path: string | null) => {
+        const { setActiveProjectPath } = await import('../utils/store');
+        setActiveProjectPath(path);
+    });
+
     // Onboarding state
     safeHandle('onboarding:get', async () => {
         const { getOnboardingState } = await import('../utils/store');

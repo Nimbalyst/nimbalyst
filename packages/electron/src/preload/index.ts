@@ -438,7 +438,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('ai-session-state:get-state', sessionId),
     isSessionActive: (sessionId: string) =>
       ipcRenderer.invoke('ai-session-state:is-active', sessionId),
-    subscribe: (workspacePath?: string) =>
+    subscribe: (workspacePath?: string | string[]) =>
       ipcRenderer.invoke('ai-session-state:subscribe', workspacePath),
     unsubscribe: () =>
       ipcRenderer.invoke('ai-session-state:unsubscribe'),

@@ -44,6 +44,7 @@ import {
 import { workstreamActiveChildAtom, workstreamStateAtom } from './atoms/workstreamState';
 import { setWindowModeAtom } from './atoms/windowMode';
 import { triggerWorktreeRefreshAtom } from './atoms/gitOperations';
+import { multiProjectModeAtom, openProjectsAtom } from './atoms/openProjects';
 import type { TranscriptEvent } from '@nimbalyst/runtime/ai/server/transcript/types';
 import { TranscriptStreamAccumulator } from './transcriptStreamAccumulator';
 
@@ -115,20 +116,42 @@ const READ_STATE_SYNC_DEBOUNCE_MS = 5000;
 
 // Active workspace-scoped subscription in main process.
 // Kept module-level so we can update routing without re-registering all IPC listeners.
-let subscribedWorkspacePath: string | undefined;
+//
+// Multi-project rail: in single-project mode the subscription is keyed to
+// the active workspace; in multi-project mode the subscription receives
+// events for every open (warm) project so a session that completes while
+// its project is hidden still flips the UI out of "Thinking…".
+let activeWorkspacePathSnapshot: string | null = null;
+let lastSubscriptionKey = '';
 
-function subscribeToSessionStateWorkspace(workspacePath?: string): void {
+function getCurrentSubscriptionPaths(): string[] | undefined {
+  const isMulti = store.get(multiProjectModeAtom);
+  if (isMulti) {
+    const open = store.get(openProjectsAtom);
+    if (open.length > 0) return open.map((p) => p.path);
+    return activeWorkspacePathSnapshot ? [activeWorkspacePathSnapshot] : undefined;
+  }
+  return activeWorkspacePathSnapshot ? [activeWorkspacePathSnapshot] : undefined;
+}
+
+function reconcileSessionStateSubscription(): void {
   if (!window.electronAPI?.sessionState) return;
 
-  if (subscribedWorkspacePath === workspacePath) {
-    return;
-  }
+  const paths = getCurrentSubscriptionPaths();
+  const key = paths ? [...paths].sort().join('\0') : '__no_filter__';
+  if (key === lastSubscriptionKey) return;
+  lastSubscriptionKey = key;
 
-  subscribedWorkspacePath = workspacePath;
-  window.electronAPI.sessionState.subscribe(workspacePath)
+  const arg: string | string[] | undefined = !paths
+    ? undefined
+    : paths.length === 1
+      ? paths[0]
+      : paths;
+
+  window.electronAPI.sessionState.subscribe(arg)
     .then((result: any) => {
-      if (!result.success) {
-        console.error('[sessionStateListeners] Failed to subscribe to session state manager:', result.error);
+      if (!result?.success) {
+        console.error('[sessionStateListeners] Failed to subscribe to session state manager:', result?.error);
       }
     })
     .catch((error: any) => {
@@ -137,7 +160,18 @@ function subscribeToSessionStateWorkspace(workspacePath?: string): void {
 }
 
 export function updateSessionStateListenerWorkspace(workspacePath: string): void {
-  subscribeToSessionStateWorkspace(workspacePath || undefined);
+  activeWorkspacePathSnapshot = workspacePath || null;
+  reconcileSessionStateSubscription();
+}
+
+// React to multi-project mode toggle / rail open-projects changes by
+// re-subscribing with the right set of workspace paths.
+let multiProjectSubscribersInstalled = false;
+function ensureMultiProjectSubscribers(): void {
+  if (multiProjectSubscribersInstalled) return;
+  multiProjectSubscribersInstalled = true;
+  store.sub(multiProjectModeAtom, reconcileSessionStateSubscription);
+  store.sub(openProjectsAtom, reconcileSessionStateSubscription);
 }
 
 /**
@@ -151,6 +185,11 @@ export function initSessionStateListeners(): () => void {
     console.warn('[sessionStateListeners] sessionState API not available');
     return () => {};
   }
+
+  // Wire reconciliation against multi-project rail state so subscriptions
+  // include every warm project, not just the visible one.
+  ensureMultiProjectSubscribers();
+  reconcileSessionStateSubscription();
 
   /**
    * Handle session state change events.
@@ -170,9 +209,19 @@ export function initSessionStateListeners(): () => void {
     const sessionMeta = registry.get(sessionId);
     const resolvedWorkspacePath = eventWorkspacePath || sessionMeta?.workspaceId || currentWorkspacePath || null;
 
-    // Ignore lifecycle events for sessions owned by a different workspace window.
-    if (currentWorkspacePath && resolvedWorkspacePath && resolvedWorkspacePath !== currentWorkspacePath) {
-      return;
+    // Ignore lifecycle events that don't belong to a workspace this window
+    // is hosting. In multi-project mode any of the rail's warm projects
+    // counts; otherwise we keep the legacy single-project filter.
+    if (currentWorkspacePath && resolvedWorkspacePath) {
+      const isMulti = store.get(multiProjectModeAtom);
+      if (isMulti) {
+        const openPaths = store.get(openProjectsAtom).map((p) => p.path);
+        if (openPaths.length > 0 && !openPaths.includes(resolvedWorkspacePath)) {
+          return;
+        }
+      } else if (resolvedWorkspacePath !== currentWorkspacePath) {
+        return;
+      }
     }
 
     switch (type) {
@@ -715,7 +764,8 @@ export function initSessionStateListeners(): () => void {
 
   // First, subscribe to the session state manager (IPC call to register this window).
   // Workspace can change during app lifetime; this is updated via updateSessionStateListenerWorkspace().
-  subscribeToSessionStateWorkspace(store.get(sessionListWorkspaceAtom) || undefined);
+  activeWorkspacePathSnapshot = store.get(sessionListWorkspaceAtom) || null;
+  reconcileSessionStateSubscription();
 
   // Fetch currently active sessions and restore their processing state
   // This handles the case where the renderer refreshes while sessions are running
@@ -804,7 +854,8 @@ export function initSessionStateListeners(): () => void {
 
     window.electronAPI.sessionState?.removeStateChangeListener?.(handleStateChange);
     window.electronAPI.sessionState?.unsubscribe?.();
-    subscribedWorkspacePath = undefined;
+    activeWorkspacePathSnapshot = null;
+    lastSubscriptionKey = '';
     cleanupMessageLogged?.();
     cleanupMessagesLoggedBatch?.();
     cleanupTitleUpdated?.();

@@ -90,6 +90,7 @@ import {
   sessionRegistryAtom,
   historyDialogFileAtom,
 } from './store';
+import { initOpenProjects } from './store/atoms/openProjects';
 import { initAiCommandListeners } from './store/listeners/aiCommandListeners';
 import { initAppCommandListeners } from './store/listeners/appCommandListeners';
 import { initClaudeUsageListeners } from './store/listeners/claudeUsageListeners';
@@ -111,6 +112,12 @@ import { initWakeupListeners } from './store/listeners/wakeupListener';
 import { TrackerMode } from './components/TrackerMode';
 import { CollabMode } from './components/CollabMode';
 import { TerminalBottomPanel } from './components/TerminalBottomPanel';
+import { ProjectRail } from './components/ProjectRail';
+import {
+  activeWorkspacePathAtom,
+  multiProjectModeAtom,
+  addOpenProjectAtom as addOpenProjectAction,
+} from './store/atoms/openProjects';
 import { registerDocumentLinkPlugin } from './plugins/registerDocumentLinkPlugin';
 import { registerAIChatPlugin } from './plugins/registerAIChatPlugin';
 import { registerTrackerPlugin } from './plugins/registerTrackerPlugin';
@@ -261,6 +268,11 @@ export default function App() {
 
   // Initialize centralized IPC listeners once at app startup
   useEffect(() => {
+    // Multi-project rail state — fire-and-forget so legacy single-project
+    // startup is not blocked by IPC. The rail consumers re-render when the
+    // atoms hydrate.
+    initOpenProjects();
+
     const cleanupAiCommands = initAiCommandListeners();
     const cleanupAppCommands = initAppCommandListeners();
     const cleanupClaude = initClaudeUsageListeners();
@@ -396,6 +408,14 @@ export default function App() {
   const [workspaceMode, setWorkspaceMode] = useState(false);
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
   const [workspaceName, setWorkspaceName] = useState<string | null>(null);
+  // Multi-project rail integration: when the user clicks a different
+  // project in the rail, the active-path atom changes. Mirror it into the
+  // existing `workspacePath` useState so the rest of the App.tsx tree
+  // (which is wired to that state) re-renders for the new project.
+  const isMultiProjectMode = useAtomValue(multiProjectModeAtom);
+  const railActivePath = useAtomValue(activeWorkspacePathAtom);
+  const addOpenProject = useSetAtom(addOpenProjectAction);
+  const setRailActivePath = useSetAtom(activeWorkspacePathAtom);
   // NOTE: fileTree, sidebarWidth, isNewFileDialogOpen, newFileDirectory, isHistoryDialogOpen moved to EditorMode
   // NOTE: Navigation dialogs (QuickOpen, SessionQuickOpen, PromptQuickOpen, ProjectQuickOpen) are now managed by DialogProvider
   // NOTE: isAIChatCollapsed, aiChatWidth moved to EditorMode for workspace mode
@@ -1514,6 +1534,15 @@ export default function App() {
               await initWindowMode(initialState.workspacePath);
               // Initialize unified navigation history
               await initNavigationHistory(initialState.workspacePath);
+
+              // Seed the multi-project rail: this window's primary
+              // workspace is always represented in the rail (visible only
+              // when multiProjectMode is on, hidden otherwise).
+              addOpenProject({
+                path: initialState.workspacePath,
+                name: initialState.workspaceName ?? initialState.workspacePath,
+                openedAt: Date.now(),
+              });
             }
           }
         }
@@ -1525,7 +1554,28 @@ export default function App() {
     };
 
     loadInitialState();
-  }, []);
+  }, [addOpenProject]);
+
+  // Multi-project rail switch: when the rail's active path changes, mirror
+  // it into the legacy `workspacePath` useState so the rest of the App
+  // tree re-renders for the new project. Only fires when the user
+  // explicitly clicks a different project — initial load is handled above.
+  useEffect(() => {
+    if (!isMultiProjectMode) return;
+    if (!railActivePath) return;
+    if (railActivePath === workspacePath) return;
+
+    setWorkspacePath(railActivePath);
+    setWorkspaceName(railActivePath.split(/[\\/]/).filter(Boolean).pop() ?? railActivePath);
+
+    // Re-init navigation history for the newly visible project.
+    initNavigationHistory(railActivePath).catch((err) => {
+      console.error('[INIT] Failed to init navigation history on rail switch:', err);
+    });
+    initWindowMode(railActivePath).catch((err) => {
+      console.error('[INIT] Failed to init window mode on rail switch:', err);
+    });
+  }, [isMultiProjectMode, railActivePath, workspacePath]);
 
 
   // Mode-aware tab navigation handlers
@@ -1840,6 +1890,9 @@ export default function App() {
     <WalkthroughProvider currentMode={activeMode}>
     <TipProvider currentMode={activeMode}>
     <div data-layout="root-container" className="h-screen flex flex-row">
+      {/* Far-left: project rail (Discord-style) — visible only when
+          multi-project mode is enabled in settings. */}
+      <ProjectRail />
       {/* Left: Navigation Gutter - full height */}
       <NavigationGutter
         contentMode={activeMode}

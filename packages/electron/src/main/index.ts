@@ -35,6 +35,7 @@ import { registerPermissionHandlers } from './ipc/PermissionHandlers';
 import { registerGitStatusHandlers } from './ipc/GitStatusHandlers';
 import { registerGitHandlers } from './ipc/GitHandlers';
 import { registerProjectSelectionHandlers } from './ipc/ProjectSelectionHandlers';
+import { registerMultiProjectRailHandlers } from './ipc/MultiProjectRailHandlers';
 import { registerUsageAnalyticsHandlers } from './ipc/UsageAnalyticsHandlers';
 import { registerWorktreeHandlers } from './ipc/WorktreeHandlers';
 import { registerWakeupHandlers } from './ipc/WakeupHandlers';
@@ -1078,6 +1079,7 @@ app.whenReady().then(async () => {
     await registerUsageAnalyticsHandlers();
     registerAttachmentHandlers();
     registerProjectSelectionHandlers();
+    registerMultiProjectRailHandlers();
     registerClaudeCodeHandlers();
     initializeClaudeCodeSessionHandlers();  // Initialize Claude Code session import
     registerAnalyticsHandlers();

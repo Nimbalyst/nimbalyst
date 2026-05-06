@@ -66,7 +66,7 @@ export async function registerSessionStateHandlers() {
   });
 
   // Subscribe to state changes
-  safeHandle('ai-session-state:subscribe', async (event, workspacePath?: string) => {
+  safeHandle('ai-session-state:subscribe', async (event, workspacePath?: string | string[]) => {
     try {
       const window = BrowserWindow.fromWebContents(event.sender);
       if (!window) {
@@ -81,12 +81,23 @@ export async function registerSessionStateHandlers() {
         existingUnsubscribe();
       }
 
+      // Normalize the filter to a Set of allowed workspace paths. Multi-project
+      // rail windows host several projects at once and must keep receiving
+      // lifecycle events for each one, otherwise the UI gets stuck on
+      // "Thinking…" when a session in an inactive project completes.
+      const allowedPaths = Array.isArray(workspacePath)
+        ? new Set(workspacePath.filter((p): p is string => typeof p === 'string' && p.length > 0))
+        : workspacePath
+          ? new Set([workspacePath])
+          : null;
+
       // Create new subscription
       const unsubscribe = stateManager.subscribe((stateEvent: SessionStateEvent) => {
-        // Workspace-scoped subscription: only send events for the window's workspace.
-        // This prevents foreign session lifecycle events from triggering cross-workspace reloads.
-        if (workspacePath) {
-          if (!stateEvent.workspacePath || stateEvent.workspacePath !== workspacePath) {
+        // Workspace-scoped subscription: only send events for the workspaces
+        // this window cares about. Pass an empty/undefined filter to receive
+        // events for all workspaces.
+        if (allowedPaths) {
+          if (!stateEvent.workspacePath || !allowedPaths.has(stateEvent.workspacePath)) {
             return;
           }
         }

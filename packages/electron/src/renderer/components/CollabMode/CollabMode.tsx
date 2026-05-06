@@ -41,7 +41,7 @@ export const CollabMode: React.FC<CollabModeProps> = ({
   useEffect(() => {
     initSharedDocuments(workspacePath);
     return () => {
-      destroyTeamSync();
+      destroyTeamSync(workspacePath);
     };
   }, [workspacePath]);
 
