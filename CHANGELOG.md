@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- Changes to existing functionality go here -->
 
 ### Fixed
-<!-- Bug fixes go here -->
+- Settings → Claude Agent SDK panel no longer reads `Version: unknown` on builds where npm workspace dedup hoists `@anthropic-ai/claude-agent-sdk` to the repo-root `node_modules/`. The build-time version read in `electron.vite.config.ts` was hardcoded to `packages/electron/node_modules/...` and silently fell through to `'unknown'` on hoisted installs; it now tries both the local and workspace-root candidates. Closes #60.
 
 ### Removed
 <!-- Removed features go here -->
