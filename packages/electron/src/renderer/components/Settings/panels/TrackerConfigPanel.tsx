@@ -9,6 +9,20 @@ import {
 } from '@nimbalyst/runtime';
 import { trackerItemCountByTypeAtom } from '@nimbalyst/runtime/plugins/TrackerPlugin';
 import { AlphaBadge } from '../../common/AlphaBadge';
+import { TrackerTypeCreator } from './TrackerTypeCreator';
+import {
+  loadLayout,
+  saveLayout,
+  loadLegacyState,
+  buildLayoutFromLegacy,
+  reconcileLayout,
+  addFolder,
+  renameFolder,
+  deleteFolder,
+  assignTypeToFolder,
+  moveEntry,
+  type TrackerSidebarLayout,
+} from '../../../services/TrackerSidebarLayout';
 
 // ============================================================================
 // Types
@@ -260,14 +274,272 @@ function IssueKeyPrefixInput({ value, onChange }: {
 }
 
 // ============================================================================
+// Folder Manager
+// ============================================================================
+
+function FolderManager({
+  trackers,
+  workspacePath,
+  onRefresh,
+}: {
+  trackers: TrackerDataModel[];
+  workspacePath?: string;
+  onRefresh?: () => void;
+}) {
+  const [layout, setLayout] = useState<TrackerSidebarLayout>({ entries: [] });
+  const [newFolderError, setNewFolderError] = useState('');
+
+  const reload = useCallback(async () => {
+    if (!workspacePath) return;
+    let saved = await loadLayout(workspacePath);
+    if (saved.entries.length === 0) {
+      const legacy = await loadLegacyState(workspacePath);
+      saved = buildLayoutFromLegacy(trackers, legacy.folders, legacy.overrides);
+    }
+    const reconciled = reconcileLayout(saved, trackers);
+    setLayout(reconciled);
+  }, [workspacePath, trackers]);
+
+  useEffect(() => {
+    reload();
+    const unsubscribe = globalRegistry.onChange(reload);
+    return () => { unsubscribe(); };
+  }, [reload]);
+
+  const persist = useCallback(async (next: TrackerSidebarLayout) => {
+    if (!workspacePath) return;
+    setLayout(next);
+    await saveLayout(workspacePath, next);
+    onRefresh?.();
+  }, [workspacePath, onRefresh]);
+
+  const handleAddFolder = useCallback(async () => {
+    const name = 'New Folder';
+    if (layout.entries.some((e) => e.kind === 'folder' && e.name === name)) {
+      setNewFolderError('A folder named "New Folder" already exists. Rename it first.');
+      return;
+    }
+    setNewFolderError('');
+    await persist(addFolder(layout, name));
+  }, [layout, persist]);
+
+  const handleRenameFolder = useCallback(async (oldName: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed === oldName) return;
+    await persist(renameFolder(layout, oldName, trimmed));
+  }, [layout, persist]);
+
+  const handleDeleteFolder = useCallback(async (folderName: string) => {
+    await persist(deleteFolder(layout, folderName));
+  }, [layout, persist]);
+
+  const handleReorder = useCallback(async (folderName: string, direction: 'up' | 'down') => {
+    const folderIndices = layout.entries
+      .map((e, i) => (e.kind === 'folder' ? i : -1))
+      .filter((i) => i >= 0);
+    const folderEntryIdx = layout.entries.findIndex(
+      (e) => e.kind === 'folder' && e.name === folderName
+    );
+    if (folderEntryIdx < 0) return;
+    const posInFolders = folderIndices.indexOf(folderEntryIdx);
+    const swapPos = direction === 'up' ? posInFolders - 1 : posInFolders + 1;
+    if (swapPos < 0 || swapPos >= folderIndices.length) return;
+    const swapEntryIdx = folderIndices[swapPos];
+    const drop: import('../../../services/TrackerSidebarLayout').DropLocation = {
+      position: direction === 'up' ? 'before' : 'after',
+      target: [swapEntryIdx],
+    };
+    const drag: import('../../../services/TrackerSidebarLayout').DragLocation = {
+      kind: 'folder',
+      id: folderName,
+    };
+    await persist(moveEntry(layout, drag, drop));
+  }, [layout, persist]);
+
+  const handleAssignFolder = useCallback(async (typeId: string, folderName: string | null) => {
+    await persist(assignTypeToFolder(layout, typeId, folderName));
+  }, [layout, persist]);
+
+  const folderEntries = layout.entries.filter(
+    (e): e is Extract<typeof e, { kind: 'folder' }> => e.kind === 'folder'
+  );
+  const folderNames = folderEntries.map((f) => f.name);
+
+  const getEffectiveFolder = (model: TrackerDataModel): string | null => {
+    for (const entry of layout.entries) {
+      if (entry.kind === 'folder' && entry.types.includes(model.type)) {
+        return entry.name;
+      }
+    }
+    return null;
+  };
+
+  return (
+    <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+      <h4 className="provider-panel-section-title text-[15px] font-semibold mb-2 text-[var(--nim-text)]">
+        Tracker Folders
+      </h4>
+      <p className="text-[13px] leading-relaxed text-[var(--nim-text-muted)] mb-3">
+        Group tracker types into collapsible folders in the sidebar. Folders are per-workspace and do not affect your data.
+      </p>
+
+      {/* Folder list */}
+      {folderEntries.length > 0 && (
+        <div className="bg-[var(--nim-bg-secondary)] rounded-lg overflow-hidden mb-3">
+          {folderEntries.map((folder, idx) => (
+            <FolderRow
+              key={folder.name}
+              folderName={folder.name}
+              isFirst={idx === 0}
+              isLast={idx === folderEntries.length - 1}
+              onRename={(newName) => handleRenameFolder(folder.name, newName)}
+              onDelete={() => handleDeleteFolder(folder.name)}
+              onMoveUp={() => handleReorder(folder.name, 'up')}
+              onMoveDown={() => handleReorder(folder.name, 'down')}
+            />
+          ))}
+        </div>
+      )}
+
+      <button
+        onClick={handleAddFolder}
+        className="inline-flex items-center gap-1 px-2.5 py-1 bg-transparent border border-[var(--nim-border)] rounded text-[var(--nim-text-muted)] text-[11px] cursor-pointer hover:bg-[var(--nim-bg-hover)] mb-3"
+      >
+        <MaterialSymbol icon="create_new_folder" size={12} />
+        Add Folder
+      </button>
+      {newFolderError && (
+        <p className="text-[11px] text-[#ef4444] mb-3">{newFolderError}</p>
+      )}
+
+      {/* Per-type folder assignment */}
+      {trackers.length > 0 && (
+        <>
+          <h5 className="text-[12px] font-semibold text-[var(--nim-text-muted)] uppercase tracking-wide mb-2">
+            Assign Types to Folders
+          </h5>
+          <div className="bg-[var(--nim-bg-secondary)] rounded-lg overflow-hidden">
+            {trackers.map((model) => {
+              const currentFolder = getEffectiveFolder(model);
+              return (
+                <div
+                  key={model.type}
+                  className="flex items-center gap-2.5 px-3.5 py-2 border-b border-[var(--nim-bg)] last:border-b-0"
+                >
+                  <TrackerIcon color={model.color} icon={model.icon} />
+                  <span className="flex-1 text-[13px] text-[var(--nim-text)] truncate">
+                    {model.displayNamePlural}
+                  </span>
+                  <select
+                    value={currentFolder ?? ''}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      handleAssignFolder(model.type, val === '' ? null : val);
+                    }}
+                    className="px-2 py-1 text-[12px] bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] outline-none focus:border-[var(--nim-primary)] cursor-pointer"
+                  >
+                    <option value="">(no folder)</option>
+                    {folderNames.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function FolderRow({
+  folderName,
+  isFirst,
+  isLast,
+  onRename,
+  onDelete,
+  onMoveUp,
+  onMoveDown,
+}: {
+  folderName: string;
+  isFirst: boolean;
+  isLast: boolean;
+  onRename: (name: string) => void;
+  onDelete: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+}) {
+  const [draft, setDraft] = useState(folderName);
+
+  useEffect(() => {
+    setDraft(folderName);
+  }, [folderName]);
+
+  const handleBlur = () => {
+    onRename(draft);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+    if (e.key === 'Escape') {
+      setDraft(folderName);
+      (e.target as HTMLInputElement).blur();
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2 px-3.5 py-2 border-b border-[var(--nim-bg)] last:border-b-0">
+      <MaterialSymbol icon="folder" size={14} className="text-[var(--nim-text-faint)] shrink-0" />
+      <input
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        className="flex-1 px-1.5 py-0.5 text-[13px] bg-[var(--nim-bg)] border border-transparent rounded focus:border-[var(--nim-border)] text-[var(--nim-text)] outline-none transition-colors"
+      />
+      <div className="flex items-center gap-0.5 shrink-0">
+        <button
+          onClick={onMoveUp}
+          disabled={isFirst}
+          title="Move up"
+          className="p-1 rounded text-[var(--nim-text-faint)] hover:text-[var(--nim-text-muted)] hover:bg-[var(--nim-bg-tertiary)] cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        >
+          <MaterialSymbol icon="arrow_upward" size={12} />
+        </button>
+        <button
+          onClick={onMoveDown}
+          disabled={isLast}
+          title="Move down"
+          className="p-1 rounded text-[var(--nim-text-faint)] hover:text-[var(--nim-text-muted)] hover:bg-[var(--nim-bg-tertiary)] cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        >
+          <MaterialSymbol icon="arrow_downward" size={12} />
+        </button>
+        <button
+          onClick={onDelete}
+          title="Delete folder"
+          className="p-1 rounded text-[var(--nim-text-faint)] hover:text-[#ef4444] hover:bg-[var(--nim-bg-tertiary)] cursor-pointer transition-colors"
+        >
+          <MaterialSymbol icon="delete" size={12} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
 // Admin View
 // ============================================================================
 
-function AdminView({ trackers, onSyncModeChange, workspacePath }: {
+function AdminView({ trackers, onSyncModeChange, workspacePath, onAddCustomTracker }: {
   trackers: TrackerTypeConfig[];
   onSyncModeChange: (type: string, mode: TrackerSyncMode) => void;
   workspacePath?: string;
+  onAddCustomTracker: () => void;
 }) {
+  const models = trackers.map((t) => t.model);
+
   return (
     <>
       {/* Team Sync Policy Section */}
@@ -323,6 +595,16 @@ function AdminView({ trackers, onSyncModeChange, workspacePath }: {
             </div>
           ))}
         </div>
+
+        <div className="mt-3">
+          <button
+            onClick={onAddCustomTracker}
+            className="inline-flex items-center gap-1 px-2.5 py-1 bg-transparent border border-[var(--nim-border)] rounded text-[var(--nim-text-muted)] text-[11px] cursor-pointer hover:bg-[var(--nim-bg-hover)]"
+          >
+            <MaterialSymbol icon="add" size={12} />
+            Add Custom Tracker
+          </button>
+        </div>
       </div>
 
       {/* Inline Note */}
@@ -336,7 +618,7 @@ function AdminView({ trackers, onSyncModeChange, workspacePath }: {
       </div>
 
       {/* Promote Banner */}
-      <div className="provider-panel-section py-4">
+      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
         <div className="flex items-center gap-2 p-3 bg-[rgba(167,139,250,0.08)] border border-[rgba(167,139,250,0.15)] rounded-lg">
           <MaterialSymbol icon="arrow_upward" size={16} className="text-[#a78bfa] shrink-0" />
           <div className="flex-1 text-[12px] text-[var(--nim-text-muted)] leading-snug">
@@ -344,6 +626,8 @@ function AdminView({ trackers, onSyncModeChange, workspacePath }: {
           </div>
         </div>
       </div>
+
+      <FolderManager trackers={models} workspacePath={workspacePath} />
     </>
   );
 }
@@ -352,9 +636,10 @@ function AdminView({ trackers, onSyncModeChange, workspacePath }: {
 // Member View
 // ============================================================================
 
-function MemberView({ trackers, workspacePath }: { trackers: TrackerTypeConfig[]; workspacePath?: string }) {
+function MemberView({ trackers, workspacePath, onAddCustomTracker }: { trackers: TrackerTypeConfig[]; workspacePath?: string; onAddCustomTracker: () => void }) {
   const sharedTrackers = trackers.filter((t) => t.syncMode !== 'local');
   const localTrackers = trackers.filter((t) => t.syncMode === 'local');
+  const models = trackers.map((t) => t.model);
 
   return (
     <>
@@ -392,16 +677,16 @@ function MemberView({ trackers, workspacePath }: { trackers: TrackerTypeConfig[]
       </div>
 
       {/* Local Trackers */}
-      {localTrackers.length > 0 && (
-        <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
-          <h4 className="provider-panel-section-title text-[15px] font-semibold mb-2 text-[var(--nim-text)] flex items-center gap-2">
-            Your Local Trackers
-            <span className="text-[11px] font-normal text-[var(--nim-text-faint)]">Only on this machine</span>
-          </h4>
-          <p className="text-[13px] leading-relaxed text-[var(--nim-text-muted)] mb-3">
-            These tracker types are local to your workspace. They never sync and are not visible to your team.
-          </p>
+      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+        <h4 className="provider-panel-section-title text-[15px] font-semibold mb-2 text-[var(--nim-text)] flex items-center gap-2">
+          Your Local Trackers
+          <span className="text-[11px] font-normal text-[var(--nim-text-faint)]">Only on this machine</span>
+        </h4>
+        <p className="text-[13px] leading-relaxed text-[var(--nim-text-muted)] mb-3">
+          These tracker types are local to your workspace. They never sync and are not visible to your team.
+        </p>
 
+        {localTrackers.length > 0 ? (
           <div className="bg-[var(--nim-bg-secondary)] rounded-lg overflow-hidden">
             {localTrackers.map((tracker) => (
               <div
@@ -426,18 +711,25 @@ function MemberView({ trackers, workspacePath }: { trackers: TrackerTypeConfig[]
               </div>
             ))}
           </div>
-
-          <div className="mt-3">
-            <button className="inline-flex items-center gap-1 px-2.5 py-1 bg-transparent border border-[var(--nim-border)] rounded text-[var(--nim-text-muted)] text-[11px] cursor-pointer hover:bg-[var(--nim-bg-hover)]">
-              <MaterialSymbol icon="add" size={12} />
-              Add Custom Tracker
-            </button>
+        ) : (
+          <div className="bg-[var(--nim-bg-secondary)] rounded-lg px-3.5 py-3 text-[12px] text-[var(--nim-text-faint)] italic">
+            No local tracker types yet.
           </div>
+        )}
+
+        <div className="mt-3">
+          <button
+            onClick={onAddCustomTracker}
+            className="inline-flex items-center gap-1 px-2.5 py-1 bg-transparent border border-[var(--nim-border)] rounded text-[var(--nim-text-muted)] text-[11px] cursor-pointer hover:bg-[var(--nim-bg-hover)]"
+          >
+            <MaterialSymbol icon="add" size={12} />
+            Add Custom Tracker
+          </button>
         </div>
-      )}
+      </div>
 
       {/* Inline Note */}
-      <div className="provider-panel-section py-4">
+      <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
         <div className="flex items-start gap-1.5 p-2.5 bg-[var(--nim-bg-secondary)] rounded-md text-[11px] text-[var(--nim-text-faint)] leading-relaxed">
           <MaterialSymbol icon="info" size={14} className="shrink-0 mt-0.5" />
           <span>
@@ -445,6 +737,8 @@ function MemberView({ trackers, workspacePath }: { trackers: TrackerTypeConfig[]
           </span>
         </div>
       </div>
+
+      <FolderManager trackers={models} workspacePath={workspacePath} />
     </>
   );
 }
@@ -458,6 +752,7 @@ export function TrackerConfigPanel({ workspacePath }: TrackerConfigPanelProps) {
   const [isAdmin, setIsAdmin] = useState(true);
   const [issueKeyPrefix, setIssueKeyPrefix] = useState('NIM');
   const [isSyncConnected, setIsSyncConnected] = useState(false);
+  const [showCreator, setShowCreator] = useState(false);
 
   useEffect(() => {
     // Load saved sync policies from workspace state, then merge with registry
@@ -587,9 +882,22 @@ export function TrackerConfigPanel({ workspacePath }: TrackerConfigPanelProps) {
           trackers={trackers}
           onSyncModeChange={handleSyncModeChange}
           workspacePath={workspacePath}
+          onAddCustomTracker={() => setShowCreator(true)}
         />
       ) : (
-        <MemberView trackers={trackers} workspacePath={workspacePath} />
+        <MemberView
+          trackers={trackers}
+          workspacePath={workspacePath}
+          onAddCustomTracker={() => setShowCreator(true)}
+        />
+      )}
+
+      {showCreator && workspacePath && (
+        <TrackerTypeCreator
+          workspacePath={workspacePath}
+          onClose={() => setShowCreator(false)}
+          onCreated={() => setShowCreator(false)}
+        />
       )}
     </div>
   );

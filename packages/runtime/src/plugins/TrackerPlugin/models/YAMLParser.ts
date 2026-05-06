@@ -131,6 +131,8 @@ export function parseTrackerYAML(yamlString: string): TrackerDataModel {
     }
   }
 
+  if (typeof data.group === 'string') model.group = data.group;
+
   // Parse sync policy
   if (data.sync) {
     const validModes: TrackerSyncMode[] = ['local', 'shared', 'hybrid'];

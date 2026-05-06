@@ -127,6 +127,8 @@ export interface TrackerDataModel {
    * without hardcoding field names like "status".
    */
   roles?: Partial<Record<TrackerSchemaRole, string>>;
+  /** Default sidebar folder for this tracker type (stored in workspace state as override). */
+  group?: string;
 }
 
 /**

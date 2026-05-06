@@ -392,6 +392,14 @@ export interface WorkspaceState {
     updatedAt: number;
   }>;
   trackerSyncPolicies?: Record<string, TrackerSyncModeSetting | TrackerSyncPolicySetting>;
+  trackerFolders?: Array<{ name: string; collapsed?: boolean; order: number }>;
+  trackerFolderOverrides?: Record<string, string | null>;
+  trackerSidebarLayout?: {
+    entries: Array<
+      | { kind: 'folder'; name: string; collapsed?: boolean; types: string[] }
+      | { kind: 'type'; typeId: string }
+    >;
+  };
   // Issue key prefix for tracker items (e.g., "NIM", "APP"). Used for local-only trackers.
   // For synced trackers, the prefix is stored server-side in TrackerRoom metadata.
   issueKeyPrefix?: string;
