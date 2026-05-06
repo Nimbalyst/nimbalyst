@@ -380,10 +380,10 @@ export function initSessionStateListeners(): () => void {
     const sessionMeta = registry.get(sessionId);
     const workspacePath = sessionMeta?.workspaceId || currentWorkspacePath;
 
-    // Guard against any cross-window leakage: only process events for this window's workspace.
-    if (currentWorkspacePath && sessionMeta?.workspaceId && sessionMeta.workspaceId !== currentWorkspacePath) {
-      return;
-    }
+    // Multi-project rail: any event we receive is intended for a workspace
+    // this window owns (the main process scopes the subscription). Don't
+    // re-filter against the visible project — that drops events for
+    // sessions in inactive rail projects and leaves their UI stale.
 
     if (!workspacePath || !sessionId) {
       return;
