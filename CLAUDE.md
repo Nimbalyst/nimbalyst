@@ -152,6 +152,7 @@ For detailed release instructions, see [RELEASING.md](./RELEASING.md).
 2. **Never fall back to default values that mask routing issues** - fail if routing is broken
 3. **Always use stable identifiers for routing** - workspace paths (stable) not window IDs (transient)
 4. **Validate at boundaries** - All IPC handlers and service methods MUST validate required parameters
+5. **Workspace-scoped IPC must take `workspacePath` as a required parameter** - the renderer always knows its window's workspace; pass it explicitly. Main-process handlers and services MUST NOT fall back to module-level "current workspace" state — that state is shared across windows and last-write-wins between them, producing silent cross-window pollution (e.g. `[SessionManager] Rejecting session ... belongs to /path/A, not /path/B`). Carve-out: genuinely app-global channels (theme, app settings, app version, analytics consent, update checks) don't need a workspace. If you can't decide whether a channel is workspace-scoped, it is — default to "scoped + required parameter." See [IPC_GUIDE.md](./docs/IPC_GUIDE.md) for the full rule and worked example.
 
 **Rule of thumb:** If you're adding code to "handle" missing required data, you're probably hiding a bug. Throw instead.
 

@@ -600,6 +600,27 @@ export class DocumentModel {
         oldContent = typeof this.lastPersistedContent === 'string' ? this.lastPersistedContent : '';
       }
 
+      // Race guard: when the renderer reads disk on the `history:pending-tag-created`
+      // signal, the agent may not yet have written. Claude's AgentToolHooks fires the
+      // pre-edit tag BEFORE its own write; Codex's chokidar event can outrun the
+      // OS-level write completion. In both cases we land here with info.content equal
+      // to the baseline. Creating an empty-diff DiffSession would lock the editor into
+      // an `applying` phase with appliedContent === baselineContent; the real
+      // disk-write event that arrives a moment later then either gets queued (and
+      // sometimes never drains) or applies an "X -> Y" transition over an editor that
+      // never visibly entered diff mode. Defer instead -- the next file-changed-on-disk
+      // event will arrive with the actual new content and create the session correctly.
+      if (!this.currentSession && newContentString === oldContent) {
+        diffTrace('DocumentModel.handleExternalChange skip empty-diff session', {
+          path: this.filePath,
+          tagId: tag.id,
+          contentLen: newContentString.length,
+          checkPendingTags: info.checkPendingTags,
+          t: performance.now(),
+        });
+        return;
+      }
+
       // Drive the DiffSession state machine. It owns duplicate-suppression and
       // baseline-rotation logic; only `apply` / `fresh` outcomes notify editors.
       // `queued` payloads sit in the session and are drained when the editor reports

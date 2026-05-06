@@ -40,9 +40,13 @@ import {
 import {
   handleTrackerList,
   handleTrackerGet,
+  handleTrackerListTypes,
+  handleTrackerDefineType,
+  handleTrackerDeleteType,
   handleTrackerCreate,
   handleTrackerUpdate,
   handleTrackerLinkSession,
+  handleTrackerUnlinkSession,
   handleTrackerLinkFile,
   handleTrackerAddComment,
   trackerToolSchemas,
@@ -393,6 +397,15 @@ function createSharedMcpServer(
         case "tracker_get":
           return handleTrackerGet(args, workspacePath);
 
+        case "tracker_list_types":
+          return handleTrackerListTypes(args);
+
+        case "tracker_define_type":
+          return handleTrackerDefineType(args, workspacePath);
+
+        case "tracker_delete_type":
+          return handleTrackerDeleteType(args, workspacePath);
+
         case "tracker_create":
           return handleTrackerCreate(args, workspacePath, sessionId);
 
@@ -401,6 +414,9 @@ function createSharedMcpServer(
 
         case "tracker_link_session":
           return handleTrackerLinkSession(args, sessionId, workspacePath);
+
+        case "tracker_unlink_session":
+          return handleTrackerUnlinkSession(args, sessionId, workspacePath);
 
         case "tracker_link_file":
           return handleTrackerLinkFile(args, sessionId, workspacePath);

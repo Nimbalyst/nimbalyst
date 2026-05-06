@@ -217,6 +217,7 @@ The OpenAI Realtime API session is configured with these function-calling tools:
 | `get_session_summary` | Get a summary of the linked coding session |
 | `list_sessions` | List recent AI sessions in the workspace |
 | `navigate_to_session` | Switch the UI to a specific AI session |
+| `create_session` | Create a new coding session and switch to it. The voice agent's linked session updates automatically via `voiceModeListeners.syncLinkedSession`. |
 
 ## MCP Tools for Coding Agent
 

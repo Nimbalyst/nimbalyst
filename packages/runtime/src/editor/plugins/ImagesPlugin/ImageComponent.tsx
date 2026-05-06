@@ -282,6 +282,17 @@ export default function ImageComponent({
     let cancelled = false;
 
     const resolveSrc = async () => {
+      // collab-asset:// is a registered standard+secure scheme -- the main
+      // process handles fetch+decrypt and hands the bytes to Chromium. The
+      // renderer must pass these URLs through untouched so we don't double-
+      // resolve to a stale blob URL or mistake them for a relative path.
+      if (src.startsWith('collab-asset://')) {
+        if (!cancelled) {
+          setResolvedSrc(src);
+        }
+        return;
+      }
+
       const callbacks = getImagePluginCallbacks();
 
       if (callbacks.resolveImageSrc) {

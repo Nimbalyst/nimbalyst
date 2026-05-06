@@ -704,6 +704,28 @@ interface ElectronAPI {
       error?: string;
     }>;
     getPersonalJwt: () => Promise<{ success: boolean; jwt?: string; error?: string }>;
+
+    // Collaborative document attachments
+    closeDoc: (documentId: string) => Promise<{ success: boolean; error?: string }>;
+    uploadAsset: (payload: {
+      orgId: string;
+      documentId: string;
+      fileBytes: ArrayBuffer;
+      mimeType: string;
+      fileName: string;
+    }) => Promise<{ success: boolean; assetId?: string; uri?: string; error?: string }>;
+    gcAssets: (payload: {
+      orgId: string;
+      documentId: string;
+      removedUris: string[];
+    }) => Promise<{
+      success: boolean;
+      requested?: number;
+      deleted?: number;
+      failed?: number;
+      skipped?: number;
+      error?: string;
+    }>;
   };
 
   // Worktree operations

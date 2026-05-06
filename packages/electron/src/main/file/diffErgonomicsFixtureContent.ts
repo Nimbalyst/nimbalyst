@@ -50,6 +50,14 @@ _URL change, link text change, and a plain phrase being turned into a link._
 
 Visit [Anthropic's homepage](https://example.com/old) for more information. Read the [Claude documentation](https://docs.anthropic.com) to get started. The Lexical project is great.
 
+## Sub-bullet with link -- URL changed
+
+_A nested bullet that mixes plain text ("URL: ") with a link, where only the link's URL changes. The "URL: " prefix and unchanged sibling sub-bullets must stay plain; only the changed link should flash, ideally as a paired remove/add side-by-side -- not as a whole-bullet block fallback._
+
+- Test Links
+  - URL: [https://example.com/test-link](https://example.com/test-link)
+  - URL: [https://example.com/test-link2](https://example.com/test-link2)
+
 ## Inline code and code block
 
 _Inline backtick swap, plus a multi-line code block where one line in the middle changes._
@@ -251,6 +259,14 @@ This sentence has *no emphasis at all*. This sentence already has some bold word
 _URL change, link text change, and a plain phrase being turned into a link._
 
 Visit [Anthropic's homepage](https://anthropic.com) for more information. Read the [official Claude docs](https://docs.anthropic.com) to get started. The [Lexical project](https://lexical.dev) is great.
+
+## Sub-bullet with link -- URL changed
+
+_A nested bullet that mixes plain text ("URL: ") with a link, where only the link's URL changes. The "URL: " prefix and unchanged sibling sub-bullets must stay plain; only the changed link should flash, ideally as a paired remove/add side-by-side -- not as a whole-bullet block fallback._
+
+- Test Links
+  - URL: [https://example.com/test-link](https://example.com/test-link)
+  - URL: [https://example.com/test-link3](https://example.com/test-link3)
 
 ## Inline code and code block
 

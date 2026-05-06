@@ -111,8 +111,8 @@
       </div>
 
       <div class="chart-card" data-chart="do-storage">
-        <h2>SQLite database size</h2>
-        <p class="chart-subtitle muted">Max database size per day across all SQLite-backed DO namespaces</p>
+        <h2>SQLite database size by namespace</h2>
+        <p class="chart-subtitle muted">Max stored bytes per day, stacked by Durable Object class</p>
         <div class="chart-canvas-wrap"><canvas id="chart-do-storage"></canvas></div>
         <p class="chart-error muted" hidden></p>
       </div>
@@ -140,6 +140,19 @@
       red: '#ef4444',
     };
     const CHART_COLORS = [PALETTE.blue, PALETTE.green, PALETTE.yellow, PALETTE.purple, PALETTE.red];
+
+    // Durable Object namespaceId -> human-readable class name.
+    // Refresh via:
+    //   curl -s -H "Authorization: Bearer $TOKEN" \
+    //     "https://api.cloudflare.com/client/v4/accounts/454b0e55f2d7f9abc0d52d4217ecdc3c/workers/durable_objects/namespaces"
+    const DO_NAMESPACE_NAMES = {
+      '5e2ad65328f646aeaae9687aae97e1e3': 'PersonalSessionRoom',
+      '16bd07a08d8b4b668b899d7b658b5c13': 'PersonalIndexRoom',
+      '2df2ad87051245a8beb4d57fa676f99d': 'PersonalProjectSyncRoom',
+      'e8bab83719eb4573b3085dbe2989d231': 'TeamDocumentRoom',
+      'b18be999a7ef4be0b229d52115a924cb': 'TeamTrackerRoom',
+      '93fb65e2c7d34f8cb001add21f730fd9': 'TeamRoom',
+    };
     const TEXT_COLOR = '#b3b3b3';
     const GRID_COLOR = 'rgba(255, 255, 255, 0.06)';
 
@@ -722,7 +735,7 @@
                   limit: 10000
                 ) {
                   max { storedBytes }
-                  dimensions { date }
+                  dimensions { date, namespaceId }
                 }
               }
             }
@@ -732,28 +745,42 @@
         const rows = account.durableObjectsSqlStorageGroups ?? [];
         const labels = buildDateAxis(30);
         const labelIndex = new Map(labels.map((d, i) => [d, i]));
-        const values = new Array(labels.length).fill(0);
+        // For each (namespaceId, day), take the max storedBytes within the day.
+        const byNamespace = new Map();
         for (const row of rows) {
           const day = String(row?.dimensions?.date ?? '').slice(0, 10);
+          const namespaceId = String(row?.dimensions?.namespaceId ?? 'unknown') || 'unknown';
           const idx = labelIndex.get(day);
           if (idx === undefined) continue;
-          values[idx] = Math.max(values[idx], Number(row?.max?.storedBytes ?? 0));
+          if (!byNamespace.has(namespaceId)) byNamespace.set(namespaceId, new Array(labels.length).fill(0));
+          const arr = byNamespace.get(namespaceId);
+          arr[idx] = Math.max(arr[idx], Number(row?.max?.storedBytes ?? 0));
         }
+        const datasets = [...byNamespace.entries()]
+          .map(([namespaceId, data], i) => ({
+            label: DO_NAMESPACE_NAMES[namespaceId] ?? namespaceId,
+            data,
+            backgroundColor: CHART_COLORS[i % CHART_COLORS.length],
+            stack: 'storage',
+            borderRadius: 2,
+          }))
+          .sort((a, b) => a.label.localeCompare(b.label));
         renderChart('chart-do-storage', {
-          type: 'line',
-          data: {
-            labels,
-            datasets: [{
-              label: 'Database size',
-              data: values,
-              borderColor: PALETTE.green,
-              backgroundColor: 'rgba(74, 222, 128, 0.18)',
-              fill: true,
-              tension: 0.3,
-              pointRadius: 2,
-            }],
+          type: 'bar',
+          data: { labels, datasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { intersect: false, mode: 'index' },
+            plugins: {
+              legend: { position: 'top' },
+              tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatBytes(ctx.parsed.y)}` } },
+            },
+            scales: {
+              x: { stacked: true, grid: { color: GRID_COLOR } },
+              y: { stacked: true, beginAtZero: true, grid: { color: GRID_COLOR }, ticks: { callback: (v) => formatBytes(v) } },
+            },
           },
-          options: timeSeriesOptions({ yLabel: 'Bytes', formatter: formatBytes }),
         });
         setError('do-storage', null);
       } catch (err) { setError('do-storage', String(err.message ?? err)); }

@@ -253,7 +253,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const showArchived = showArchivedAtom;
   const setShowArchived = setShowArchivedAtom;
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
-  const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set()); // Format: "blitz:id", "worktree:id", "workstream:id", "superloop:id"
+  const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set()); // Format: "blitz:id", "worktree:id", "workstream:id", "superloop:id", "meta-agent:id"
   const lastSelectedIdRef = useRef<string | null>(null); // For shift+click range selection
   const [worktreeCache, setWorktreeCache] = useState<Map<string, WorktreeWithStatus>>(new Map()); // Cache worktree data
   const [workstreamChildrenCache, setWorkstreamChildrenCache] = useState<Map<string, SessionItem[]>>(new Map()); // Cache workstream children
@@ -716,6 +716,31 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     }
   };
 
+  const getMetaAgentGroupSessionIds = useCallback((metaSessionId: string) => {
+    return [
+      metaSessionId,
+      ...sessions
+        .filter(session => session.createdBySessionId === metaSessionId)
+        .map(session => session.id),
+    ];
+  }, [sessions]);
+
+  const handleArchiveMetaAgentSession = useCallback(async (metaSessionId: string) => {
+    const sessionIds = getMetaAgentGroupSessionIds(metaSessionId);
+    try {
+      await Promise.all(
+        sessionIds.map(sessionId => window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: true }))
+      );
+      sessionIds.forEach(sessionId => {
+        updateSessionStore({ sessionId, updates: { isArchived: true } });
+        onSessionArchive?.(sessionId);
+      });
+      setSessions(prev => prev.filter(session => !sessionIds.includes(session.id)));
+    } catch (err) {
+      console.error('[SessionHistory] Failed to archive meta-agent session:', err);
+    }
+  }, [getMetaAgentGroupSessionIds, onSessionArchive, updateSessionStore]);
+
   // Clean up UI state after a worktree archive (used by both auto-archive and dialog confirm paths)
   const cleanupAfterWorktreeArchive = useCallback((worktreeId: string) => {
     const worktreeSessions = allSessions.filter(s => s.worktreeId === worktreeId);
@@ -807,6 +832,38 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       console.error('[SessionHistory] Failed to unarchive session:', err);
     }
   };
+
+  const handleUnarchiveMetaAgentSession = useCallback(async (metaSessionId: string) => {
+    const sessionIds = getMetaAgentGroupSessionIds(metaSessionId);
+    try {
+      await Promise.all(
+        sessionIds.map(sessionId => window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: false }))
+      );
+      sessionIds.forEach(sessionId => {
+        updateSessionStore({ sessionId, updates: { isArchived: false } });
+      });
+      setSessions(prev => prev.map(session => (
+        sessionIds.includes(session.id)
+          ? { ...session, isArchived: false }
+          : session
+      )));
+    } catch (err) {
+      console.error('[SessionHistory] Failed to unarchive meta-agent session:', err);
+    }
+  }, [getMetaAgentGroupSessionIds, updateSessionStore]);
+
+  const handleDeleteMetaAgentSession = useCallback(async (metaSessionId: string) => {
+    if (!onSessionDelete) return;
+
+    const sessionIds = getMetaAgentGroupSessionIds(metaSessionId);
+    const childSessionIds = sessionIds.filter(sessionId => sessionId !== metaSessionId);
+
+    for (const sessionId of childSessionIds) {
+      await onSessionDelete(sessionId);
+    }
+    await onSessionDelete(metaSessionId);
+    await loadAllSessions();
+  }, [getMetaAgentGroupSessionIds, loadAllSessions, onSessionDelete]);
 
   const toggleShowArchived = async () => {
     const newValue = !showArchived;
@@ -2844,6 +2901,15 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
                       onMultiSelect={() => handleGroupMultiSelect(`meta-agent:${item.metaSession.id}`)}
                       activeSessionId={activeSessionId}
                       onSessionSelect={handleSessionClick}
+                      onSessionArchive={handleArchiveSession}
+                      onSessionUnarchive={handleUnarchiveSession}
+                      onSessionDelete={onSessionDelete ? handleDeleteSession : undefined}
+                      onMetaSessionArchive={handleArchiveMetaAgentSession}
+                      onMetaSessionUnarchive={handleUnarchiveMetaAgentSession}
+                      onMetaSessionDelete={onSessionDelete ? handleDeleteMetaAgentSession : undefined}
+                      onSessionPinToggle={handleSessionPinToggle}
+                      onSessionBranch={onSessionBranch}
+                      onWorktreeArchive={handleArchiveWorktree}
                     />
                   );
                 }

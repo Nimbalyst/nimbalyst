@@ -153,6 +153,94 @@ describe('projectRawMessagesToViewMessages', () => {
         'mcp__nimbalyst-mcp__developer_git_commit_proposal',
       ]);
     });
+
+    it('produces separate tool_call events when Codex reuses item_0 for the same MCP tool name', async () => {
+      const messages: RawMessage[] = [
+        raw({
+          id: 1,
+          source: 'openai-codex',
+          content: JSON.stringify({
+            type: 'item.started',
+            item: {
+              id: 'item_0',
+              type: 'mcp_tool_call',
+              server: 'nimbalyst-mcp',
+              tool: 'developer_git_commit_proposal',
+              arguments: { commitMessage: 'first commit', filesToStage: ['a.ts'] },
+              status: 'in_progress',
+            },
+          }),
+        }),
+        raw({
+          id: 2,
+          source: 'openai-codex',
+          content: JSON.stringify({
+            type: 'item.completed',
+            item: {
+              id: 'item_0',
+              type: 'mcp_tool_call',
+              server: 'nimbalyst-mcp',
+              tool: 'developer_git_commit_proposal',
+              result: {
+                content: [{ type: 'text', text: 'Auto-committed 1 file(s).\nCommit hash: first123' }],
+              },
+              error: null,
+              status: 'completed',
+            },
+          }),
+        }),
+        raw({
+          id: 3,
+          source: 'openai-codex',
+          content: JSON.stringify({
+            type: 'item.started',
+            item: {
+              id: 'item_0',
+              type: 'mcp_tool_call',
+              server: 'nimbalyst-mcp',
+              tool: 'developer_git_commit_proposal',
+              arguments: { commitMessage: 'second commit', filesToStage: ['b.ts'] },
+              status: 'in_progress',
+            },
+          }),
+        }),
+        raw({
+          id: 4,
+          source: 'openai-codex',
+          content: JSON.stringify({
+            type: 'item.completed',
+            item: {
+              id: 'item_0',
+              type: 'mcp_tool_call',
+              server: 'nimbalyst-mcp',
+              tool: 'developer_git_commit_proposal',
+              result: {
+                content: [{ type: 'text', text: 'Auto-committed 1 file(s).\nCommit hash: second456' }],
+              },
+              error: null,
+              status: 'completed',
+            },
+          }),
+        }),
+      ];
+
+      const vms = await projectRawMessagesToViewMessages(messages, 'openai-codex');
+
+      const toolCalls = vms.filter((m) => m.type === 'tool_call');
+      expect(toolCalls).toHaveLength(2);
+      // CodexRawParser wraps raw item ids in synthetic edit-group IDs of
+      // the form `nimtc|<rawId>|<ts>|<idx>` so reuses of `item_0` across
+      // turns get distinct, durable canonical IDs.
+      const firstId = toolCalls[0].toolCall?.providerToolCallId ?? '';
+      const secondId = toolCalls[1].toolCall?.providerToolCallId ?? '';
+      expect(firstId.startsWith('nimtc|item_0|')).toBe(true);
+      expect(secondId.startsWith('nimtc|item_0|')).toBe(true);
+      expect(firstId).not.toBe(secondId);
+      expect((toolCalls[0].toolCall?.arguments as any).commitMessage).toBe('first commit');
+      expect((toolCalls[1].toolCall?.arguments as any).commitMessage).toBe('second commit');
+      expect(toolCalls[0].toolCall?.result).toContain('first123');
+      expect(toolCalls[1].toolCall?.result).toContain('second456');
+    });
   });
 
   describe('Codex ACP provider', () => {

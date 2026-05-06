@@ -88,6 +88,10 @@ import {
   addNimAssetRoot,
   removeNimAssetRoot,
 } from './protocols/nimAssetProtocol';
+import {
+  registerCollabAssetSchemeAsPrivileged,
+  installCollabAssetProtocolHandler,
+} from './protocols/collabAssetProtocol';
 import { SessionNamingService } from './services/SessionNamingService';
 import { SessionWakeupScheduler } from './services/SessionWakeupScheduler';
 import { getSessionWakeupsStore } from './services/RepositoryManager';
@@ -131,8 +135,8 @@ import { FeatureUsageService, FEATURES } from "./services/FeatureUsageService.ts
 import { shutdownStytchAuth, handleAuthCallback } from './services/StytchAuthService';
 import { registerTrackerSyncHandlers, initializeTrackerSync } from './services/TrackerSyncManager';
 import { initTrackerSchemaService, updateTrackerSchemaWorkspace } from './services/TrackerSchemaService';
-import { registerTeamHandlers, autoMatchTeamForWorkspace } from './services/TeamService';
-import { registerOrgKeyHandlers } from './services/OrgKeyService';
+import { registerTeamHandlers, autoMatchTeamForWorkspace, getOrgScopedJwt } from './services/TeamService';
+import { registerOrgKeyHandlers, getOrgKey } from './services/OrgKeyService';
 import { registerDocumentSyncHandlers } from './ipc/DocumentSyncHandlers';
 import { getPermissionService } from './services/PermissionService';
 import { ClaudeSettingsManager } from './services/ClaudeSettingsManager';
@@ -159,6 +163,7 @@ if (process.platform === 'win32') {
 // privileged before the app is ready or the renderer treats them as opaque
 // origins. The actual request handler is wired up after whenReady.
 registerNimAssetSchemeAsPrivileged();
+registerCollabAssetSchemeAsPrivileged();
 
 // NOTE: User data directory configuration is handled in bootstrap.ts
 // which runs BEFORE this file is imported, ensuring electron-store
@@ -886,6 +891,23 @@ app.whenReady().then(async () => {
     // Issue #146: wire up the `nim-asset://` request handler. Workspaces are
     // added to its allowlist below, as windows register their workspace path.
     registerNimAssetProtocolHandler();
+
+    // collab-asset:// E2E-encrypted document attachment handler.
+    // Same-origins the production worker request from Chromium's perspective,
+    // so we can keep webSecurity:true. The per-doc registry is populated by
+    // document-sync:open / torn down by document-sync:close-doc.
+    installCollabAssetProtocolHandler({
+        getOrgKey,
+        getOrgScopedJwt,
+        getCollabHttpUrl: () => {
+            const config = getSessionSyncConfig();
+            const isDev = process.env.NODE_ENV !== 'production';
+            const env = isDev ? config?.environment : undefined;
+            return env === 'development'
+                ? 'http://localhost:8790'
+                : 'https://sync.nimbalyst.com';
+        },
+    });
 
     // Show splash screen immediately so the user sees something while we initialize
     // Skip splash in Playwright tests - the splash window would be returned by firstWindow()

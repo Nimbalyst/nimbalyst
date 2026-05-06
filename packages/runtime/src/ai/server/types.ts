@@ -393,6 +393,14 @@ export interface StreamChunk {
     name: string;
     arguments?: Record<string, any>;
     result?: ToolResult | string;
+    /**
+     * Stable provider-agnostic edit-group ID stamped by the provider so file
+     * trackers and pre-edit history tags can dedupe and attribute file
+     * changes to the exact tool invocation. For Codex this carries the
+     * synthetic `nimtc|<encoded>|<ts>|<idx>` ID minted by
+     * OpenAICodexProvider; for Claude Code this is the SDK's tool_use_id.
+     */
+    toolUseId?: string;
   };
   toolError?: {
     name: string;

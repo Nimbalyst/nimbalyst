@@ -204,18 +204,25 @@ export function initSessionStateListeners(): () => void {
     const { type, sessionId, workspacePath: eventWorkspacePath } = event;
     if (!sessionId) return;
 
-    const currentWorkspacePath = store.get(sessionListWorkspaceAtom);
     const registry = store.get(sessionRegistryAtom);
     const sessionMeta = registry.get(sessionId);
-    const resolvedWorkspacePath = eventWorkspacePath || sessionMeta?.workspaceId || currentWorkspacePath || null;
+    const ownedWorkspacePath = eventWorkspacePath || sessionMeta?.workspaceId || null;
 
-    // The main-process subscription is now scoped to the set of workspace
-    // paths this window actually hosts (single project or rail-warm),
-    // so any event that reaches us here is intended for us. We used to
-    // re-filter by `currentWorkspacePath` here, but that dropped lifecycle
-    // events for sessions in inactive rail projects — leaving the UI
-    // stuck on "Thinking…" after a session completed while its project
-    // was hidden.
+    // The main-process subscription is scoped to the set of workspace paths
+    // this window actually hosts (single project or rail-warm), so any event
+    // that reaches us here is intended for us. We don't re-filter by
+    // currentWorkspacePath — that would drop lifecycle events for sessions
+    // in inactive rail projects, leaving the UI stuck on "Thinking…" after a
+    // session completed while its project was hidden.
+    //
+    // We still require an owned workspacePath (event-carried or registry
+    // hit). Falling back to the active project's path would silently process
+    // events for unrelated sessions whose owner is unknown to this window.
+    if (!ownedWorkspacePath) {
+      return;
+    }
+
+    const resolvedWorkspacePath = ownedWorkspacePath;
 
     switch (type) {
       // Session is actively running
@@ -375,25 +382,27 @@ export function initSessionStateListeners(): () => void {
    */
   const handleMessageLogged = (data: { sessionId: string; direction: string; workspacePath?: string }) => {
     const { sessionId, direction, workspacePath: eventWorkspacePath } = data;
-    const currentWorkspacePath = store.get(sessionListWorkspaceAtom);
+    if (!sessionId) return;
+
     const registry = store.get(sessionRegistryAtom);
     const sessionMeta = registry.get(sessionId);
     // Prefer the workspacePath sent by main — it is the session's owning
     // path, which the registry only knows about while that project is the
     // active one. After a rail switch the registry has been replaced with
     // the new project's sessions and `sessionMeta?.workspaceId` is
-    // undefined, so the legacy `|| currentWorkspacePath` fallback would
-    // route the reload to the wrong workspace.
-    const workspacePath = eventWorkspacePath || sessionMeta?.workspaceId || currentWorkspacePath;
-
+    // undefined, so legacy fallback to currentWorkspacePath would route
+    // the reload to the wrong workspace.
+    //
     // Multi-project rail: any event we receive is intended for a workspace
     // this window owns (the main process scopes the subscription). Don't
     // re-filter against the visible project — that drops events for
     // sessions in inactive rail projects and leaves their UI stale.
-
-    if (!workspacePath || !sessionId) {
+    const ownedWorkspacePath = eventWorkspacePath || sessionMeta?.workspaceId || null;
+    if (!ownedWorkspacePath) {
       return;
     }
+
+    const workspacePath = ownedWorkspacePath;
 
     // Throttle session data reload per session (leading + trailing edge).
     // During active streaming, message-logged fires on every chunk which would

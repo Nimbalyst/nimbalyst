@@ -108,6 +108,14 @@ COLLABV3_VERSION = '"0.0.0-dev"'
 [env.staging.vars]
 ENVIRONMENT = "staging"
 
+# Staging R2 bucket for document attachments. Without this binding every
+# PUT to /api/collab/docs/.../assets/... fails with "DOCUMENT_ASSETS is
+# undefined". Bucket must be created out-of-band:
+#   wrangler r2 bucket create nimbalyst-document-assets-staging
+[[env.staging.r2_buckets]]
+binding = "DOCUMENT_ASSETS"
+bucket_name = "nimbalyst-document-assets-staging"
+
 # Production environment
 [env.production]
 name = "nimbalyst-collabv3"

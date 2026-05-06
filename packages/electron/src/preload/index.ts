@@ -904,6 +904,39 @@ contextBridge.exposeInMainWorld('electronAPI', {
         jwt?: string;
         error?: string;
       }>,
+
+    // Collaborative document attachments
+    closeDoc: (documentId: string) =>
+      ipcRenderer.invoke('document-sync:close-doc', { documentId }) as Promise<{
+        success: boolean;
+        error?: string;
+      }>,
+    uploadAsset: (payload: {
+      orgId: string;
+      documentId: string;
+      fileBytes: ArrayBuffer;
+      mimeType: string;
+      fileName: string;
+    }) =>
+      ipcRenderer.invoke('document-sync:upload-asset', payload) as Promise<{
+        success: boolean;
+        assetId?: string;
+        uri?: string;
+        error?: string;
+      }>,
+    gcAssets: (payload: {
+      orgId: string;
+      documentId: string;
+      removedUris: string[];
+    }) =>
+      ipcRenderer.invoke('document-sync:gc-assets', payload) as Promise<{
+        success: boolean;
+        requested?: number;
+        deleted?: number;
+        failed?: number;
+        skipped?: number;
+        error?: string;
+      }>,
   },
 
   // Worktree operations

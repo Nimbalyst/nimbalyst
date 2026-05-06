@@ -76,6 +76,7 @@ export class RealtimeAPIClient {
   private onRespondToPromptCallback: ((params: { sessionId: string; promptId: string; promptType: string; answer: string }) => Promise<{ success: boolean; error?: string }>) | null = null;
   private onListSessionsCallback: ((query?: string) => Promise<{ success: boolean; sessions?: Array<{ id: string; title: string; status: string }>; error?: string }>) | null = null;
   private onNavigateToSessionCallback: ((sessionId: string) => Promise<{ success: boolean; title?: string; error?: string }>) | null = null;
+  private onCreateSessionCallback: ((title?: string) => Promise<{ success: boolean; sessionId?: string; title?: string; error?: string }>) | null = null;
   private claudeCodeSessionId: string;
   private workspacePath: string | null;
   private window: Electron.BrowserWindow;
@@ -246,6 +247,13 @@ export class RealtimeAPIClient {
    */
   setOnNavigateToSession(callback: (sessionId: string) => Promise<{ success: boolean; title?: string; error?: string }>): void {
     this.onNavigateToSessionCallback = callback;
+  }
+
+  /**
+   * Set callback for creating a new AI session
+   */
+  setOnCreateSession(callback: (title?: string) => Promise<{ success: boolean; sessionId?: string; title?: string; error?: string }>): void {
+    this.onCreateSessionCallback = callback;
   }
 
   /**
@@ -441,6 +449,9 @@ IMPORTANT: Your knowledge of this codebase is limited to the session context abo
 Tools:
 - submit_agent_prompt: Send a coding task to the coding agent.
 - ask_coding_agent: Ask the coding agent a question about the project.
+- create_session: Start a brand new coding session. Future commands will target it.
+- list_sessions: List recent coding sessions in this workspace.
+- navigate_to_session: Switch to a specific existing coding session.
 - respond_to_interactive_prompt: Answer a pending interactive prompt from the coding agent.
 - pause_listening: Put the microphone to sleep.
 - stop_voice_session: End the voice session entirely.
@@ -607,6 +618,21 @@ Your job is to be a voice relay, not to interpret or improve the user's requests
               },
             },
             required: ['sessionId'],
+          },
+        },
+        {
+          type: 'function',
+          name: 'create_session',
+          description: 'Create a new coding session in the current workspace and switch to it. Use this when the user asks to start a new session, open a fresh chat, begin a new task, or anything that implies starting from scratch. After this returns, future submit_agent_prompt and ask_coding_agent calls will target the new session.',
+          parameters: {
+            type: 'object',
+            properties: {
+              title: {
+                type: 'string',
+                description: 'Optional short title for the new session (e.g. "Refactor auth flow"). If the user gave a topic, derive a brief title from it. Omit if the user did not specify what the session is for.',
+              },
+            },
+            required: [],
           },
         },
       ],
@@ -956,6 +982,32 @@ Your job is to be a voice relay, not to interpret or improve the user's requests
           }
         } catch (error) {
           console.error('[RealtimeAPIClient] Failed to navigate to session:', error);
+          this.sendFunctionCallResult(callId, {
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+        break;
+      }
+
+      case 'create_session': {
+        try {
+          const args = argsJson ? JSON.parse(argsJson) : {};
+          const title = typeof args.title === 'string' && args.title.trim().length > 0
+            ? args.title.trim()
+            : undefined;
+
+          if (this.onCreateSessionCallback) {
+            const result = await this.onCreateSessionCallback(title);
+            this.sendFunctionCallResult(callId, result);
+          } else {
+            this.sendFunctionCallResult(callId, {
+              success: false,
+              error: 'Create session callback not registered',
+            });
+          }
+        } catch (error) {
+          console.error('[RealtimeAPIClient] Failed to create session:', error);
           this.sendFunctionCallResult(callId, {
             success: false,
             error: error instanceof Error ? error.message : String(error),

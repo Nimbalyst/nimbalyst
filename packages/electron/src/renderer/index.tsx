@@ -15,7 +15,6 @@ import './index.css';
 import './styles/components.css';
 import posthog from "posthog-js";
 import {PostHogProvider} from "posthog-js/react";
-import {beforePostHogSendWeb} from "../main/services/analytics/analytics-utils.ts";
 import { initMonacoEditor } from './utils/monacoConfig';
 import { store } from '@nimbalyst/runtime/store';
 import { registerLocalAssetUrlConverter } from '@nimbalyst/runtime';
@@ -216,7 +215,7 @@ const posthogClient = posthog.init(
         posthog.people.set_once({ is_dev_user: true });
       }
     },
-    before_send: beforePostHogSendWeb,
+    before_send: (event) => process.env.PLAYWRIGHT_TEST ? null : event,
     debug: isDevInstallation
   }
 )
