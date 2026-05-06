@@ -957,8 +957,8 @@ export { TrackerDocumentHeader, shouldRenderTrackerHeader } from './documentHead
 
 // Export data models
 export { ModelLoader, loadBuiltinTrackers } from './models/ModelLoader';
-export type { TrackerDataModel, FieldDefinition, TrackerSyncPolicy, TrackerSyncMode, TrackerSchemaRole } from './models/TrackerDataModel';
-export { parseTrackerYAML } from './models/YAMLParser';
+export type { TrackerDataModel, FieldDefinition, FieldType, TrackerSyncPolicy, TrackerSyncMode, TrackerSchemaRole } from './models/TrackerDataModel';
+export { parseTrackerYAML, serializeTrackerYAML } from './models/YAMLParser';
 export { globalRegistry, getRoleField, getFieldByRole } from './models/TrackerDataModel';
 
 // Export components

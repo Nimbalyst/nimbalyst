@@ -58,6 +58,7 @@ export {
   ModelLoader,
   globalRegistry,
   parseTrackerYAML,
+  serializeTrackerYAML,
   // Tracker data atoms (cross-platform reactive state)
   trackerItemsMapAtom,
   trackerDataLoadedAtom,
@@ -79,6 +80,7 @@ export type {
   TrackerSyncMode,
   TrackerSchemaRole,
   FieldDefinition,
+  FieldType,
   DocumentHeaderProvider,
   DocumentHeaderComponentProps,
 } from './plugins/TrackerPlugin';
