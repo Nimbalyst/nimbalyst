@@ -180,9 +180,19 @@ export class MessageStreamingHandler {
     // refresh once instead of N times. The queue already excludes hidden rows
     // from the count, so we don't filter again here.
     this.unsubscribeBatchListener = onAgentMessageBatch((batch) => {
+      // Enrich the batch with the session's workspacePath so the renderer
+      // can route the reload to the correct workspace even when the
+      // session's project is not the visible one in the multi-project
+      // rail. The renderer's session registry only knows about the active
+      // project's sessions.
+      const sessionState = getSessionStateManager().getSessionState(batch.sessionId);
+      const enriched = {
+        ...batch,
+        workspacePath: sessionState?.workspacePath,
+      };
       for (const window of BrowserWindow.getAllWindows()) {
         if (!window.isDestroyed()) {
-          window.webContents.send('ai:messages-logged-batch', batch);
+          window.webContents.send('ai:messages-logged-batch', enriched);
         }
       }
     });
@@ -567,11 +577,17 @@ export class MessageStreamingHandler {
     const toolHandler = this.svc.createToolHandler(event.sender, documentContext, session.id, effectiveWorkspacePath);
     provider.registerToolHandler(toolHandler);
 
-    // Listen for message:logged events and forward to renderer to trigger UI updates
-    // Skip hidden messages - they shouldn't trigger UI refreshes
+    // Listen for message:logged events and forward to renderer to trigger UI updates.
+    // Skip hidden messages - they shouldn't trigger UI refreshes.
+    //
+    // Multi-project rail: include the session's workspacePath in the payload
+    // so the renderer can route the reload to the correct workspace even
+    // when the session is in a project that is not currently visible. The
+    // renderer's session registry holds only the visible project's
+    // sessions, so it can't always resolve the path on its own.
     const onMessageLogged = (data: { sessionId: string; direction: string; hidden?: boolean }) => {
       if (data.hidden) return;
-      safeSend(event, 'ai:message-logged', data);
+      safeSend(event, 'ai:message-logged', { ...data, workspacePath: effectiveWorkspacePath });
     };
     // Remove all previous listeners to avoid duplicates
     provider.removeAllListeners('message:logged');

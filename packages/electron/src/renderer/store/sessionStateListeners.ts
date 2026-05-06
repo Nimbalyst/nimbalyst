@@ -373,12 +373,18 @@ export function initSessionStateListeners(): () => void {
    * Also marks sessions as unread when they receive output messages while not being
    * the currently viewed session.
    */
-  const handleMessageLogged = (data: { sessionId: string; direction: string }) => {
-    const { sessionId, direction } = data;
+  const handleMessageLogged = (data: { sessionId: string; direction: string; workspacePath?: string }) => {
+    const { sessionId, direction, workspacePath: eventWorkspacePath } = data;
     const currentWorkspacePath = store.get(sessionListWorkspaceAtom);
     const registry = store.get(sessionRegistryAtom);
     const sessionMeta = registry.get(sessionId);
-    const workspacePath = sessionMeta?.workspaceId || currentWorkspacePath;
+    // Prefer the workspacePath sent by main — it is the session's owning
+    // path, which the registry only knows about while that project is the
+    // active one. After a rail switch the registry has been replaced with
+    // the new project's sessions and `sessionMeta?.workspaceId` is
+    // undefined, so the legacy `|| currentWorkspacePath` fallback would
+    // route the reload to the wrong workspace.
+    const workspacePath = eventWorkspacePath || sessionMeta?.workspaceId || currentWorkspacePath;
 
     // Multi-project rail: any event we receive is intended for a workspace
     // this window owns (the main process scopes the subscription). Don't
@@ -492,10 +498,15 @@ export function initSessionStateListeners(): () => void {
     sessionId: string;
     count: number;
     direction: 'input' | 'output' | 'mixed';
+    workspacePath?: string;
   }) => {
     if (!data?.sessionId || !data.count) return;
     const effectiveDirection = data.direction === 'input' ? 'input' : 'output';
-    handleMessageLogged({ sessionId: data.sessionId, direction: effectiveDirection });
+    handleMessageLogged({
+      sessionId: data.sessionId,
+      direction: effectiveDirection,
+      workspacePath: data.workspacePath,
+    });
   };
 
   /**
