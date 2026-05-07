@@ -223,6 +223,21 @@ const WorkstreamEditorTabsInner = forwardRef<WorkstreamEditorTabsRef, Workstream
     const prevTabCountRef = useRef(tabs.length);
     // Track restore state: 'pending' -> 'restoring' -> 'done'
     const restoreStateRef = useRef<'pending' | 'restoring' | 'done'>('pending');
+    // Defense-in-depth: only allow `[]` writes to disk after we've observed
+    // a non-empty tab state at least once. This prevents data loss on the
+    // failure paths the `workstreamStatesLoaded` gate doesn't fully cover:
+    //   1) `loadWorkstreamStates` IPC throws and the catch block flips the
+    //      loaded flag to true with an empty map - the gate passes, restore
+    //      reads empty, transitions to 'done', and persist writes [] over
+    //      the saved tabs.
+    //   2) The per-workstream `loadWorkstreamState(id)` call (fired async by
+    //      `AgentWorkstreamPanel`) loses the race against this component's
+    //      mount when the global flag is already true from a prior bulk load.
+    // Until we see at least one tab in scope, treat an empty `tabs` array as
+    // "load not complete" and skip the IPC write. New workstreams legitimately
+    // have nothing to save until the user opens a file, so the deferred write
+    // is harmless there.
+    const hasEverHadTabsRef = useRef(false);
 
     // Restore tabs from workstream state on mount.
     // Wait for workstream states to finish loading from IPC before reading
@@ -285,8 +300,21 @@ const WorkstreamEditorTabsInner = forwardRef<WorkstreamEditorTabsRef, Workstream
       });
       // console.log('[WorkstreamEditorTabs] Synced workstream state:', tabs.length, 'tabs');
 
+      // Latch: once we observe non-empty tabs, all subsequent writes are
+      // legitimate user edits (including closing all tabs). Before that
+      // first observation, treat empty as "not yet hydrated" and skip IPC.
+      if (tabs.length > 0) {
+        hasEverHadTabsRef.current = true;
+      }
+
       // Only persist to IPC after restore is complete to avoid overwriting saved state
       if (restoreStateRef.current === 'done') {
+        if (tabs.length === 0 && !hasEverHadTabsRef.current) {
+          // Skip the first empty write so a load failure or post-bulk on-demand
+          // load race can't clobber the saved tab list. The user opening any
+          // tab flips the latch and unblocks future writes.
+          return;
+        }
         // console.log('[WorkstreamEditorTabs] Persisting tabs to workspace state:', tabs.map(t => t.filePath), 'active:', activeTabId);
         updateTabState(workstreamId, workspacePath, tabs, activeTabId);
       } else {
