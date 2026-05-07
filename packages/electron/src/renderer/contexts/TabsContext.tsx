@@ -202,17 +202,22 @@ export function TabsProvider({
     s.listeners.forEach(listener => listener());
   }, []);
 
-  // Subscribe function for useSyncExternalStore
+  // Subscribe function for useSyncExternalStore.
+  // Depends on `slot` so consumers re-subscribe when the workspace switches —
+  // otherwise listeners stay attached to the previous workspace's slot and
+  // never fire for the new one (TabBar froze on the prior project's
+  // activeTabId, breadcrumb/editor showed the real file).
   const subscribe = useCallback((callback: () => void) => {
-    const s = slotRef.current;
-    s.listeners.add(callback);
+    slot.listeners.add(callback);
     return () => {
-      s.listeners.delete(callback);
+      slot.listeners.delete(callback);
     };
-  }, []);
+  }, [slot]);
 
-  // Get current snapshot - returns the immutable snapshot
-  const getSnapshot = useCallback(() => slotRef.current.snapshot, []);
+  // Get current snapshot - returns the immutable snapshot.
+  // Identity changes with `slot` so useSyncExternalStore detects the
+  // workspace switch and re-renders consumers against the new slot.
+  const getSnapshot = useCallback(() => slot.snapshot, [slot]);
 
   // Generate unique tab ID
   const generateTabId = useCallback((): string => {
