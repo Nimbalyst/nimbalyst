@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- Changes to existing functionality go here -->
 
 ### Fixed
-<!-- Bug fixes go here -->
+- Claude Chat no longer fails Test Connection (and real chat sends) against the default `claude-opus-4-7` model. Anthropic deprecated `temperature` for Opus 4.7 and the provider was sending it unconditionally, so every fresh install hit `400 "temperature is deprecated for this model"` on the first API call and reported a misleading "Test Connection: Failed" against valid keys. `ClaudeProvider` now omits `temperature` for Opus 4.7+ via a new `ClaudeProvider.supportsTemperature(modelId)` denylist (matches `claude-opus-4-N` for N >= 7, while keeping Opus 4 / 4.1 / 4.5 / 4.6, every Sonnet variant, every Haiku variant, and legacy Claude 3 models on the existing temperature path). Mirrors the pattern `OpenAIProvider` already uses for `o1` / `gpt-5` / `gpt-4.5`. Adds 18 unit tests covering the Opus version boundary, the 8-digit date suffix on Opus 4.0 (`claude-opus-4-20250514`), case-insensitive matching, and malformed input. Fixes #199.
 
 ### Removed
 <!-- Removed features go here -->
