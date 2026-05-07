@@ -103,6 +103,8 @@ const BINARY_EXTENSIONS = new Set([
     '.node', '.wasm',
 ]);
 
+const NIMBALYST_LOCAL_DIRNAME = 'nimbalyst-local';
+
 // Get the ripgrep binary path for the current platform.
 // Resolves the rg bundled by the @vscode/ripgrep package at
 // node_modules/@vscode/ripgrep/bin/rg(.exe).
@@ -158,17 +160,14 @@ function getRipgrepPath(): string {
     return 'rg';
 }
 
-// Cross-platform file finder using ripgrep --files
-// Finds all files and filters out binary extensions
-async function findWorkspaceFiles(dir: string): Promise<string[]> {
+async function runRipgrepFiles(rootPath: string, options?: { noIgnore?: boolean }): Promise<string[]> {
     const rgPath = getRipgrepPath();
-
-    // Find ALL files, only exclude directories (no file type filtering)
     const rgArgs = [
         '--files',
         '--hidden',  // Include dotfiles like .gitignore
+        ...(options?.noIgnore ? ['--no-ignore'] : []),
         ...RIPGREP_EXCLUDE_ARGS_ARRAY,
-        dir
+        rootPath
     ];
 
     let stdout = '';
@@ -189,7 +188,20 @@ async function findWorkspaceFiles(dir: string): Promise<string[]> {
     return stdout
         .split('\n')
         .filter(line => line.trim())
-        .map(file => path.normalize(file))
+        .map(file => path.normalize(file));
+}
+
+// Cross-platform file finder using ripgrep --files.
+// Respects .gitignore for the general workspace scan, but explicitly includes
+// nimbalyst-local/ so local plan files remain mentionable in @ typeahead.
+async function findWorkspaceFiles(dir: string): Promise<string[]> {
+    const baseFiles = await runRipgrepFiles(dir);
+    const nimbalystLocalPath = path.join(dir, NIMBALYST_LOCAL_DIRNAME);
+    const extraFiles = existsSync(nimbalystLocalPath)
+      ? await runRipgrepFiles(nimbalystLocalPath, { noIgnore: true })
+      : [];
+
+    return Array.from(new Set([...baseFiles, ...extraFiles]))
         .filter(file => {
             // Filter out binary files by extension
             const ext = path.extname(file).toLowerCase();

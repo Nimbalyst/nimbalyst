@@ -380,64 +380,241 @@ export function $applyInlineTextDiff(
     return;
   }
 
-  // Complex case: handle mixed content (text with different formatting, links, hashtags, etc.)
-
-  // Check if source and target are IDENTICAL (same structure and content)
-  // This prevents false positives where hashtag/emoji nodes cause unnecessary red/green
-  if (sourceChildren.length === targetChildren.length) {
-    let identical = true;
-    for (let i = 0; i < sourceChildren.length; i++) {
-      const source = sourceChildren[i];
-      const target = targetChildren[i];
-
-      // Compare type
-      if (source.type !== target.type) {
-        identical = false;
-        break;
-      }
-
-      // Compare text content (works for text, hashtag, emoji nodes)
-      const sourceText = (source as any).text || '';
-      const targetText = (target as any).text || '';
-      if (sourceText !== targetText) {
-        identical = false;
-        break;
-      }
-
-      // Compare format for text nodes
-      if (source.type === 'text') {
-        const sourceFormat = (source as SerializedTextNode).format || 0;
-        const targetFormat = (target as SerializedTextNode).format || 0;
-        if (sourceFormat !== targetFormat) {
-          identical = false;
-          break;
-        }
-      }
+  // Complex case: handle mixed content (text + links + hashtags + emoji + etc.)
+  //
+  // Try to keep as much of the bullet plain as possible by anchoring on a
+  // common prefix and common suffix of structurally-equal children, then
+  // diffing only the differing middle.
+  //
+  // This handles three shapes that previously all collapsed to the
+  // whole-container block fallback:
+  //   1. Same length, types align everywhere -> per-child pairwise diff
+  //      ("URL: [old](old-url)" -> "URL: [new](new-url)" keeps "URL: "
+  //      plain and shows only the link as remove/add).
+  //   2. Different lengths but with common prefix/suffix -> emit the shared
+  //      anchors plain, render only the divergent middle as remove/add
+  //      ("**URL:**" alone vs "**URL:** https://..." keeps "URL:" plain
+  //      and adds the URL portion in green).
+  //   3. No common context -> block fallback (genuinely different
+  //      structures, no point pretending otherwise).
+  if (sourceChildren.length > 0 || targetChildren.length > 0) {
+    let prefixLen = 0;
+    const minLen = Math.min(sourceChildren.length, targetChildren.length);
+    while (
+      prefixLen < minLen &&
+      serializedNodesEqual(sourceChildren[prefixLen], targetChildren[prefixLen])
+    ) {
+      prefixLen++;
     }
 
-    // If identical, just add target children without diff markers
-    if (identical) {
-      // if (hasHashtag) {
-      //   console.log('[inlineTextDiff] Children are IDENTICAL! Adding without diff markers');
-      // }
-      for (const targetChild of targetChildren) {
-        const node = $parseSerializedNode(targetChild);
-        containerNode.append(node);
-      }
+    let suffixLen = 0;
+    while (
+      suffixLen < minLen - prefixLen &&
+      serializedNodesEqual(
+        sourceChildren[sourceChildren.length - 1 - suffixLen],
+        targetChildren[targetChildren.length - 1 - suffixLen],
+      )
+    ) {
+      suffixLen++;
+    }
+
+    const sourceMiddle = sourceChildren.slice(
+      prefixLen,
+      sourceChildren.length - suffixLen,
+    );
+    const targetMiddle = targetChildren.slice(
+      prefixLen,
+      targetChildren.length - suffixLen,
+    );
+
+    // Decide whether we have enough alignment to render inline at all. A
+    // pure prefix/suffix anchor (or any pairwise-aligned middle) lets us
+    // keep the unchanged context plain. Without anchors and without
+    // type-aligned middles, fall through to the block fallback so the
+    // structural change reads cleanly as two stacked siblings.
+    const hasAnchor = prefixLen > 0 || suffixLen > 0;
+    const middleTypesAlign =
+      sourceMiddle.length === targetMiddle.length &&
+      sourceMiddle.every((c, i) => c.type === targetMiddle[i].type);
+
+    if (hasAnchor || middleTypesAlign) {
+      $emitAnchoredChildDiff(
+        containerNode,
+        sourceChildren,
+        targetChildren,
+        prefixLen,
+        suffixLen,
+        middleTypesAlign,
+      );
       return;
     }
-    // else if (hasHashtag) {
-    //   console.log('[inlineTextDiff] Children are NOT identical, falling back to remove+add');
-    // }
   }
 
-  // Content is different -- the two children sequences contain inline
-  // elements (links, hashtags, etc.) that aren't amenable to word-level
-  // diffing. Render as a block fallback (source container removed wholesale,
-  // target container added wholesale) instead of stacking both in one
-  // container, so the boundary doesn't run together visually and approve/
-  // reject can each cleanly drop one entire side.
+  // No alignment found -- structural change. Render as a block fallback
+  // (source container removed wholesale, target container added wholesale)
+  // instead of stacking both in one container, so the boundary doesn't run
+  // together visually and approve/reject can each cleanly drop one entire
+  // side.
   $applyBlockFallback(containerNode, sourceChildren, targetChildren);
+}
+
+/**
+ * Render a diff that has been split into common prefix + differing middle +
+ * common suffix. The prefix and suffix children are emitted as plain
+ * (unchanged) copies. The middle uses pairwise diffing when its types align,
+ * otherwise it's stacked as a removed-source / added-target pair so each
+ * version reads coherently.
+ */
+function $emitAnchoredChildDiff(
+  containerNode: ElementNode,
+  sourceChildren: SerializedLexicalNode[],
+  targetChildren: SerializedLexicalNode[],
+  prefixLen: number,
+  suffixLen: number,
+  middleTypesAlign: boolean,
+): void {
+  for (let i = 0; i < prefixLen; i++) {
+    containerNode.append($parseSerializedNode(targetChildren[i]));
+  }
+
+  const sourceMiddle = sourceChildren.slice(
+    prefixLen,
+    sourceChildren.length - suffixLen,
+  );
+  const targetMiddle = targetChildren.slice(
+    prefixLen,
+    targetChildren.length - suffixLen,
+  );
+
+  if (middleTypesAlign && sourceMiddle.length > 0) {
+    $applyPairwiseChildDiff(containerNode, sourceMiddle, targetMiddle);
+  } else {
+    for (const child of sourceMiddle) {
+      $appendChildAsRemoved(containerNode, child);
+    }
+    for (const child of targetMiddle) {
+      $appendChildAsAdded(containerNode, child);
+    }
+  }
+
+  for (let i = 0; i < suffixLen; i++) {
+    containerNode.append(
+      $parseSerializedNode(targetChildren[targetChildren.length - suffixLen + i]),
+    );
+  }
+}
+
+/**
+ * Deep structural equality for serialized Lexical nodes. Stable JSON of two
+ * subtrees with sorted keys, with internal metadata (Lexical's `__key`,
+ * `__liveKey`, and the `$` NodeState bag carrying `liveNodeKey`) stripped so
+ * the source side -- which has been tagged with LiveNodeKeyState by the diff
+ * pipeline -- still compares equal to its untagged target counterpart when
+ * the underlying content matches. Without this, an unchanged link or
+ * hashtag would always look "different" and get flagged as a removed/added
+ * pair purely because of identity bookkeeping.
+ *
+ * `direction` is also normalized: source nodes that have been rendered in a
+ * live editor get `direction: "ltr"`, while headless target nodes parsed in
+ * the diff pipeline serialize with `direction: null`. Both are equivalent
+ * (LTR is the default), so we treat them as equal here -- matching the
+ * normalization already applied in `extractAttrs` (canonicalTree.ts) for the
+ * TreeMatcher's attr comparison.
+ */
+function serializedNodesEqual(
+  a: SerializedLexicalNode,
+  b: SerializedLexicalNode,
+): boolean {
+  const replacer = (key: string, value: unknown) => {
+    if (key === '__key' || key === '__liveKey' || key === '$') {
+      return undefined;
+    }
+    if (key === 'direction' && (value === 'ltr' || value === null)) {
+      // Treat "ltr" and null as equivalent -- both mean LTR. See JSDoc above.
+      return undefined;
+    }
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const obj = value as Record<string, unknown>;
+      const sorted: Record<string, unknown> = {};
+      for (const k of Object.keys(obj).sort()) {
+        sorted[k] = obj[k];
+      }
+      return sorted;
+    }
+    return value;
+  };
+  try {
+    return JSON.stringify(a, replacer) === JSON.stringify(b, replacer);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Render a position-aligned diff over child nodes whose types match pairwise.
+ * Each pair of children is one of three cases:
+ *   - structurally identical -> append target child clean (no diff marker)
+ *   - both text nodes that differ -> word-level inline diff so a single-word
+ *     swap doesn't flash the whole text node
+ *   - any other change (link URL flipped, hashtag retargeted, format-only
+ *     text change, etc.) -> emit source as removed + target as added so the
+ *     change is visible without poisoning unrelated siblings
+ */
+function $applyPairwiseChildDiff(
+  containerNode: ElementNode,
+  sourceChildren: SerializedLexicalNode[],
+  targetChildren: SerializedLexicalNode[],
+): void {
+  for (let i = 0; i < sourceChildren.length; i++) {
+    const sourceChild = sourceChildren[i];
+    const targetChild = targetChildren[i];
+
+    if (serializedNodesEqual(sourceChild, targetChild)) {
+      const node = $parseSerializedNode(targetChild);
+      containerNode.append(node);
+      continue;
+    }
+
+    if (sourceChild.type === 'text' && targetChild.type === 'text') {
+      const sText = (sourceChild as SerializedTextNode).text;
+      const tText = (targetChild as SerializedTextNode).text;
+      const sFmt = (sourceChild as SerializedTextNode).format || 0;
+      const tFmt = (targetChild as SerializedTextNode).format || 0;
+
+      if (sText === tText) {
+        // Format-only change at this position. Emit a paired
+        // removed-source / added-target so the format flip is visible and
+        // approve/reject still round-trip.
+        const removed = $createTextNode(sText);
+        removed.setFormat(sFmt);
+        $setDiffState(removed, 'removed');
+        containerNode.append(removed);
+        const added = $createTextNode(tText);
+        added.setFormat(tFmt);
+        $setDiffState(added, 'added');
+        containerNode.append(added);
+        continue;
+      }
+
+      const segments = diffWords(sText, tText);
+      // Single-text-node format map: every char in the target shares tFmt.
+      const targetFormatMap: number[] = new Array(tText.length).fill(tFmt);
+      $applyWordLevelInlineDiff(
+        containerNode,
+        segments,
+        targetFormatMap,
+        sFmt,
+        0,
+      );
+      continue;
+    }
+
+    // Non-text change (link, hashtag, etc.) at this position -- emit
+    // removed source + added target so the swap is visible without
+    // dragging in the unchanged neighbors.
+    $appendChildAsRemoved(containerNode, sourceChild);
+    $appendChildAsAdded(containerNode, targetChild);
+  }
 }
 
 /**

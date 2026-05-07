@@ -93,12 +93,16 @@ export function detectTrackerFromFrontmatter(content: string): TrackerFrontmatte
   }
 
   // Extension-owned keys take priority -- their extension manages the nested block,
-  // so always read from it rather than stale top-level fields.
+  // so always read from it rather than stale top-level fields. Top-level fields
+  // are still surfaced when they don't shadow a nested field (e.g. tracker
+  // workflow `status` and `tags`, which the nested AutomationStatus block does
+  // not own). The nested block wins on overlap to defeat any stale duplicates
+  // left over by previous flattening.
   for (const [extKey, trackerType] of Object.entries(EXTENSION_OWNED_KEYS)) {
     if (frontmatter[extKey] && typeof frontmatter[extKey] === 'object') {
       const extData = frontmatter[extKey] as Record<string, any>;
       const { [extKey]: _, trackerStatus: _ts, ...otherTopLevel } = frontmatter;
-      const merged = { ...extData, ...otherTopLevel, type: trackerType };
+      const merged = { ...otherTopLevel, ...extData, type: trackerType };
       return {
         type: trackerType,
         data: resolveFieldData(trackerType, merged),
@@ -176,28 +180,44 @@ export function updateTrackerInFrontmatter(
 ): string {
   const frontmatter = extractFrontmatter(content) || {};
 
-  // Extension-owned keys are managed by their respective extensions -- don't touch them.
-  // Write only trackerStatus.type and timestamps; leave the nested block intact.
-  // Also clean up stale top-level duplicates of fields that belong in the nested block.
+  // Extension-owned keys are managed by their respective extensions -- never
+  // flatten or rewrite the nested block. Only mutate top-level fields the
+  // extension does not own (e.g. tracker workflow `status`, `tags`, timestamps),
+  // and clean up any stale top-level duplicates of nested fields that previous
+  // tracker code may have written before this fix landed.
   const extensionOwnedKey = Object.keys(EXTENSION_OWNED_KEYS).find(
     key => frontmatter[key] && typeof frontmatter[key] === 'object'
   );
   if (extensionOwnedKey) {
     const nestedData = frontmatter[extensionOwnedKey] as Record<string, any>;
-    const cleanedFrontmatter = { ...frontmatter };
-    for (const field of Object.keys(nestedData)) {
-      if (field in cleanedFrontmatter && field !== extensionOwnedKey) {
-        delete cleanedFrontmatter[field];
-      }
+    const nestedFieldNames = new Set(Object.keys(nestedData));
+
+    const topLevel: Record<string, any> = {};
+    for (const [key, value] of Object.entries(frontmatter)) {
+      if (key === extensionOwnedKey) continue;
+      if (key === 'trackerStatus') continue;
+      if (nestedFieldNames.has(key)) continue; // drop stale duplicate
+      topLevel[key] = value;
     }
+
+    // Apply caller updates targeting top-level tracker fields. Updates aimed at
+    // fields the nested block owns are dropped here -- the owning extension is
+    // the only writer for those fields.
+    for (const [key, value] of Object.entries(updates)) {
+      if (key === 'type') continue;
+      if (nestedFieldNames.has(key)) continue;
+      topLevel[key] = value;
+    }
+
     const now = formatLocalDateOnly(new Date());
-    const mergedUpdates: Record<string, any> = {};
-    for (const [key, value] of Object.entries(cleanedFrontmatter)) {
-      mergedUpdates[key] = value;
-    }
-    mergedUpdates.trackerStatus = { type: trackerType };
-    if (!cleanedFrontmatter.created) mergedUpdates.created = now;
-    mergedUpdates.updated = now;
+    if (!topLevel.created) topLevel.created = now;
+    topLevel.updated = now;
+
+    const mergedUpdates: Record<string, any> = {
+      ...topLevel,
+      [extensionOwnedKey]: nestedData,
+      trackerStatus: { type: trackerType },
+    };
 
     const yamlContent = jsyaml.dump(mergedUpdates, {
       indent: 2,

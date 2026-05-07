@@ -84,15 +84,22 @@ function buildPayloadsFromRows(
       assigneeId: data.assigneeId,
       reporterId: data.reporterId,
       labels: data.labels,
-      linkedSessions: data.linkedSessions,
       linkedCommitSha: data.linkedCommitSha,
       documentId: data.documentId,
       content: row.content != null ? row.content : undefined,
+      // Thread persisted per-field LWW timestamps through to the upload payload.
+      // Without this, trackerItemToRecord stamps every field with Date.now(),
+      // making field-level merge non-deterministic for items uploaded from PGLite.
+      fieldUpdatedAt: data._fieldUpdatedAt || undefined,
     };
     const itemKeys = new Set(Object.keys(item));
     const extra: Record<string, any> = {};
     if (data) {
       for (const [k, v] of Object.entries(data)) {
+        // Skip _fieldUpdatedAt: it is consumed via item.fieldUpdatedAt above
+        // and is not a user field. linkedSessions remains local-only and must
+        // never be promoted back into shared tracker payloads as a custom field.
+        if (k === '_fieldUpdatedAt' || k === 'linkedSessions') continue;
         if (!itemKeys.has(k) && v !== undefined) extra[k] = v;
       }
     }
@@ -538,7 +545,6 @@ async function hydrateTrackerItem(
     assigneeId: item.assigneeId,
     reporterId: item.reporterId,
     labels: item.labels,
-    linkedSessions: item.linkedSessions,
     linkedCommitSha: item.linkedCommitSha,
     documentId: item.documentId,
     // Spread customFields at the top level so generated columns (e.g. kanban_sort_order)
@@ -561,6 +567,9 @@ async function hydrateTrackerItem(
       // Carry forward local-only fields not present in the incoming data
       if (existingData?.kanbanSortOrder && !data.kanbanSortOrder) {
         data.kanbanSortOrder = existingData.kanbanSortOrder;
+      }
+      if (existingData?.linkedSessions && !data.linkedSessions) {
+        data.linkedSessions = existingData.linkedSessions;
       }
 
       // Merge comments (union by ID, keep newer version per comment)

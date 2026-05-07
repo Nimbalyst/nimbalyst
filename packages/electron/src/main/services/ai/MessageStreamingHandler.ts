@@ -45,6 +45,7 @@ import { TrayManager } from '../../tray/TrayManager';
 import { logger } from '../../utils/logger';
 import { windowStates, findWindowByWorkspace } from '../../window/WindowManager';
 import { sessionFileTracker } from '../SessionFileTracker';
+import { codexEditWindowRegistry, shouldOpenCodexEditWindow } from '../CodexEditWindowRegistry';
 import { toolCallMatcher, unwrapShellCommand } from '../ToolCallMatcher';
 import { FeatureUsageService, FEATURES } from '../FeatureUsageService.ts';
 import { historyManager } from '../../HistoryManager';
@@ -164,6 +165,28 @@ async function getCurrentSessionTitle(sessionId: string, fallback = 'AI Session'
   return fallback;
 }
 
+// Cache of sessionId -> workspacePath so per-batch broadcast routing doesn't
+// hit the DB on every flush. A session's workspace is immutable, so the cache
+// never needs invalidation; it grows with the number of distinct sessions
+// seen. First lookup for an unknown session pays one AISessionsRepository.get;
+// subsequent lookups are O(1).
+const sessionWorkspaceCache = new Map<string, string>();
+
+async function getWorkspacePathForSession(sessionId: string): Promise<string | null> {
+  const cached = sessionWorkspaceCache.get(sessionId);
+  if (cached) return cached;
+  try {
+    const session = await AISessionsRepository.get(sessionId);
+    if (session?.workspacePath) {
+      sessionWorkspaceCache.set(sessionId, session.workspacePath);
+      return session.workspacePath;
+    }
+  } catch {
+    // Ignore — caller will skip the broadcast.
+  }
+  return null;
+}
+
 export class MessageStreamingHandler {
   private readonly svc: AIServiceInternal;
   private readonly unsubscribeBatchListener: () => void;
@@ -180,11 +203,25 @@ export class MessageStreamingHandler {
     // refresh once instead of N times. The queue already excludes hidden rows
     // from the count, so we don't filter again here.
     this.unsubscribeBatchListener = onAgentMessageBatch((batch) => {
-      for (const window of BrowserWindow.getAllWindows()) {
-        if (!window.isDestroyed()) {
-          window.webContents.send('ai:messages-logged-batch', batch);
+      // Route to only the window owning this session's workspace. The previous
+      // BrowserWindow.getAllWindows() fan-out caused every window to react to
+      // every other window's session activity, which surfaced as
+      // [SessionManager] Rejecting session ... rejection logs because the
+      // receiving window's renderer would call aiLoadSession with its own
+      // workspace path. The session's workspace is immutable, so we cache the
+      // lookup. See docs/IPC_GUIDE.md "Workspace-Scoped IPC".
+      void getWorkspacePathForSession(batch.sessionId).then((workspacePath) => {
+        if (!workspacePath) {
+          return;
         }
-      }
+        const targetWindow = findWindowByWorkspace(workspacePath);
+        if (targetWindow && !targetWindow.isDestroyed()) {
+          targetWindow.webContents.send('ai:messages-logged-batch', {
+            ...batch,
+            workspacePath,
+          });
+        }
+      });
     });
   }
 
@@ -860,6 +897,7 @@ export class MessageStreamingHandler {
         await stateManager.endSession(data.sessionId);
         // Stop file watcher - session is fully complete (teammates done)
         await this.svc.hooklessWatcher.stopForSession(data.sessionId);
+        codexEditWindowRegistry.clearSession(data.sessionId);
 
         // Play completion sound now that the session is truly done
         const soundService = SoundNotificationService.getInstance();
@@ -1163,16 +1201,58 @@ export class MessageStreamingHandler {
                     }
                   }
 
-                  // Codex reuses item IDs across turns, so we normally avoid storing
-                  // provider IDs as toolUseId. Exception: file_change events need
-                  // stable per-item IDs so `session-files:get-tool-call-diffs` can
-                  // resolve the exact file_change call that produced a diff.
-                  const providerToolUseId = typeof (chunk.toolCall as any)?.toolUseId === 'string'
-                    ? (chunk.toolCall as any).toolUseId
-                    : (typeof chunk.toolCall.id === 'string' ? chunk.toolCall.id : undefined);
-                  const toolUseId = session.provider === 'openai-codex'
-                    ? (trackToolName === 'file_change' ? providerToolUseId : undefined)
-                    : providerToolUseId;
+                  // Codex reuses raw item IDs (e.g. `item_0`) across turns, so we
+                  // never persist them as toolUseId directly. The provider stamps
+                  // a stable synthetic edit-group ID on the chunk via toolUseId
+                  // (`nimtc|<encoded>|<ts>|<idx>`), matching what CodexRawParser
+                  // mints on later reparse. Use that for ALL Codex tool calls --
+                  // not just `file_change` -- so file edits caused by other
+                  // write-capable tools attribute to the same edit group.
+                  const chunkSyntheticToolUseId =
+                    typeof (chunk.toolCall as any)?.toolUseId === 'string'
+                      ? ((chunk.toolCall as any).toolUseId as string)
+                      : undefined;
+                  const isCodexProvider = session.provider === 'openai-codex';
+                  const providerToolUseId = isCodexProvider
+                    ? chunkSyntheticToolUseId
+                    : (chunkSyntheticToolUseId ?? (typeof chunk.toolCall.id === 'string' ? chunk.toolCall.id : undefined));
+                  const toolUseId = providerToolUseId;
+
+                  // Open / close a Codex edit attribution window for write-capable
+                  // tool calls. Watcher events that fire while a window is open
+                  // (or within a short post-close grace period) attribute to the
+                  // canonical synthetic edit-group ID instead of falling back to
+                  // ToolCallMatcher's fuzzy time heuristics. We deliberately
+                  // exclude command_execution per the Phase 2 scope decision.
+                  if (isCodexProvider && chunkSyntheticToolUseId && shouldOpenCodexEditWindow(chunk.toolCall.name)) {
+                    let codexTargetFilePath: string | null = null;
+                    const argsRecord = chunk.toolCall.arguments as Record<string, unknown> | undefined;
+                    if (argsRecord) {
+                      if (typeof argsRecord.file_path === 'string') codexTargetFilePath = argsRecord.file_path;
+                      else if (typeof argsRecord.path === 'string') codexTargetFilePath = argsRecord.path;
+                    }
+                    codexEditWindowRegistry.open({
+                      sessionId: session.id,
+                      editGroupId: chunkSyntheticToolUseId,
+                      toolName: chunk.toolCall.name,
+                      workspacePath: effectiveWorkspacePath,
+                      targetFilePath: codexTargetFilePath,
+                    });
+                    // A tool_call carrying a result is terminal -- close the
+                    // window so attribution stops claiming new watcher events
+                    // after the post-close grace period elapses.
+                    const hasResult = chunk.toolCall.result !== undefined && chunk.toolCall.result !== null;
+                    if (hasResult) {
+                      const resultObj = chunk.toolCall.result as Record<string, unknown> | string | undefined;
+                      const looksError = typeof resultObj === 'object' && resultObj !== null
+                        && (('success' in resultObj && (resultObj as Record<string, unknown>).success === false)
+                          || 'error' in resultObj);
+                      codexEditWindowRegistry.close(
+                        chunkSyntheticToolUseId,
+                        looksError ? 'error' : 'completed',
+                      );
+                    }
+                  }
 
                   await sessionFileTracker.trackToolExecution(
                     session.id,
@@ -1397,10 +1477,21 @@ export class MessageStreamingHandler {
                         continue;
                       }
 
+                      // Prefer the synthetic edit-group ID stamped by the
+                      // OpenAICodexProvider so the pre-edit history tag,
+                      // SessionFileTracker dedupe key, and CodexRawParser-minted
+                      // canonical providerToolCallId all reference the same
+                      // group. Fall back to chunk.toolCall.id only for older
+                      // streaming code paths that don't yet stamp toolUseId.
+                      const codexSyntheticToolUseId =
+                        typeof (chunk.toolCall as any)?.toolUseId === 'string'
+                          ? ((chunk.toolCall as any).toolUseId as string)
+                          : undefined;
                       const toolUseId =
-                        typeof chunk.toolCall.id === 'string'
+                        codexSyntheticToolUseId
+                        ?? (typeof chunk.toolCall.id === 'string'
                           ? chunk.toolCall.id
-                          : `codex-file-change-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                          : `codex-file-change-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
                       const tagId = `ai-edit-pending-${session.id}-${toolUseId}`;
                       await historyManager.createTag(
                         effectiveWorkspacePath,
@@ -2329,6 +2420,7 @@ export class MessageStreamingHandler {
           await stateManager.endSession(session.id);
           // Stop file watcher - session ended on error
           await this.svc.hooklessWatcher.stopForSession(session.id);
+          codexEditWindowRegistry.clearSession(session.id);
         }
 
         // Clear executing and pending prompt flags for mobile sync on error

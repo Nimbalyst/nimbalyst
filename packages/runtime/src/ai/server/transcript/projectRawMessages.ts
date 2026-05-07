@@ -59,6 +59,8 @@ export async function rawMessagesToCanonicalEvents(
     hasSubagent: (id: string) => subagentEventIds.has(id),
     findByProviderToolCallId: (id: string) =>
       store.findByProviderToolCallId(id, sessionId),
+    findActiveToolCallByRawProviderId: (rawId: string) =>
+      store.findActiveToolCallByRawProviderId(rawId, sessionId),
   };
 
   for (const msg of rawMessages) {

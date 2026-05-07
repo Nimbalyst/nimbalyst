@@ -168,12 +168,23 @@ export function initSessionStateListeners(): () => void {
     const currentWorkspacePath = store.get(sessionListWorkspaceAtom);
     const registry = store.get(sessionRegistryAtom);
     const sessionMeta = registry.get(sessionId);
-    const resolvedWorkspacePath = eventWorkspacePath || sessionMeta?.workspaceId || currentWorkspacePath || null;
+    const ownedWorkspacePath = eventWorkspacePath || sessionMeta?.workspaceId || null;
 
-    // Ignore lifecycle events for sessions owned by a different workspace window.
-    if (currentWorkspacePath && resolvedWorkspacePath && resolvedWorkspacePath !== currentWorkspacePath) {
+    // Ignore lifecycle events that aren't attributable to this window's workspace.
+    // Without an event-carried workspacePath or a registry hit, we can't safely
+    // assume the event belongs here -- defaulting to currentWorkspacePath would
+    // silently process events for other windows' sessions (the bug that caused
+    // [SessionManager] Rejecting session ... noise during streaming in another
+    // window). Source emitters should attach workspacePath to every event;
+    // see docs/IPC_GUIDE.md.
+    if (!ownedWorkspacePath) {
       return;
     }
+    if (currentWorkspacePath && ownedWorkspacePath !== currentWorkspacePath) {
+      return;
+    }
+
+    const resolvedWorkspacePath = ownedWorkspacePath;
 
     switch (type) {
       // Session is actively running
@@ -331,21 +342,29 @@ export function initSessionStateListeners(): () => void {
    * Also marks sessions as unread when they receive output messages while not being
    * the currently viewed session.
    */
-  const handleMessageLogged = (data: { sessionId: string; direction: string }) => {
-    const { sessionId, direction } = data;
+  const handleMessageLogged = (data: { sessionId: string; direction: string; workspacePath?: string }) => {
+    const { sessionId, direction, workspacePath: eventWorkspacePath } = data;
+    if (!sessionId) return;
+
     const currentWorkspacePath = store.get(sessionListWorkspaceAtom);
     const registry = store.get(sessionRegistryAtom);
     const sessionMeta = registry.get(sessionId);
-    const workspacePath = sessionMeta?.workspaceId || currentWorkspacePath;
+    const ownedWorkspacePath = eventWorkspacePath || sessionMeta?.workspaceId || null;
 
-    // Guard against any cross-window leakage: only process events for this window's workspace.
-    if (currentWorkspacePath && sessionMeta?.workspaceId && sessionMeta.workspaceId !== currentWorkspacePath) {
+    // Drop events that aren't attributable to this window's workspace.
+    // Falling back to currentWorkspacePath when neither the event nor the
+    // registry tells us who owns the session causes cross-window pollution
+    // (the markdowntests window reloading stravu-editor sessions and producing
+    // [SessionManager] Rejecting session ... noise). Source emitters should
+    // attach workspacePath; see docs/IPC_GUIDE.md.
+    if (!ownedWorkspacePath) {
+      return;
+    }
+    if (currentWorkspacePath && ownedWorkspacePath !== currentWorkspacePath) {
       return;
     }
 
-    if (!workspacePath || !sessionId) {
-      return;
-    }
+    const workspacePath = ownedWorkspacePath;
 
     // Throttle session data reload per session (leading + trailing edge).
     // During active streaming, message-logged fires on every chunk which would
@@ -450,10 +469,15 @@ export function initSessionStateListeners(): () => void {
     sessionId: string;
     count: number;
     direction: 'input' | 'output' | 'mixed';
+    workspacePath?: string;
   }) => {
     if (!data?.sessionId || !data.count) return;
     const effectiveDirection = data.direction === 'input' ? 'input' : 'output';
-    handleMessageLogged({ sessionId: data.sessionId, direction: effectiveDirection });
+    handleMessageLogged({
+      sessionId: data.sessionId,
+      direction: effectiveDirection,
+      workspacePath: data.workspacePath,
+    });
   };
 
   /**

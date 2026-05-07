@@ -24,7 +24,7 @@ import {
   type TypeColumnConfig,
 } from '../../store/atoms/trackers';
 import { getDefaultColumnConfig } from '@nimbalyst/runtime/plugins/TrackerPlugin';
-import { setSelectedWorkstreamAtom, sessionRegistryAtom, refreshSessionListAtom } from '../../store/atoms/sessions';
+import { setSelectedWorkstreamAtom, sessionRegistryAtom, refreshSessionListAtom, initSessionList } from '../../store/atoms/sessions';
 import { trackerItemsMapAtom } from '@nimbalyst/runtime/plugins/TrackerPlugin/trackerDataAtoms';
 import { workstreamStateAtom } from '../../store/atoms/workstreamState';
 import { setWindowModeAtom } from '../../store/atoms/windowMode';
@@ -56,7 +56,10 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [quickAddType, setQuickAddType] = useState<string | null>(null);
 
-
+  useEffect(() => {
+    if (!workspacePath) return;
+    void initSessionList(workspacePath);
+  }, [workspacePath]);
 
   // Current user identity for "mine" filter
   const [currentIdentity, setCurrentIdentity] = useState<TrackerIdentity | null>(null);

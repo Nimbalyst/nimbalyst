@@ -9,6 +9,13 @@ import {
 } from '@nimbalyst/runtime';
 import { trackerItemCountByTypeAtom } from '@nimbalyst/runtime/plugins/TrackerPlugin';
 import { AlphaBadge } from '../../common/AlphaBadge';
+import { useDialog } from '../../../contexts/DialogContext';
+import {
+  buildTrackerUpgradeConfirmOptions,
+  canUpgradeTrackerMode,
+  getTrackerStorageCopy,
+  requiresTrackerUpgradeConfirmation,
+} from './trackerConfigUpgrade';
 
 // ============================================================================
 // Types
@@ -180,6 +187,19 @@ function TrackerIcon({ color, icon }: { color: string; icon: string }) {
       style={{ background: `${color}20` }}
     >
       <MaterialSymbol icon={icon} size={16} style={{ color }} fill />
+    </div>
+  );
+}
+
+function TrackerStorageInfoBanner() {
+  return (
+    <div className="provider-panel-section py-4 mb-4 border-b border-[var(--nim-border)] last:border-b-0 last:mb-0 last:pb-0">
+      <div className="flex items-start gap-2.5 p-3 bg-[rgba(96,165,250,0.08)] border border-[rgba(96,165,250,0.2)] rounded-lg">
+        <MaterialSymbol icon="storage" size={14} className="text-[var(--nim-primary)] shrink-0 mt-0.5" />
+        <div className="text-[12px] text-[var(--nim-text-muted)] leading-relaxed">
+          {getTrackerStorageCopy()}
+        </div>
+      </div>
     </div>
   );
 }
@@ -455,9 +475,10 @@ function MemberView({ trackers, workspacePath }: { trackers: TrackerTypeConfig[]
 
 export function TrackerConfigPanel({ workspacePath }: TrackerConfigPanelProps) {
   const [trackers, setTrackers] = useState<TrackerTypeConfig[]>([]);
-  const [isAdmin, setIsAdmin] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [issueKeyPrefix, setIssueKeyPrefix] = useState('NIM');
   const [isSyncConnected, setIsSyncConnected] = useState(false);
+  const { confirm } = useDialog();
 
   useEffect(() => {
     // Load saved sync policies from workspace state, then merge with registry
@@ -477,11 +498,16 @@ export function TrackerConfigPanel({ workspacePath }: TrackerConfigPanelProps) {
         // Check team role (per-workspace lookup)
         try {
           const teamResult = await (window as any).electronAPI.team.findForWorkspace(workspacePath);
-          if (teamResult.success && teamResult.team) {
-            setIsAdmin(teamResult.team.role === 'admin');
+          if (teamResult.success) {
+            if (teamResult.team) {
+              setIsAdmin(teamResult.team.role === 'admin');
+            } else {
+              // No team matched this workspace, so keep local tracker policy management available.
+              setIsAdmin(true);
+            }
           }
         } catch {
-          // No team or error
+          // Leave admin gating closed on lookup error.
         }
 
         // Check if tracker sync is connected (for determining where to save prefix)
@@ -547,7 +573,25 @@ export function TrackerConfigPanel({ workspacePath }: TrackerConfigPanelProps) {
     }
   }, [workspacePath, isSyncConnected]);
 
-  const handleSyncModeChange = (type: string, mode: TrackerSyncMode) => {
+  const handleSyncModeChange = useCallback(async (type: string, mode: TrackerSyncMode) => {
+    const tracker = trackers.find((entry) => entry.model.type === type);
+    if (!tracker || tracker.syncMode === mode) {
+      return;
+    }
+
+    if (!canUpgradeTrackerMode(tracker.syncMode, mode, isAdmin)) {
+      return;
+    }
+
+    if (requiresTrackerUpgradeConfirmation(tracker.syncMode, mode)) {
+      const approved = await confirm(
+        buildTrackerUpgradeConfirmOptions(tracker.model.displayNamePlural, mode)
+      );
+      if (!approved) {
+        return;
+      }
+    }
+
     setTrackers((prev) =>
       prev.map((t) =>
         t.model.type === type ? { ...t, syncMode: mode } : t
@@ -560,10 +604,10 @@ export function TrackerConfigPanel({ workspacePath }: TrackerConfigPanelProps) {
         trackerSyncPolicies: { [type]: mode },
       });
     }
-  };
+  }, [confirm, isAdmin, trackers, workspacePath]);
 
   return (
-    <div className="provider-panel flex flex-col">
+    <div className="tracker-config-panel provider-panel flex flex-col">
       {/* Header */}
       <div className="provider-panel-header mb-5 pb-4 border-b border-[var(--nim-border)]">
         <h3 className="provider-panel-title text-xl font-semibold leading-tight mb-1.5 text-[var(--nim-text)] flex items-center gap-2">
@@ -576,6 +620,8 @@ export function TrackerConfigPanel({ workspacePath }: TrackerConfigPanelProps) {
             : 'View team-shared tracker types and manage your local trackers.'}
         </p>
       </div>
+
+      <TrackerStorageInfoBanner />
 
       <IssueKeyPrefixInput
         value={issueKeyPrefix}

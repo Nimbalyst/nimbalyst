@@ -27,6 +27,7 @@ import { MCPServerConfig } from '../../../types/MCPServerConfig';
 import { safeJSONSerialize } from '../../../utils/serialization';
 import { AskUserQuestionPrompt, AskUserQuestionPromptOption } from './shared/askUserQuestionTypes';
 import { AgentProtocolTranscriptAdapter } from './agentProtocol/AgentProtocolTranscriptAdapter';
+import { buildCodexToolLookupId } from '../toolLookupIds';
 
 interface OpenAICodexProviderDeps {
   protocol?: CodexSDKProtocol;
@@ -90,6 +91,21 @@ export class OpenAICodexProvider extends BaseAgentProvider {
   private readonly permissionService: ToolPermissionService;
   private readonly mcpConfigService: McpConfigService;
   private readonly pendingAskUserQuestions = new Map<string, PendingAskUserQuestionEntry>();
+
+  /**
+   * Per-session map of `rawItemId -> synthetic edit-group ID`. Used to
+   * stamp the same `nimtc|...` ID onto:
+   *   1. raw message metadata (`editGroupId`) so CodexRawParser produces
+   *      the same canonical providerToolCallId on later reparse, and
+   *   2. tool_call streaming chunks (`toolCall.toolUseId`) so
+   *      MessageStreamingHandler / SessionFileTracker dedupe and store
+   *      the same ID at streaming time.
+   *
+   * Entries are cleared on item.completed for the corresponding raw item id
+   * so a later turn that reuses `item_0` mints a fresh edit-group ID.
+   */
+  private readonly codexEditGroupIdsBySession = new Map<string, Map<string, string>>();
+  private codexEditGroupCounter = 0;
 
   // Analytics initialization data, captured during first sendMessage call
   private _initData: {
@@ -921,6 +937,21 @@ export class OpenAICodexProvider extends BaseAgentProvider {
                 usedSessionNamingToolThisTurn = true;
               }
               this.handleAskUserQuestionToolCall(item.toolCall, sessionId);
+              // Stamp the synthetic edit-group ID minted when the corresponding
+              // raw_event was logged so MessageStreamingHandler /
+              // SessionFileTracker dedupe and persist the same `nimtc|...` ID
+              // CodexRawParser will mint when reparsing the raw log.
+              if (sessionId && typeof item.toolCall.id === 'string' && item.toolCall.id) {
+                const editGroupId = this.lookupCodexEditGroupId(sessionId, item.toolCall.id);
+                if (editGroupId) {
+                  (item.toolCall as { toolUseId?: string }).toolUseId = editGroupId;
+                }
+                // A tool_call carrying a result is terminal -- allow a later
+                // turn that reuses `item_0` to mint a fresh edit-group ID.
+                if (item.toolCall.result !== undefined && item.toolCall.result !== null) {
+                  this.clearCodexEditGroupForItem(sessionId, item.toolCall.id);
+                }
+              }
               // AIService still needs tool_call yields for file tracking / worktree detection
               yield { type: 'tool_call', toolCall: item.toolCall };
               break;
@@ -1702,16 +1733,32 @@ export class OpenAICodexProvider extends BaseAgentProvider {
     const { content, usedFallback } = this.serializeRawCodexEvent(event.metadata.rawEvent);
     const rawEventType = this.getRawEventType(event.metadata.rawEvent);
 
+    // Mint or look up the synthetic edit-group ID for this raw event's tool
+    // item (if any). Stamping it onto the message metadata makes it the
+    // canonical source of the providerToolCallId for both the parser
+    // (CodexRawParser.resolveEditGroupId reads msg.metadata.editGroupId) and
+    // SessionFileTracker (the chunk yielded a few lines later carries the
+    // same ID so both writers store the same toolUseId).
+    const rawItemId = this.extractCodexRawItemId(event.metadata.rawEvent);
+    const editGroupId = rawItemId
+      ? this.getOrMintCodexEditGroupId(sessionId, rawItemId)
+      : undefined;
+
+    const metadata: Record<string, unknown> = {
+      eventType: rawEventType,
+      codexProvider: true,
+      rawEventSerializationFallback: usedFallback,
+    };
+    if (editGroupId) {
+      metadata.editGroupId = editGroupId;
+    }
+
     await this.logAgentMessage(
       sessionId,
       this.getProviderName(),
       'output',
       content,
-      {
-        eventType: rawEventType,
-        codexProvider: true,
-        rawEventSerializationFallback: usedFallback,
-      },
+      metadata,
       false, // not hidden
       undefined, // no provider message ID
       false // not searchable - raw events are not for search
@@ -1719,6 +1766,68 @@ export class OpenAICodexProvider extends BaseAgentProvider {
 
     // Detect todo_list items and update session metadata so sidebar widgets display them
     this.handleTodoListEvent(event.metadata.rawEvent, sessionId);
+  }
+
+  /**
+   * Extract the raw Codex item id (e.g. `item_0`) from a raw SDK event, if
+   * present. Returns null for events that don't carry a tool item (text,
+   * thread.started, token_count, etc.).
+   */
+  private extractCodexRawItemId(rawEvent: unknown): string | null {
+    if (!rawEvent || typeof rawEvent !== 'object') return null;
+    const record = rawEvent as Record<string, unknown>;
+    const item = record.item;
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+    const id = (item as Record<string, unknown>).id;
+    return typeof id === 'string' && id ? id : null;
+  }
+
+  /**
+   * Look up the synthetic edit-group ID for a raw Codex item id without
+   * minting a new one. Used by the streaming yield path to attach the same
+   * `nimtc|...` ID minted by storeRawEventIfPresent (which always runs first
+   * for the corresponding raw_event in the protocol stream) onto the
+   * tool_call chunk.
+   */
+  private lookupCodexEditGroupId(sessionId: string, rawItemId: string): string | undefined {
+    return this.codexEditGroupIdsBySession.get(sessionId)?.get(rawItemId);
+  }
+
+  /**
+   * Get the synthetic edit-group ID for the given (sessionId, rawItemId),
+   * minting a fresh `nimtc|<encoded>|<Date.now()>|<counter>` ID if no entry
+   * exists. The counter is per-provider-instance and ensures distinct IDs
+   * even when two raw items log in the same millisecond.
+   */
+  private getOrMintCodexEditGroupId(sessionId: string, rawItemId: string): string {
+    let sessionMap = this.codexEditGroupIdsBySession.get(sessionId);
+    if (!sessionMap) {
+      sessionMap = new Map<string, string>();
+      this.codexEditGroupIdsBySession.set(sessionId, sessionMap);
+    }
+    const existing = sessionMap.get(rawItemId);
+    if (existing) return existing;
+    const minted = buildCodexToolLookupId(
+      rawItemId,
+      Date.now(),
+      ++this.codexEditGroupCounter,
+    );
+    sessionMap.set(rawItemId, minted);
+    return minted;
+  }
+
+  /**
+   * Drop the (sessionId, rawItemId) -> syntheticId entry so a later turn
+   * that reuses the same raw item id (e.g. `item_0`) mints a fresh ID.
+   * Called after the tool_call carrying a result is yielded.
+   */
+  private clearCodexEditGroupForItem(sessionId: string, rawItemId: string): void {
+    const sessionMap = this.codexEditGroupIdsBySession.get(sessionId);
+    if (!sessionMap) return;
+    sessionMap.delete(rawItemId);
+    if (sessionMap.size === 0) {
+      this.codexEditGroupIdsBySession.delete(sessionId);
+    }
   }
 
   /**

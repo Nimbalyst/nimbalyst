@@ -1028,6 +1028,9 @@ export class ElectronDocumentService implements DocumentService {
           'created', 'updated', 'dueDate', 'assigneeEmail', 'reporterEmail',
           'authorIdentity', 'lastModifiedBy', 'createdByAgent', 'assigneeId',
           'reporterId', 'labels', 'linkedSessions', 'linkedCommitSha', 'documentId',
+          // _fieldUpdatedAt is the per-field LWW timestamp map, surfaced via the
+          // top-level fieldUpdatedAt property -- not a user-visible custom field.
+          '_fieldUpdatedAt',
         ]);
         const extra: Record<string, any> = {};
         if (data) {
