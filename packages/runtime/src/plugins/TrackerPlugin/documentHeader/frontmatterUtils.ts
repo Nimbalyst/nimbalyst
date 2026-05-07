@@ -39,10 +39,14 @@ function resolveFieldData(type: string, data: Record<string, any>): Record<strin
 }
 
 /**
- * Extract YAML frontmatter from markdown content
+ * Extract YAML frontmatter from markdown content.
+ *
+ * `\r?\n` tolerates Windows `\r\n` line endings (e.g. files checked out
+ * with `git config core.autocrlf=true`). Without it, frontmatter on
+ * Windows-newline files is silently undetectable. See nimbalyst#68.
  */
 export function extractFrontmatter(content: string): Record<string, any> | null {
-  const frontmatterRegex = /^---\n([\s\S]*?)\n---/;
+  const frontmatterRegex = /^---\r?\n([\s\S]*?)\r?\n---/;
   const match = content.match(frontmatterRegex);
 
   if (!match) {
@@ -74,8 +78,12 @@ const LEGACY_KEY_TO_TYPE: Record<string, string> = {
 /**
  * Extension-owned frontmatter keys that the tracker should detect but never flatten or rewrite.
  * The owning extension manages these blocks; the tracker only reads `type` from their presence.
+ *
+ * Exported so consumers like `TrackerTable.resolveTrackerFrontmatter` can use the same map
+ * and stay in sync with `detectTrackerFromFrontmatter` instead of duplicating it. See
+ * nimbalyst#67 for the consequences of having two diverging copies.
  */
-const EXTENSION_OWNED_KEYS: Record<string, string> = {
+export const EXTENSION_OWNED_KEYS: Record<string, string> = {
   automationStatus: 'automation',
 };
 
@@ -157,7 +165,8 @@ export function updateFrontmatter(
     noRefs: true,
   });
 
-  const frontmatterRegex = /^---\n[\s\S]*?\n---\n?/;
+  // `\r?\n` matches both LF and CRLF openers (nimbalyst#68).
+  const frontmatterRegex = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/;
   const hasFrontmatter = frontmatterRegex.test(content);
 
   if (hasFrontmatter) {
@@ -224,7 +233,8 @@ export function updateTrackerInFrontmatter(
       lineWidth: -1,
       noRefs: true,
     });
-    const frontmatterRegex = /^---\n[\s\S]*?\n---\n?/;
+    // `\r?\n` matches both LF and CRLF openers (nimbalyst#68).
+    const frontmatterRegex = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/;
     if (frontmatterRegex.test(content)) {
       return content.replace(frontmatterRegex, `---\n${yamlContent}---\n`);
     }
