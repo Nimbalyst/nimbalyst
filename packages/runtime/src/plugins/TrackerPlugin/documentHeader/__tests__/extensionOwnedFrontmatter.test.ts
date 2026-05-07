@@ -180,4 +180,57 @@ describe('frontmatterUtils — extension-owned automationStatus', () => {
       expect(fm).toHaveProperty('automationStatus');
     });
   });
+
+  // CRLF tolerance regression coverage for nimbalyst#68. On Windows with
+  // `git config core.autocrlf=true`, files arrive with `\r\n` line endings.
+  // The frontmatter regexes used to require bare `\n`, so the entire
+  // automations / Tracker pipeline silently treated the files as
+  // frontmatter-less. These tests pin `\r?\n` tolerance.
+  describe('CRLF line endings', () => {
+    function buildCrlfContent(frontmatter: Record<string, any>, body = '\n# Body\n'): string {
+      // jsyaml emits LF; build the wrapper with explicit CRLF and replace
+      // the YAML body's LFs with CRLFs to mirror what git delivers on Windows.
+      const yaml = jsyaml.dump(frontmatter).replace(/\n/g, '\r\n');
+      return `---\r\n${yaml}---\r\n${body}`;
+    }
+
+    it('extractFrontmatter parses CRLF frontmatter', () => {
+      const content = buildCrlfContent({ title: 'Windows file', priority: 'high' });
+      const fm = extractFrontmatter(content);
+      expect(fm).not.toBeNull();
+      expect(fm?.title).toBe('Windows file');
+      expect(fm?.priority).toBe('high');
+    });
+
+    it('detectTrackerFromFrontmatter recognises automationStatus in CRLF files', () => {
+      const content = buildCrlfContent({
+        automationStatus: {
+          id: 'daily-build',
+          title: 'Daily Build',
+          enabled: true,
+          schedule: { type: 'daily', time: '09:00' },
+          output: { mode: 'new-file', location: 'out/' },
+        },
+      });
+      const detected = detectTrackerFromFrontmatter(content);
+      expect(detected?.type).toBe('automation');
+      expect(detected?.data.id).toBe('daily-build');
+    });
+
+    it('updateTrackerInFrontmatter still works on CRLF input', () => {
+      const content = buildCrlfContent({
+        automationStatus: {
+          id: 'daily-build',
+          title: 'Daily Build',
+          enabled: true,
+          schedule: { type: 'daily', time: '09:00' },
+          output: { mode: 'new-file', location: 'out/' },
+        },
+      });
+      const updated = updateTrackerInFrontmatter(content, 'automation', {});
+      const fm = extractFrontmatter(updated);
+      expect(fm?.trackerStatus).toEqual({ type: 'automation' });
+      expect(fm).toHaveProperty('automationStatus');
+    });
+  });
 });

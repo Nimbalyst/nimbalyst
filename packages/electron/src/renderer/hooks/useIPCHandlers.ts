@@ -788,7 +788,8 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
           const normalizedUpdates: Record<string, unknown> = { ...updates };
           const mergedData = mergeFrontmatterData(existingData ?? {}, normalizedUpdates as Partial<FrontmatterData>);
 
-          const frontmatterMatch = currentContent.match(/^---\n([\s\S]*?)\n---\n?/);
+          // `\r?\n` tolerates Windows CRLF (nimbalyst#68).
+          const frontmatterMatch = currentContent.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
           const newFrontmatterBlockBase = serializeWithFrontmatter('', mergedData);
 
           let replacements: Array<{ oldText: string; newText: string }>;

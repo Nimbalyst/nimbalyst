@@ -331,8 +331,8 @@ export class MessageStreamingHandler {
       //   documentContext.content.substring(0, 500) +
       //   (documentContext.content.length > 500 ? '...' : ''));
 
-      // Check for frontmatter
-      const frontmatterMatch = documentContext.content.match(/^---\n([\s\S]*?)\n---/);
+      // Check for frontmatter (`\r?\n` tolerates Windows CRLF; nimbalyst#68)
+      const frontmatterMatch = documentContext.content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
       if (frontmatterMatch) {
       } else {
       }
