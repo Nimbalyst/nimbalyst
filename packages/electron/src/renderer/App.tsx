@@ -1328,11 +1328,14 @@ export default function App() {
     showFigmaMcpMigrationToast(true);
   }, [showFigmaMcpMigrationVersion, showFigmaMcpMigrationToast]);
 
-  // Update window title for files mode - agent mode sets title directly from AgenticPanel
+  // Update window title to reflect the active workspace.
+  // The agent-mode early-return that used to live here was a holdover from
+  // when AgenticPanel set the title itself; nothing does that today, and
+  // the multi-project rail can switch the active workspace while the user
+  // is in agent mode, leaving the title bar stuck on the previous
+  // project's name.
   useEffect(() => {
     if (!window.electronAPI) return;
-    // Skip if in agent mode - AgenticPanel manages the title
-    if (activeMode === 'agent') return;
 
     let title = 'Nimbalyst';
     if (workspaceMode && workspaceName) {

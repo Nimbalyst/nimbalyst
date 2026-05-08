@@ -144,7 +144,10 @@ function ProjectRailIcon({
       >
         ×
       </button>
-      <span className="project-rail-tooltip">{project.name}</span>
+      <span className="project-rail-tooltip">
+        <span className="project-rail-tooltip-name">{project.name}</span>
+        <span className="project-rail-tooltip-path">{project.path}</span>
+      </span>
     </div>
   );
 }

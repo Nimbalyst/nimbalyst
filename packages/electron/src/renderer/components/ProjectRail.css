@@ -19,7 +19,7 @@
    * --rail-item-accent is set inline per project (see ProjectRail.tsx:
    * style={{ '--rail-item-accent': accentColor }}). It comes from
    * generateWorkspaceAccentColor(path) so the rail icon shares its color
-   * with the workspace summary header bar. Falls back to --nim-accent so
+   * with the workspace summary header bar. Falls back to --nim-primary so
    * the rail still looks correct if the inline variable is ever missing.
    */
   position: relative;
@@ -39,7 +39,7 @@
   align-items: center;
   justify-content: center;
   background-color: var(--nim-bg-tertiary, #2a2a2a);
-  color: var(--rail-item-accent, var(--nim-accent, #5b8cff));
+  color: var(--rail-item-accent, var(--nim-primary, #3b82f6));
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -52,14 +52,14 @@
 
 .project-rail-item-main:hover {
   border-radius: 14px;
-  background-color: var(--rail-item-accent, var(--nim-accent, #5b8cff));
-  color: var(--nim-fg-on-accent, #ffffff);
+  background-color: var(--rail-item-accent, var(--nim-primary, #3b82f6));
+  color: #ffffff;
 }
 
 .project-rail-item.is-active .project-rail-item-main {
   border-radius: 14px;
-  background-color: var(--rail-item-accent, var(--nim-accent, #5b8cff));
-  color: var(--nim-fg-on-accent, #ffffff);
+  background-color: var(--rail-item-accent, var(--nim-primary, #3b82f6));
+  color: #ffffff;
   border-color: transparent;
 }
 
@@ -71,18 +71,19 @@
   bottom: 8px;
   width: 4px;
   border-radius: 0 4px 4px 0;
-  background-color: var(--rail-item-accent, var(--nim-fg, #e6e6e6));
+  background-color: var(--rail-item-accent, var(--nim-text, #111827));
 }
 
 .project-rail-item-badge {
   position: absolute;
   bottom: -2px;
   right: -2px;
-  min-width: 12px;
-  height: 12px;
-  padding: 0 3px;
-  border-radius: 8px;
-  background-color: var(--nim-accent, #5b8cff);
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  padding: 0;
+  border-radius: 50%;
+  background-color: var(--nim-primary, #3b82f6);
   border: 2px solid var(--nim-bg-secondary, #1a1a1a);
   font-size: 9px;
   font-weight: 700;
@@ -102,7 +103,7 @@
   height: 18px;
   border-radius: 50%;
   background-color: var(--nim-bg-secondary, #1a1a1a);
-  color: var(--nim-fg, #e6e6e6);
+  color: var(--nim-text, #111827);
   border: 1px solid var(--nim-border, rgba(255, 255, 255, 0.12));
   display: none;
   align-items: center;
@@ -118,7 +119,7 @@
 }
 
 .project-rail-item-close:hover {
-  background-color: var(--nim-danger, #d04444);
+  background-color: var(--nim-error, #ef4444);
   color: #ffffff;
 }
 
@@ -137,7 +138,7 @@
   align-items: center;
   justify-content: center;
   background-color: transparent;
-  color: var(--nim-fg-muted, #888);
+  color: var(--nim-text-muted, #6b7280);
   font-size: 22px;
   line-height: 1;
   cursor: pointer;
@@ -150,7 +151,7 @@
   border-radius: 14px;
   border-style: solid;
   background-color: var(--nim-bg-tertiary, #2a2a2a);
-  color: var(--nim-fg, #e6e6e6);
+  color: var(--nim-text, #111827);
 }
 
 .project-rail-add:disabled {
@@ -177,15 +178,15 @@
   padding: 6px 12px;
   text-align: left;
   font-size: 13px;
-  color: var(--nim-fg, #e6e6e6);
+  color: var(--nim-text, #111827);
   border-radius: 4px;
   cursor: pointer;
   white-space: nowrap;
 }
 
 .project-rail-context-menu-item:hover {
-  background-color: var(--nim-accent, #5b8cff);
-  color: var(--nim-fg-on-accent, #ffffff);
+  background-color: var(--nim-primary, #3b82f6);
+  color: #ffffff;
 }
 
 .project-rail-context-menu-divider {
@@ -200,7 +201,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--nim-fg-muted, #888);
+  color: var(--nim-text-muted, #6b7280);
 }
 
 .project-rail-add-menu {
@@ -222,7 +223,7 @@
 
 .project-rail-context-menu-item-path {
   font-size: 11px;
-  color: var(--nim-fg-muted, #888);
+  color: var(--nim-text-muted, #6b7280);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -239,9 +240,9 @@
   top: 50%;
   transform: translateY(-50%);
   margin-left: 12px;
-  padding: 4px 8px;
+  padding: 6px 10px;
   background-color: var(--nim-bg-tertiary, #2a2a2a);
-  color: var(--nim-fg, #e6e6e6);
+  color: var(--nim-text, #111827);
   font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
@@ -251,6 +252,23 @@
   opacity: 0;
   transition: opacity 100ms ease;
   z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 320px;
+}
+
+.project-rail-tooltip-name {
+  font-weight: 600;
+  color: var(--nim-text, #111827);
+}
+
+.project-rail-tooltip-path {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--nim-text-muted, #6b7280);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .project-rail-item:hover > .project-rail-tooltip,
