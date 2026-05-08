@@ -1417,15 +1417,18 @@ export const convertToWorkstreamAtom = atom(
         set(setWorkstreamActiveChildAtom, { workstreamId: parentSessionId, childId: sessionId });
       }
 
-      // Update unified workstream state (only when sibling was created)
-      if (siblingResult.success && siblingResult.sessionId) {
-        const { convertToWorkstreamAtom: convertToWorkstreamStateAtom } = await import('./workstreamState');
-        set(convertToWorkstreamStateAtom, {
-          sessionId,
-          parentId: parentSessionId,
-          siblingId: siblingResult.sessionId,
-        });
-      }
+      // Update unified workstream state. Always runs so drag-drop conversions
+      // (skipSiblingCreation=true) initialize childSessionIds; otherwise subsequent
+      // reparentSession calls operate on uninitialized state and the workstream's
+      // child list never reflects further drops.
+      const { convertToWorkstreamAtom: convertToWorkstreamStateAtom } = await import('./workstreamState');
+      set(convertToWorkstreamStateAtom, {
+        sessionId,
+        parentId: parentSessionId,
+        ...(siblingResult.success && siblingResult.sessionId
+          ? { siblingId: siblingResult.sessionId }
+          : {}),
+      });
 
       // Add the new parent session to the session list so it appears in the sidebar
       // If original was pinned, transfer pin to the parent workstream
