@@ -50,6 +50,7 @@ import { FeatureUsageService, FEATURES } from '../FeatureUsageService.ts';
 import { historyManager } from '../../HistoryManager';
 import { addGitignoreBypass } from '../../file/WorkspaceEventBus';
 import { getSyncProvider, isDesktopTrulyAway } from '../SyncManager';
+import { getAgentWorkflowService } from '../AgentWorkflowService';
 import {
   shouldShowCommunityPopup,
   markCommunityPopupShown,
@@ -1120,6 +1121,14 @@ export class MessageStreamingHandler {
         }
       }
 
+      if (session.provider === 'openai-codex' && effectiveWorkspacePath) {
+        try {
+          await getAgentWorkflowService(effectiveWorkspacePath).ensureCodexExports();
+        } catch (workflowError) {
+          logger.main.error('[AIService] Failed to sync Codex workflow exports:', workflowError);
+        }
+      }
+
       for await (const chunk of provider.sendMessage(messageToSend, contextWithSession, session.id, sessionMessages, effectiveWorkspacePath, attachments)) {
         if (!chunk) continue;
         chunkCount++;
@@ -1451,6 +1460,27 @@ export class MessageStreamingHandler {
                     const seenCount = (bashCommandOccurrences.get(commandItemId) ?? 0) + 1;
                     bashCommandOccurrences.set(commandItemId, seenCount);
                     pendingBashCommands.set(commandItemId, trackArgs.command);
+
+                    // First observation == item.started: capture each
+                    // referenced file's current disk content into the cache
+                    // BEFORE the bash command runs. This is the only
+                    // deterministic moment to record a true pre-edit baseline
+                    // for command_execution. Without it, item.completed below
+                    // would compare post-command disk content against a
+                    // tier-2 git-`startSha` baseline, falsely attributing
+                    // read-only commands (`sed -n`, `cat`, `nl`) on
+                    // working-tree-modified files as edits.
+                    if (seenCount === 1) {
+                      try {
+                        await this.svc.hooklessWatcher.captureBashPreEditSnapshots(
+                          session.id,
+                          workspacePath,
+                          trackArgs.command,
+                        );
+                      } catch (snapshotError) {
+                        logger.ai.warn('[AIService] Failed to seed bash pre-edit snapshots:', snapshotError);
+                      }
+                    }
 
                     if (seenCount >= 2 && !processedBashCommandItemIds.has(commandItemId)) {
                       const tracked = await this.svc.hooklessWatcher.trackBashEditsFromCommand(
