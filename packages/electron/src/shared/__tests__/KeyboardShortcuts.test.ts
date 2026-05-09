@@ -73,6 +73,15 @@ describe('getShortcutDisplay', () => {
         getShortcutDisplay(KeyboardShortcuts.window.contentSearch, false),
       ).toBe('Ctrl+Shift+F');
     });
+
+    it('pasteAsText renders correctly on each platform', () => {
+      expect(
+        getShortcutDisplay(KeyboardShortcuts.edit.pasteAsText, true),
+      ).toBe('⌘⇧V');
+      expect(
+        getShortcutDisplay(KeyboardShortcuts.edit.pasteAsText, false),
+      ).toBe('Ctrl+Shift+V');
+    });
   });
 });
 

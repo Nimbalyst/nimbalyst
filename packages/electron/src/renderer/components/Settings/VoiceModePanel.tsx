@@ -66,6 +66,8 @@ const VOICE_GROUPS = [
   { label: 'Neutral', voices: VOICE_OPTIONS.filter(v => v.gender === 'neutral') },
 ];
 
+type MicAccessStatus = 'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown';
+
 export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
   workspacePath,
 }) => {
@@ -104,6 +106,38 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
   const [isGeneratingSummary, setIsGeneratingSummary] = React.useState(false);
   const [summaryError, setSummaryError] = React.useState<string | null>(null);
   const [summaryPath, setSummaryPath] = React.useState<string | null>(null);
+
+  // Microphone access state. Only populated while voice mode is enabled --
+  // we don't probe the OS at all when voice is off, so a user who never opts
+  // in never has the mic permission concept surfaced.
+  const [micStatus, setMicStatus] = React.useState<MicAccessStatus | null>(null);
+  const [micPlatform, setMicPlatform] = React.useState<NodeJS.Platform | null>(null);
+
+  const checkMicStatus = React.useCallback(async () => {
+    try {
+      const result = await window.electronAPI?.invoke('voice-mode:get-mic-status') as
+        | { status: MicAccessStatus; platform: NodeJS.Platform }
+        | undefined;
+      if (result) {
+        setMicStatus(result.status);
+        setMicPlatform(result.platform);
+      }
+    } catch {
+      setMicStatus(null);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (!enabled) {
+      setMicStatus(null);
+      return;
+    }
+    checkMicStatus();
+  }, [enabled, checkMicStatus]);
+
+  const handleOpenMicSettings = async () => {
+    await window.electronAPI?.invoke('voice-mode:open-mic-settings');
+  };
 
   // Check if project summary exists
   React.useEffect(() => {
@@ -292,6 +326,47 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
         </div>
       </div>
 
+      {enabled && hasOpenAIKey && micStatus && micStatus !== 'granted' && (
+        <div
+          className="voice-mode-mic-permission-warning provider-panel-section mb-6 p-4 rounded border border-[var(--nim-warning)] bg-[var(--nim-bg-secondary)]"
+          data-testid="voice-mode-mic-permission-warning"
+        >
+          <div className="flex items-start gap-3">
+            <MaterialSymbol icon="mic_off" size={20} className="mt-0.5 text-[var(--nim-warning)]" />
+            <div className="flex-1">
+              <h4 className="text-sm font-medium text-[var(--nim-text)] mb-1">Microphone access not granted</h4>
+              <p className="text-xs text-[var(--nim-text-muted)] mb-3">
+                {micStatus === 'denied'
+                  ? 'Voice Mode needs microphone access. Enable it for Nimbalyst in System Settings, then re-check below.'
+                  : micStatus === 'restricted'
+                  ? 'Microphone access is restricted on this device (e.g. by parental controls or MDM). Voice Mode cannot capture audio.'
+                  : 'Voice Mode needs microphone access. Open System Settings to grant it for Nimbalyst.'}
+              </p>
+              <div className="flex items-center gap-2">
+                {micPlatform === 'darwin' && (
+                  <button
+                    onClick={handleOpenMicSettings}
+                    className="px-3 py-1.5 rounded border border-[var(--nim-border)] bg-[var(--nim-primary)] text-white cursor-pointer text-sm flex items-center gap-1.5"
+                    data-testid="voice-mode-open-mic-settings"
+                  >
+                    <MaterialSymbol icon="open_in_new" size={14} />
+                    Open System Settings
+                  </button>
+                )}
+                <button
+                  onClick={checkMicStatus}
+                  className="px-3 py-1.5 rounded border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] text-[var(--nim-text)] cursor-pointer text-sm flex items-center gap-1.5"
+                  data-testid="voice-mode-recheck-mic"
+                >
+                  <MaterialSymbol icon="refresh" size={14} />
+                  Re-check
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {enabled && hasOpenAIKey && (
         <>
           <div className="provider-panel-section mb-6">
@@ -458,13 +533,13 @@ export const VoiceModePanel: React.FC<VoiceModePanelProps> = ({
                   min="5000"
                   max="30000"
                   step="1000"
-                  value={listenWindowMs ?? 10000}
+                  value={listenWindowMs ?? 15000}
                   onChange={(e) => handleSettingChange({ listenWindowMs: parseInt(e.target.value) })}
                   className="flex-1"
                 />
                 <span className="text-xs text-[var(--nim-text-muted)]">30s</span>
                 <span className="text-xs text-[var(--nim-text)] min-w-[36px]">
-                  {Math.round((listenWindowMs ?? 10000) / 1000)}s
+                  {Math.round((listenWindowMs ?? 15000) / 1000)}s
                 </span>
               </div>
             </div>

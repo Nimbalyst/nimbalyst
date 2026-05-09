@@ -197,6 +197,9 @@ export interface ExtensionContributions {
   /** Claude Code plugin metadata */
   claudePlugin?: ClaudePluginContribution;
 
+  /** Provider-neutral agent workflows exported to supported agent providers */
+  agentWorkflows?: AgentWorkflowsContribution;
+
   /**
    * Non-file-based panels (e.g., database browser, deployment dashboard).
    * Panels integrate with the navigation gutter and can expose AI tools.
@@ -315,6 +318,25 @@ export interface ClaudePluginAgent {
 
   /** Human-readable description */
   description: string;
+}
+
+/**
+ * Provider-neutral agent workflow contribution.
+ * The directory should contain `commands/` and/or `skills/` subdirectories
+ * using the familiar Claude-compatible markdown formats.
+ */
+export interface AgentWorkflowsContribution {
+  /** Path to the workflow root relative to extension root */
+  path: string;
+
+  /** Human-readable name for settings and diagnostics UI */
+  displayName: string;
+
+  /** Description for settings and diagnostics UI */
+  description?: string;
+
+  /** Whether these workflows are enabled by default */
+  enabledByDefault?: boolean;
 }
 
 /**

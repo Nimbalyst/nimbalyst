@@ -471,6 +471,33 @@ function validateManifest(
         }
       }
 
+      // Validate agentWorkflows
+      if (contributions.agentWorkflows !== undefined) {
+        const agentWorkflows = contributions.agentWorkflows as Record<string, unknown>;
+        if (typeof agentWorkflows !== 'object' || agentWorkflows === null) {
+          errors.push({
+            error: `Invalid 'contributions.agentWorkflows' - should be an object`,
+            field: 'contributions.agentWorkflows',
+            suggestion: 'Provide workflow metadata with at least "path" and "displayName"',
+          });
+        } else {
+          if (typeof agentWorkflows.path !== 'string' || !agentWorkflows.path) {
+            errors.push({
+              error: `agentWorkflows missing 'path'`,
+              field: 'contributions.agentWorkflows.path',
+              suggestion: 'Add the relative workflow directory path',
+            });
+          }
+          if (typeof agentWorkflows.displayName !== 'string' || !agentWorkflows.displayName) {
+            errors.push({
+              error: `agentWorkflows missing 'displayName'`,
+              field: 'contributions.agentWorkflows.displayName',
+              suggestion: 'Add a user-facing workflow collection name',
+            });
+          }
+        }
+      }
+
       // Validate panels
       if (contributions.panels !== undefined) {
         if (!Array.isArray(contributions.panels)) {

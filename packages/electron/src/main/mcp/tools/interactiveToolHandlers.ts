@@ -520,9 +520,15 @@ export async function handleGitCommitProposal(
       `[MCP Server] Persisted git commit proposal: ${proposalId}, notifying renderer for session: ${targetSessionId}`
     );
     if (commitWindow) {
+      // Include proposal data in the IPC so renderer-side consumers (the
+      // GitCommit widget AND the voice forwarding path) can display the
+      // commit message and act on the file list without needing a separate
+      // round-trip to load the persisted proposal from the database.
       commitWindow.webContents.send("ai:gitCommitProposal", {
         sessionId: targetSessionId,
         proposalId,
+        commitMessage: proposalArgs.commitMessage,
+        filesToStage: proposalArgs.filesToStage,
         workspacePath,
       });
     } else {

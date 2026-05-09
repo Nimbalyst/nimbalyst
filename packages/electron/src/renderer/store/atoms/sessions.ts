@@ -193,12 +193,17 @@ export const sessionPromptAdditionsAtom = atomFamily((_sessionId: string) =>
 
 /**
  * Pending interactive prompt from the database.
- * Represents either a permission_request or ask_user_question_request.
+ * Represents one of: permission_request, ask_user_question_request,
+ * exit_plan_mode_request, or git_commit_proposal_request.
  */
 export interface PendingPrompt {
   id: string;
   sessionId: string;
-  promptType: 'permission_request' | 'ask_user_question_request';
+  promptType:
+    | 'permission_request'
+    | 'ask_user_question_request'
+    | 'exit_plan_mode_request'
+    | 'git_commit_proposal_request';
   promptId: string;  // requestId or questionId
   data: any;         // The full prompt content
   createdAt: number;
@@ -1417,15 +1422,18 @@ export const convertToWorkstreamAtom = atom(
         set(setWorkstreamActiveChildAtom, { workstreamId: parentSessionId, childId: sessionId });
       }
 
-      // Update unified workstream state (only when sibling was created)
-      if (siblingResult.success && siblingResult.sessionId) {
-        const { convertToWorkstreamAtom: convertToWorkstreamStateAtom } = await import('./workstreamState');
-        set(convertToWorkstreamStateAtom, {
-          sessionId,
-          parentId: parentSessionId,
-          siblingId: siblingResult.sessionId,
-        });
-      }
+      // Update unified workstream state. Always runs so drag-drop conversions
+      // (skipSiblingCreation=true) initialize childSessionIds; otherwise subsequent
+      // reparentSession calls operate on uninitialized state and the workstream's
+      // child list never reflects further drops.
+      const { convertToWorkstreamAtom: convertToWorkstreamStateAtom } = await import('./workstreamState');
+      set(convertToWorkstreamStateAtom, {
+        sessionId,
+        parentId: parentSessionId,
+        ...(siblingResult.success && siblingResult.sessionId
+          ? { siblingId: siblingResult.sessionId }
+          : {}),
+      });
 
       // Add the new parent session to the session list so it appears in the sidebar
       // If original was pinned, transfer pin to the parent workstream

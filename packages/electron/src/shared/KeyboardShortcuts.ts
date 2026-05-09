@@ -26,6 +26,7 @@ export const KeyboardShortcuts = {
     copy: 'Cmd+C',
     copyMarkdown: 'Cmd+Shift+C',
     paste: 'Cmd+V',
+    pasteAsText: 'Cmd+Shift+V',
     selectAll: 'Cmd+A',
     find: 'Cmd+F',
     findNext: 'Cmd+G',

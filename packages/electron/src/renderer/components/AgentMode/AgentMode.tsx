@@ -939,12 +939,17 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   }, [updateSessionStore, selectedWorkstream, workspacePath, setSelectedWorkstream]);
 
   // Rename a session
+  const [renamedSession, setRenamedSession] = useState<{ id: string; title: string } | null>(null);
   const handleSessionRename = useCallback(async (sessionId: string, newName: string) => {
     try {
       const result = await window.electronAPI.invoke('sessions:update-metadata', sessionId, { title: newName });
       if (result.success) {
         // Update in atom store (syncs both sessionStoreAtom and sessionRegistryAtom)
         updateSessionStore({ sessionId, updates: { title: newName, updatedAt: Date.now() } });
+        // Sub-sessions render from SessionHistory's workstreamChildrenCache, not from
+        // sessionRegistryAtom. The cache only patches when its `renamedSession` prop
+        // changes, so trigger that here.
+        setRenamedSession({ id: sessionId, title: newName });
       } else {
         console.error('[AgentMode] Failed to rename session:', result.error);
       }
@@ -1034,6 +1039,7 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
       onSessionDelete={handleSessionDelete}
       onSessionArchive={handleSessionArchive}
       onSessionRename={handleSessionRename}
+      renamedSession={renamedSession}
       onSessionBranch={handleSessionBranch}
       onNewSession={createNewSession}
       onNewWorktreeSession={isWorktreesAvailable ? createNewWorktreeSession : undefined}

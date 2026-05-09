@@ -13,8 +13,8 @@ import { AudioCapture } from '../../utils/audioCapture';
 import { AudioPlayback } from '../../utils/audioPlayback';
 import { voiceModeEnabledAtom } from '../../store/atoms/appSettings';
 import { activeSessionIdAtom } from '../../store/atoms/sessions';
-import { voiceTokenUsageAtom, voiceListenStateAtom, voiceErrorAtom, registerVoiceAudioCallback, registerVoiceInterruptCallback, registerVoiceSubmitPromptCallback, registerVoiceAgentTaskCompleteCallback, registerVoiceStoppedCallback } from '../../store/atoms/voiceModeState';
-import { setVoiceActiveSession, clearVoiceActiveSession, persistAndClearVoiceSession, onLinkedSessionChanged, wakeVoiceListening } from '../../store/listeners/voiceModeListeners';
+import { voiceTokenUsageAtom, voiceListenStateAtom, voiceErrorAtom, registerVoiceAudioCallback, registerVoiceInterruptCallback, registerVoiceSubmitPromptCallback, registerVoiceAgentTaskCompleteCallback, registerVoiceStoppedCallback, registerVoiceResponseDoneCallback, registerVoiceAudioActiveQuery } from '../../store/atoms/voiceModeState';
+import { setVoiceActiveSession, clearVoiceActiveSession, persistAndClearVoiceSession, onLinkedSessionChanged, wakeVoiceListening, notifyVoiceAudioPlaybackDrained } from '../../store/listeners/voiceModeListeners';
 import { openSettingsCommandAtom } from '../../store';
 import { HelpTooltip } from '../../help';
 import { store } from '@nimbalyst/runtime/store';
@@ -152,6 +152,16 @@ function registerVoiceCallbacks() {
     });
   });
 
+  // Voice agent finished a turn -- play a brief readiness cue when the mic
+  // came back from sleep with no audible agent response, so the user has a
+  // clear signal that the 15s response window has started.
+  registerVoiceResponseDoneCallback((wokeFromSleep) => {
+    if (activeVoiceSessionId === null) return;
+    if (wokeFromSleep) {
+      playReadyCue();
+    }
+  });
+
   // Programmatic stop (clean up audio resources)
   registerVoiceStoppedCallback(() => {
     if (globalAudioCapture) {
@@ -168,6 +178,11 @@ function registerVoiceCallbacks() {
 
 // Register callbacks immediately on module load
 registerVoiceCallbacks();
+
+// Let voiceModeListeners synchronously query whether the assistant's audio
+// is still playing in the user's speakers. Used to defer the post-turn
+// listen window until *audible* end-of-turn for long responses.
+registerVoiceAudioActiveQuery(() => globalAudioPlayback?.isPlaybackActive() ?? false);
 
 /**
  * Play a soft "bing" activation sound using the Web Audio API.
@@ -203,6 +218,46 @@ function playActivationSound(): void {
     osc2.stop(now + 0.25);
 
     // Clean up context after sounds finish
+    setTimeout(() => ctx.close(), 500);
+  } catch {
+    // Audio playback is best-effort
+  }
+}
+
+/**
+ * Play a soft "ready for input" cue when the mic wakes from sleep at the end
+ * of a voice-agent turn that produced no audible response. Two ascending notes
+ * so it's distinct from playActivationSound() but still unobtrusive.
+ */
+function playReadyCue(): void {
+  try {
+    const ctx = new AudioContext();
+    const now = ctx.currentTime;
+
+    // First note (A5 ~880Hz)
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(880, now);
+    gain1.gain.setValueAtTime(0, now);
+    gain1.gain.linearRampToValueAtTime(0.08, now + 0.01);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    osc1.connect(gain1).connect(ctx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.18);
+
+    // Second note (E6 ~1319Hz) -- slightly later, ascending
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(1319, now + 0.12);
+    gain2.gain.setValueAtTime(0, now + 0.12);
+    gain2.gain.linearRampToValueAtTime(0.08, now + 0.13);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+    osc2.connect(gain2).connect(ctx.destination);
+    osc2.start(now + 0.12);
+    osc2.stop(now + 0.32);
+
     setTimeout(() => ctx.close(), 500);
   } catch {
     // Audio playback is best-effort
@@ -320,6 +375,12 @@ export function VoiceModeButton({ workspacePath }: VoiceModeButtonProps) {
         }
 
         globalAudioPlayback = new AudioPlayback();
+        // When the assistant's audio queue drains in the user's speakers,
+        // notify the listener so it can start the 15s listen window from
+        // *audible* end-of-turn rather than server end-of-turn.
+        globalAudioPlayback.setOnDrained(() => {
+          notifyVoiceAudioPlaybackDrained();
+        });
         globalAudioCapture = new AudioCapture();
         await globalAudioCapture.start((pcm16Base64) => {
           // Use activeVoiceSessionId (module-level, updated on session switch)

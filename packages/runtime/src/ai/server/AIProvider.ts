@@ -47,6 +47,20 @@ export function isAskUserQuestionProvider(provider: AIProvider): provider is AIP
   return !!provider && typeof (provider as any).resolveAskUserQuestion === 'function';
 }
 
+export interface SlashCommandCatalogProvider {
+  getSlashCommands?(): string[];
+  getSkills?(): string[];
+}
+
+export function isSlashCommandCatalogProvider(
+  provider: AIProvider | null | undefined
+): provider is AIProvider & SlashCommandCatalogProvider {
+  return !!provider && (
+    typeof (provider as any).getSlashCommands === 'function' ||
+    typeof (provider as any).getSkills === 'function'
+  );
+}
+
 export interface AIProvider extends EventEmitter {
   /**
    * Initialize the provider with configuration

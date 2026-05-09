@@ -26,6 +26,7 @@ import { windows as windowMap, windowStates } from '../window/windowState';
 import { removeInlineTrackerItem } from '@nimbalyst/runtime/plugins/TrackerPlugin/documentHeader/frontmatterUtils';
 import type { TrackerSyncStatus, TrackerItemPayload } from '@nimbalyst/runtime/sync';
 import * as syncModule from '@nimbalyst/runtime/sync';
+import { DEFAULT_SLOW_STARTUP_MS } from '../utils/startupTiming';
 
 function loadSyncModule() {
   return syncModule;
@@ -355,6 +356,11 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
     // (we return early if re-fetch fails)
     const validatedKey = encryptionKey!;
 
+    // Track wall-clock from connect() until hasMore:false so we can warn in
+    // user logs when the initial websocket+decrypt loop is dragging. Set just
+    // before provider.connect() below.
+    let initialSyncStart: number | null = null;
+
     let provider: import('@nimbalyst/runtime/sync').TrackerSyncProvider;
     provider = new TrackerSyncProvider({
       serverUrl,
@@ -416,6 +422,18 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
       },
 
       onInitialSyncComplete: async (summary) => {
+        if (initialSyncStart !== null) {
+          const duration = Date.now() - initialSyncStart;
+          if (duration >= DEFAULT_SLOW_STARTUP_MS) {
+            logger.main.info(
+              `[StartupSlow] TrackerSync.initialSync(${projectId}) took ${duration}ms ` +
+              `(threshold ${DEFAULT_SLOW_STARTUP_MS}ms, ${summary.remoteItemCount} items, ` +
+              `${summary.remoteDeletedCount} deletions, sequence ${summary.sequence})`
+            );
+          }
+          initialSyncStart = null;
+        }
+
         if (
           summary.remoteItemCount !== 0 ||
           summary.remoteDeletedCount !== 0 ||
@@ -445,6 +463,7 @@ export async function initializeTrackerSync(workspacePath: string): Promise<void
 
     // Connect
     // logger.main.info('[TrackerSyncManager] Connecting tracker sync', { serverUrl, orgId, projectId });
+    initialSyncStart = Date.now();
     await provider.connect();
 
     // Push shareable unsynced items to the server.

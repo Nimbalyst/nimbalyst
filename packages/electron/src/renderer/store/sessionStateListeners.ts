@@ -610,7 +610,7 @@ export function initSessionStateListeners(): () => void {
     const prompt: PendingPrompt = {
       id: requestId,
       sessionId,
-      promptType: 'ask_user_question_request', // reuse type for voice forwarding
+      promptType: 'exit_plan_mode_request',
       promptId: requestId,
       data: { type: 'exit_plan_mode_request', requestId },
       createdAt: Date.now(),
@@ -679,16 +679,28 @@ export function initSessionStateListeners(): () => void {
    * Handle GitCommitProposal events globally.
    * Sets pending interactive prompt indicator for the sidebar.
    */
-  const handleGitCommitProposal = (data: { sessionId: string; proposalId: string; commitMessage?: string }) => {
+  const handleGitCommitProposal = (data: {
+    sessionId: string;
+    proposalId: string;
+    commitMessage?: string;
+    filesToStage?: Array<string | { path: string; status?: string }>;
+    workspacePath?: string;
+  }) => {
     const { sessionId, proposalId } = data;
     if (!sessionId) return;
     store.set(sessionHasPendingInteractivePromptAtom(sessionId), true);
     const prompt: PendingPrompt = {
       id: proposalId,
       sessionId,
-      promptType: 'ask_user_question_request', // reuse type for voice forwarding
+      promptType: 'git_commit_proposal_request',
       promptId: proposalId,
-      data: { type: 'git_commit_proposal_request', proposalId, commitMessage: data.commitMessage },
+      data: {
+        type: 'git_commit_proposal_request',
+        proposalId,
+        commitMessage: data.commitMessage,
+        filesToStage: data.filesToStage,
+        workspacePath: data.workspacePath,
+      },
       createdAt: Date.now(),
     };
     const current = store.get(sessionPendingPromptsAtom(sessionId));

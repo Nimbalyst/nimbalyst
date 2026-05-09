@@ -28,6 +28,8 @@ import { setSelectedWorkstreamAtom, sessionRegistryAtom, refreshSessionListAtom,
 import { trackerItemsMapAtom } from '@nimbalyst/runtime/plugins/TrackerPlugin/trackerDataAtoms';
 import { workstreamStateAtom } from '../../store/atoms/workstreamState';
 import { setWindowModeAtom } from '../../store/atoms/windowMode';
+import { defaultAgentModelAtom } from '../../store/atoms/appSettings';
+import { ModelIdentifier } from '@nimbalyst/runtime/ai/server/types';
 import { store } from '../../store';
 
 export type ViewMode = 'table' | 'kanban';
@@ -55,6 +57,12 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
   const [sortDirection, setSortDirection] = useState<TrackerSortDirection>('desc');
   const [searchQuery, setSearchQuery] = useState('');
   const [quickAddType, setQuickAddType] = useState<string | null>(null);
+
+  // User's selected default model. Used by handleLaunchSession so the new
+  // session uses the workspace's configured provider rather than always
+  // falling back to claude-code (which fails for Codex-only installs).
+  // See nimbalyst#176.
+  const defaultModel = useAtomValue(defaultAgentModelAtom);
 
   useEffect(() => {
     if (!workspacePath) return;
@@ -135,8 +143,23 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
   /** Launch a new AI session linked to a tracker item */
   const handleLaunchSession = useCallback(async (trackerItemId: string) => {
     try {
-      const result = await window.electronAPI.aiCreateSession('claude-code', undefined, workspacePath);
-      if (result?.id) {
+      // Derive provider from the user's default model rather than hardcoding
+      // 'claude-code'. Mirrors AgentMode.createNewSession so a Codex-only
+      // workspace launches a Codex session, not a failed claude-code one.
+      // See nimbalyst#176.
+      const sessionId = crypto.randomUUID();
+      const parsedModel = defaultModel ? ModelIdentifier.tryParse(defaultModel) : null;
+      const provider = parsedModel?.provider || 'claude-code';
+      const result = await window.electronAPI.invoke('sessions:create', {
+        session: {
+          id: sessionId,
+          provider,
+          model: defaultModel,
+          title: 'New Session',
+        },
+        workspaceId: workspacePath,
+      });
+      if (result?.success && result?.id) {
         // Look up the tracker item to build a context-aware draft prompt
         const itemsMap = store.get(trackerItemsMapAtom);
         const trackerItem = itemsMap.get(trackerItemId);
@@ -203,7 +226,7 @@ export const TrackerMainView: React.FC<TrackerMainViewProps> = ({
     } catch (err) {
       console.error('[TrackerMainView] Failed to launch session:', err);
     }
-  }, [workspacePath, refreshSessionList, setSelectedWorkstream, setWindowMode]);
+  }, [workspacePath, refreshSessionList, setSelectedWorkstream, setWindowMode, defaultModel]);
 
   // Base item sets from atoms
   const activeItems = useAtomValue(trackerItemsByTypeAtom(filterType));

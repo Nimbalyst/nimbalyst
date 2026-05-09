@@ -109,6 +109,7 @@ import { claudeUsageService } from './services/ClaudeUsageService';
 import { registerCodexUsageHandlers } from './ipc/CodexUsageHandlers';
 import { codexUsageService } from './services/CodexUsageService';
 import { registerExtensionHandlers, getClaudePluginPaths, initializeExtensionFileTypes } from './ipc/ExtensionHandlers';
+import { getAgentWorkflowService } from './services/AgentWorkflowService';
 import { queueMarketplaceInstallRequest, registerExtensionMarketplaceHandlers, runExtensionAutoUpdate } from './ipc/ExtensionMarketplaceHandlers';
 import { getRegisteredExtensions } from './extensions/RegisteredFileTypes';
 import { ClaudeCodeProvider, OpenAICodexProvider, OpenAICodexACPProvider, OpenCodeProvider, CopilotCLIProvider } from '@nimbalyst/runtime/ai/server';
@@ -1261,7 +1262,12 @@ app.whenReady().then(async () => {
     // Inject extension plugins loader into ClaudeCodeProvider
     // This allows extensions to provide Claude SDK plugins with custom commands/agents
     // Uses main-process-native implementation that reads extension manifests directly
-    ClaudeCodeProvider.setExtensionPluginsLoader(getClaudePluginPaths);
+    ClaudeCodeProvider.setExtensionPluginsLoader(async (workspacePath?: string) => {
+        if (!workspacePath) {
+            return getClaudePluginPaths(workspacePath);
+        }
+        return getAgentWorkflowService(workspacePath).getClaudeProviderPluginPaths();
+    });
 
     // ScheduleWakeup handler: the CLI emits ScheduleWakeup tool calls but its tool_result is
     // informational only. Re-queue the prompt at fire time via SessionWakeupScheduler.
@@ -1744,25 +1750,8 @@ app.whenReady().then(async () => {
     const sessionRestored = shouldSkipSessionRestore ? false : await restoreSessionState();
     markEnd('session-restore');
 
-    // Set up a loader that reads customClaudeCodePath fresh from the store on each query,
-    // so changes in the UI take effect without restarting the app. The workspace path is
-    // required: getAIProviderOverridesWithWorktreeFallback handles direct overrides plus
-    // worktree-to-parent inheritance. Only fall through to the global setting when no
-    // project-level override exists at all (which is the intended fallback, not a routing
-    // failure). A missing workspacePath here would mean an upstream wiring bug, so throw.
-    ClaudeCodeProvider.setCustomClaudeCodePathLoader((workspacePath: string) => {
-      if (!workspacePath) {
-        throw new Error('[ClaudeCodeProvider] customClaudeCodePathLoader called without a workspacePath');
-      }
-
-      const projectOverride = getAIProviderOverridesWithWorktreeFallback(workspacePath)?.customClaudeCodePath;
-      if (projectOverride !== undefined) {
-        return projectOverride;
-      }
-
-      return (store.get('customClaudeCodePath', '') as string) || '';
-    });
-    logger.main.info('[ClaudeCodeProvider] Initialized customClaudeCodePath loader (workspace-aware)');
+    // Note: customClaudeCodePathLoader is now set up in AIService constructor,
+    // where it has direct access to the ai-settings store that owns this value.
 
     // Close splash screen now that initialization is done and a real window is about to show.
     // The last restored window activates the app via its own ready-to-show handler.

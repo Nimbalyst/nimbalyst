@@ -35,6 +35,8 @@ export interface ExtensionSettings {
   enabled: boolean;
   /** Whether the Claude Agent SDK plugin is enabled (if extension has one) */
   claudePluginEnabled?: boolean;
+  /** Whether provider-neutral agent workflows are enabled (if extension has them) */
+  agentWorkflowsEnabled?: boolean;
   /** Extension-specific configuration values (user scope) */
   configuration?: Record<string, unknown>;
 }
@@ -96,6 +98,18 @@ interface AppStoreSchema {
     projectCommandsEnabled?: boolean;
     // Enable user-level commands (~/.claude/commands/)
     userCommandsEnabled?: boolean;
+  };
+  // Unified agent workflow registry source settings
+  agentWorkflowSources?: {
+    workspaceClaudeCompatibilityEnabled?: boolean;
+    includeProjectClaudeSources?: boolean;
+    includeUserClaudeSources?: boolean;
+    extensionWorkflowsEnabled?: boolean;
+  };
+  // Provider-specific workflow export settings
+  agentWorkflowExports?: {
+    codexEnabled?: boolean;
+    claudeGeneratedExtensionWorkflowsEnabled?: boolean;
   };
   // Extension Development Kit (EDK) - enables MCP tools for building/reloading extensions
   extensionDevToolsEnabled?: boolean;
@@ -1469,6 +1483,21 @@ export function setClaudePluginEnabled(extensionId: string, enabled: boolean): v
   setExtensionSettings(settings);
 }
 
+export function getAgentWorkflowsEnabled(extensionId: string): boolean | undefined {
+  const settings = getExtensionSettings();
+  return settings[extensionId]?.agentWorkflowsEnabled;
+}
+
+export function setAgentWorkflowsEnabled(extensionId: string, enabled: boolean): void {
+  const settings = getExtensionSettings();
+  if (!settings[extensionId]) {
+    settings[extensionId] = { enabled: true, agentWorkflowsEnabled: enabled };
+  } else {
+    settings[extensionId].agentWorkflowsEnabled = enabled;
+  }
+  setExtensionSettings(settings);
+}
+
 // Claude Code settings
 export function getClaudeCodeSettings(): { projectCommandsEnabled: boolean; userCommandsEnabled: boolean } {
   const settings = getAppStore().get('claudeCode', {});
@@ -1481,11 +1510,72 @@ export function getClaudeCodeSettings(): { projectCommandsEnabled: boolean; user
 export function setClaudeCodeProjectCommandsEnabled(enabled: boolean): void {
   const current = getAppStore().get('claudeCode', {});
   getAppStore().set('claudeCode', { ...current, projectCommandsEnabled: enabled });
+  const workflowSources = getAppStore().get('agentWorkflowSources', {});
+  getAppStore().set('agentWorkflowSources', {
+    ...workflowSources,
+    workspaceClaudeCompatibilityEnabled: true,
+    includeProjectClaudeSources: enabled,
+  });
 }
 
 export function setClaudeCodeUserCommandsEnabled(enabled: boolean): void {
   const current = getAppStore().get('claudeCode', {});
   getAppStore().set('claudeCode', { ...current, userCommandsEnabled: enabled });
+  const workflowSources = getAppStore().get('agentWorkflowSources', {});
+  getAppStore().set('agentWorkflowSources', {
+    ...workflowSources,
+    workspaceClaudeCompatibilityEnabled: true,
+    includeUserClaudeSources: enabled,
+  });
+}
+
+export interface AgentWorkflowSourceSettings {
+  workspaceClaudeCompatibilityEnabled: boolean;
+  includeProjectClaudeSources: boolean;
+  includeUserClaudeSources: boolean;
+  extensionWorkflowsEnabled: boolean;
+}
+
+export interface AgentWorkflowExportSettings {
+  codexEnabled: boolean;
+  claudeGeneratedExtensionWorkflowsEnabled: boolean;
+}
+
+export function getAgentWorkflowSourceSettings(): AgentWorkflowSourceSettings {
+  const configured = getAppStore().get('agentWorkflowSources', {});
+  const claudeSettings = getAppStore().get('claudeCode', {});
+  return {
+    workspaceClaudeCompatibilityEnabled: configured.workspaceClaudeCompatibilityEnabled ?? false,
+    includeProjectClaudeSources: configured.includeProjectClaudeSources ?? claudeSettings.projectCommandsEnabled ?? false,
+    includeUserClaudeSources: configured.includeUserClaudeSources ?? claudeSettings.userCommandsEnabled ?? false,
+    extensionWorkflowsEnabled: configured.extensionWorkflowsEnabled ?? false,
+  };
+}
+
+export function getAgentWorkflowExportSettings(): AgentWorkflowExportSettings {
+  const configured = getAppStore().get('agentWorkflowExports', {});
+  return {
+    codexEnabled: configured.codexEnabled ?? false,
+    claudeGeneratedExtensionWorkflowsEnabled: configured.claudeGeneratedExtensionWorkflowsEnabled ?? false,
+  };
+}
+
+export function setAgentWorkflowSourceSettings(
+  updates: Partial<AgentWorkflowSourceSettings>
+): AgentWorkflowSourceSettings {
+  const current = getAppStore().get('agentWorkflowSources', {});
+  const next = { ...current, ...updates };
+  getAppStore().set('agentWorkflowSources', next);
+  return getAgentWorkflowSourceSettings();
+}
+
+export function setAgentWorkflowExportSettings(
+  updates: Partial<AgentWorkflowExportSettings>
+): AgentWorkflowExportSettings {
+  const current = getAppStore().get('agentWorkflowExports', {});
+  const next = { ...current, ...updates };
+  getAppStore().set('agentWorkflowExports', next);
+  return getAgentWorkflowExportSettings();
 }
 
 // Extension Development Kit (EDK) Settings

@@ -663,6 +663,33 @@ export function initVoiceModeService() {
         }
       });
 
+      // Propose a commit via the "Commit with AI" path. The voice agent
+      // calls this when the user says "propose a commit". We forward to
+      // the renderer so it can run the SAME logic as the Smart Commit
+      // button in GitOperationsPanel (git:get-commit-context +
+      // ai:sendMessage with the COMMIT_REQUEST_PREFIX message). That makes
+      // the "Requesting commit proposal" widget appear in the transcript
+      // and the coding agent invoke developer_git_commit_proposal, which
+      // returns through the existing interactive-prompt forwarding.
+      poc.setOnProposeCommit(async () => {
+        try {
+          if (!window || window.isDestroyed()) {
+            return { success: false, error: 'Window not available' };
+          }
+          window.webContents.send('voice-mode:propose-commit', {
+            sessionId: currentSessionId(),
+            workspacePath,
+          });
+          return { success: true };
+        } catch (error) {
+          console.error('[VoiceModeService] Failed to propose commit:', error);
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
+      });
+
       // Navigate to a specific session
       poc.setOnNavigateToSession(async (sessionId: string) => {
         try {

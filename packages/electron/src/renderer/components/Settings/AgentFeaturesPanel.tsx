@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
@@ -19,6 +19,18 @@ const AGENT_FEATURE_TAGS: AlphaFeatureTag[] = [
   'meta-agent',
 ];
 
+interface WorkflowSourceSettings {
+  workspaceClaudeCompatibilityEnabled: boolean;
+  includeProjectClaudeSources: boolean;
+  includeUserClaudeSources: boolean;
+  extensionWorkflowsEnabled: boolean;
+}
+
+interface WorkflowExportSettings {
+  codexEnabled: boolean;
+  claudeGeneratedExtensionWorkflowsEnabled: boolean;
+}
+
 export function AgentFeaturesPanel() {
   const posthog = usePostHog();
   const [settings] = useAtom(advancedSettingsAtom);
@@ -31,6 +43,17 @@ export function AgentFeaturesPanel() {
   const [aiDebugSettings] = useAtom(aiDebugSettingsAtom);
   const [, updateAIDebugSettings] = useAtom(setAIDebugSettingsAtom);
   const { showToolCalls, aiDebugLogging, showPromptAdditions } = aiDebugSettings;
+  const [workflowSettingsLoading, setWorkflowSettingsLoading] = useState(false);
+  const [workflowSourceSettings, setWorkflowSourceSettings] = useState<WorkflowSourceSettings>({
+    workspaceClaudeCompatibilityEnabled: false,
+    includeProjectClaudeSources: false,
+    includeUserClaudeSources: false,
+    extensionWorkflowsEnabled: false,
+  });
+  const [workflowExportSettings, setWorkflowExportSettings] = useState<WorkflowExportSettings>({
+    codexEnabled: false,
+    claudeGeneratedExtensionWorkflowsEnabled: false,
+  });
 
   const isDevelopment = import.meta.env.DEV;
 
@@ -48,6 +71,56 @@ export function AgentFeaturesPanel() {
   const features = AGENT_FEATURE_TAGS
     .map((tag) => ALPHA_FEATURES.find((f) => f.tag === tag))
     .filter((f): f is (typeof ALPHA_FEATURES)[number] => f != null);
+
+  useEffect(() => {
+    const loadAgentWorkflowSettings = async () => {
+      try {
+        const settings = await window.electronAPI.claudeCode.getSettings();
+        const workflowSettings = await window.electronAPI.agentWorkflows.getSettings();
+        setWorkflowSourceSettings({
+          workspaceClaudeCompatibilityEnabled: workflowSettings.sourceSettings.workspaceClaudeCompatibilityEnabled,
+          includeProjectClaudeSources: workflowSettings.sourceSettings.includeProjectClaudeSources ?? settings.projectCommandsEnabled,
+          includeUserClaudeSources: workflowSettings.sourceSettings.includeUserClaudeSources ?? settings.userCommandsEnabled,
+          extensionWorkflowsEnabled: workflowSettings.sourceSettings.extensionWorkflowsEnabled,
+        });
+        setWorkflowExportSettings(workflowSettings.exportSettings);
+      } catch (err) {
+        console.error('Failed to load agent workflow settings:', err);
+      }
+    };
+
+    loadAgentWorkflowSettings();
+  }, []);
+
+  const handleWorkflowSourceToggle = useCallback(async (
+    key: keyof WorkflowSourceSettings,
+    enabled: boolean,
+  ) => {
+    setWorkflowSettingsLoading(true);
+    try {
+      const next = await window.electronAPI.agentWorkflows.setSourceSettings({ [key]: enabled });
+      setWorkflowSourceSettings(next);
+    } catch (err) {
+      console.error('Failed to update workflow source settings:', err);
+    } finally {
+      setWorkflowSettingsLoading(false);
+    }
+  }, []);
+
+  const handleWorkflowExportToggle = useCallback(async (
+    key: keyof WorkflowExportSettings,
+    enabled: boolean,
+  ) => {
+    setWorkflowSettingsLoading(true);
+    try {
+      const next = await window.electronAPI.agentWorkflows.setExportSettings({ [key]: enabled });
+      setWorkflowExportSettings(next);
+    } catch (err) {
+      console.error('Failed to update workflow export settings:', err);
+    } finally {
+      setWorkflowSettingsLoading(false);
+    }
+  }, []);
 
   return (
     <div className="provider-panel flex flex-col">
@@ -83,6 +156,63 @@ export function AgentFeaturesPanel() {
           <p className="m-0 text-[13px] text-[var(--nim-text)] leading-snug">
             These features may change, regress, or be removed. Some require a restart to take full effect.
           </p>
+        </div>
+
+        <div className="mb-4 rounded border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] p-3">
+          <h5 className="text-sm font-semibold mb-1.5 text-[var(--nim-text)]">
+            Agent skills and commands compatibility
+          </h5>
+          <p className="text-xs leading-relaxed text-[var(--nim-text-muted)] mb-2">
+            Control which command and skill sources feed the shared picker and which generated compatibility exports are written for Claude Code and Codex.
+          </p>
+
+          <div className="border-b border-[var(--nim-border)] mb-2">
+            <SettingsToggle
+              checked={workflowSourceSettings.workspaceClaudeCompatibilityEnabled}
+              onChange={(checked) => handleWorkflowSourceToggle('workspaceClaudeCompatibilityEnabled', checked)}
+              disabled={workflowSettingsLoading}
+              name="Workspace Claude compatibility"
+              description="Import project and user .claude commands and skills into the shared workflow registry."
+            />
+            <SettingsToggle
+              checked={workflowSourceSettings.includeProjectClaudeSources}
+              onChange={(checked) => handleWorkflowSourceToggle('includeProjectClaudeSources', checked)}
+              disabled={workflowSettingsLoading || !workflowSourceSettings.workspaceClaudeCompatibilityEnabled}
+              name="Project .claude sources"
+              description="Include .claude/commands and .claude/skills from the current workspace."
+            />
+            <SettingsToggle
+              checked={workflowSourceSettings.includeUserClaudeSources}
+              onChange={(checked) => handleWorkflowSourceToggle('includeUserClaudeSources', checked)}
+              disabled={workflowSettingsLoading || !workflowSourceSettings.workspaceClaudeCompatibilityEnabled}
+              name="User .claude sources"
+              description="Include ~/.claude commands and skills when you want user-level compatibility in the picker and exports."
+            />
+            <SettingsToggle
+              checked={workflowSourceSettings.extensionWorkflowsEnabled}
+              onChange={(checked) => handleWorkflowSourceToggle('extensionWorkflowsEnabled', checked)}
+              disabled={workflowSettingsLoading}
+              name="Extension workflows"
+              description="Load provider-neutral agentWorkflows contributions and legacy Claude plugin workflows from enabled extensions."
+            />
+          </div>
+
+          <div>
+            <SettingsToggle
+              checked={workflowExportSettings.codexEnabled}
+              onChange={(checked) => handleWorkflowExportToggle('codexEnabled', checked)}
+              disabled={workflowSettingsLoading}
+              name="Codex generated skills"
+              description="Export registry workflows into .agents/skills/.nimbalyst-generated before Codex turns."
+            />
+            <SettingsToggle
+              checked={workflowExportSettings.claudeGeneratedExtensionWorkflowsEnabled}
+              onChange={(checked) => handleWorkflowExportToggle('claudeGeneratedExtensionWorkflowsEnabled', checked)}
+              disabled={workflowSettingsLoading}
+              name="Claude generated extension workflows"
+              description="Generate Claude plugin shims for extension agentWorkflows under .claude/plugins/.nimbalyst-generated."
+            />
+          </div>
         </div>
 
         {features.map((feature) => (

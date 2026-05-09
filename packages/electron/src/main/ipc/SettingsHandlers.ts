@@ -436,6 +436,17 @@ export function registerSettingsHandlers() {
         return getClaudeCodeSettings();
     });
 
+    safeHandle('agentWorkflows:get-settings', async () => {
+        const {
+            getAgentWorkflowSourceSettings,
+            getAgentWorkflowExportSettings,
+        } = await import('../utils/store');
+        return {
+            sourceSettings: getAgentWorkflowSourceSettings(),
+            exportSettings: getAgentWorkflowExportSettings(),
+        };
+    });
+
     // Claude Code user-level environment variables (~/.claude/settings.json)
     safeHandle('claudeSettings:get-env', async () => {
         const { ClaudeSettingsManager } = await import('../services/ClaudeSettingsManager');
@@ -461,6 +472,28 @@ export function registerSettingsHandlers() {
         const { setClaudeCodeUserCommandsEnabled } = await import('../utils/store');
         setClaudeCodeUserCommandsEnabled(enabled);
         logger.store.info(`[SettingsHandlers] Claude Code user commands ${enabled ? 'enabled' : 'disabled'}`);
+    });
+
+    safeHandle('agentWorkflows:set-source-settings', async (_event, updates: {
+        workspaceClaudeCompatibilityEnabled?: boolean;
+        includeProjectClaudeSources?: boolean;
+        includeUserClaudeSources?: boolean;
+        extensionWorkflowsEnabled?: boolean;
+    }) => {
+        const { setAgentWorkflowSourceSettings } = await import('../utils/store');
+        const next = setAgentWorkflowSourceSettings(updates ?? {});
+        logger.store.info('[SettingsHandlers] Agent workflow source settings updated');
+        return next;
+    });
+
+    safeHandle('agentWorkflows:set-export-settings', async (_event, updates: {
+        codexEnabled?: boolean;
+        claudeGeneratedExtensionWorkflowsEnabled?: boolean;
+    }) => {
+        const { setAgentWorkflowExportSettings } = await import('../utils/store');
+        const next = setAgentWorkflowExportSettings(updates ?? {});
+        logger.store.info('[SettingsHandlers] Agent workflow export settings updated');
+        return next;
     });
 
     // Extension Development Kit (EDK) settings

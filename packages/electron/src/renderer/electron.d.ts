@@ -471,10 +471,11 @@ interface ElectronAPI {
   // Extensions API
   extensions: {
     listInstalled: () => Promise<Array<{ id: string; path: string; manifest: any; name: string; enabled: boolean }>>;
-    getAllSettings: () => Promise<Record<string, { enabled: boolean; claudePluginEnabled?: boolean }>>;
+    getAllSettings: () => Promise<Record<string, { enabled: boolean; claudePluginEnabled?: boolean; agentWorkflowsEnabled?: boolean }>>;
     getEnabled: (extensionId: string, defaultEnabled?: boolean) => Promise<boolean>;
     setEnabled: (extensionId: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>;
     setClaudePluginEnabled: (extensionId: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+    setAgentWorkflowsEnabled: (extensionId: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>;
     getClaudePluginCommands: () => Promise<Array<{
       extensionId: string;
       extensionName: string;
@@ -501,6 +502,39 @@ interface ElectronAPI {
     setUserCommandsEnabled: (enabled: boolean) => Promise<void>;
     getEnv: () => Promise<Record<string, string>>;
     setEnv: (env: Record<string, string>) => Promise<void>;
+  };
+
+  agentWorkflows: {
+    getSettings: () => Promise<{
+      sourceSettings: {
+        workspaceClaudeCompatibilityEnabled: boolean;
+        includeProjectClaudeSources: boolean;
+        includeUserClaudeSources: boolean;
+        extensionWorkflowsEnabled: boolean;
+      };
+      exportSettings: {
+        codexEnabled: boolean;
+        claudeGeneratedExtensionWorkflowsEnabled: boolean;
+      };
+    }>;
+    setSourceSettings: (updates: {
+      workspaceClaudeCompatibilityEnabled?: boolean;
+      includeProjectClaudeSources?: boolean;
+      includeUserClaudeSources?: boolean;
+      extensionWorkflowsEnabled?: boolean;
+    }) => Promise<{
+      workspaceClaudeCompatibilityEnabled: boolean;
+      includeProjectClaudeSources: boolean;
+      includeUserClaudeSources: boolean;
+      extensionWorkflowsEnabled: boolean;
+    }>;
+    setExportSettings: (updates: {
+      codexEnabled?: boolean;
+      claudeGeneratedExtensionWorkflowsEnabled?: boolean;
+    }) => Promise<{
+      codexEnabled: boolean;
+      claudeGeneratedExtensionWorkflowsEnabled: boolean;
+    }>;
   };
 
   // Extension Development Kit (EDK) API

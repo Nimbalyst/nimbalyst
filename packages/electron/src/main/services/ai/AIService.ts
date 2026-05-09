@@ -7,7 +7,17 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { safeHandle } from '../../utils/ipcRegistry';
 import Store from 'electron-store';
-import { SessionManager, ProviderFactory, ModelRegistry, AIProvider, isAskUserQuestionProvider, isAgentProvider, ClaudeCodeProvider, OpenAICodexProvider } from '@nimbalyst/runtime/ai/server';
+import {
+  SessionManager,
+  ProviderFactory,
+  ModelRegistry,
+  AIProvider,
+  isAskUserQuestionProvider,
+  isAgentProvider,
+  isSlashCommandCatalogProvider,
+  ClaudeCodeProvider,
+  OpenAICodexProvider,
+} from '@nimbalyst/runtime/ai/server';
 import { getSessionStateManager } from '@nimbalyst/runtime/ai/server/SessionStateManager';
 import { parseContextUsageMessage } from '@nimbalyst/runtime/ai/server/utils/contextUsage';
 import { isBedrockToolSearchError } from '@nimbalyst/runtime/ai/server/utils/errorDetection';
@@ -55,7 +65,7 @@ import {
   shouldShowCommunityPopup,
   wasCommunityPopupShownThisLaunch
 } from '../../utils/store';
-import { mergeAISettings } from '../../utils/aiSettingsMerge';
+import { mergeAISettings, getAIProviderOverridesWithWorktreeFallback } from '../../utils/aiSettingsMerge';
 import { DocumentContextService, type RawDocumentContext, type PreparedDocumentContext } from '@nimbalyst/runtime';
 import { getMessageSyncHandler, getSyncProvider, isDesktopTrulyAway } from '../SyncManager';
 import { normalizeCodexProviderConfig, omitModelsField, stripTransientProviderFields } from '@nimbalyst/runtime/ai/server/utils/modelConfigUtils';
@@ -89,6 +99,7 @@ import {
 } from './aiServiceUtils';
 import { MessageStreamingHandler } from './MessageStreamingHandler';
 import { HooklessAgentFileWatcher } from './HooklessAgentFileWatcher';
+import { getAgentWorkflowService } from '../AgentWorkflowService';
 
 const execFileAsync = promisify(execFile);
 
@@ -164,6 +175,22 @@ export class AIService {
     for (const tool of BUILT_IN_TOOLS) {
       toolRegistry.register(tool);
     }
+
+    // Wire up the custom binary path loader so each query reads the current
+    // value fresh from the ai-settings store. This must live here (not in
+    // index.ts) because only AIService owns the ai-settings store; the
+    // store reference in index.ts points to app-settings and would always
+    // return empty string.
+    ClaudeCodeProvider.setCustomClaudeCodePathLoader((workspacePath: string) => {
+      if (!workspacePath) {
+        throw new Error('[ClaudeCodeProvider] customClaudeCodePathLoader called without a workspacePath');
+      }
+      const projectOverride = getAIProviderOverridesWithWorktreeFallback(workspacePath)?.customClaudeCodePath;
+      if (projectOverride !== undefined) {
+        return projectOverride;
+      }
+      return (this.getSettingsStore().get('customClaudeCodePath', '') as string) || '';
+    });
 
     // API keys must be explicitly set by the user in settings.
     // NEVER auto-import keys from process.env. A user's .env file with
@@ -1223,6 +1250,56 @@ export class AIService {
     // NOTE: Message sync is handled automatically by SyncedAgentMessagesStore
 
     return provider;
+  }
+
+  private getProviderWorkflowCatalog(request: {
+    sessionId?: string;
+    provider?: string | null;
+  }): { commands: string[]; skills: string[] } {
+    const providerCandidates = request.provider
+      ? [request.provider]
+      : ['claude-code', 'openai-codex'];
+
+    let provider: AIProvider | undefined;
+    for (const providerType of providerCandidates) {
+      if (!request.sessionId) {
+        break;
+      }
+
+      provider = ProviderFactory.getProvider(providerType as AIProviderType, request.sessionId) ?? undefined;
+      if (provider) {
+        break;
+      }
+    }
+
+    if (isSlashCommandCatalogProvider(provider)) {
+      const commands = typeof provider.getSlashCommands === 'function'
+        ? provider.getSlashCommands()
+        : [];
+      const skills = typeof provider.getSkills === 'function'
+        ? provider.getSkills()
+        : [];
+
+      if (commands.length > 0 || skills.length > 0) {
+        return { commands, skills };
+      }
+    }
+
+    if (request.provider === 'claude-code' || !request.provider) {
+      return {
+        commands: ClaudeCodeProvider.getCachedSdkSlashCommands(),
+        skills: ClaudeCodeProvider.getCachedSdkSkills(),
+      };
+    }
+
+    if (request.provider === 'openai-codex') {
+      return {
+        commands: OpenAICodexProvider.getKnownSlashCommands(),
+        skills: [],
+      };
+    }
+
+    return { commands: [], skills: [] };
   }
 
   /**
@@ -2905,30 +2982,53 @@ export class AIService {
       return { success: true };
     });
 
-    // Get slash commands from active claude-code provider
-    safeHandle('ai:getSlashCommands', async (event, sessionId?: string) => {
+    safeHandle('ai:getAgentWorkflows', async (
+      _event,
+      payload?: {
+        workspacePath?: string;
+        sessionId?: string;
+        provider?: string | null;
+      }
+    ) => {
       try {
-        // Try the specific session's provider first
-        let provider: AIProvider | undefined;
-        if (sessionId) {
-          provider = ProviderFactory.getProvider('claude-code', sessionId) ?? undefined;
+        const request = payload ?? {};
+        if (!request.workspacePath) {
+          throw new Error('ai:getAgentWorkflows requires workspacePath');
         }
 
-        if (provider && 'getSlashCommands' in provider && typeof (provider as any).getSlashCommands === 'function') {
-          const commands = (provider as any).getSlashCommands();
-          const skills = 'getSkills' in provider && typeof (provider as any).getSkills === 'function'
-            ? (provider as any).getSkills()
-            : [];
+        const resolvedProvider = request.provider ?? 'claude-code';
+        const nativeCatalog = this.getProviderWorkflowCatalog({
+          sessionId: request.sessionId,
+          provider: resolvedProvider,
+        });
 
-          if (commands.length > 0 || skills.length > 0) {
-            return { success: true, commands, skills };
-          }
-        }
+        const workflows = await getAgentWorkflowService(request.workspacePath).listEntries({
+          provider: resolvedProvider,
+          nativeCommands: nativeCatalog.commands,
+          nativeSkills: nativeCatalog.skills,
+        });
 
-        // Fall back to static cache (populated by any previous session's init chunk)
-        const cachedCommands = ClaudeCodeProvider.getCachedSdkSlashCommands();
-        const cachedSkills = ClaudeCodeProvider.getCachedSdkSkills();
-        return { success: true, commands: cachedCommands, skills: cachedSkills };
+        return { success: true, workflows };
+      } catch (error) {
+        console.error('[AIService] Error getting agent workflows:', error);
+        return {
+          success: false,
+          workflows: [],
+          error: error instanceof Error ? error.message : 'Unknown error',
+        };
+      }
+    });
+
+    safeHandle('ai:getSlashCommands', async (
+      _event,
+      payload?: string | { sessionId?: string; provider?: string | null }
+    ) => {
+      try {
+        const request = typeof payload === 'string'
+          ? { sessionId: payload, provider: undefined }
+          : payload ?? {};
+        const { commands, skills } = this.getProviderWorkflowCatalog(request);
+        return { success: true, commands, skills };
       } catch (error) {
         console.error('[AIService] Error getting slash commands:', error);
         return { success: false, commands: [], skills: [], error: error instanceof Error ? error.message : 'Unknown error' };
