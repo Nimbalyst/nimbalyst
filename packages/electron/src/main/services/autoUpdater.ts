@@ -158,7 +158,10 @@ export class AutoUpdaterService {
     autoUpdater.on('error', (err) => {
       log.error('Update error:', err);
       this.isCheckingForUpdate = false;
-      this.isManualCheck = false; // Reset manual check flag
+      // Capture before reset so the suppression below can distinguish
+      // user-initiated checks from the hourly background poll.
+      const wasManualCheck = this.isManualCheck;
+      this.isManualCheck = false;
 
       // Windows-only: antivirus often holds a transient handle on the freshly
       // downloaded installer, so electron-updater's temp -> final rename throws
@@ -179,18 +182,32 @@ export class AutoUpdaterService {
       // Track update error - determine stage based on context
       // If downloadStartTime is set, we were downloading; otherwise it was a check error
       const stage = wasDownloading ? 'download' : 'check';
+      const errorType = classifyUpdateError(err);
       AnalyticsService.getInstance().sendEvent('update_error', {
         stage,
-        error_type: classifyUpdateError(err),
+        error_type: errorType,
         release_channel: getReleaseChannel()
       });
       this.downloadStartTime = null;
       this.downloadRetryAttempted = false;
 
-      // Send error to frontmost window via toast system
-      this.sendToFrontmostWindow('update-toast:error', {
-        message: err.message
-      });
+      // Suppress the user-facing toast for transient network errors on
+      // automatic background checks (#56). Users on networks that can't
+      // resolve the update endpoint (LAN-only, captive portal, restrictive
+      // firewall) were getting an "Update Error: net::ERR_NAME_NOT_RESOLVED"
+      // toast every hour because the auto-updater retries on a 60-minute
+      // schedule. The error is still logged and reported to analytics.
+      // Manual checks (`Check for Updates` menu item) and download errors
+      // still surface so the user gets feedback when they asked for it
+      // or are mid-download.
+      const isTransientNetworkCheckError =
+        stage === 'check' && errorType === 'network' && !wasManualCheck;
+      if (!isTransientNetworkCheckError) {
+        // Send error to frontmost window via toast system
+        this.sendToFrontmostWindow('update-toast:error', {
+          message: err.message
+        });
+      }
 
       this.sendToAllWindows('update-error', err.message);
     });
