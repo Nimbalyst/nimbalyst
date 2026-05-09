@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-<!-- New features go here -->
+- Title-only mode for `mcp__nimbalyst-session-context__list_recent_sessions`. The existing `query` parameter goes through `AISessionsRepository.search`, which uses Postgres full-text search across both session titles and `ai_transcript_events.searchable_text`. That made it hard to find a session by name when the search term appeared frequently in conversations (e.g. searching `"Budget"` returned every session that mentioned budgets in passing, not just the session titled "Budget tracker setup"). Adds a `searchField` parameter accepting `'title'`, `'content'`, or `'both'` (default `'both'` keeps existing behavior). When `searchField: 'title'` is passed, the handler calls `AISessionsRepository.list` and filters in memory by case-insensitive substring match on `s.title`, bypassing the FTS path entirely. The result label and no-results message both show `in titles` when the title-only mode is active so the model can tell the modes apart. Fixes #83.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
