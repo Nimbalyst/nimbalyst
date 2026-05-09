@@ -240,4 +240,14 @@ export function registerMultiProjectRailHandlers(): void {
 
         return { success: true };
     });
+
+    // Renderer asks the host to close this window when the rail goes empty
+    // (user closed the last open project). Closing the BrowserWindow lets the
+    // app fall back to its initial project-selection flow.
+    safeHandle('workspace:close-rail-window', async (event) => {
+        const window = BrowserWindow.fromWebContents(event.sender);
+        if (!window) return { success: false, error: 'No window for event sender' };
+        window.close();
+        return { success: true };
+    });
 }

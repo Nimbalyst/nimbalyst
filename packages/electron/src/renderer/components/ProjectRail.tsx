@@ -245,6 +245,8 @@ export function ProjectRail() {
         if (!proceed) return;
       }
 
+      const wasLast = openProjects.length <= 1;
+
       closeProject(project.path);
 
       try {
@@ -252,8 +254,19 @@ export function ProjectRail() {
       } catch (err) {
         console.error('[ProjectRail] unregister-additional failed:', err);
       }
+
+      // Closing the last project leaves nothing to render in this window.
+      // Ask the host to close the window so the app can fall back to its
+      // initial project-selection flow.
+      if (wasLast) {
+        try {
+          await window.electronAPI?.invoke?.('workspace:close-rail-window');
+        } catch (err) {
+          console.error('[ProjectRail] close-rail-window failed:', err);
+        }
+      }
     },
-    [closeProject, activity]
+    [closeProject, activity, openProjects.length]
   );
 
   // Right-click context menu state. Anchored to a virtual reference at the

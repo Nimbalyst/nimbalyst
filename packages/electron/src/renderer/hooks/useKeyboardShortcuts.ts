@@ -212,9 +212,13 @@ export function useKeyboardShortcuts({
           e.stopPropagation();
           const activePath = store.get(activeWorkspacePathAtom);
           const projects = store.get(openProjectsAtom);
-          if (activePath && projects.length > 1) {
+          if (activePath) {
+            const wasLast = projects.length <= 1;
             store.set(closeOpenProjectAtom, activePath);
             window.electronAPI?.invoke?.('workspace:unregister-additional', { workspacePath: activePath }).catch(() => {});
+            if (wasLast) {
+              window.electronAPI?.invoke?.('workspace:close-rail-window').catch(() => {});
+            }
           }
         }
       }
