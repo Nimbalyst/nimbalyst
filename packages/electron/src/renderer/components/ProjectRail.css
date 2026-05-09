@@ -234,12 +234,13 @@
   color: rgba(255, 255, 255, 0.85);
 }
 
+/*
+ * Tooltip is rendered through @floating-ui/react's FloatingPortal
+ * (see ProjectRail.tsx) so it escapes `.project-rail`'s `overflow: hidden`
+ * clip. Position + visibility are owned by floating-ui — these rules cover
+ * appearance only.
+ */
 .project-rail-tooltip {
-  position: absolute;
-  left: 100%;
-  top: 50%;
-  transform: translateY(-50%);
-  margin-left: 12px;
   padding: 6px 10px;
   background-color: var(--nim-bg-tertiary, #2a2a2a);
   color: var(--nim-text, #111827);
@@ -249,13 +250,12 @@
   border-radius: 4px;
   border: 1px solid var(--nim-border, rgba(255, 255, 255, 0.12));
   pointer-events: none;
-  opacity: 0;
-  transition: opacity 100ms ease;
   z-index: 1000;
   display: flex;
   flex-direction: column;
   gap: 2px;
   max-width: 320px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .project-rail-tooltip-name {
@@ -271,7 +271,3 @@
   text-overflow: ellipsis;
 }
 
-.project-rail-item:hover > .project-rail-tooltip,
-.project-rail-add:hover > .project-rail-tooltip {
-  opacity: 1;
-}

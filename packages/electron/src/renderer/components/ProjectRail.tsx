@@ -14,6 +14,7 @@ import {
   useFloating,
   FloatingPortal,
   useDismiss,
+  useHover,
   useInteractions,
   useRole,
   offset,
@@ -74,6 +75,21 @@ function ProjectRailIcon({
   onClose,
   onContextMenu,
 }: ProjectRailIconProps) {
+  // Hover tooltip via floating-ui. Renders through FloatingPortal so the
+  // tooltip escapes the rail container's `overflow: hidden` clip — the
+  // earlier CSS-only `:hover > .project-rail-tooltip` approach was clipped
+  // and never visible. Matches CLAUDE.md's floating-ui rule.
+  const [tooltipOpen, setTooltipOpen] = useState(false);
+  const { refs: tooltipRefs, floatingStyles: tooltipFloatingStyles, context: tooltipContext } = useFloating({
+    open: tooltipOpen,
+    onOpenChange: setTooltipOpen,
+    placement: 'right',
+    middleware: [offset(12), flip({ padding: 8 }), shift({ padding: 8 })],
+  });
+  const tooltipHover = useHover(tooltipContext, { delay: { open: 200, close: 0 }, move: false });
+  const { getReferenceProps: getTooltipRefProps, getFloatingProps: getTooltipFloatingProps } =
+    useInteractions([tooltipHover]);
+
   const handleClick = useCallback(() => {
     onActivate(project.path);
   }, [onActivate, project.path]);
@@ -113,11 +129,13 @@ function ProjectRailIcon({
   // invalid HTML and confuses screen readers / keyboard navigation.
   return (
     <div
+      ref={tooltipRefs.setReference}
       className={className}
       onContextMenu={handleContextMenu}
       data-testid="project-rail-item"
       data-project-path={project.path}
       style={{ ['--rail-item-accent' as any]: accentColor }}
+      {...getTooltipRefProps()}
     >
       <button
         type="button"
@@ -144,10 +162,19 @@ function ProjectRailIcon({
       >
         ×
       </button>
-      <span className="project-rail-tooltip">
-        <span className="project-rail-tooltip-name">{project.name}</span>
-        <span className="project-rail-tooltip-path">{project.path}</span>
-      </span>
+      {tooltipOpen && (
+        <FloatingPortal>
+          <div
+            ref={tooltipRefs.setFloating}
+            className="project-rail-tooltip"
+            style={tooltipFloatingStyles}
+            {...getTooltipFloatingProps()}
+          >
+            <span className="project-rail-tooltip-name">{project.name}</span>
+            <span className="project-rail-tooltip-path">{project.path}</span>
+          </div>
+        </FloatingPortal>
+      )}
     </div>
   );
 }
@@ -294,11 +321,30 @@ export function ProjectRail() {
   const addRole = useRole(addContext, { role: 'menu' });
   const { getFloatingProps: getAddFloatingProps } = useInteractions([addDismiss, addRole]);
 
+  // Hover tooltip for the add button. Separate floating-ui instance from
+  // the click-driven add menu above; both share `addButtonRef` as the
+  // anchor element.
+  const [addTooltipOpen, setAddTooltipOpen] = useState(false);
+  const {
+    refs: addTooltipRefs,
+    floatingStyles: addTooltipFloatingStyles,
+    context: addTooltipContext,
+  } = useFloating({
+    open: addTooltipOpen,
+    onOpenChange: setAddTooltipOpen,
+    placement: 'right',
+    middleware: [offset(12), flip({ padding: 8 }), shift({ padding: 8 })],
+  });
+  const addTooltipHover = useHover(addTooltipContext, { delay: { open: 200, close: 0 }, move: false });
+  const { getReferenceProps: getAddTooltipRefProps, getFloatingProps: getAddTooltipFloatingProps } =
+    useInteractions([addTooltipHover]);
+
   React.useEffect(() => {
     if (addButtonRef.current) {
       addRefs.setReference(addButtonRef.current);
+      addTooltipRefs.setReference(addButtonRef.current);
     }
-  }, [addRefs]);
+  }, [addRefs, addTooltipRefs]);
 
   const openProjectPaths = useMemo(() => new Set(openProjects.map((p) => p.path)), [openProjects]);
   const filteredRecents = useMemo(
@@ -381,10 +427,22 @@ export function ProjectRail() {
         disabled={atCap}
         data-testid="project-rail-add"
         aria-label="Add project to rail"
+        {...getAddTooltipRefProps()}
       >
         +
-        <span className="project-rail-tooltip">{atCap ? 'Rail full (8 projects max)' : 'Add project'}</span>
       </button>
+      {addTooltipOpen && (
+        <FloatingPortal>
+          <div
+            ref={addTooltipRefs.setFloating}
+            className="project-rail-tooltip"
+            style={addTooltipFloatingStyles}
+            {...getAddTooltipFloatingProps()}
+          >
+            {atCap ? 'Rail full (8 projects max)' : 'Add project'}
+          </div>
+        </FloatingPortal>
+      )}
 
       {addMenuOpen && (
         <FloatingPortal>
