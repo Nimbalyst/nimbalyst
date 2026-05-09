@@ -2259,6 +2259,19 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
       pending.resolve(response);
       this.pendingExitPlanModeConfirmations.delete(requestId);
 
+      // Mirror AskUserQuestion / ToolPermission semantics: emit a resolved
+      // event so MessageStreamingHandler can flip the SessionStateManager
+      // status back to 'running'. Without this, the multi-project rail
+      // misses the resume transition after an ExitPlanMode denial and the
+      // "Thinking…" spinner stays hidden until the rail is remounted.
+      this.emit('exitPlanMode:resolved', {
+        requestId,
+        sessionId,
+        approved: response.approved,
+        respondedBy,
+        timestamp: Date.now(),
+      });
+
       // Persist the response as a message for sync and audit trail
       if (sessionId) {
         const responseContent = {

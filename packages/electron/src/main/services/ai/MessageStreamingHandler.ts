@@ -696,6 +696,35 @@ export class MessageStreamingHandler {
     provider.removeAllListeners('exitPlanMode:confirm');
     provider.on('exitPlanMode:confirm', onExitPlanModeConfirm);
 
+    // Listen for ExitPlanMode resolutions (approve/deny) and flip session
+    // status back to 'running' so SessionStateManager emits session:streaming
+    // for every subscribed window. Required for the "Continued Planning"
+    // denial path in the multi-project rail: without this, state stays at
+    // waiting_for_input and the AGENT panel's "Thinking…" indicator does
+    // not re-appear when the SDK resumes streaming. Mirrors the
+    // askUserQuestion:answered and toolPermission:resolved patterns above.
+    const onExitPlanModeResolved = (data: {
+      requestId: string;
+      sessionId: string;
+      approved: boolean;
+      respondedBy?: 'desktop' | 'mobile';
+      timestamp: number;
+    }) => {
+      logger.main.info('[AIService] ExitPlanMode resolved:', data.requestId, 'approved=', data.approved);
+      syncPendingPrompt(data.sessionId, false);
+      TrayManager.getInstance().onPromptResolved(data.sessionId);
+
+      getSessionStateManager().updateActivity({
+        sessionId: data.sessionId,
+        status: 'running',
+        isStreaming: true,
+      }).catch((err) => {
+        logger.main.error('[AIService] Failed to update session status to running after ExitPlanMode resolve:', err);
+      });
+    };
+    provider.removeAllListeners('exitPlanMode:resolved');
+    provider.on('exitPlanMode:resolved', onExitPlanModeResolved);
+
     // Listen for AskUserQuestion requests and forward to renderer
     const onAskUserQuestion = async (data: { questionId: string; sessionId: string; questions: any[]; timestamp: number }) => {
       // logger.main.info('[AIService] AskUserQuestion requested:', data.questionId);
