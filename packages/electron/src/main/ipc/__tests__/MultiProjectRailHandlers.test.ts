@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => {
     stopWorkspaceWatcher: vi.fn(),
     setFileSystemService: vi.fn(),
     clearFileSystemService: vi.fn(),
+    setFileSystemServiceFor: vi.fn(),
+    clearFileSystemServiceFor: vi.fn(),
     documentServices: new Map<string, any>(),
     fileSystemServices: new Map<string, any>(),
     windowStates: new Map<number, WindowState>(),
@@ -41,6 +43,8 @@ vi.mock('../../file/WorkspaceWatcher.ts', () => ({
 vi.mock('@nimbalyst/runtime', () => ({
   setFileSystemService: mocks.setFileSystemService,
   clearFileSystemService: mocks.clearFileSystemService,
+  setFileSystemServiceFor: mocks.setFileSystemServiceFor,
+  clearFileSystemServiceFor: mocks.clearFileSystemServiceFor,
 }));
 
 vi.mock('../../protocols/nimAssetProtocol', () => ({
