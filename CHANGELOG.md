@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- Changes to existing functionality go here -->
 
 ### Fixed
-<!-- Bug fixes go here -->
+- Commit proposal widget: sort files alphabetically by basename and subdirectories by displayPath within each directory node. Files inside a directory used to render in the order the model emitted them in `filesToStage`, which made it hard to scan a commit with many files in one folder. Folders-before-files convention is preserved. Fixes #233.
 
 ### Removed
 <!-- Removed features go here -->

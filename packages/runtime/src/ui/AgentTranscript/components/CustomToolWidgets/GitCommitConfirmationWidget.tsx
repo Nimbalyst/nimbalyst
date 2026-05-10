@@ -726,14 +726,24 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
     const allSelected = selectedCount === filesInDir.length;
     const someSelected = selectedCount > 0 && !allSelected;
 
+    // Sort subdirectories by displayPath and files by basename so the
+    // tree renders deterministically rather than in the order the model
+    // emitted paths in filesToStage. Folders-before-files convention is
+    // preserved by rendering subdirectories before files at each site.
+    const sortedSubdirectories = Array.from(node.subdirectories.values())
+      .sort((a, b) => a.displayPath.localeCompare(b.displayPath));
+    const sortedFiles = [...node.files].sort((a, b) => {
+      const aBase = a.substring(a.lastIndexOf('/') + 1);
+      const bBase = b.substring(b.lastIndexOf('/') + 1);
+      return aBase.localeCompare(bBase);
+    });
+
     // Root node - just render children
     if (!node.displayPath) {
       return (
         <>
-          {Array.from(node.subdirectories.values()).map(subdir =>
-            renderDirectoryNode(subdir)
-          )}
-          {node.files.map(file => renderFile(file))}
+          {sortedSubdirectories.map(subdir => renderDirectoryNode(subdir))}
+          {sortedFiles.map(file => renderFile(file))}
         </>
       );
     }
@@ -785,10 +795,8 @@ export const GitCommitConfirmationWidget: React.FC<CustomToolWidgetProps> = ({
 
         {isExpanded && hasContent && (
           <div className="git-commit-widget__directory-children mt-0.5 pl-4">
-            {Array.from(node.subdirectories.values()).map(subdir =>
-              renderDirectoryNode(subdir)
-            )}
-            {node.files.map(file => renderFile(file, true))}
+            {sortedSubdirectories.map(subdir => renderDirectoryNode(subdir))}
+            {sortedFiles.map(file => renderFile(file, true))}
           </div>
         )}
       </div>
