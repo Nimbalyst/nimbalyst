@@ -38,11 +38,25 @@ export default tseslint.config(
       // The wrapper auto-registers every atomFamily for the Developer Dashboard stats view.
       // The registry itself (atomFamilyRegistry.ts) is excluded via the ignores pattern below.
       'no-restricted-imports': ['error', {
-        paths: [{
-          name: 'jotai/utils',
-          importNames: ['atomFamily'],
-          message: 'Import atomFamily from \'../debug/atomFamilyRegistry\' (or correct relative path) instead of \'jotai/utils\'. This ensures automatic registration for the Developer Dashboard > AtomFamily Stats.'
-        }]
+        paths: [
+          {
+            name: 'jotai/utils',
+            importNames: ['atomFamily'],
+            message: 'Import atomFamily from \'../debug/atomFamilyRegistry\' (or correct relative path) instead of \'jotai/utils\'. This ensures automatic registration for the Developer Dashboard > AtomFamily Stats.'
+          },
+          {
+            // Renderer code must go through the Enhanced wrappers so frontmatter
+            // extraction, list-indent normalization, and our NCR-based
+            // literal-emphasis encoding stay applied. Calling upstream's
+            // $convertFromMarkdownString or $convertToMarkdownString directly
+            // skips those steps and regresses round-trip stability on real
+            // Nimbalyst plan documents (see
+            // packages/runtime/src/editor/markdown/FORKED_MARKDOWN_IMPORT.md).
+            name: '@lexical/markdown',
+            importNames: ['$convertFromMarkdownString', '$convertToMarkdownString'],
+            message: 'Use $convertFromEnhancedMarkdownString / $convertToEnhancedMarkdownString from @nimbalyst/runtime/editor instead. See packages/runtime/src/editor/markdown/FORKED_MARKDOWN_IMPORT.md for why upstream import/export must not be called directly.',
+          },
+        ],
       }],
       // Ban electronAPI.on() in the renderer by default. Re-enabled for the
       // sanctioned singleton-subscription directories below.
@@ -52,6 +66,17 @@ export default tseslint.config(
   {
     // The registry itself must import the real atomFamily from jotai/utils
     files: ['src/renderer/store/debug/atomFamilyRegistry.ts'],
+    rules: {
+      'no-restricted-imports': 'off',
+    },
+  },
+  {
+    // The extension platform service deliberately re-exposes the entire
+    // @lexical/markdown surface to extension code via importShim, so the
+    // namespace import has to be allowed here. Extensions are trusted to
+    // know the import-fn caveats; first-party code does not get the same
+    // free pass.
+    files: ['src/renderer/services/ExtensionPlatformServiceImpl.ts'],
     rules: {
       'no-restricted-imports': 'off',
     },

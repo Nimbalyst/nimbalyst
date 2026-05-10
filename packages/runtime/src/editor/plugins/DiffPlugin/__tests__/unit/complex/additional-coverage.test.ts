@@ -246,10 +246,12 @@ const x: number = 5;
         );
       });
 
-      // The markdown system may escape complex backtick patterns for safety
-      // The key is that the content modification ("modified") is preserved
+      // The markdown importer follows CommonMark: only the inner ``backticks``
+      // span is recognised as a code span; the outer double-backticks become
+      // literal text and are escaped on export. The key is that the content
+      // modification ("modified") is preserved.
       const expectedWithEscaping =
-        'Use ``modified code with `backticks` inside\\`\\`.';
+        'Use \\`\\`modified code with `backticks` inside\\`\\`.';
       expectMarkdownEquivalent(actualMarkdown, expectedWithEscaping);
     });
   });

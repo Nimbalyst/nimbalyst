@@ -104,10 +104,10 @@ export type { PluginPackage, DynamicMenuOption, UserCommand } from './types/Plug
 export { pluginRegistry } from './plugins/PluginRegistry';
 export { PluginManager } from './plugins/PluginManager';
 
-// Markdown utilities
-// WARNING: NEVER use $convertFromMarkdownString from @lexical/markdown!
-// Use our $convertFromEnhancedMarkdownString instead - it handles 2-space indents.
-// See src/markdown/FORKED_MARKDOWN_IMPORT.md for details.
+// Markdown utilities. Always go through `$convertFromEnhancedMarkdownString` /
+// `$convertToEnhancedMarkdownString` so frontmatter extraction, list-indent
+// normalization, and the NCR-based literal-emphasis encoding stay applied.
+// Calling upstream's `$convertFromMarkdownString` directly skips those steps.
 export {
   MarkdownStreamProcessor,
   createHeadlessEditorFromEditor,
@@ -153,11 +153,8 @@ export {
 export {
   $mergeFrontmatter,
   $updateFrontmatter,
-  $convertFromEnhancedMarkdownString // This is the main function to use!
+  $convertFromEnhancedMarkdownString
 } from './markdown/EnhancedMarkdownImport';
-
-// Export our forked markdown import (prefer $convertFromEnhancedMarkdownString instead)
-export { $convertFromMarkdownStringRexical } from './markdown/LexicalMarkdownImport';
 
 // Markdown copy plugin - Cmd+Shift+C to copy as markdown
 export { default as MarkdownCopyPlugin, COPY_AS_MARKDOWN_COMMAND } from './plugins/MarkdownCopyPlugin';

@@ -49,8 +49,6 @@ export function createTransformers(
   ];
 }
 
-// Re-export for convenience
-// Note: Use the enhanced versions instead ($convertFromEnhancedMarkdownString, $convertToEnhancedMarkdownString)
 export { MarkdownStreamProcessor, createHeadlessEditorFromEditor, markdownToJSONSync } from './MarkdownStreamProcessor';
 export type { InsertMode } from './MarkdownStreamProcessor';
 
@@ -103,7 +101,3 @@ export {
   detectMarkdownIndentSize,
   type NormalizerConfig,
 } from './MarkdownNormalizer';
-
-// Export OUR FORKED markdown import function - never use Lexical's!
-export { $convertFromMarkdownStringRexical } from './LexicalMarkdownImport';
-

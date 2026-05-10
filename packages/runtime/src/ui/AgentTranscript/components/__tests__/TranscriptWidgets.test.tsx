@@ -17,10 +17,12 @@
 
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import * as rtl from '@testing-library/react';
 import { createStore, Provider as JotaiProvider } from 'jotai';
 import type { TranscriptViewMessage } from '../../../../ai/server/transcript/TranscriptProjector';
 import type { CustomToolWidgetProps } from '../CustomToolWidgets/index';
+
+const { render, screen, fireEvent } = rtl;
 
 // Mock clipboard
 vi.mock('../../../../utils/clipboard', () => ({
@@ -1625,4 +1627,3 @@ describe('EditorScreenshotWidget', () => {
     expect(img?.getAttribute('src')).toContain('data:image/png;base64,');
   });
 });
-
