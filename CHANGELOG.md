@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Commit proposal widget: sort files alphabetically by basename and subdirectories by displayPath within each directory node. Files inside a directory used to render in the order the model emitted them in `filesToStage`, which made it hard to scan a commit with many files in one folder. Folders-before-files convention is preserved. Fixes #233.
+- Open file links of the form `/abs/path/<real absolute path>` on Windows. Claude Code emits markdown file references with this prefix (e.g. `/abs/path/C:/Users/foo/file.ts:42`); the literal path does not exist on disk so the workspace file opener never fires. `resolveTranscriptFilePathFromHref` in `packages/runtime/src/ui/AgentTranscript/components/MarkdownRenderer.tsx` now strips the `/abs/path/` prefix just before the absolute-path check, after the existing scheme detection and line/column-suffix stripping, so the path that flows into `workspace:open-file` is the real on-disk path. Works for both Windows (`/abs/path/C:/...`) and macOS (`/abs/path//Users/...`) shapes. Adds 6 unit tests covering both platforms, with and without `:line:col` suffixes, and a non-absolute-remainder regression check. Fixes #240.
 
 ### Removed
 <!-- Removed features go here -->

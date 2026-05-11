@@ -259,9 +259,20 @@ export function resolveTranscriptFilePathFromHref(href?: string): string | null 
     candidate = safeDecodeURIComponent(stripQueryAndHash(trimmedHref));
   }
 
-  const cleanedPath = stripLineAndColumnSuffix(candidate);
+  let cleanedPath = stripLineAndColumnSuffix(candidate);
   if (!cleanedPath) {
     return null;
+  }
+
+  // Claude Code emits markdown links of the form
+  // `/abs/path/<real absolute path>` (e.g.
+  // `/abs/path/C:/Users/foo/file.ts:42` on Windows or
+  // `/abs/path//Users/foo/file.ts:42` on macOS). The `/abs/path/`
+  // prefix is a Claude Code marker, not a real filesystem segment;
+  // strip it so the rest of the renderer routes the link through
+  // `workspace:open-file` with the actual on-disk path. Fixes #240.
+  if (cleanedPath.startsWith('/abs/path/')) {
+    cleanedPath = cleanedPath.slice('/abs/path/'.length);
   }
 
   return isAbsoluteFilePath(cleanedPath) ? cleanedPath : null;
