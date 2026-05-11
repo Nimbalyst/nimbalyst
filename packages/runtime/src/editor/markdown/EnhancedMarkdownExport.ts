@@ -631,8 +631,18 @@ function exportTextFormat(
     if (hasTextFormat(node, format) && !appliedFormats.has(format)) {
       appliedFormats.add(format);
 
+      // Continuity check: use the raw format bit on the previous sibling, not
+      // shouldTrackAsFormattedSibling. The latter treats whitespace-only
+      // siblings as "no format", which conflates two questions: "should we
+      // wrap THIS node in emphasis markers" (whitespace flanking rule), and
+      // "is the format already open going into this node" (continuity).
+      // Filtering whitespace-only siblings here caused duplicate `unclosedTags`
+      // entries when a triple-nested format span ran across a whitespace-only
+      // text node (e.g. `~~strike *italic **bold** text* inside~~`), which
+      // the close loop then popped as extra closing markers, corrupting
+      // emphasis output.
       if (
-        !shouldTrackAsFormattedSibling(previousTextNode, format) ||
+        !hasTextFormat(previousTextNode, format) ||
         !unclosedTags.find((entry) => entry.tag === tag)
       ) {
         unclosedTags.push({ format, tag });
@@ -777,19 +787,4 @@ function hasTextFormat(
   format: TextFormatType,
 ): boolean {
   return $isTextNode(node) && node.hasFormat(format);
-}
-
-function shouldTrackAsFormattedSibling(
-  node: TextNode | null,
-  format: TextFormatType,
-): boolean {
-  if (!hasTextFormat(node, format)) {
-    return false;
-  }
-
-  if (format === 'code') {
-    return true;
-  }
-
-  return node != null && !/^\s*$/.test(node.getTextContent());
 }
