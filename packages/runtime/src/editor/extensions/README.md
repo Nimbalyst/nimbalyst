@@ -1,72 +1,83 @@
-# Lexical Extension Adapter (Phase 5 scaffolding)
+# Nimbalyst editor extensions
 
-This directory holds the bridge between Nimbalyst's `PluginPackage` model
-(`src/editor/types/PluginTypes.ts`, `src/editor/plugins/PluginRegistry.ts`)
-and upstream Lexical's extension system (`@lexical/extension`,
-`LexicalExtensionComposer`).
+This directory is the source of truth for how the Nimbalyst editor is
+composed. The editor is built with `LexicalExtensionComposer` from
+`@lexical/react`; every plugin participating in the editor is a
+`LexicalExtension` listed in the root extension's `dependencies` array.
 
-It is intentionally **scaffolding**, not a migration. Today the editor still
-mounts plugins via `LexicalComposer` in `Editor.tsx` / `NimbalystEditor.tsx`;
-this adapter only formalizes how the headless parts of a `PluginPackage`
-correspond to a `LexicalExtension` so that an incremental migration becomes a
-mechanical swap of consumers later.
+## Files
 
-## What the adapter does
+| File | What it owns |
+| --- | --- |
+| `NimbalystEditorExtensions.ts` | Builds the root extension. Lists every built-in dependency the editor depends on. Adding a plugin means appending a new entry here. |
+| `registerBuiltinExtensions.ts` | Side-effect module that imports every built-in extension so its module-level `setExtensionContributions(...)` call runs. Imported by `editor/index.ts` so callers who only touch markdown utilities still see the full transformer set. |
+| `extensionContributionsStore.ts` | Per-source registry of `userCommands`, `markdownTransformers`, and dynamic component-picker option providers. Replaces the legacy `pluginRegistry` for the parts that aren't covered by `LexicalExtension.nodes` / `register` / `dependencies`. |
+| `extensionLexicalExtensionsStore.ts` | Per-source registry of `LexicalExtension` instances contributed by the renderer extension bridge or by app-level plugins (tracker, mockup, document-link). `NimbalystEditor` reads the merged snapshot and rebuilds the editor when the snapshot reference changes. |
+| `extensionEditorComponentsStore.ts` | Per-source registry of React components that need to mount inside `LexicalExtensionComposer` (typeahead menus, dialog hosts, document-path-aware effect components). `Editor.tsx` iterates the store inside the rich-text branch. |
+| `builtin/` | One file per built-in Lexical extension: image, page break, collapsible, layout, kanban board, mermaid, diff, table markdown, emoji markdown, plus the headless support extensions (`AutoLink`, `AssetGc`, `CollabAssetLink`, `DragDropPaste`, `MarkdownPaste`, `MarkdownCopy`, `TabFocus`). |
 
-`pluginPackageToExtension(pkg, options?)` returns a `LexicalExtension` whose:
+## How a built-in plugin is wired
 
-- `name` matches `pkg.name`
-- `nodes` matches `pkg.nodes`
-- `dependencies` are resolved from `pkg.dependencies` (string names) through a
-  caller-supplied `resolveDependency(name)` resolver
-- `config` is a `NimbalystExtensionConfig` containing:
-  - `markdownTransformers` (the package's transformers)
-  - `commands` (frozen copy of `pkg.commands`)
-  - `userCommands` (component-picker entries)
-  - `getDynamicOptions` (component-picker dynamic options provider)
-  - `pluginConfig` (opaque pass-through of `pkg.config`)
-- `register?` is a thin wrapper around a caller-supplied
-  `register(editor, config)` hook, or `undefined` if the caller doesn't
-  supply one.
+A typical built-in extension does three things:
 
-## What the adapter explicitly does NOT do (yet)
+1. **Owns its node classes** via `defineExtension({ nodes: [...] })`. The
+   Lexical builder topologically resolves them; nothing extra is needed
+   for registration.
+2. **Owns its commands and listeners** in `register(editor)`. Returning
+   a cleanup function disposes them when the editor tears down.
+3. **Publishes its markdown transformers and slash-picker entries** at
+   module-load time:
 
-- **It does not migrate React `Component` mounting.** Plugin React components
-  continue to mount inside `LexicalComposer`. Until we move the editor shell
-  to `LexicalExtensionComposer`, those components remain Nimbalyst-side
-  concerns.
-- **It does not auto-synthesize a `register()` body.** Most current
-  `PluginPackage` runtime behavior lives inside React components (effects
-  registering commands, listeners, etc.). The adapter cannot infer that and
-  intentionally does not try.
-- **It does not mutate `PluginRegistry`.** Callers can map registered
-  packages through the adapter when they want extension-shaped metadata; the
-  registry remains authoritative for the existing PluginPackage shape.
-- **It does not change how plugins are loaded.** No runtime difference for
-  any caller until consumers explicitly opt in.
+   ```ts
+   setExtensionContributions('@nimbalyst/editor/page-break', {
+     markdownTransformers: [PAGE_BREAK_TRANSFORMER],
+   });
+   ```
 
-## Pilot migration candidates
+The slash picker and the import/export pipeline read from the
+contributions store, so the only place that needs to know about a new
+plugin is the one file under `builtin/` plus a line in
+`NimbalystEditorExtensions.ts`'s `dependencies` array.
 
-Per the plan (`nimbalyst-local/plans/lexical-upgrade-and-defork.md` Phase 5),
-low-risk candidates for actual migration after this scaffolding lands:
+## How a Nimbalyst extension contributes a Lexical plugin
 
-- list / checklist (`@lexical/react/LexicalListPlugin` →
-  upstream `ListExtension` / `CheckListExtension`)
-- history / shared-history (`@lexical/react/LexicalHistoryPlugin` →
-  `HistoryExtension` / `SharedHistoryExtension`)
-- horizontal rule (currently a custom `HR_TRANSFORMER` + plugin →
-  `HorizontalRuleExtension`, but mind the custom transformer)
-- tab indentation (`TabIndentationExtension`)
+Extensions loaded by the on-disk extension system declare
+`contributions.lexicalExtensions: string[]` in their manifest and export
+matching `LexicalExtension` instances from their `lexicalExtensions`
+module export. The renderer-side bridge in
+`packages/electron/src/renderer/extensions/ExtensionPluginBridge.ts`
+collects those instances and publishes them through
+`setExtensionLexicalExtensions(extensions, sourceName)`. Toggling an
+extension on or off rebuilds the editor (per the Phase 7 decision; live
+mutation of the extension graph isn't supported by Lexical).
 
-`AutoLink` is **not** a low-risk candidate: our fork has a
-base64/data-URL filter that upstream's `AutoLinkExtension` does not include.
+The bridge also publishes the extension's `slashCommands`,
+`transformers`, and `nodes` contributions via `setExtensionContributions`
+and `setExtensionLexicalExtension` for legacy contribution shapes.
 
-Each migration requires:
+## How a renderer-side React plugin contributes UI
 
-1. Replacing the React plugin component with an extension instance.
-2. Wiring the extension into either an `LexicalExtensionComposer` boundary
-   or a small bridge that runs `extension.register(editor, ...)` against the
-   existing `LexicalComposer` editor.
-3. Confirming all transformers and command flows still work.
+When a plugin genuinely needs to mount inside the editor's React tree
+(typeahead menus, dialog state, host-context-aware effects), the
+renderer publishes it via `registerExtensionEditorComponent`:
 
-These are out of scope for this phase.
+```ts
+registerExtensionEditorComponent({
+  name: 'document-link',
+  Component: DocumentLinkPluginWrapper,
+});
+```
+
+`Editor.tsx` reads the store via `useExtensionEditorComponents()` and
+mounts every entry inside `FrontmatterProvider` / `AnchorProvider` so
+the component has access to the editor's React context.
+
+## Migration history
+
+The pre-Phase-7 architecture used three parallel systems:
+`PluginRegistry` for nodes/transformers/userCommands, `PluginManager`
+for React mounts, and a `LexicalComposer` shell mounting most plugins
+as React children. Phase 7.5 deleted all three. Every plugin is now a
+`LexicalExtension`, every React UI surface goes through
+`registerExtensionEditorComponent`, and the slash-picker reads from
+the per-source contributions store.

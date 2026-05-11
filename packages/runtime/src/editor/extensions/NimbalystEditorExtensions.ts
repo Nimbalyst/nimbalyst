@@ -1,26 +1,12 @@
 /**
  * Root extension for the Nimbalyst editor shell.
  *
- * Phase 7.1 of the Lexical upgrade plan
- * (`nimbalyst-local/plans/lexical-upgrade-and-defork.md`) replaces
- * `LexicalComposer initialConfig={...}` with `LexicalExtensionComposer
- * extension={...}` in `NimbalystEditor.tsx`. This module is the single source of
- * truth for that root extension.
- *
- * Why a root extension instead of `initialConfig`:
- *
- * - `LexicalExtensionComposer` accepts a single root `LexicalExtension`. The
- *   InitialEditorConfig fields it understands (`namespace`, `nodes`, `theme`,
- *   `editable`, `onError`, `$initialEditorState`) are top-level fields on the
- *   extension itself, not under `config`.
- * - Adding a plugin to the editor in Phase 7.2-7.4 means appending an
- *   extension to `dependencies` here, NOT reaching into `Editor.tsx`'s JSX.
- *
- * Today this root extension has an empty `dependencies` list: every plugin is
- * still mounted as a React child inside `<LexicalExtensionComposer>`. As
- * plugins migrate (upstream `HistoryExtension`, headless command-only
- * extensions, etc.), they move into this `dependencies` array and out of
- * `Editor.tsx`.
+ * `LexicalExtensionComposer` accepts a single root `LexicalExtension`. We
+ * build it here so adding or removing a plugin is a one-line change in
+ * `dependencies` instead of a JSX edit in `Editor.tsx`. The shell-level
+ * fields LexicalComposer used to accept (`namespace`, `nodes`, `theme`,
+ * `editable`, `onError`, `$initialEditorState`) are top-level fields on
+ * the extension itself, not under `config`.
  */
 
 import {
@@ -29,7 +15,6 @@ import {
   type AnyLexicalExtensionArgument,
   type LexicalExtension,
 } from 'lexical';
-import type { Klass, LexicalNode } from 'lexical';
 import {
   ClearEditorExtension,
   HorizontalRuleExtension,
@@ -43,15 +28,23 @@ import type { Transformer } from '@lexical/markdown';
 
 import EditorNodes from '../nodes/EditorNodes';
 import NimbalystEditorTheme from '../themes/NimbalystEditorTheme';
-import { pluginRegistry } from '../plugins/PluginRegistry';
 import { validateUrl } from '../utils/url';
 import { AssetGcExtension } from './builtin/AssetGcExtension';
 import { AutoLinkExtension } from './builtin/AutoLinkExtension';
 import { CollabAssetLinkExtension } from './builtin/CollabAssetLinkExtension';
+import { CollapsibleExtension } from './builtin/CollapsibleExtension';
+import { DiffExtension } from './builtin/DiffExtension';
 import { DragDropPasteExtension } from './builtin/DragDropPasteExtension';
+import { EmojiMarkdownExtension } from './builtin/EmojiExtension';
+import { ImagesExtension } from './builtin/ImagesExtension';
+import { KanbanBoardExtension } from './builtin/KanbanBoardExtension';
+import { LayoutExtension } from './builtin/LayoutExtension';
 import { MarkdownCopyExtension } from './builtin/MarkdownCopyExtension';
 import { MarkdownPasteExtension } from './builtin/MarkdownPasteExtension';
+import { MermaidExtension } from './builtin/MermaidExtension';
+import { PageBreakExtension } from './builtin/PageBreakExtension';
 import { TabFocusExtension } from './builtin/TabFocusExtension';
+import { TableMarkdownExtension } from './builtin/TableMarkdownExtension';
 import type { UploadedEditorAsset } from '../EditorConfig';
 
 export interface NimbalystRootExtensionOptions {
@@ -116,17 +109,13 @@ export interface NimbalystRootExtensionOptions {
 export function buildNimbalystRootExtension(
   options: NimbalystRootExtensionOptions,
 ): LexicalExtension<Record<string, never>, '@nimbalyst/editor/root', unknown, unknown> {
-  const nodes: Array<Klass<LexicalNode>> = [
-    ...EditorNodes,
-    ...pluginRegistry.getAllNodes(),
-  ];
-
-  // Dependencies replace one-for-one the React plugins previously mounted in
-  // Editor.tsx. Phase 7.2 in the upgrade plan.
+  // Dependencies declare every Lexical plugin participating in the editor.
+  // Order is informational only -- LexicalBuilder topologically resolves the
+  // graph from `nodes` and `dependencies`.
   const dependencies: AnyLexicalExtensionArgument[] = [
+    // Upstream-equivalent plugins
     ClearEditorExtension,
     HorizontalRuleExtension,
-    // maxIndent matches the previous `<TabIndentationPlugin maxIndent={7} />`
     configExtension(TabIndentationExtension, { maxIndent: 7 }),
     configExtension(ListExtension, {
       hasStrictIndent: options.listStrictIndent ?? false,
@@ -138,8 +127,8 @@ export function buildNimbalystRootExtension(
         ? { rel: 'noopener noreferrer', target: '_blank' }
         : undefined,
     }),
-    // Nimbalyst headless extensions (Phase 7.3): each was previously a
-    // React component mounted in Editor.tsx.
+    // Nimbalyst headless extensions (formerly React plugins or
+    // pluginRegistry entries)
     AutoLinkExtension,
     CollabAssetLinkExtension,
     TabFocusExtension,
@@ -156,6 +145,16 @@ export function buildNimbalystRootExtension(
     configExtension(MarkdownCopyExtension, {
       transformers: options.markdownTransformers ?? [],
     }),
+    // Custom block / inline extensions migrated from registerBuiltinPlugins
+    ImagesExtension,
+    PageBreakExtension,
+    CollapsibleExtension,
+    LayoutExtension,
+    KanbanBoardExtension,
+    MermaidExtension,
+    DiffExtension,
+    TableMarkdownExtension,
+    EmojiMarkdownExtension,
   ];
 
   if (!options.collaboration) {
@@ -173,7 +172,7 @@ export function buildNimbalystRootExtension(
   return defineExtension({
     name: '@nimbalyst/editor/root',
     namespace: 'Nimbalyst',
-    nodes,
+    nodes: EditorNodes,
     theme: NimbalystEditorTheme,
     editable: options.editable ?? true,
     onError: (error: Error) => {

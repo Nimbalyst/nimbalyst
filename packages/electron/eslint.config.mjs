@@ -97,6 +97,17 @@ export default tseslint.config(
             name: '@lexical/react/LexicalHorizontalRuleNode',
             message: 'Import HorizontalRuleNode, $createHorizontalRuleNode, $isHorizontalRuleNode, and INSERT_HORIZONTAL_RULE_COMMAND from @lexical/extension instead (Phase 7.2). The React subclass is not registered on the editor.',
           },
+          // Phase 7.5 deleted the legacy Nimbalyst plugin system. These
+          // symbols no longer exist in the runtime; importing them is a
+          // sign that a stale callsite still expects the old surface.
+          // Migration target: publish into the runtime extension stores
+          // (`setExtensionContributions`, `setExtensionLexicalExtension`,
+          // `registerExtensionEditorComponent`) instead.
+          {
+            name: '@nimbalyst/runtime',
+            importNames: ['pluginRegistry', 'PluginPackage', 'PluginManager'],
+            message: 'The legacy pluginRegistry / PluginPackage / PluginManager surface was deleted in Phase 7.5. Use setExtensionContributions + setExtensionLexicalExtension + registerExtensionEditorComponent from @nimbalyst/runtime instead. See docs/EXTENSION_ARCHITECTURE.md.',
+          },
         ],
       }],
       // Ban electronAPI.on() in the renderer by default. Re-enabled for the

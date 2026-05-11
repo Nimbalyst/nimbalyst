@@ -248,7 +248,8 @@ export default function App() {
 
         // Initialize the extension system (discovers and loads extensions)
         // This MUST complete before any editors are mounted so that extension nodes
-        // (like DataModelNode) are registered with the pluginRegistry
+        // (like DataModelNode) are published into the runtime extension stores
+        // and included in the editor's Lexical extension graph.
         await registerExtensionSystem();
         logger.ui.info('[Extensions] Extension system initialized');
 
@@ -1892,7 +1893,7 @@ export default function App() {
 
   // Show nothing while initializing - let HTML/CSS background show through
   // Wait for both initial state and extensions to be ready before rendering editors
-  // This ensures extension nodes (like DataModelNode) are registered with the pluginRegistry
+  // This ensures extension nodes (like DataModelNode) are published into the runtime extension stores
   if (isInitializing || !extensionsReady) {
     return <div className="h-screen" />;
   }

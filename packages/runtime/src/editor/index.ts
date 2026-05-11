@@ -8,9 +8,11 @@
 // Import main CSS styles
 import './index.css';
 
-// Register built-in plugins (must be done before any editor initialization)
-import { registerBuiltinPlugins } from './plugins/registerBuiltinPlugins';
-registerBuiltinPlugins();
+// Side-effect: registers built-in extension contributions (markdown
+// transformers, slash-picker entries) into the extension contributions
+// store. Must run before any caller invokes `getEditorTransformers()` or
+// mounts an editor.
+import './extensions/registerBuiltinExtensions';
 
 // Main editor components
 export { NimbalystEditor, type NimbalystEditorProps } from './NimbalystEditor';
@@ -88,19 +90,43 @@ export type {
   InitialConfigType,
 } from '@lexical/react/LexicalComposer';
 
-// Plugin system exports
-export type { PluginPackage, DynamicMenuOption, UserCommand } from './types/PluginTypes';
-export { pluginRegistry } from './plugins/PluginRegistry';
-export { PluginManager } from './plugins/PluginManager';
+// Extension contributions: slash-picker entries and dynamic option types
+// formerly carried by the legacy `PluginPackage` shape.
+export type { DynamicMenuOption, UserCommand } from './types/PluginTypes';
 
-// Lexical-extension contributions from Nimbalyst extensions (Phase 7.6).
-// The electron-side bridge writes here; `NimbalystEditor` reads from here
+// Extension contribution stores (transformers + slash-picker entries).
+// Renderer-side extension bridges write here; the editor reads through
+// the contribution hooks.
+export {
+  setExtensionContributions,
+  clearExtensionContributions,
+  getAllExtensionUserCommands,
+  getAllExtensionTransformers,
+  getAllExtensionDynamicOptions,
+  subscribeToExtensionContributions,
+  useExtensionUserCommands,
+  type EditorExtensionContributions,
+} from './extensions/extensionContributionsStore';
+
+// Lexical-extension contributions from Nimbalyst extensions. The
+// electron-side bridge writes here; `NimbalystEditor` reads from here
 // and includes the contributions in the editor's extension graph.
 export {
+  setExtensionLexicalExtension,
   setExtensionLexicalExtensions,
   getExtensionLexicalExtensions,
   useExtensionLexicalExtensions,
 } from './extensions/extensionLexicalExtensionsStore';
+
+// React component slot for renderer-contributed Lexical plugins (UI
+// surfaces that need to live inside `<LexicalExtensionComposer>`, like
+// the document-link typeahead or the tracker popovers).
+export {
+  registerExtensionEditorComponent,
+  unregisterExtensionEditorComponent,
+  useExtensionEditorComponents,
+  type ExtensionEditorComponentEntry,
+} from './extensions/extensionEditorComponentsStore';
 
 // Markdown utilities. Always go through `$convertFromEnhancedMarkdownString` /
 // `$convertToEnhancedMarkdownString` so frontmatter extraction, list-indent
@@ -111,7 +137,7 @@ export {
   createHeadlessEditorFromEditor,
   markdownToJSONSync,
   type InsertMode,
-  getEditorTransformers, // Gets complete set of transformers (core + plugin)
+  getEditorTransformers, // Gets complete set of transformers (core + extension)
   $convertToEnhancedMarkdownString,
   $convertNodeToEnhancedMarkdownString,
   $convertSelectionToEnhancedMarkdownString
@@ -154,12 +180,12 @@ export {
   $convertFromEnhancedMarkdownString
 } from './markdown/EnhancedMarkdownImport';
 
-// Markdown copy extension - Cmd+Shift+C to copy as markdown (Phase 7.3
-// headless extension; previously a React-mounted plugin).
+// Markdown copy extension - Cmd+Shift+C to copy as markdown.
 export { COPY_AS_MARKDOWN_COMMAND } from './extensions/builtin/MarkdownCopyExtension';
 
-// Diff plugin and hook
-export { DiffPlugin, useDiffCommands, APPLY_MARKDOWN_REPLACE_COMMAND, LiveNodeKeyState } from './plugins/DiffPlugin';
+// Diff command identities + the React hook for callers that want the
+// imperative shape.
+export { useDiffCommands, APPLY_MARKDOWN_REPLACE_COMMAND, LiveNodeKeyState } from './plugins/DiffPlugin';
 
 // Diff utilities (now from local plugin)
 export {

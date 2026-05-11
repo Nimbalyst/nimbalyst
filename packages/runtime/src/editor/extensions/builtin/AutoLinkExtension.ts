@@ -486,6 +486,7 @@ export interface AutoLinkConfig {
 
 export const AutoLinkExtension = defineExtension({
   name: '@nimbalyst/editor/auto-link',
+  nodes: [AutoLinkNode],
   config: {
     matchers: DEFAULT_AUTOLINK_MATCHERS,
     onChange: undefined,
