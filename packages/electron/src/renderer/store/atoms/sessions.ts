@@ -1267,6 +1267,15 @@ export const convertToWorkstreamAtom = atom(
         return null;
       }
 
+      // Don't convert if the session is in a worktree. A worktree IS the workstream —
+      // wrapping a worktree-resident session in a workstream container produces a
+      // forbidden third layer (worktree → workstream → session). New sessions in a
+      // worktree should just be created as flat siblings, never via this conversion path.
+      if (sessionData.worktreeId) {
+        console.error(`[sessions] Cannot convert to workstream: session ${sessionId} is in worktree ${sessionData.worktreeId} (the worktree is already the workstream)`);
+        return null;
+      }
+
       // Don't convert if already a workstream root (has children or isWorkstreamRoot flag)
       // Check children in the atom first
       const existingChildren = get(sessionChildrenAtom(sessionId));
@@ -1462,7 +1471,9 @@ export const convertToWorkstreamAtom = atom(
         messageCount: 0,
         isArchived: false,
         isPinned: originalWasPinned,
-        worktreeId: sessionData.worktreeId || null,
+        // Workstreams never carry a worktreeId — the worktree IS the workstream,
+        // and the early-return above already blocks this path for worktree sessions.
+        worktreeId: null,
         parentSessionId: null, // This is the root
         childCount: children.length,
         uncommittedCount: 0,

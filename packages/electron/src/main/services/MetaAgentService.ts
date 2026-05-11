@@ -461,9 +461,19 @@ export class MetaAgentService {
   }
 
   private async resolveOrCreateWorkstream(
-    parent: { id: string; title?: string; provider: string; model?: string | null; sessionType?: string; parentSessionId?: string | null },
+    parent: { id: string; title?: string; provider: string; model?: string | null; sessionType?: string; parentSessionId?: string | null; worktreeId?: string | null },
     workspaceId: string
-  ): Promise<{ workstreamId: string; promotedParent: boolean }> {
+  ): Promise<{ workstreamId: string | null; promotedParent: boolean }> {
+    // A worktree IS the workstream — the worktree row in the `worktrees` table is the
+    // container, and every session inside it is a flat sibling keyed by `worktree_id`.
+    // Never wrap a worktree-resident session in a `session_type='workstream'` row;
+    // that produces a forbidden third layer (worktree → workstream → session) and
+    // confuses every grouping derivation (worktreeGroupsData, FilesEditedSidebar,
+    // the workstream tab strip). Hard rule: two layers max.
+    if (parent.worktreeId) {
+      return { workstreamId: null, promotedParent: false };
+    }
+
     if (parent.parentSessionId) {
       return { workstreamId: parent.parentSessionId, promotedParent: false };
     }
