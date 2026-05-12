@@ -46,6 +46,7 @@ import FloatingLinkEditorPlugin from './plugins/FloatingLinkEditorPlugin';
 import FloatingTextFormatToolbarPlugin from './plugins/FloatingTextFormatToolbarPlugin';
 import ImagesPlugin from './plugins/ImagesPlugin';
 import { LayoutPlugin } from './plugins/LayoutPlugin/LayoutPlugin';
+import {HeadingAnchorPlugin} from './plugins/HeadingAnchorPlugin';
 import LinkPlugin from './plugins/LinkPlugin';
 import MarkdownShortcutPlugin from './plugins/MarkdownShortcutPlugin';
 import MarkdownPastePlugin from './plugins/MarkdownPastePlugin';
@@ -335,6 +336,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
               }
               ErrorBoundary={LexicalErrorBoundary}
             />
+            <HeadingAnchorPlugin />
             <MarkdownShortcutPlugin />
             <MarkdownPastePlugin transformers={markdownTransformers} />
             <MarkdownCopyPlugin transformers={markdownTransformers} />

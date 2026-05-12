@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- Changes to existing functionality go here -->
 
 ### Fixed
+- Markdown anchor links now scroll to in-document headings in the Lexical editor. A new `HeadingAnchorPlugin` walks `HeadingNode` mutations and assigns each rendered heading element a GitHub-style slug id (`# Hero` becomes `id="hero"`), with duplicate-suffix handling for repeat slugs. The global link-click handler in `App.tsx` was also extended to detect `href="#..."` links, find the matching id inside the active editor scroll container (so multiple open files do not interfere), and scroll to it; it falls back to default behaviour if no match is found. (#248)
 <!-- Bug fixes go here -->
 
 ### Removed
