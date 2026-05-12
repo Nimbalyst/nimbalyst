@@ -1883,6 +1883,31 @@ export default function App() {
             });
             return;
           }
+
+          // In-document anchor link: scroll to the matching id inside the
+          // active editor scroll container, NOT the whole document. Multiple
+          // files can be open; we want the heading inside the same editor.
+          if (href && href.startsWith('#') && href.length > 1) {
+            let targetId: string;
+            try {
+              targetId = decodeURIComponent(href.slice(1));
+            } catch {
+              targetId = href.slice(1);
+            }
+            const scrollContainer = anchor.closest('.editor-scroller');
+            const scope: ParentNode = scrollContainer ?? document;
+            const escapedId =
+              typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+                ? CSS.escape(targetId)
+                : targetId.replace(/(["\\\]\[\(\)\.:;'#])/g, '\\$1');
+            const targetElement = scope.querySelector(`#${escapedId}`);
+            if (targetElement) {
+              event.preventDefault();
+              event.stopPropagation();
+              targetElement.scrollIntoView({ block: 'start', behavior: 'smooth' });
+              return;
+            }
+          }
           break;
         }
         target = target.parentElement;

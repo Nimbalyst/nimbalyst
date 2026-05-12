@@ -36,6 +36,7 @@ import { CollapsibleExtension } from './builtin/CollapsibleExtension';
 import { DiffExtension } from './builtin/DiffExtension';
 import { DragDropPasteExtension } from './builtin/DragDropPasteExtension';
 import { EmojiMarkdownExtension } from './builtin/EmojiExtension';
+import { HeadingAnchorExtension } from './builtin/HeadingAnchorExtension';
 import { ImagesExtension } from './builtin/ImagesExtension';
 import { KanbanBoardExtension } from './builtin/KanbanBoardExtension';
 import { LayoutExtension } from './builtin/LayoutExtension';
@@ -131,6 +132,7 @@ export function buildNimbalystRootExtension(
     // pluginRegistry entries)
     AutoLinkExtension,
     CollabAssetLinkExtension,
+    HeadingAnchorExtension,
     TabFocusExtension,
     configExtension(DragDropPasteExtension, {
       uploadAsset: options.onUploadAsset,
