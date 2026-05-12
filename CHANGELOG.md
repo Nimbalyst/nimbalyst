@@ -9,13 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-<!-- New features go here -->
+- Honour a new user-facing `chatShowToolCalls` setting in `ai-settings.json` (default `true`) so the AI chat view can hide tool-call rows entirely instead of just collapsing them. The original `showToolCalls` field stays a developer-mode-only toggle (default `false`, gated behind `isDevelopment` in `AgentFeaturesPanel`), so production users get a discoverable "Show Tool Calls in Chat" toggle in Agent Features that defaults to on. The renderer's tool-row guards in `RichTranscriptView` (orphan-tool path and `toolMessagesBefore` path) consume the new value flowing through `initialSettings.showToolCalls`. Interactive tool widgets (`ToolPermission`, `ExitPlanMode`, `AskUserQuestion`, `GitCommitProposal`) always render so the user can still act on prompts even when tool rows are hidden. Default `true` preserves UX for everyone who has not manually set the value. Fixes #118.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
 
 ### Fixed
 - Marketplace install from a GitHub URL no longer reports success and then silently fails to load when the repo does not include a built `dist/` directory. The install handler now returns a clear error explaining that the repo must be built before installing (or noting if the repo lacks a `package.json` entirely) and cleans up the partially-installed extension directory so the user can retry from a fresh state. (#247)
+- Commit-widget failure path now renders the error state instead of the cancelled state. The renderer's `gitCommit` host was collapsing every `result.success === false` outcome (including hook rejection, no-staged-changes errors, and IPC throws) into `action: 'cancelled'`, which the widget's reader at `GitCommitConfirmationWidget.tsx:452` short-circuits to the cancelled state before reaching the error check. Real failures are now sent as `action: 'error'` with the underlying error string, and the widget gains an `error`/`failed` action handler so the user sees the actual failure reason. `'cancelled'` stays reserved for the explicit user-cancel path. (Partial fix for #202.)
 <!-- Bug fixes go here -->
 
 ### Removed

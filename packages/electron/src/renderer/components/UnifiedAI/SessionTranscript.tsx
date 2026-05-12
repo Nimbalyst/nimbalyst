@@ -74,7 +74,7 @@ import { convertToWorkstreamAtom, sessionPromptAdditionsAtom, sessionLastSubmitA
 import { clearAIInputHistoryAtom } from '../../store/atoms/aiInputUndo';
 import { scrollToTeammateAtom, scrollToMessageAtom, requestOpenSessionAtom } from '../../store/atoms/agentMode';
 import { usePostHog } from 'posthog-js/react';
-import { setAgentModeSettingsAtom, showPromptAdditionsAtom, hasExternalEditorAtom, externalEditorNameAtom, openInExternalEditorAtom, defaultAgentModelAtom, defaultEffortLevelAtom } from '../../store/atoms/appSettings';
+import { setAgentModeSettingsAtom, showPromptAdditionsAtom, hasExternalEditorAtom, externalEditorNameAtom, openInExternalEditorAtom, defaultAgentModelAtom, defaultEffortLevelAtom, chatShowToolCallsAtom } from '../../store/atoms/appSettings';
 import { supportsEffortLevel, parseEffortLevel, type EffortLevel } from '../../utils/modelUtils';
 import { buildPlanImplementationPrompt, resolvePlanFilePath } from '../../utils/pathUtils';
 import { autoCommitEnabledAtom, setAutoCommitEnabledAtom } from '../../store/atoms/autoCommitAtoms';
@@ -312,6 +312,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const provider = useAtomValue(sessionProviderAtom(sessionId));
   const tokenUsage = useAtomValue(sessionTokenUsageAtom(sessionId));
   const isDataLoading = useAtomValue(sessionLoadingAtom(sessionId));
+  const chatShowToolCalls = useAtomValue(chatShowToolCallsAtom);
   const [aiMode, setAiMode] = useAtom(sessionModeAtom(sessionId));
   const [currentModel, setCurrentModel] = useAtom(sessionModelAtom(sessionId));
   const [isArchived, setIsArchived] = useAtom(sessionArchivedAtom(sessionId));
@@ -1311,13 +1312,17 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
             files
           ) as { success: boolean; commitHash?: string; commitDate?: string; error?: string };
 
-          // Send response via unified IPC channel for the durable prompt
+          // Send response via unified IPC channel for the durable prompt.
+          // A real failure (success=false with an error) maps to action='error',
+          // not 'cancelled'. 'cancelled' is reserved for the explicit user-cancel
+          // path; collapsing failures into 'cancelled' makes the widget render
+          // the cancelled state instead of surfacing the error to the user.
           await window.electronAPI.invoke('messages:respond-to-prompt', {
             sessionId,
             promptId: proposalId,
             promptType: 'git_commit_proposal_request' as const,
             response: {
-              action: result.success ? 'committed' : 'cancelled',
+              action: result.success ? 'committed' : 'error',
               commitHash: result.commitHash,
               commitDate: result.commitDate,
               error: result.error,
@@ -1334,13 +1339,14 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
             error: error instanceof Error ? error.message : String(error),
           };
 
-          // Send error result back via unified IPC
+          // IPC threw outright. Surface as action='error' for the same reason
+          // as above: the user needs to see the failure, not a cancelled state.
           await window.electronAPI.invoke('messages:respond-to-prompt', {
             sessionId,
             promptId: proposalId,
             promptType: 'git_commit_proposal_request' as const,
             response: {
-              action: 'cancelled',
+              action: 'error',
               error: errorResult.error,
             },
             respondedBy: 'desktop' as const,
@@ -1647,7 +1653,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
             showFloatingActions={mode === 'agent'}
             workspacePath={workspacePath}
             initialSettings={{
-              showToolCalls: true,
+              showToolCalls: chatShowToolCalls,
               compactMode: false,
               collapseTools: false,
               showThinking: true,
