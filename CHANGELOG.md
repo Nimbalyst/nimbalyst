@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- Changes to existing functionality go here -->
 
 ### Fixed
+- Marketplace install from a GitHub URL no longer reports success and then silently fails to load when the repo does not include a built `dist/` directory. The install handler now returns a clear error explaining that the repo must be built before installing (or noting if the repo lacks a `package.json` entirely) and cleans up the partially-installed extension directory so the user can retry from a fresh state. (#247)
 <!-- Bug fixes go here -->
 
 ### Removed
