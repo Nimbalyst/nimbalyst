@@ -25,6 +25,7 @@ import {
 } from '@nimbalyst/runtime/plugins/TrackerPlugin/documentHeader/frontmatterUtils';
 import { database } from '../database/PGLiteDatabaseWorker';
 import { shouldExcludeDir } from '../utils/fileFilters';
+import { getRegisteredExtensions } from '../extensions/RegisteredFileTypes';
 import { isPathInWorkspace, getRelativeWorkspacePath } from '../utils/workspaceDetection';
 import { syncTrackerItem, unsyncTrackerItem, isTrackerSyncActive } from './TrackerSyncManager';
 import {
@@ -477,6 +478,18 @@ export class ElectronDocumentService implements DocumentService {
       '.vue', '.svelte', '.astro'
     ];
 
+    // Extension-contributed file types. Extensions declare these via
+    // `contributions.customEditors[].filePatterns` in their manifest, and
+    // `initializeExtensionFileTypes` populates the central registry at
+    // boot. Merge them in here so files like `*.excalidraw`, `*.mockup.html`,
+    // `*.mindmap` etc. show up in the `@` typeahead without anyone editing
+    // this file.
+    const extensionContributedExtensions = Array.from(getRegisteredExtensions());
+    const supportedExtensionsSet = new Set<string>([
+      ...supportedExtensions,
+      ...extensionContributedExtensions,
+    ]);
+
     // Markdown extensions for tracker content check
     const markdownExtensions = ['.md', '.markdown'];
 
@@ -532,7 +545,7 @@ export class ElectronDocumentService implements DocumentService {
             documents.push(...subDocs);
           } else if (stats.isFile()) {
             const ext = path.extname(item).toLowerCase();
-            if (supportedExtensions.includes(ext)) {
+            if (supportedExtensionsSet.has(ext)) {
               const isMarkdown = markdownExtensions.includes(ext);
               const underLimit = scanState.count < ElectronDocumentService.MAX_FILES_TO_SCAN;
 

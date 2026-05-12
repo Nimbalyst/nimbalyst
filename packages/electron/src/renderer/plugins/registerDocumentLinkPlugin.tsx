@@ -25,12 +25,15 @@ import { ElectronRendererDocumentService } from '../services/ElectronDocumentSer
 const SOURCE = 'document-link';
 const documentService = new ElectronRendererDocumentService();
 
-// Custom trigger function that allows dots in filenames so "@README.md"
-// matches the full token.
+// Custom trigger function that allows dots and hyphens in filenames so
+// `@README.md` and `@settings-atomwithstorage-rewrite.excalidraw` both
+// keep the typeahead open as the user types. Punctuation that would end a
+// reasonable filename token (parens, brackets, quotes, etc.) still ends
+// the match so the menu closes when the user moves on to other prose.
 function createDocumentLinkTrigger(trigger: string, { minLength = 0, maxLength = 75 }) {
-  const PUNCTUATION_NO_DOT = String.raw`\,\+\*\?\$\|#{}\(\)\^\-\[\]\\\/!%'"~=<>_:;`;
+  const FILENAME_TERMINATORS = String.raw`\,\+\*\?\$\|#{}\(\)\^\[\]\\\/!%'"~=<>:;`;
   return (text: string) => {
-    const validChars = '[^' + trigger + PUNCTUATION_NO_DOT + '\\s]';
+    const validChars = '[^' + trigger + FILENAME_TERMINATORS + '\\s]';
     const regex = new RegExp(
       '(^|\\s|\\()(' +
         '[' +

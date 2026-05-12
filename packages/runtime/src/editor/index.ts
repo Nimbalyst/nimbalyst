@@ -218,3 +218,28 @@ export { FrontmatterProvider, useFrontmatterUtils, type FrontmatterUtils } from 
 // Typeahead components
 export { TypeaheadMenuPlugin } from './plugins/TypeaheadPlugin/TypeaheadMenuPlugin';
 export type { TypeaheadMenuOption } from './plugins/TypeaheadPlugin/TypeaheadMenu';
+
+// Embed plugin -- inline previews of extension-editor files inside markdown
+export {
+  EmbeddedFileNode,
+  $createEmbeddedFileNode,
+  $isEmbeddedFileNode,
+  EMBED_TRANSFORMER,
+  parseEmbedAttrs,
+  serializeEmbedAttrs,
+  getEmbeddableExtensions,
+  isEmbeddableUrl,
+  registerEmbeddableExtension,
+  unregisterEmbeddableExtension,
+  setEmbeddableExtensions,
+  subscribeToEmbeddableExtensionsChanges,
+  getEmbedPluginCallbacks,
+  setEmbedPluginCallbacks,
+} from './plugins/EmbedPlugin';
+export type {
+  EmbedAttrs,
+  EmbeddedFilePayload,
+  SerializedEmbeddedFileNode,
+  EmbedFrameProps,
+  EmbedPluginCallbacks,
+} from './plugins/EmbedPlugin';

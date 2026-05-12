@@ -35,6 +35,7 @@ import { CollabAssetLinkExtension } from './builtin/CollabAssetLinkExtension';
 import { CollapsibleExtension } from './builtin/CollapsibleExtension';
 import { DiffExtension } from './builtin/DiffExtension';
 import { DragDropPasteExtension } from './builtin/DragDropPasteExtension';
+import { EmbedExtension } from './builtin/EmbedExtension';
 import { EmojiMarkdownExtension } from './builtin/EmojiExtension';
 import { HeadingAnchorExtension } from './builtin/HeadingAnchorExtension';
 import { ImagesExtension } from './builtin/ImagesExtension';
@@ -154,6 +155,7 @@ export function buildNimbalystRootExtension(
     LayoutExtension,
     KanbanBoardExtension,
     MermaidExtension,
+    EmbedExtension,
     DiffExtension,
     TableMarkdownExtension,
     EmojiMarkdownExtension,
