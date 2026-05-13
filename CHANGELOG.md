@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- Changes to existing functionality go here -->
 
 ### Fixed
-<!-- Bug fixes go here -->
+- Pressing Enter at the end of a task/bug/idea/plan/decision/automation tracker-item line on the last line of a markdown file in the rich Lexical editor no longer silently swallows the keypress. `TrackerItemNode` was relying on the base `ElementNode.insertNewAfter` which returns null, so Lexical's RichText KEY_ENTER_COMMAND handler had nothing to insert and the user was stuck with no way to add content below the last tracker item. The node now mirrors HeadingNode/QuoteNode and inserts a new `ParagraphNode` below itself, preserving the direction (LTR/RTL). (#263)
 
 ### Removed
 <!-- Removed features go here -->
