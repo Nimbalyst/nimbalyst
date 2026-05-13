@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -130,12 +130,63 @@ if (typeof document !== 'undefined') {
   injectMarkdownRendererStyles();
 }
 
+// Per-content wrap preference, persisted across remounts. The transcript
+// re-renders during streaming and react-markdown re-creates the children
+// tree on every content update; a code block's position can shift enough
+// to make React unmount and remount the OverflowWrapper, which loses local
+// state. Keying off the rendered content gives us a stable identity that
+// survives those remounts, so the Wrap checkbox stays sticky once toggled.
+// Bounded LRU so a long session can't grow the map without limit.
+const WRAP_PREFERENCE_CAP = 200;
+const wrapPreferenceByContent = new Map<string, boolean>();
+
+function setWrapPreference(key: string, value: boolean) {
+  if (!key) return;
+  if (wrapPreferenceByContent.has(key)) {
+    wrapPreferenceByContent.delete(key);
+  } else if (wrapPreferenceByContent.size >= WRAP_PREFERENCE_CAP) {
+    const firstKey = wrapPreferenceByContent.keys().next().value;
+    if (firstKey !== undefined) wrapPreferenceByContent.delete(firstKey);
+  }
+  wrapPreferenceByContent.set(key, value);
+}
+
+function extractTextContent(node: React.ReactNode): string {
+  if (node == null || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(extractTextContent).join('');
+  if (typeof node === 'object' && 'props' in node) {
+    return extractTextContent((node as React.ReactElement).props.children);
+  }
+  return '';
+}
+
+function computeWrapKey(node: React.ReactNode): string {
+  // Use the first 200 chars of the rendered text content as the wrap key.
+  // First line is enough to make code blocks distinguishable in practice,
+  // and 200 chars keeps the key stable once the code block has streamed
+  // past its preamble — subsequent appends during streaming no longer
+  // change the key, so a toggle made mid-stream survives later renders.
+  const text = extractTextContent(node).slice(0, 200);
+  return text ? `cb:${text.length}:${text}` : '';
+}
+
 // Wrapper for any element that might overflow horizontally.
 // Uses IntersectionObserver to defer scrollWidth measurement until visible,
 // and ResizeObserver to re-check on size changes - avoids forced reflow during
 // initial session load when many code blocks render off-screen.
 const OverflowWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [wordWrap, setWordWrap] = useState(false);
+  // Compute the key once per mount. Re-mounts get a fresh useMemo and pick
+  // up the persisted preference (if any) for the new key.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const wrapKey = useMemo(() => computeWrapKey(children), []);
+  const [wordWrap, setWordWrapState] = useState<boolean>(
+    () => wrapPreferenceByContent.get(wrapKey) ?? false
+  );
+  const setWordWrap = useCallback((next: boolean) => {
+    setWordWrapState(next);
+    setWrapPreference(wrapKey, next);
+  }, [wrapKey]);
   const [isOverflowing, setIsOverflowing] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const hasBeenVisible = useRef(false);
