@@ -46,6 +46,7 @@ import {
 import { store } from '@nimbalyst/runtime/store';
 
 import { customEditorRegistry } from '../CustomEditors/registry';
+import { FilePathBreadcrumb } from '../common/FilePathBreadcrumb';
 import { fileChangedOnDiskAtomFamily } from '../../store/atoms/fileWatch';
 import { useTheme } from '../../hooks/useTheme';
 import { createEmbeddedFileHost } from './createEmbeddedFileHost';
@@ -721,12 +722,20 @@ const EmbedChrome: React.FC<EmbedChromeProps> = ({
   // tell at a glance why the link said one thing and the embed shows
   // another file.
   const showLabel = !!label && label !== basename(relativePath);
+  const workspacePath = (window as unknown as { __workspacePath?: string }).__workspacePath ?? null;
   return (
     <div className="embed-frame__chrome" data-testid="embed-frame-chrome">
-      <MaterialSymbol icon="insert_drive_file" size={16} />
-      <span className="embed-frame__path" title={absolutePath ?? relativePath}>
-        {relativePath}
-      </span>
+      {absolutePath ? (
+        <FilePathBreadcrumb
+          filePath={absolutePath}
+          workspacePath={workspacePath}
+          className="embed-frame__breadcrumb flex-1"
+        />
+      ) : (
+        <span className="embed-frame__path" title={relativePath}>
+          {relativePath}
+        </span>
+      )}
       {isDirty && (
         <span
           className="embed-frame__dirty-dot"

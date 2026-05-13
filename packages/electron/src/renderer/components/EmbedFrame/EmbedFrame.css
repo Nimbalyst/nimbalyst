@@ -68,6 +68,10 @@
   user-select: none;
 }
 
+.embed-frame__breadcrumb {
+  flex: 1 1 auto;
+}
+
 .embed-frame__path {
   font-family: var(--nim-font-mono, ui-monospace, SFMono-Regular, monospace);
   color: var(--nim-text);
