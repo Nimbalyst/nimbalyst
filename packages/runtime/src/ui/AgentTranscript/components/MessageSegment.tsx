@@ -7,6 +7,7 @@ import { LoginRequiredWidget } from './LoginRequiredWidget';
 import { OpenAIAuthWidget } from './OpenAIAuthWidget';
 import { ContextLimitWidget } from './ContextLimitWidget';
 import { RateLimitWidget } from './RateLimitWidget';
+import { ApiServiceErrorWidget, isApiServiceError } from './ApiServiceErrorWidget';
 import { FullscreenModal } from './FullscreenModal';
 import { MaterialSymbol } from '../../icons/MaterialSymbol';
 import { formatToolDisplayName } from '../utils/toolNameFormatter';
@@ -181,6 +182,15 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     // Check if this is a rate limit event embedded in text content
     if (!isUser && isRateLimitContent(message.text ?? '')) {
       return <RateLimitWidget content={message.text ?? ''} />;
+    }
+
+    // Upstream Claude API service errors (api_error 5xx, overloaded_error)
+    // that the CLI / SDK forwards verbatim. Surface as a human-readable
+    // explanation with the request_id, status page link, and a "show raw
+    // payload" disclosure for support tickets. Conservative detection -
+    // see isApiServiceError for the signal definition.
+    if (!isUser && isApiServiceError(message.text ?? '')) {
+      return <ApiServiceErrorWidget content={message.text ?? ''} />;
     }
 
     // Check if this is an OpenAI auth error in the message content
@@ -358,6 +368,13 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     // Check if this is a rate limit event
     if (isRateLimitContent(errorMessage)) {
       return <RateLimitWidget content={errorMessage} />;
+    }
+
+    // Upstream API service error (api_error 5xx, overloaded_error) -
+    // same detection as the text-content path, applied here too so an
+    // error-flagged message also gets the human-readable surface.
+    if (isApiServiceError(errorMessage)) {
+      return <ApiServiceErrorWidget content={errorMessage} />;
     }
 
     // Otherwise, render the generic error UI
