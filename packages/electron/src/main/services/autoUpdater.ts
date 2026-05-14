@@ -9,6 +9,16 @@ import { AnalyticsService } from './analytics/AnalyticsService';
 import { hasActiveStreamingSessions } from '../ipc/SessionStateHandlers';
 import { getSessionStateManager } from '@nimbalyst/runtime/ai/server/SessionStateManager';
 import { getDatabase } from '../database/initialize';
+import {
+  categorizeDownloadDuration,
+  classifyUpdateError,
+  isWindowsRenameLockError,
+} from './autoUpdaterUtils';
+
+// Re-export the pure utilities so callers that already pulled them from this
+// module keep working. Unit tests should import from `autoUpdaterUtils`
+// directly to avoid the Electron app-global load chain.
+export { classifyUpdateError, categorizeDownloadDuration, isWindowsRenameLockError };
 
 // Reminder suppression duration: 24 hours
 const REMINDER_SUPPRESSION_DURATION_MS = 24 * 60 * 60 * 1000;
@@ -18,54 +28,11 @@ const GITHUB_UPDATE_PROVIDER = {
   repo: 'nimbalyst'
 };
 
-/**
- * Categorize download duration for analytics
- */
-function getDurationCategory(durationMs: number): string {
-  if (durationMs < 30000) return 'fast';       // < 30 seconds
-  if (durationMs < 120000) return 'medium';    // 30s - 2 minutes
-  return 'slow';                                // > 2 minutes
-}
-
-/**
- * Classify update errors for analytics and toast handling. Exported for
- * focused unit testing of the new `squirrel_install_disabled` branch added
- * for #245 without standing up the full AutoUpdaterService.
- */
-export function classifyUpdateError(error: Error): string {
-  const message = error.message.toLowerCase();
-  if (message.includes('network') || message.includes('enotfound') || message.includes('timeout') || message.includes('econnrefused')) {
-    return 'network';
-  }
-  if (message.includes('permission') || message.includes('eacces')) {
-    return 'permission';
-  }
-  if (message.includes('disk') || message.includes('space') || message.includes('enospc')) {
-    return 'disk_space';
-  }
-  if (message.includes('signature') || message.includes('verify') || message.includes('certificate') || message.includes('cert')) {
-    return 'signature';
-  }
-  // Squirrel.Mac NSException surfaced after the download proxy is torn down
-  // before `quitAndInstall` runs. Classify it as its own type so the renderer
-  // toast can show a "restart manually" instruction instead of the generic
-  // failure message that previously left users stuck. See #245.
-  if (message.includes('command is disabled') || message.includes('cannot be executed')) {
-    return 'squirrel_install_disabled';
-  }
-  return 'unknown';
-}
-
-// Antivirus on Windows often holds a transient handle on the freshly-downloaded
-// installer, causing electron-updater's temp -> final rename to fail with EPERM
-// (occasionally EBUSY). The fix is to wait briefly and retry the download once.
-function isWindowsRenameLockError(err: Error): boolean {
-  if (process.platform !== 'win32') return false;
-  const msg = err.message || '';
-  if (/\bEPERM\b.*\brename\b/i.test(msg)) return true;
-  if (/\bEBUSY\b/i.test(msg)) return true;
-  return false;
-}
+// classifyUpdateError, categorizeDownloadDuration, isWindowsRenameLockError
+// moved to ./autoUpdaterUtils so unit tests can import them without pulling
+// in this module's Electron-app-global load chain (see #245). Alias keeps
+// the original call-site name (`getDurationCategory`) in scope.
+const getDurationCategory = categorizeDownloadDuration;
 
 export class AutoUpdaterService {
   private updateCheckInterval: NodeJS.Timeout | null = null;

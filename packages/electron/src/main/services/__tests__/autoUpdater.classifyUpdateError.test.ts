@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { classifyUpdateError } from '../autoUpdater';
+// Import from the pure-utility file, NOT from autoUpdater.ts. The latter
+// transitively imports `app.getPath()` and `safeHandle` IPC registrations
+// that crash at module-load time in a vitest environment without a real
+// Electron app global. CI caught this on the first push - prior to the
+// extraction, this test file was the only failed file across 229 passing
+// tests. See #245.
+import { classifyUpdateError } from '../autoUpdaterUtils';
 
 // Regression coverage for nimbalyst#245. adambhenry reported the auto-update
 // flow failing on macOS arm64 with "The command is disabled and cannot be
