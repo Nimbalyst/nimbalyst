@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- Changes to existing functionality go here -->
 
 ### Fixed
-<!-- Bug fixes go here -->
+- Chat-attached text files now actually reach the agent instead of degrading to a `@filename` token the agent then fails to resolve. `ClaudeSDKProtocol.buildDocumentBlocks` and the four image/pdf branches in `ClaudeProvider.sendMessage` (past-message loop + current message) only handled `image` and `pdf` attachment types; the `document` branch was missing, so the inline `AttachmentProcessor` payload for text files was silently dropped before reaching the Anthropic API. Both protocols now emit a text-source document content block (`source: { type: 'text', media_type: 'text/plain', data: ... }`) carrying the decoded file contents, mirroring the working `claude-code` path in `messagePreparation.ts`. Image attachments were unaffected throughout (different content-block branch). (#239)
 
 ### Removed
 <!-- Removed features go here -->
