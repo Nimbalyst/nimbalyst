@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- Changes to existing functionality go here -->
 
 ### Fixed
-<!-- Bug fixes go here -->
+- "Allow this tool?" permission dialog no longer gets stuck on "Waiting..." with no Allow/Deny/Cancel buttons. `ToolPermissionWidget` had an early-return branch that rendered a button-less shell whenever `useAtomValue(interactiveWidgetHostAtom(sessionId))` captured a null host. The host atom is set imperatively by `SessionTranscript`'s mount effect, and a re-run of that effect (cleanup nils the atom before the new effect re-sets it) or a session context that hadn't yet installed a host left the widget trapped with no interactive controls. The widget now always renders the full action row; click handlers read the host imperatively via `getInteractiveWidgetHost(sessionId)` so a transient null does not block the click, and a "Reconnecting to permission backend" note surfaces when the captured host is null so the user has a visible signal. (#276)
 
 ### Removed
 <!-- Removed features go here -->
