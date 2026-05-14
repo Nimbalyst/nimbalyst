@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- Changes to existing functionality go here -->
 
 ### Fixed
-<!-- Bug fixes go here -->
+- OpenCode test-connection now finds the `opencode` binary when installed via nvm, asdf, Volta, or fnm. The "Test Connection" handler in `AIService` was calling `execSync('opencode --version', { env: process.env })` with Electron's restricted GUI-launched PATH, which does not include version-manager bin directories. Users with `opencode-ai` installed under `~/.nvm/versions/node/<version>/bin/opencode` got "OpenCode CLI not found" on registration even though the binary resolved fine in their shell. Routed the call through `CLIManager.getEnhancedPath()` (already used by every other CLI check in the codebase) so the test connection sees the same augmented PATH the server-spawn path uses via `OpenCodeProvider`'s `enhancedPathLoader`. (#184)
 
 ### Removed
 <!-- Removed features go here -->
