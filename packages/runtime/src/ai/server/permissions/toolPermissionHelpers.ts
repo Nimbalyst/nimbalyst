@@ -166,3 +166,77 @@ export function generateToolPattern(toolName: string, input: any): string {
       return toolName;
   }
 }
+
+/**
+ * Returns true if a runtime tool pattern is covered by an entry in the
+ * Claude allow list (the `permissions.allow` array in `~/.claude/settings.json`,
+ * `.claude/settings.json`, or `.claude/settings.local.json`).
+ *
+ * Claude Code's allow patterns are prefix-wildcards, not exact strings:
+ * - `Bash(git:*)` covers any `Bash(git X:*)` (e.g. `Bash(git status:*)`)
+ * - `Bash(git diff:*)` covers `Bash(git diff:*)` but not `Bash(git status:*)`
+ * - `WebFetch` (bare tool name, no parens) covers every `WebFetch(...)` call
+ * - `mcp__server` covers every tool under that MCP server
+ * - `mcp__server__tool` covers only that specific MCP tool
+ *
+ * Nimbalyst's runtime patterns are always the most specific form, e.g.
+ * `Bash(git status:*)` or `WebFetch(domain:example.com)`, so the old exact
+ * `Array.prototype.includes` check missed the prefix-wildcard case and the
+ * user kept seeing dialogs for tools they had already approved globally.
+ * Fixes nimbalyst#152.
+ *
+ * Word-boundary prefix matching prevents `Bash(npm:*)` from accidentally
+ * covering a hypothetical `Bash(npmrc:*)` candidate: the allow command must
+ * either equal the candidate command exactly OR be followed by a space in
+ * the candidate.
+ *
+ * @param candidate - The runtime pattern Nimbalyst built for the current
+ *   tool call (e.g. `Bash(git status:*)`).
+ * @param allowed - One entry from the user's `permissions.allow` array
+ *   (e.g. `Bash(git:*)`, `WebFetch`, `mcp__github`).
+ * @returns true if the candidate should be treated as approved.
+ */
+export function matchesAllowPattern(candidate: string, allowed: string): boolean {
+  if (candidate === allowed) return true;
+  if (!allowed) return false;
+
+  const stripWildcardSuffix = (s: string): string =>
+    s.endsWith(':*') ? s.slice(0, -2) : s;
+
+  // Bare tool name in allow list (`WebFetch`, `mcp__github`, `Task`).
+  // Matches any candidate whose tool name (text before `(`) equals the
+  // allowed entry, or whose name starts with `allowed + '__'` for MCP
+  // server-wide allows.
+  if (!allowed.includes('(')) {
+    const candidateToolName = candidate.split('(')[0];
+    if (candidateToolName === allowed) return true;
+    if (
+      allowed.startsWith('mcp__') &&
+      candidateToolName.startsWith(allowed + '__')
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  // Both patterns have a parenthesized command. Split into tool + command.
+  // Greedy match on the inner so commands containing `)` (e.g. shell
+  // substitution `$(date)`) round-trip through the same regex.
+  const allowedMatch = allowed.match(/^([^(]+)\((.*)\)$/);
+  const candidateMatch = candidate.match(/^([^(]+)\((.*)\)$/);
+  if (!allowedMatch || !candidateMatch) return false;
+
+  const [, allowedTool, allowedRawCmd] = allowedMatch;
+  const [, candidateTool, candidateRawCmd] = candidateMatch;
+
+  if (allowedTool !== candidateTool) return false;
+
+  const allowedCmd = stripWildcardSuffix(allowedRawCmd);
+  const candidateCmd = stripWildcardSuffix(candidateRawCmd);
+
+  if (allowedCmd === candidateCmd) return true;
+
+  // Word-boundary prefix match: `git` covers `git status`, `npm` does NOT
+  // cover `npmrc`. The trailing space in the prefix is the boundary check.
+  return candidateCmd.startsWith(allowedCmd + ' ');
+}

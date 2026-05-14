@@ -113,6 +113,7 @@ import { getAgentWorkflowService } from './services/AgentWorkflowService';
 import { queueMarketplaceInstallRequest, registerExtensionMarketplaceHandlers, runExtensionAutoUpdate } from './ipc/ExtensionMarketplaceHandlers';
 import { getRegisteredExtensions } from './extensions/RegisteredFileTypes';
 import { ClaudeCodeProvider, OpenAICodexProvider, OpenAICodexACPProvider, OpenCodeProvider, CopilotCLIProvider } from '@nimbalyst/runtime/ai/server';
+import { matchesAllowPattern } from '@nimbalyst/runtime/ai/server/permissions/toolPermissionHelpers';
 import { sessionFileTracker } from './services/SessionFileTracker';
 import { historyManager } from './HistoryManager';
 import { readFileContentOrNull } from './services/ai/aiServiceUtils';
@@ -1435,9 +1436,19 @@ app.whenReady().then(async () => {
     const patternSaver = async (workspacePath: string, pattern: string) => {
       await claudeSettingsManager.addAllowedTool(workspacePath, pattern);
     };
+    // Claude Code allow patterns are prefix-wildcards, not exact strings:
+    // `Bash(git:*)` covers `Bash(git status:*)`, `WebFetch` covers any
+    // `WebFetch(domain:...)`, and `mcp__server` covers every tool under
+    // that server. The old `.includes(pattern)` check only ever matched
+    // exact strings, so a user with broad allows in `~/.claude/settings.json`
+    // still saw a permission dialog for every distinct subcommand. The
+    // wildcard-aware `matchesAllowPattern` brings Nimbalyst's pre-screen
+    // in line with Claude Code's own pattern semantics. Fixes #152.
     const patternChecker = async (workspacePath: string, pattern: string) => {
       const effectiveSettings = await claudeSettingsManager.getEffectiveSettings(workspacePath);
-      return effectiveSettings.permissions.allow.includes(pattern);
+      return effectiveSettings.permissions.allow.some((allow) =>
+        matchesAllowPattern(pattern, allow),
+      );
     };
     // NOTE: For worktree sessions, AIService pre-resolves the worktree path to the parent
     // project (worktreeProjectPath) and passes it via documentContext.permissionsPath.

@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- Changes to existing functionality go here -->
 
 ### Fixed
-<!-- Bug fixes go here -->
+- Pre-approved tools in the global Claude allow list now bypass the permission dialog. The `patternChecker` wired into `ClaudeCodeProvider`/`OpenAICodexProvider`/`OpenAICodexACPProvider` was doing an exact-string `Array.prototype.includes(pattern)` against `permissions.allow` from `~/.claude/settings.json`, but Claude Code's allow entries are prefix-wildcards: `Bash(git:*)` is meant to cover any `Bash(git X:*)`, `WebFetch` covers any `WebFetch(...)`, and `mcp__server` covers every tool under that server. Users with broad globals (`Bash(git:*)`, `Bash(npm:*)`, `WebFetch`, MCP tools) kept seeing dialogs for every distinct subcommand. Added a `matchesAllowPattern` helper in `permissions/toolPermissionHelpers.ts` that handles bare-tool-name allows, MCP server-wide allows, word-boundary prefix matches on Bash commands, and the existing exact-match case. The patternChecker now uses `.some(allow => matchesAllowPattern(pattern, allow))`. (#152)
 
 ### Removed
 <!-- Removed features go here -->
