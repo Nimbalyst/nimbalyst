@@ -269,11 +269,21 @@ export function useOnboarding({
       // Small delay to let other windows start up first
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // Check if unified onboarding has been completed
-      const state = await window.electronAPI.invoke('onboarding:get');
-
-      // Only check the new unified onboarding flag
-      if (state.unifiedOnboardingCompleted) {
+      // Check if unified onboarding has been completed. Race against a 3s
+      // timeout - on a cold start the main-process `onboarding:get` handler
+      // can stall while it lazy-imports its store module, and if the promise
+      // never resolves the dialog (or this hook's own gate) hangs. On
+      // timeout we conservatively assume "not completed" so the dialog
+      // opens and the user is unblocked rather than staring at a beach
+      // ball. Mirror of the same guard in UnifiedOnboarding.tsx for #260.
+      const state: any = await Promise.race([
+        window.electronAPI.invoke('onboarding:get'),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+      ]);
+      if (state === null) {
+        console.warn('[onboarding] onboarding:get IPC timed out after 3s; proceeding to show dialog');
+        // Fall through to the "show dialog" branch below.
+      } else if (state.unifiedOnboardingCompleted) {
         // Onboarding already done, check platform warnings
         checkWindowsWarning();
         checkRosettaWarning();

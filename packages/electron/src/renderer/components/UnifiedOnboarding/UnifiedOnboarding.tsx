@@ -82,12 +82,34 @@ export const UnifiedOnboarding: React.FC<UnifiedOnboardingProps> = ({
   // Force showing all fields for testing
   const [forceShowAllFields, setForceShowAllFields] = useState<boolean>(false);
 
-  // Check for existing user on open
+  // Check for existing user on open.
+  //
+  // The previous implementation `await`-ed the `onboarding:get` IPC with no
+  // timeout. Two paths fire this channel on dialog open (this effect plus
+  // `checkUnifiedOnboarding` in useOnboarding.ts) and the main-process
+  // handler uses a dynamic `await import('../utils/store')` that can stall
+  // on a fresh cold start or if electron-store is racing on its lock file.
+  // When the promise never resolves, the dialog renders its initial state
+  // forever - no mode card is highlighted and the "Get Started" button is
+  // dead. Karl's reporter (a second user) hit exactly this and could never
+  // complete onboarding without force-quit. See nimbalyst#260.
+  //
+  // Fix: race the IPC against a 3-second timeout. Whichever resolves first
+  // wins; on timeout we proceed with the "new user" path (the conservative
+  // default) so the UI is interactive instead of a beach ball.
   useEffect(() => {
     if (isOpen) {
       const checkExistingUser = async () => {
         try {
-          const state = await window.electronAPI.invoke('onboarding:get');
+          const state = await Promise.race([
+            window.electronAPI.invoke('onboarding:get'),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+          ]);
+          if (state === null) {
+            console.warn('[onboarding] onboarding:get IPC timed out after 3s; proceeding with new-user path');
+            setIsExistingUser(false);
+            return;
+          }
           // If user has already provided their role, they're an existing user
           const hasExistingData = !!(state.userRole && state.userRole !== 'skipped');
           setIsExistingUser(hasExistingData);
