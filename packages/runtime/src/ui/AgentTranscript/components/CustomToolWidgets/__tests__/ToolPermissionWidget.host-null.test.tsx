@@ -68,7 +68,14 @@ describe('ToolPermissionWidget — host-null regression (#276)', () => {
   it('renders the action buttons even when host is null', () => {
     setInteractiveWidgetHost(sessionId, null);
 
-    renderWithStore(<ToolPermissionWidget message={makeMessage()} sessionId={sessionId} />);
+    renderWithStore(
+      <ToolPermissionWidget
+        message={makeMessage()}
+        sessionId={sessionId}
+        isExpanded={false}
+        onToggle={() => {}}
+      />,
+    );
 
     // Before the fix, the widget short-circuited to a Waiting-only shell.
     // The fix means we should see all four interactive buttons even
@@ -82,7 +89,14 @@ describe('ToolPermissionWidget — host-null regression (#276)', () => {
   it('shows a "Reconnecting to permission backend" note when host is null', () => {
     setInteractiveWidgetHost(sessionId, null);
 
-    renderWithStore(<ToolPermissionWidget message={makeMessage()} sessionId={sessionId} />);
+    renderWithStore(
+      <ToolPermissionWidget
+        message={makeMessage()}
+        sessionId={sessionId}
+        isExpanded={false}
+        onToggle={() => {}}
+      />,
+    );
 
     expect(screen.getByTestId('tool-permission-host-reconnecting')).toBeTruthy();
   });
@@ -90,7 +104,14 @@ describe('ToolPermissionWidget — host-null regression (#276)', () => {
   it('hides the reconnecting note once a host is installed', () => {
     setInteractiveWidgetHost(sessionId, makeFakeHost());
 
-    renderWithStore(<ToolPermissionWidget message={makeMessage()} sessionId={sessionId} />);
+    renderWithStore(
+      <ToolPermissionWidget
+        message={makeMessage()}
+        sessionId={sessionId}
+        isExpanded={false}
+        onToggle={() => {}}
+      />,
+    );
 
     expect(screen.queryByTestId('tool-permission-host-reconnecting')).toBeNull();
     expect(screen.getByTestId('tool-permission-deny')).toBeTruthy();
@@ -103,6 +124,8 @@ describe('ToolPermissionWidget — host-null regression (#276)', () => {
       <ToolPermissionWidget
         message={{ toolCall: null } as any}
         sessionId={sessionId}
+        isExpanded={false}
+        onToggle={() => {}}
       />,
     );
 
