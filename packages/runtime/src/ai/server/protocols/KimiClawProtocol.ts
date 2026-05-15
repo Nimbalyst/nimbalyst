@@ -296,22 +296,6 @@ function parseSwarmEvent(raw: RawKimiClawEvent): ProtocolEvent[] {
       });
       break;
 
-    case 'agent.degraded':
-      events.push({
-        type: 'text',
-        content: `Agent ${(d.agent_id as string)?.slice(0, 8)} degraded (tier ${d.tier}): ${d.reason}`,
-        metadata: { kind: 'agent_status' },
-      });
-      break;
-
-    case 'brain.tier':
-      events.push({
-        type: 'text',
-        content: `Agent ${(d.agent_id as string)?.slice(0, 8)} using tier ${d.tier}`,
-        metadata: { kind: 'agent_status' },
-      });
-      break;
-
     case 'wave.started':
       events.push({
         type: 'text',
