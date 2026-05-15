@@ -148,6 +148,34 @@ describe.each([
     expect(store.get(sessionProcessingAtom(sid))).toBe(false);
     expect(store.get(sessionHasPendingInteractivePromptAtom(sid))).toBe(false);
   });
+
+  // Per @ghinkle's review on the closed PR #293: terminal events must ALSO
+  // clear the workspace-scoped streaming flag in the no-workspacePath case,
+  // not just the per-session atoms. The activity index records which
+  // workspace this session belonged to when `markSessionStreamingAtom` fired
+  // (during started / streaming / waiting), and `clearSessionStreamingAtom`
+  // resolves through the index when its `workspacePath` argument is omitted.
+  // Without this, the multi-project rail's "streaming" badge stayed on for
+  // sessions in inactive projects even after they terminated.
+  it(`clears workspace-scoped streaming flag in the no-workspacePath case (Greg's #293 review)`, async () => {
+    const { markSessionStreamingAtom, globalSessionActivityAtom } = await import(
+      '../atoms/sessionActivity'
+    );
+    const sid = uniqueSessionId(`terminal-${type}-streaming`);
+    const inactiveProject = '/ws/inactive-project';
+
+    // Seed the activity index by simulating an earlier started/streaming event
+    // that DID carry a workspacePath.
+    store.set(markSessionStreamingAtom, { sessionId: sid, workspacePath: inactiveProject });
+    expect(store.get(globalSessionActivityAtom).get(inactiveProject)?.streaming.has(sid)).toBe(true);
+
+    // Terminal event WITHOUT workspacePath - the registry also has no entry.
+    const handler = handlers.get('ai-session-state:event');
+    handler!({ type, sessionId: sid });
+
+    // Streaming flag for the inactive project should now be cleared.
+    expect(store.get(globalSessionActivityAtom).get(inactiveProject)?.streaming.has(sid) ?? false).toBe(false);
+  });
 });
 
 describe('direct prompt events: AskUserQuestion', () => {

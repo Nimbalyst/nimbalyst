@@ -254,6 +254,14 @@ export function initSessionStateListeners(): () => void {
     if (isTerminalEvent) {
       store.set(sessionProcessingAtom(sessionId), false);
       store.set(sessionHasPendingInteractivePromptAtom(sessionId), false);
+      // Also clear the workspace-scoped streaming flag. The atom looks up
+      // workspacePath from `sessionActivityIndexAtom` when not provided, so
+      // cross-workspace rail activity for this session gets cleared even
+      // when the terminal event itself lacks workspacePath. Without this,
+      // the rail badge ("streaming" dot on inactive projects) stayed stuck
+      // after the session ended in the no-workspacePath race documented
+      // above. Per @ghinkle's review on the closed #293.
+      store.set(clearSessionStreamingAtom, { sessionId });
     }
 
     if (!ownedWorkspacePath) {
@@ -300,10 +308,11 @@ export function initSessionStateListeners(): () => void {
       case 'session:completed':
       case 'session:error':
       case 'session:interrupted':
-        store.set(sessionProcessingAtom(sessionId), false);
-        // Also clear pending interactive prompt state - if session ended, no longer waiting
-        store.set(sessionHasPendingInteractivePromptAtom(sessionId), false);
-        store.set(clearSessionStreamingAtom, { sessionId, workspacePath: resolvedWorkspacePath });
+        // The three atoms cleared in the unconditional terminal-event block
+        // above (processing, pendingInteractivePrompt, streaming) cover this
+        // case. We intentionally do NOT re-clear them here; the streaming
+        // atom is idempotent but the duplicate would obscure the invariant
+        // that terminal-event cleanup is workspace-agnostic.
 
         // Clear any pending throttle timer for this session - the final reload below
         // will fetch the complete state, so a stale throttled reload is unnecessary
