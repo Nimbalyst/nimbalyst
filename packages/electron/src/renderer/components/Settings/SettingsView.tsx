@@ -12,6 +12,7 @@ import { ClaudeCodePanel } from '../GlobalSettings/panels/ClaudeCodePanel';
 import { OpenAIPanel } from '../GlobalSettings/panels/OpenAIPanel';
 import { OpenAICodexPanel } from '../GlobalSettings/panels/OpenAICodexPanel';
 import { OpenCodePanel } from '../GlobalSettings/panels/OpenCodePanel';
+import { KimiClawPanel } from '../GlobalSettings/panels/KimiClawPanel';
 import { CopilotCLIPanel } from '../GlobalSettings/panels/CopilotCLIPanel';
 import { LMStudioPanel } from '../GlobalSettings/panels/LMStudioPanel';
 import { AdvancedPanel } from '../GlobalSettings/panels/AdvancedPanel';
@@ -540,6 +541,8 @@ export function SettingsView({
         return wrapWithOverride('openai-codex', 'OpenAI Codex', <OpenAICodexPanel {...commonProps} />);
       case 'opencode':
         return wrapWithOverride('opencode', 'OpenCode', <OpenCodePanel {...commonProps} />);
+      case 'kimiclaw':
+        return wrapWithOverride('kimiclaw', 'KimiClaw', <KimiClawPanel {...commonProps} />);
       case 'copilot-cli':
         return wrapWithOverride('copilot-cli', 'GitHub Copilot', <CopilotCLIPanel {...commonProps} />);
       case 'lmstudio':
