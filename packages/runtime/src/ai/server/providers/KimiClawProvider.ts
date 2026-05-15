@@ -16,7 +16,7 @@ import {
   AIProviderType,
   ChatAttachment,
 } from '../types';
-import { KimiClawProtocol } from '../protocols/KimiClawProtocol';
+import { KimiClawProtocol, KimiClawHttpTransport } from '../protocols/KimiClawProtocol';
 import { ProviderSessionManager } from './ProviderSessionManager';
 import { McpConfigService } from '../services/McpConfigService';
 import { AgentProtocolTranscriptAdapter } from './agentProtocol/AgentProtocolTranscriptAdapter';
@@ -288,13 +288,24 @@ export class KimiClawProvider extends BaseAgentProvider {
 
   async checkInstallation(): Promise<{ installed: boolean; details?: string }> {
     try {
-      const healthy = await this.protocol.healthCheck();
+      // Use configured endpoint/auth if available, otherwise fall back to defaults
+      const cfg = this.config as any;
+      const endpoint = cfg?.endpoint || 'http://127.0.0.1:9643';
+      const authMode = cfg?.authMode || 'cookie';
+      const transport = new KimiClawHttpTransport(endpoint, {
+        mode: authMode,
+        username: cfg?.username || 'admin',
+        password: cfg?.password || 'admin',
+        bearerToken: cfg?.bearerToken || '',
+      });
+      const protocol = new KimiClawProtocol(transport);
+      const healthy = await protocol.healthCheck();
       if (healthy) {
         return { installed: true, details: 'KimiClaw reachable' };
       }
-      return { installed: false, details: 'KimiClaw not reachable. Run: docker compose up -d' };
+      return { installed: false, details: 'KimiClaw not reachable. Run: kcs serve --host 127.0.0.1 --port 9643' };
     } catch {
-      return { installed: false, details: 'KimiClaw not reachable. Run: docker compose up -d' };
+      return { installed: false, details: 'KimiClaw not reachable. Run: kcs serve --host 127.0.0.1 --port 9643' };
     }
   }
 }

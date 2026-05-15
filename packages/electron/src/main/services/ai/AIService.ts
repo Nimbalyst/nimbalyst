@@ -2788,6 +2788,10 @@ export class AIService {
           // LMStudio doesn't need an API key, just test the connection
           apiKey = 'not-required';
           break;
+        case 'kimiclaw':
+          // KimiClaw uses local HTTP bridge, no API key needed
+          apiKey = 'not-required';
+          break;
         default:
           return { success: false, error: `Unknown provider: ${provider}` };
       }
@@ -2944,6 +2948,22 @@ export class AIService {
           const response = await fetch(`${baseUrl}/v1/models`);
           if (!response.ok) {
             throw new Error(`LMStudio server not responding at ${baseUrl}`);
+          }
+        }
+
+        // For KimiClaw, test the bridge via checkInstallation
+        if (provider === 'kimiclaw') {
+          const providerSettings = this.getSettingsStore().get('providerSettings', {}) as any;
+          const kcConfig = providerSettings['kimiclaw'] || {};
+          const { KimiClawProvider } = await import('@nimbalyst/runtime/ai/server/providers/KimiClawProvider');
+          const testProvider = new KimiClawProvider();
+          await testProvider.initialize({
+            model: kcConfig.model || 'kimi-code/kimi-for-coding',
+            ...kcConfig,
+          });
+          const result = await testProvider.checkInstallation();
+          if (!result.installed) {
+            throw new Error(result.details || 'KimiClaw bridge not reachable');
           }
         }
 
