@@ -131,6 +131,18 @@ export function parseCSV(content: string): { data: SpreadsheetData; delimiter: '
 }
 
 /**
+ * ISO-style calendar date pattern (YYYY-MM-DD, YYYY-M-D, etc.). Kept here
+ * as a literal rather than importing from `formatters.ts` to avoid pulling
+ * the formatting layer into the parsing layer.
+ *
+ * The check is intentionally narrow: it only matches the full-string
+ * `YYYY-(M)M-(D)D` shape. Other date shapes (slash-delimited, dot-delimited,
+ * date-with-time, partial dates) are out of scope for this guard; they fall
+ * through to the existing string branch and render as plain text.
+ */
+const ISO_DATE_PATTERN = /^\d{4}-\d{1,2}-\d{1,2}$/;
+
+/**
  * Create a Cell from a raw string value
  */
 export function createCell(value: string): Cell {
@@ -141,6 +153,26 @@ export function createCell(value: string): Cell {
     return {
       raw: trimmed,
       computed: null, // Will be computed by formula engine
+    };
+  }
+
+  // ISO date guard (issue #329).
+  //
+  // `parseFloat("2026-05-15")` returns `2026` because parseFloat stops at
+  // the first non-numeric character. Without this guard, `2026-05-15` got
+  // stored as `{ raw: "2026-05-15", computed: 2026 }` and the spreadsheet
+  // grid wrote `cell.computed` (2026) into the rendered cell, truncating
+  // the displayed value to the year. The raw file content stayed correct
+  // on disk because `serializeToCSV` reads `cell.raw`; only the rendered
+  // cell was wrong.
+  //
+  // Treat ISO-date-shaped strings as strings so the displayed value matches
+  // the file contents. Numeric values like `2026` (a year on its own) stay
+  // on the numeric path below.
+  if (ISO_DATE_PATTERN.test(trimmed)) {
+    return {
+      raw: trimmed,
+      computed: trimmed,
     };
   }
 
