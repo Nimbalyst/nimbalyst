@@ -1,7 +1,7 @@
 /**
  * KimiClaw Provider
  *
- * HTTP+SSE provider for KimiClawSwarm (KCS) — local Flask server at 127.0.0.1:9643.
+ * HTTP+SSE provider for KimiClawSwarm (KCS) — local FastAPI server at 127.0.0.1:9643.
  * Follows the same pattern as OpenCodeProvider.
  */
 
