@@ -78,7 +78,7 @@ export class KimiClawProvider extends BaseAgentProvider {
   static async getModels(): Promise<AIModel[]> {
     return [
       {
-        id: 'kimi-code/kimi-for-coding',
+        id: 'kimiclaw:kimi-code/kimi-for-coding',
         name: 'Kimi K2 Coding',
         provider: 'kimiclaw' as AIProviderType,
       },
@@ -136,7 +136,7 @@ export class KimiClawProvider extends BaseAgentProvider {
     try {
       const existingSwarmId = this.sessions.getSessionId(sessionId || '');
 
-      const isResumedSession = !!existingSwarmId;
+      let isResumedSession = !!existingSwarmId;
       if (isResumedSession && existingSwarmId) {
         // Check if the swarm is still alive
         try {
@@ -160,6 +160,7 @@ export class KimiClawProvider extends BaseAgentProvider {
         } catch {
           // Snapshot failed — treat as new session
           console.warn('[KIMICLAW] Resume snapshot failed, treating as new session');
+          isResumedSession = false;
         }
       }
 
@@ -190,9 +191,11 @@ export class KimiClawProvider extends BaseAgentProvider {
         } as Record<string, unknown>,
       };
 
+      console.log(`[KIMICLAW] Creating session (resumed=${isResumedSession}) for ${sessionId}`);
       const session = isResumedSession
         ? await this.protocol.resumeSession(existingSwarmId || '', sessionOptions)
         : await this.protocol.createSession(sessionOptions);
+      console.log(`[KIMICLAW] Session created: ${session.id}`);
 
       // Note: we don't store session.id (random UUID) here.
       // The actual KCS swarmId is captured from the first protocol event below.
@@ -202,13 +205,18 @@ export class KimiClawProvider extends BaseAgentProvider {
 
       // Stream protocol events — update stored providerSessionId to swarmId when dispatch completes
       let swarmIdCaptured = false;
+      let hasText = false;
 
+      console.log(`[KIMICLAW] Starting protocol.sendMessage for session ${session.id}`);
       for await (const event of this.protocol.sendMessage(session, {
         content: messageWithContext,
         attachments,
         sessionId,
         mode: documentContext?.mode || 'agent',
       })) {
+        if (!swarmIdCaptured && event.metadata && (event.metadata as Record<string, unknown>).providerSessionId) {
+          console.log(`[KIMICLAW] Swarm dispatched: ${(event.metadata as Record<string, unknown>).providerSessionId}`);
+        }
         // Overwrite stored session id with the actual KCS swarmId (needed for resume/snapshot)
         if (sessionId && !swarmIdCaptured && event.metadata && (event.metadata as Record<string, unknown>).providerSessionId) {
           this.sessions.captureSessionId(sessionId, (event.metadata as Record<string, unknown>).providerSessionId as string);
@@ -238,7 +246,9 @@ export class KimiClawProvider extends BaseAgentProvider {
         for (const item of transcriptAdapter.processEvent(event)) {
           switch (item.kind) {
             case 'text':
-              fullText += item.text;
+              // Add a blank line between chunks so multi-agent output is readable
+              fullText += fullText ? '\n\n' + item.text : item.text;
+              hasText = true;
               yield { type: 'text', content: item.text };
               break;
             case 'tool_call':
@@ -260,8 +270,16 @@ export class KimiClawProvider extends BaseAgentProvider {
           }
         }
       }
+
+      // Persist final assistant output so the renderer can display it.
+      // The transcript transformer (ClaudeCodeRawParser fallback) treats
+      // non-JSON output messages as plain-text assistant_message events.
+      if (sessionId && hasText && fullText.trim()) {
+        await this.logAgentMessageBestEffort(sessionId, 'output', fullText.trim());
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`[KIMICLAW] Error in sendMessage: ${errorMessage}`);
       if (!abortController.signal.aborted) {
         yield { type: 'error', error: errorMessage };
       }

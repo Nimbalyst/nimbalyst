@@ -1568,6 +1568,9 @@ export class AIService {
         case 'lmstudio':
           // LMStudio doesn't need an API key, just the base URL
           break;
+        case 'kimiclaw':
+          // KimiClaw uses local HTTP bridge auth (cookie/bearer), no API key needed
+          break;
         default:
           throw new Error(`Unknown provider: ${provider}`);
       }

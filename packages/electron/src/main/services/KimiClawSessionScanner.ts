@@ -5,6 +5,8 @@
  * GET /api/v2/swarms with pagination.
  */
 
+import fetch from 'node-fetch';
+
 export interface KimiClawSwarmRecord {
   swarm_id: string;
   status: string;
@@ -36,7 +38,6 @@ export async function scanKimiClawSessions(
   offset: number = 0,
 ): Promise<KimiClawScanResult> {
   try {
-    const fetch = (await import('node-fetch')).default;
     let cookieHeader = '';
 
     // Cookie auth: login first to obtain session cookie

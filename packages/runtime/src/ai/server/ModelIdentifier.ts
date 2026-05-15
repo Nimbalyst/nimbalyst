@@ -164,7 +164,7 @@ export class ModelIdentifier {
    * (providers that support MCP and file system tools).
    */
   isAgentProvider(): boolean {
-    return this.provider === 'claude-code' || this.provider === 'openai-codex';
+    return this.provider === 'claude-code' || this.provider === 'openai-codex' || this.provider === 'openai-codex-acp' || this.provider === 'opencode' || this.provider === 'copilot-cli' || this.provider === 'kimiclaw';
   }
 
   /**
