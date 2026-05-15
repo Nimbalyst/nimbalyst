@@ -175,8 +175,8 @@ export class KimiClawProvider extends BaseAgentProvider {
         workspacePath,
         model: this.config?.model || 'default',
         raw: {
-          endpoint: (this.config as any)?.endpoint || 'http://127.0.0.1:9643',
-          authMode: (this.config as any)?.authMode || 'cookie',
+          endpoint: (this.config as any)?.endpointUrl || (this.config as any)?.endpoint || 'http://127.0.0.1:9643',
+          authMode: (this.config as any)?.authMethod || (this.config as any)?.authMode || 'cookie',
           username: (this.config as any)?.username || 'admin',
           password: (this.config as any)?.password || 'admin',
           bearerToken: (this.config as any)?.bearerToken || '',
@@ -290,8 +290,8 @@ export class KimiClawProvider extends BaseAgentProvider {
     try {
       // Use configured endpoint/auth if available, otherwise fall back to defaults
       const cfg = this.config as any;
-      const endpoint = cfg?.endpoint || 'http://127.0.0.1:9643';
-      const authMode = cfg?.authMode || 'cookie';
+      const endpoint = cfg?.endpointUrl || cfg?.endpoint || 'http://127.0.0.1:9643';
+      const authMode = cfg?.authMethod || cfg?.authMode || 'cookie';
       const transport = new KimiClawHttpTransport(endpoint, {
         mode: authMode,
         username: cfg?.username || 'admin',
