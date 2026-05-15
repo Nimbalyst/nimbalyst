@@ -242,6 +242,129 @@ export class KimiClawHttpTransport implements KimiClawTransport {
 }
 
 // ---------------------------------------------------------------------------
+// SSE event -> canonical ProtocolEvent helper
+// ---------------------------------------------------------------------------
+
+function parseSwarmEvent(raw: RawKimiClawEvent): ProtocolEvent[] {
+  const events: ProtocolEvent[] = [];
+  const d = raw.data;
+
+  switch (raw.type) {
+    case 'agent.started':
+      events.push({
+        type: 'text',
+        content: `[Agent ${d.name || (d.agent_id as string)?.slice(0, 8)}] Starting...`,
+        metadata: { kind: 'agent_status' },
+      });
+      break;
+
+    case 'agent.phase_changed':
+      events.push({
+        type: 'text',
+        content: `[Agent ${d.name || (d.agent_id as string)?.slice(0, 8)}] ${d.phase}...`,
+        metadata: { kind: 'agent_status' },
+      });
+      break;
+
+    case 'agent.activity_changed':
+      events.push({
+        type: 'text',
+        content: `[Agent ${(d.agent_id as string)?.slice(0, 8)}] ${d.activity}`,
+        metadata: { kind: 'agent_status' },
+      });
+      break;
+
+    case 'agent.completed': {
+      const output = typeof d.output === 'string' ? d.output : JSON.stringify(d.output);
+      const synthetic = d.synthetic_output_used === true;
+      events.push({
+        type: 'text',
+        content: output + (synthetic ? '\n\n**[SYNTH -- tier 5 fallback]**' : ''),
+        metadata: { kind: 'agent_output', agentId: d.agent_id },
+      });
+      break;
+    }
+
+    case 'agent.failed':
+      events.push({
+        type: 'text',
+        content: `Agent ${(d.agent_id as string)?.slice(0, 8)} failed: ${d.error}`,
+        metadata: { kind: 'agent_error' },
+      });
+      break;
+
+    case 'agent.degraded':
+      events.push({
+        type: 'text',
+        content: `Agent ${(d.agent_id as string)?.slice(0, 8)} degraded (tier ${d.tier}): ${d.reason}`,
+        metadata: { kind: 'agent_status' },
+      });
+      break;
+
+    case 'brain.tier':
+      events.push({
+        type: 'text',
+        content: `Agent ${(d.agent_id as string)?.slice(0, 8)} using tier ${d.tier}`,
+        metadata: { kind: 'agent_status' },
+      });
+      break;
+
+    case 'wave.started':
+      events.push({
+        type: 'text',
+        content: `Wave ${d.wave_number} started`,
+        metadata: { kind: 'wave_status' },
+      });
+      break;
+
+    case 'wave.completed':
+      events.push({
+        type: 'text',
+        content: `Wave ${d.wave_number} completed`,
+        metadata: { kind: 'wave_status' },
+      });
+      break;
+
+    case 'orchestrator.plan_summary':
+      events.push({
+        type: 'text',
+        content: typeof d.summary === 'string' ? d.summary : JSON.stringify(d.summary),
+        metadata: { kind: 'plan_summary' },
+      });
+      break;
+
+    case 'orchestrator.deliverable':
+      events.push({
+        type: 'text',
+        content: typeof d.deliverable === 'string' ? d.deliverable : JSON.stringify(d.deliverable),
+        metadata: { kind: 'deliverable' },
+      });
+      break;
+
+    case 'budget.update':
+      events.push({
+        type: 'text',
+        content: `Steps: ${d.consumed}/${d.total}`,
+        metadata: { kind: 'budget' },
+      });
+      break;
+
+    case 'budget.exhausted':
+      events.push({
+        type: 'text',
+        content: `Budget exhausted: ${d.reason}`,
+        metadata: { kind: 'budget_error' },
+      });
+      break;
+
+    default:
+      break;
+  }
+
+  return events;
+}
+
+// ---------------------------------------------------------------------------
 // Error
 // ---------------------------------------------------------------------------
 
@@ -325,7 +448,12 @@ export class KimiClawProtocol implements AgentProtocol {
           break;
         }
 
-        // TODO Slice 3: parseSwarmEvent(raw) -> canonical ProtocolEvents
+        // Slice 3: SSE event -> canonical ProtocolEvent mapping
+        const evs = parseSwarmEvent(raw);
+        for (const ev of evs) {
+          yield ev;
+        }
+        // Always emit raw_event for transcript / downstream debugging
         yield { type: 'raw_event', metadata: { rawEvent: raw } };
       }
 
