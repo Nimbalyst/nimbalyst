@@ -1,7 +1,7 @@
 /**
  * KimiClaw Protocol
  *
- * HTTP+SSE transport for KimiClawSwarm (KCS) — local Flask server at 127.0.0.1:9643.
+ * HTTP+SSE transport for KimiClawSwarm (KCS) — local FastAPI server at 127.0.0.1:9643.
  * Uses node-fetch + tough-cookie (not Electron net.request).
  */
 
@@ -280,10 +280,9 @@ function parseSwarmEvent(raw: RawKimiClawEvent): ProtocolEvent[] {
 
     case 'agent.completed': {
       const output = typeof d.output === 'string' ? d.output : JSON.stringify(d.output);
-      const synthetic = d.synthetic_output_used === true;
       events.push({
         type: 'text',
-        content: output + (synthetic ? '\n\n**[SYNTH -- tier 5 fallback]**' : ''),
+        content: output,
         metadata: { kind: 'agent_output', agentId: d.agent_id },
       });
       break;
