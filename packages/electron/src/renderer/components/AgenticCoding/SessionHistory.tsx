@@ -36,6 +36,8 @@ import { blitzCreatedAtom, blitzDisplayNameUpdateAtom } from '../../store/atoms/
 import { superLoopListAtom, upsertSuperLoopAtom, removeSuperLoopAtom } from '../../store/atoms/superLoop';
 import { useSuperLoopDialog } from '../../hooks/useSuperLoop';
 import { workspaceSessionTurnActivityAtom } from '../../store/atoms/sessionActivity';
+import { sessionKanbanTagsAtom } from '../../store/atoms/sessionKanban';
+import { sessionListTagFilterAtom } from '../../store/atoms/sessionListFilter';
 import type { SuperLoop } from '../../../shared/types/superLoop';
 import { store } from '@nimbalyst/runtime/store';
 import { createMetaAgentSession } from '../../utils/metaAgentUtils';
@@ -355,6 +357,44 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const [showSearchFilters, setShowSearchFilters] = useState(false);
   const searchFiltersRef = useRef<HTMLDivElement>(null);
 
+  // Tag filter state (parity with Kanban tag picker; session-only, no persistence)
+  const allWorkspaceTags = useAtomValue(sessionKanbanTagsAtom);
+  const tagFilter = useAtomValue(sessionListTagFilterAtom);
+  const setTagFilter = useSetAtom(sessionListTagFilterAtom);
+  const [showTagDropdown, setShowTagDropdown] = useState(false);
+  const [tagQuery, setTagQuery] = useState('');
+  const [highlightedTagIndex, setHighlightedTagIndex] = useState(0);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const tagDropdownRef = useRef<HTMLDivElement>(null);
+  const searchTrackDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Tags available for selection: exclude already-active tags, optionally narrow by typed query
+  const filteredTagOptions = useMemo(() => {
+    const activeSet = new Set(tagFilter.tags);
+    const q = tagQuery.toLowerCase();
+    return allWorkspaceTags
+      .filter(t => !activeSet.has(t.name))
+      .filter(t => !q || t.name.toLowerCase().includes(q));
+  }, [allWorkspaceTags, tagFilter.tags, tagQuery]);
+
+  const addTagFilter = useCallback((tag: string) => {
+    if (!tagFilter.tags.includes(tag)) {
+      const next = [...tagFilter.tags, tag];
+      setTagFilter({ tags: next });
+      posthog?.capture('session_list_filter_applied', {
+        filterType: 'tag',
+        activeTagCount: next.length,
+      });
+    }
+    setTagQuery('');
+    setShowTagDropdown(false);
+    setHighlightedTagIndex(0);
+  }, [tagFilter, setTagFilter, posthog]);
+
+  const removeTagFilter = useCallback((tag: string) => {
+    setTagFilter({ tags: tagFilter.tags.filter(t => t !== tag) });
+  }, [tagFilter, setTagFilter]);
+
   // Archive worktree dialog hook
   const {
     dialogState: archiveWorktreeDialogState,
@@ -647,19 +687,30 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     // But keep standalone worktree sessions that should appear as WorktreeSingle
     const sessionsToFilter = allSessions;
 
-    if (!searchQuery.trim()) {
-      // No search query - show all sessions (filtered by mode)
+    const activeTags = tagFilter.tags;
+    const hasTagFilter = activeTags.length > 0;
+    const titleQuery = searchQuery.trim().toLowerCase();
+    const hasTitleQuery = titleQuery.length > 0;
+
+    if (!hasTitleQuery && !hasTagFilter) {
+      // No filters - show all sessions (filtered by mode)
       setSessions([...sessionsToFilter].sort(compareSessionOrder));
       return;
     }
 
-    // Filter sessions by title in memory (case-insensitive)
-    const query = searchQuery.toLowerCase();
-    const filtered = sessionsToFilter.filter(session =>
-      (session.title ?? '').toLowerCase().includes(query)
-    );
+    // Filter sessions by title (case-insensitive) AND tags (OR within tags).
+    const filtered = sessionsToFilter.filter(session => {
+      if (hasTitleQuery && !(session.title ?? '').toLowerCase().includes(titleQuery)) {
+        return false;
+      }
+      if (hasTagFilter) {
+        const sessionTags = session.tags ?? [];
+        if (!activeTags.some(t => sessionTags.includes(t))) return false;
+      }
+      return true;
+    });
     setSessions(filtered.sort(compareSessionOrder));
-  }, [searchQuery, allSessions, mode, compareSessionOrder]);
+  }, [searchQuery, tagFilter.tags, allSessions, mode, compareSessionOrder]);
 
   useEffect(() => {
     const commitOrderMap = (nextMap: Map<string, number>) => {
@@ -773,6 +824,29 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showSearchFilters]);
+
+  // Close tag dropdown on click outside
+  useEffect(() => {
+    if (!showTagDropdown) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      const inDropdown = tagDropdownRef.current?.contains(target);
+      const inInput = searchInputRef.current?.contains(target);
+      if (!inDropdown && !inInput) {
+        setShowTagDropdown(false);
+        setTagQuery('');
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showTagDropdown]);
+
+  // Clean up search-track debounce timer on unmount
+  useEffect(() => () => {
+    if (searchTrackDebounceRef.current) clearTimeout(searchTrackDebounceRef.current);
+  }, []);
 
   // Handle user choosing to build FTS index
   const handleBuildIndex = useCallback(async () => {
@@ -2921,31 +2995,125 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       <div className="session-history-section-label px-3 py-1.5 text-[11px] font-semibold text-[var(--nim-text-faint)] uppercase tracking-wider border-b border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] shrink-0">Agent Sessions</div>
       <div className="session-history-search px-3 py-2 border-b border-[var(--nim-border)] shrink-0 relative z-[101]">
         <input
+          ref={searchInputRef}
           type="text"
           className="session-history-search-input nim-input w-full px-3 py-2 pr-14 text-[13px] text-[var(--nim-text)] bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded outline-none transition-colors duration-150 placeholder:text-[var(--nim-text-faint)] focus:border-[var(--nim-primary)] focus:bg-[var(--nim-bg)]"
-          placeholder="Search sessions..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search or type # to filter by tag..."
+          value={showTagDropdown
+            ? (searchQuery ? searchQuery + ' ' : '') + '#' + tagQuery
+            : searchQuery}
+          onChange={(e) => {
+            const value = e.target.value;
+            const hashIndex = value.lastIndexOf('#');
+            if (hashIndex >= 0) {
+              // Tag-picker mode: text before the last '#' is the title search,
+              // text after it is the tag query.
+              setSearchQuery(value.slice(0, hashIndex).trim());
+              setTagQuery(value.slice(hashIndex + 1));
+              setShowTagDropdown(true);
+              setHighlightedTagIndex(0);
+            } else {
+              setSearchQuery(value);
+              setShowTagDropdown(false);
+              setTagQuery('');
+              // Debounced posthog tracking for search-mode filters
+              if (searchTrackDebounceRef.current) clearTimeout(searchTrackDebounceRef.current);
+              if (value.trim()) {
+                searchTrackDebounceRef.current = setTimeout(() => {
+                  posthog?.capture('session_list_filter_applied', {
+                    filterType: 'search',
+                    activeTagCount: tagFilter.tags.length,
+                  });
+                }, 1000);
+              }
+            }
+          }}
           onKeyDown={(e) => {
+            if (showTagDropdown) {
+              if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setHighlightedTagIndex(i => Math.min(i + 1, filteredTagOptions.length - 1));
+              } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setHighlightedTagIndex(i => Math.max(i - 1, 0));
+              } else if (e.key === 'Enter' || e.key === 'Tab') {
+                if (filteredTagOptions.length > 0) {
+                  e.preventDefault();
+                  addTagFilter(filteredTagOptions[highlightedTagIndex].name);
+                }
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                setShowTagDropdown(false);
+                setTagQuery('');
+              } else if (e.key === 'Backspace' && tagQuery.length === 0) {
+                // Backspace at empty tag query closes tag mode rather than nuking the title text
+                e.preventDefault();
+                setShowTagDropdown(false);
+              }
+              return;
+            }
             if (e.key === 'Tab' && searchQuery && !contentSearchTriggered) {
               e.preventDefault();
               searchMessageContents();
+            } else if (e.key === 'Backspace' && searchQuery.length === 0 && tagFilter.tags.length > 0) {
+              // Backspace on empty input pops the most recent tag chip
+              e.preventDefault();
+              removeTagFilter(tagFilter.tags[tagFilter.tags.length - 1]);
             }
           }}
-          aria-label="Search sessions"
+          onFocus={() => {
+            if (tagQuery) setShowTagDropdown(true);
+          }}
+          aria-label="Search sessions or filter by tag"
         />
-        {searchQuery && (
+        {(searchQuery || tagFilter.tags.length > 0 || showTagDropdown) && (
           <button
             type="button"
             className="session-history-search-clear absolute right-5 top-1/2 -translate-y-1/2 flex items-center justify-center w-5 h-5 rounded text-[var(--nim-text-muted)] bg-transparent border-none cursor-pointer transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] hover:text-[var(--nim-text)]"
-            onClick={() => setSearchQuery('')}
-            aria-label="Clear search"
-            title="Clear search"
+            onClick={() => {
+              setSearchQuery('');
+              setTagQuery('');
+              setShowTagDropdown(false);
+              if (tagFilter.tags.length > 0) setTagFilter({ tags: [] });
+            }}
+            aria-label="Clear search and tag filters"
+            title="Clear search and tag filters"
           >
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M4 4L12 12M12 4L4 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
           </button>
+        )}
+        {/* Tag typeahead dropdown */}
+        {showTagDropdown && (
+          <div
+            ref={tagDropdownRef}
+            className="session-history-tag-dropdown absolute left-3 right-3 top-full mt-1 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded shadow-lg z-[100] max-h-[220px] overflow-y-auto"
+            data-testid="session-list-tag-dropdown"
+          >
+            {filteredTagOptions.length > 0 ? (
+              filteredTagOptions.slice(0, 15).map((tag, i) => (
+                <button
+                  key={tag.name}
+                  type="button"
+                  className={`w-full text-left px-3 py-1.5 text-[12px] flex items-center justify-between cursor-pointer transition-colors ${
+                    i === highlightedTagIndex
+                      ? 'bg-[var(--nim-bg-tertiary)] text-[var(--nim-text)]'
+                      : 'text-[var(--nim-text-muted)] hover:bg-[var(--nim-bg-tertiary)]'
+                  }`}
+                  onMouseEnter={() => setHighlightedTagIndex(i)}
+                  onClick={() => addTagFilter(tag.name)}
+                >
+                  <span>#{tag.name}</span>
+                  <span className="text-[var(--nim-text-faint)] text-[11px] tabular-nums">{tag.count}</span>
+                </button>
+              ))
+            ) : (
+              <div className="px-3 py-2 text-[12px] text-[var(--nim-text-faint)] italic">
+                {tagQuery ? 'No matching tags' : 'No tags in this workspace yet'}
+              </div>
+            )}
+          </div>
         )}
         {isSearching && (
           <div className="session-history-search-status absolute right-12 top-1/2 -translate-y-1/2 text-xs text-[var(--nim-text-faint)] pointer-events-none">
@@ -3026,6 +3194,27 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
             )}
           </div>
         )}
+        {/* Active tag filter chips - wraps below the input when present */}
+        {tagFilter.tags.length > 0 && (
+          <div
+            className="session-history-tag-chips flex flex-wrap gap-1 mt-2"
+            data-testid="session-list-tag-chips"
+          >
+            {tagFilter.tags.map(tag => (
+              <button
+                key={tag}
+                type="button"
+                className="session-history-tag-chip flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] border cursor-pointer bg-blue-400/[0.12] border-blue-400/30 text-blue-400 hover:bg-blue-400/[0.18]"
+                onClick={() => removeTagFilter(tag)}
+                title={`Remove #${tag} filter`}
+                data-testid={`session-list-tag-chip-${tag}`}
+              >
+                #{tag}
+                <MaterialSymbol icon="close" size={12} />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <div className="session-history-filters flex items-center px-3 py-2 border-b border-[var(--nim-border)] gap-1.5 shrink-0">
         <button
@@ -3039,12 +3228,25 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
             <path d="M6 8h4" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/>
           </svg>
         </button>
-        <span
-          className="session-history-match-count text-[11px] text-[var(--nim-text-faint)] tabular-nums"
-          title={`${iosMatchCount} non-archived sessions in this workspace (matches the iOS project list count)${sessions.length !== iosMatchCount ? ` -- ${sessions.length} visible after current filters` : ''}`}
-        >
-          {iosMatchCount} {iosMatchCount === 1 ? 'session' : 'sessions'}
-        </span>
+        {(() => {
+          const hasFilter = searchQuery.trim().length > 0 || tagFilter.tags.length > 0;
+          const visibleCount = sessions.length;
+          const totalLabel = `${iosMatchCount} non-archived session${iosMatchCount === 1 ? '' : 's'} in this workspace (matches the iOS project list count)`;
+          const title = hasFilter
+            ? `${visibleCount} of ${iosMatchCount} visible after current filters -- ${totalLabel}`
+            : totalLabel;
+          return (
+            <span
+              className="session-history-match-count text-[11px] text-[var(--nim-text-faint)] tabular-nums"
+              title={title}
+              data-testid="session-list-match-count"
+            >
+              {hasFilter
+                ? `${visibleCount} of ${iosMatchCount} session${iosMatchCount === 1 ? '' : 's'}`
+                : `${iosMatchCount} session${iosMatchCount === 1 ? '' : 's'}`}
+            </span>
+          );
+        })()}
         <div className="session-history-sort-dropdown ml-auto relative">
           <button
             className="session-history-sort-button flex items-center justify-center px-1.5 py-1 text-xs rounded border border-[var(--nim-border)] bg-[var(--nim-bg-secondary)] text-[var(--nim-text-muted)] cursor-pointer transition-all duration-150 outline-none hover:bg-[var(--nim-bg-tertiary)] hover:border-[var(--nim-primary)] hover:text-[var(--nim-text)] [&_svg]:block"
