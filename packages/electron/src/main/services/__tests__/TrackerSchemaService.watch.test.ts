@@ -1,16 +1,49 @@
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const {
+  mockSafeHandle,
+  mockWatch,
+  mockWindowSend,
+  watcherHandlers,
+} = vi.hoisted(() => {
+  const handlers: Record<string, ((arg: string | unknown) => void) | undefined> = {};
+  return {
+    mockSafeHandle: vi.fn(),
+    mockWatch: vi.fn(() => ({
+      on(event: string, handler: (arg: string | unknown) => void) {
+        handlers[event] = handler;
+        return this;
+      },
+      close: vi.fn().mockResolvedValue(undefined),
+    })),
+    mockWindowSend: vi.fn(),
+    watcherHandlers: handlers,
+  };
+});
 
 vi.mock('electron', () => ({
   BrowserWindow: {
-    getAllWindows: () => [],
+    getAllWindows: () => [
+      {
+        webContents: {
+          send: mockWindowSend,
+        },
+      },
+    ],
   },
 }));
 
 vi.mock('../../utils/ipcRegistry', () => ({
-  safeHandle: vi.fn(),
+  safeHandle: mockSafeHandle,
+}));
+
+vi.mock('chokidar', () => ({
+  default: {
+    watch: mockWatch,
+  },
 }));
 
 interface TrackerSchemaServiceModule {
@@ -61,44 +94,68 @@ roles:
 `;
 }
 
-async function waitFor(assertion: () => boolean, timeoutMs = 5000): Promise<void> {
-  const start = Date.now();
-  while (!assertion()) {
-    if (Date.now() - start > timeoutMs) {
-      throw new Error(`Condition not met within ${timeoutMs}ms`);
-    }
-    await new Promise(resolve => setTimeout(resolve, 50));
-  }
-}
-
 describe('TrackerSchemaService watcher', () => {
   let workspacePath: string;
   let trackersDir: string;
   let service: TrackerSchemaServiceModule;
 
-  beforeAll(async () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    for (const key of Object.keys(watcherHandlers)) {
+      delete watcherHandlers[key];
+    }
+
     workspacePath = await fs.mkdtemp(path.join(os.tmpdir(), 'tracker-schema-watch-'));
     trackersDir = path.join(workspacePath, '.nimbalyst', 'trackers');
     await fs.mkdir(trackersDir, { recursive: true });
+
     service = await import('../TrackerSchemaService');
     service.initTrackerSchemaService(workspacePath);
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     service.updateTrackerSchemaWorkspace(null);
     await fs.rm(workspacePath, { recursive: true, force: true });
   });
 
-  it('hot-loads added, edited, and deleted workspace schemas', async () => {
+  it('hot-loads added, edited, and deleted workspace schemas through watcher callbacks', async () => {
     const filePath = path.join(trackersDir, 'runtime-watch.yaml');
 
+    expect(mockWatch).toHaveBeenCalledTimes(1);
+    expect(typeof watcherHandlers.add).toBe('function');
+    expect(typeof watcherHandlers.change).toBe('function');
+    expect(typeof watcherHandlers.unlink).toBe('function');
+
     await fs.writeFile(filePath, buildYaml('Runtime Watch Added'), 'utf-8');
-    await waitFor(() => service.getTrackerSchema('runtime-watch')?.displayName === 'Runtime Watch Added');
+    watcherHandlers.add?.(filePath);
 
+    expect(service.getTrackerSchema('runtime-watch')?.displayName).toBe('Runtime Watch Added');
+    expect(mockWindowSend).toHaveBeenCalledWith(
+      'tracker-schema:changed',
+      expect.arrayContaining([expect.objectContaining({ type: 'runtime-watch' })]),
+    );
+
+    mockWindowSend.mockClear();
     await fs.writeFile(filePath, buildYaml('Runtime Watch Updated'), 'utf-8');
-    await waitFor(() => service.getTrackerSchema('runtime-watch')?.displayName === 'Runtime Watch Updated');
+    watcherHandlers.change?.(filePath);
 
+    expect(service.getTrackerSchema('runtime-watch')?.displayName).toBe('Runtime Watch Updated');
+    expect(mockWindowSend).toHaveBeenCalledWith(
+      'tracker-schema:changed',
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'runtime-watch',
+          displayName: 'Runtime Watch Updated',
+        }),
+      ]),
+    );
+
+    mockWindowSend.mockClear();
     await fs.unlink(filePath);
-    await waitFor(() => service.getTrackerSchema('runtime-watch') == null);
+    watcherHandlers.unlink?.(filePath);
+
+    expect(service.getTrackerSchema('runtime-watch')).toBeUndefined();
+    expect(mockWindowSend).toHaveBeenCalledWith('tracker-schema:changed', expect.any(Array));
   });
 });

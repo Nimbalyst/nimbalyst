@@ -135,10 +135,12 @@ const injectRichTranscriptStyles = () => {
       max-width: 72rem;
     }
 
-    /* Flat-list (content-visibility) mode. The container scrolls, each top-level
-       row is hinted to the browser so paint and layout can be skipped while it
-       is far from the viewport. The DOM nodes stay mounted so the Selection API
-       preserves drag-selection across scroll. */
+    /* Flat-list mode for Chromium hosts. We render every message as plain
+       DOM with no virtualization and no content-visibility tricks. The
+       browser handles paint optimization for off-screen content on its own,
+       and DOM node identity is preserved across scroll so the Selection API
+       works correctly -- which is the whole point of this path. iOS still
+       uses VList for memory reasons; see useVirtualization. */
     .rich-transcript-flat-list {
       display: flex;
       flex-direction: column;
@@ -149,19 +151,15 @@ const injectRichTranscriptStyles = () => {
     .rich-transcript-content.compact .rich-transcript-flat-list {
       max-width: 72rem;
     }
-    .rich-transcript-flat-list > * {
-      content-visibility: auto;
-      contain-intrinsic-size: auto 90px;
-    }
     /* Chat-bottom layout: when transcript content is shorter than the
        scrollable viewport, push it against the bottom so the latest message
        sits next to the input. When content overflows, this is a no-op and
        normal top-to-bottom scrolling takes over.
-       The explicit width:100% here is critical: turning the scroll container
-       into a flex column would otherwise let the existing mx-auto on
+       The explicit width:100% on the children is critical: making the scroll
+       container a flex column would otherwise let the existing mx-auto on
        .rich-transcript-content (and margin:0 auto on .rich-transcript-flat-list)
-       absorb cross-axis space as flex auto-margins, which kills
-       align-items:stretch and shrink-wraps every row to its content width. */
+       behave as flex-item cross-axis auto-margins, killing align-items:stretch
+       and shrink-wrapping every row to its content width. */
     .rich-transcript-scroll-container.flat {
       display: flex;
       flex-direction: column;
@@ -1042,6 +1040,59 @@ export const extractEditsFromToolMessage = (message: TranscriptViewMessage): any
   return edits;
 };
 
+/**
+ * Defers mounting heavy children (diff views, custom tool widgets) until
+ * the placeholder is within `rootMargin` of the viewport. After mounting
+ * once, the children stay mounted -- which is critical for the Selection
+ * API: an unmount-on-scroll-out approach would destroy any active selection
+ * across the boundary, which is exactly what we're trying to avoid by not
+ * virtualizing the flat-list.
+ *
+ * The placeholder is a real DOM element with a known `minHeight`, so layout
+ * (and DOM hit-testing for drag-selection) is stable. When real content
+ * mounts and its measured height differs from the placeholder, there's a
+ * one-time scroll shift below the mount point; the generous `rootMargin`
+ * lets it happen while the area is off-screen for the user.
+ */
+function LazyMount({
+  placeholderHeight,
+  rootMargin = '600px',
+  children,
+}: {
+  placeholderHeight: number;
+  rootMargin?: string;
+  children: () => React.ReactNode;
+}): JSX.Element {
+  const [mounted, setMounted] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (mounted) return;
+    const el = ref.current;
+    if (!el) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setMounted(true);
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setMounted(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [mounted, rootMargin]);
+
+  if (mounted) {
+    return <>{children()}</>;
+  }
+  return <div ref={ref} style={{ minHeight: placeholderHeight }} aria-hidden="true" />;
+}
+
 export const RichTranscriptView = React.forwardRef<
   { scrollToMessage: (index: number) => void; scrollToTop: () => void },
   RichTranscriptViewProps
@@ -1071,14 +1122,14 @@ export const RichTranscriptView = React.forwardRef<
   const flatBottomSentinelRef = useRef<HTMLDivElement>(null);
   const messageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
-  // Virtualization vs. flat content-visibility rendering.
-  // iOS WebKit lands `content-visibility: auto` in iOS 18 but selection
-  // extension into skipped content is rougher than Chromium, so we keep the
-  // existing virtua path for iPhone/iPad/iPod and let Chromium-based hosts
-  // (Electron, Capacitor Android) render the full list with content-visibility.
-  // Selection on iOS is rare enough that the tradeoff is worth it; on desktop
-  // selection is the primary complaint and content-visibility preserves DOM
-  // node identity across scroll so the browser's Selection API keeps working.
+  // iOS WKWebView (memory-constrained mobile hardware) keeps the existing
+  // virtua-based path. Every other host renders the full transcript as plain
+  // DOM. Virtualization fundamentally breaks the Selection API -- DOM nodes
+  // get unmounted on scroll, anchors die. Selection is the desktop user's
+  // primary complaint; on iOS it's rarely used, so the tradeoff is worth it.
+  // Browsers handle paint optimization for off-screen content on their own;
+  // they don't need our help, and content-visibility-style lazy paint tricks
+  // produce hit-test divergence during drag-selection.
   const useVirtualization = useMemo(() => isAppleMobileWebKit(), []);
 
   const settings = propsSettings || defaultSettings;
@@ -1333,19 +1384,9 @@ export const RichTranscriptView = React.forwardRef<
       if (useVirtualization) {
         vlistRef.current?.scrollToIndex(messages.length - 1, { align: 'end' });
       } else {
-        // content-visibility: auto rows use the intrinsic-size placeholder
-        // (90px) until they are first painted, so scrollHeight is under-
-        // estimated at first paint. scrollIntoView on a bottom sentinel
-        // forces the browser to measure the path to the sentinel and place
-        // the latest message at the viewport's bottom edge -- reliable.
         flatBottomSentinelRef.current?.scrollIntoView({ block: 'end', behavior: 'auto' });
       }
-      // Let layout settle, then reveal -- and re-pin to bottom in case
-      // content-visibility expanded any rows after our first scroll.
       requestAnimationFrame(() => {
-        if (!useVirtualization) {
-          flatBottomSentinelRef.current?.scrollIntoView({ block: 'end', behavior: 'auto' });
-        }
         setIsScrollReady(true);
       });
     });
@@ -1393,11 +1434,11 @@ export const RichTranscriptView = React.forwardRef<
     const container = scrollContainerRef.current;
     if (!container) return;
 
-    // content-visibility rows expand from their intrinsic-size placeholder
-    // to their real height as they enter the viewport. That grows scrollHeight
-    // without changing scrollTop, which trips the at-bottom check and would
-    // otherwise drop us out of sticky-scroll mode mid-stream. Only update
-    // the at-bottom atom when the user actually scrolled (scrollTop changed).
+    // Only update the at-bottom atom when scrollTop actually changes. Streaming
+    // content growth grows scrollHeight without moving scrollTop, which would
+    // otherwise drop us out of sticky-scroll mode by tripping the at-bottom
+    // distance check. The scrollTopChanged guard keeps sticky-bottom intact
+    // through streaming updates.
     let lastScrollTop = container.scrollTop;
 
     const handleScroll = () => {
@@ -1440,10 +1481,12 @@ export const RichTranscriptView = React.forwardRef<
     return () => container.removeEventListener('scroll', handleScroll);
   }, [useVirtualization, sessionId, pendingPermissionIndices, showPermissionBanner]);
 
-  // Flat-list mode: when content grows (new streamed chunk, content-visibility
-  // expansion, image load), re-pin to the bottom as long as the user is in
-  // sticky-bottom mode. The useEffect above fires only when messages change;
-  // this ResizeObserver catches every layout-driven growth in between.
+  // Flat-list mode: when content grows (new streamed chunk, async-loaded
+  // image, code block syntax-highlighting, etc.), re-pin to the bottom as
+  // long as the user is in sticky-bottom mode. The useEffect above fires
+  // only when the messages array changes; this ResizeObserver catches
+  // layout-driven growth between message updates (e.g. token-by-token
+  // streaming inside an already-rendered assistant row).
   useEffect(() => {
     if (useVirtualization) return;
     const flatList = flatListRef.current;
@@ -1460,6 +1503,7 @@ export const RichTranscriptView = React.forwardRef<
     ro.observe(flatList);
     return () => ro.disconnect();
   }, [useVirtualization, sessionId]);
+
 
 
   // Listen for routed search events from AgentWorkstreamPanel
@@ -1670,6 +1714,16 @@ export const RichTranscriptView = React.forwardRef<
     const isSubAgent = toolMsg.type === 'subagent';
     const isTeammate = isSubAgent && !!(toolMsg.subagent?.teammateName || toolMsg.subagent?.teamName);
     const hasChildren = isSubAgent && toolMsg.subagent?.childEvents && toolMsg.subagent.childEvents.length > 0;
+
+    // Lazy-mount heavy widget bodies on the flat-list path so a long
+    // transcript doesn't pay the full mount cost up-front. VList already
+    // mounts rows on demand, so nested lazy-mount would just flicker; in
+    // that path we render immediately.
+    const wrapHeavy = (placeholderHeight: number, render: () => React.ReactNode): React.ReactNode => {
+      if (useVirtualization) return render();
+      return <LazyMount placeholderHeight={placeholderHeight}>{render}</LazyMount>;
+    };
+
     // Check for custom widget first
     const CustomWidget = tool.toolName ? getCustomToolWidget(tool.toolName) : undefined;
     if (CustomWidget) {
@@ -1679,17 +1733,19 @@ export const RichTranscriptView = React.forwardRef<
           className={`rich-transcript-tool-container mb-2 ${depth > 0 ? 'nested ml-0' : ''}`}
           style={{ marginLeft: depth > 0 ? '1rem' : '0' }}
         >
-          <ToolWidgetErrorBoundary toolName={tool.toolName}>
-            <CustomWidget
-              message={toolMsg}
-              isExpanded={isExpanded}
-              onToggle={() => toggleToolExpand(toolId)}
-              workspacePath={workspacePath}
-              sessionId={sessionId}
-              readFile={readFile}
-              getToolCallDiffs={getToolCallDiffs}
-            />
-          </ToolWidgetErrorBoundary>
+          {wrapHeavy(150, () => (
+            <ToolWidgetErrorBoundary toolName={tool.toolName}>
+              <CustomWidget
+                message={toolMsg}
+                isExpanded={isExpanded}
+                onToggle={() => toggleToolExpand(toolId)}
+                workspacePath={workspacePath}
+                sessionId={sessionId}
+                readFile={readFile}
+                getToolCallDiffs={getToolCallDiffs}
+              />
+            </ToolWidgetErrorBoundary>
+          ))}
         </div>
       );
     }
@@ -1706,6 +1762,7 @@ export const RichTranscriptView = React.forwardRef<
           className={`rich-transcript-tool-container mb-2 ${depth > 0 ? 'nested ml-0' : ''}`}
           style={{ marginLeft: depth > 0 ? '1rem' : '0' }}
         >
+          {wrapHeavy(280, () => (
             <AsyncEditToolResultCard
               toolMessage={toolMsg}
               workspacePath={workspacePath}
@@ -1714,6 +1771,7 @@ export const RichTranscriptView = React.forwardRef<
               canEmbedFile={canEmbedFile}
               getToolCallDiffs={getToolCallDiffs}
             />
+          ))}
         </div>
       );
     }
@@ -1729,14 +1787,16 @@ export const RichTranscriptView = React.forwardRef<
           className={`rich-transcript-tool-container mb-2 ${depth > 0 ? 'nested ml-0' : ''}`}
           style={{ marginLeft: depth > 0 ? '1rem' : '0' }}
         >
-          <EditToolResultCard
-            toolMessage={toolMsg}
-            edits={editEntries}
-            workspacePath={workspacePath}
-            onOpenFile={onOpenFile}
-            renderEmbeddedFile={renderEmbeddedFile}
-            canEmbedFile={canEmbedFile}
-          />
+          {wrapHeavy(280, () => (
+            <EditToolResultCard
+              toolMessage={toolMsg}
+              edits={editEntries}
+              workspacePath={workspacePath}
+              onOpenFile={onOpenFile}
+              renderEmbeddedFile={renderEmbeddedFile}
+              canEmbedFile={canEmbedFile}
+            />
+          ))}
         </div>
       );
     }
@@ -1977,7 +2037,7 @@ export const RichTranscriptView = React.forwardRef<
   };
 
   // Rendered message rows. Computed once and reused by both the VList path
-  // (iOS WKWebView) and the flat-list / content-visibility path (Chromium hosts).
+  // (iOS WKWebView) and the plain-DOM flat-list path (Chromium hosts).
   // Each row's outer div carries `data-message-index` and registers its DOM
   // node in `messageRefs` so imperative scroll and selection helpers work in
   // both modes.
@@ -2369,8 +2429,7 @@ export const RichTranscriptView = React.forwardRef<
             /* Skip VList rendering when container is hidden (display:none parent).
                VList with 0 height renders ALL items instead of virtualizing,
                causing massive DOM bloat and style recalculation. The flat-list
-               path is unaffected -- content-visibility already skips paint for
-               offscreen rows. */
+               path is unaffected by display:none (no virtualization to break). */
             null
           ) : useVirtualization ? (
             <div className={`rich-transcript-messages rich-transcript-messages-wrapper flex flex-col max-w-full overflow-x-hidden h-full ${isScrollReady ? 'scroll-ready' : ''}`}>
@@ -2458,9 +2517,9 @@ export const RichTranscriptView = React.forwardRef<
                     <span className="rich-transcript-waiting-text">{waitingText}</span>
                   </div>
                 )}
-                {/* Zero-height bottom sentinel used by scrollIntoView({ block: 'end' })
-                    to reliably pin the bottom of the transcript even when
-                    content-visibility hasn't measured every row yet. */}
+                {/* Zero-height bottom sentinel. scrollIntoView({ block: 'end' })
+                    on this is a reliable way to scroll the container to the
+                    very bottom regardless of any async layout settling. */}
                 <div ref={flatBottomSentinelRef} aria-hidden="true" style={{ height: 0 }} />
               </div>
             </div>
