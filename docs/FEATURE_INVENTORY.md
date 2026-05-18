@@ -7,7 +7,7 @@ A concise reference of all features in the product. Keep this up to date as feat
 - **Lexical rich text editor** (`.md`, `.txt`, `.mdc`) -- WYSIWYG with markdown shortcuts, slash commands, embedded diagrams, collaborative editing
 - **Monaco code editor** (all code file types) -- syntax highlighting, IntelliSense, multi-cursor
 - **CSV spreadsheet editor** (`.csv`, `.tsv`) -- formula support, sorting, filtering
-- **Excalidraw diagram editor** (`.excalidraw`) -- whiteboard-style diagramming with Mermaid import and AI tools
+- **Excalidraw diagram editor** (`.excalidraw`) -- whiteboard-style diagramming with Mermaid import, AI tools, and real-time multi-client Share-to-Team collab
 - **DataModelLM editor** (`.prisma`, `.datamodel`) -- visual ER diagrams with export to SQL/JSON/DBML
 - **MockupLM editor** (`.mockup.html`) -- visual HTML/CSS mockup rendering with annotation layer
 - **PDF viewer** (`.pdf`)
@@ -211,6 +211,8 @@ A concise reference of all features in the product. Keep this up to date as feat
 - Shared document list
 - Key envelope distribution for new members
 - Durable Objects per entity (session, document, tracker, team, index)
+- **Extension-provided collab editors** — SDK `useCollaborativeEditor` hook lets any extension (Excalidraw shipped; others can opt in via `collaboration.supported` manifest flag) share its file type to team with real-time multi-client editing, cursors, and selection
+- **Client-side snapshot compaction** — connected clients periodically send `docCompact` so initial sync stays fast as edit history grows (single-elector by lowest userId)
 
 ## Tracker System
 

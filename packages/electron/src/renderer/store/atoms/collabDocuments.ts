@@ -121,6 +121,13 @@ export const workspaceHasTeamAtom = atom<boolean, [boolean], void>(
 export interface PendingCollabDocument {
   documentId: string;
   initialContent?: string;
+  /**
+   * Logical document type for routing. Defaults to 'markdown' for backward
+   * compatibility with the original share flow. For non-markdown shares
+   * (Excalidraw, Mindmap, etc.) the share callsite supplies the extension
+   * so the recipient can route to the right editor on first open.
+   */
+  documentType?: string;
 }
 export const pendingCollabDocumentAtom = atom<PendingCollabDocument | null>(null);
 

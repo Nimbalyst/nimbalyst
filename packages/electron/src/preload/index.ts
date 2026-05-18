@@ -814,13 +814,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Document Sync (collaborative editing)
   documentSync: {
-    open: (workspacePath: string, documentId: string, title?: string) =>
-      ipcRenderer.invoke('document-sync:open', { workspacePath, documentId, title }) as Promise<{
+    open: (
+      workspacePath: string,
+      documentId: string,
+      title?: string,
+      documentType?: string,
+    ) =>
+      ipcRenderer.invoke('document-sync:open', { workspacePath, documentId, title, documentType }) as Promise<{
         success: boolean;
         config?: {
           orgId: string;
           documentId: string;
           title: string;
+          documentType?: string;
           orgKeyBase64: string;
           orgKeyFingerprint?: string;
           serverUrl: string;

@@ -181,16 +181,27 @@ export type DocumentSyncStatus =
  */
 export type SerializedRelativePosition = string; // base64 encoded
 
-export interface AwarenessState {
-  /**
-   * Cursor/selection as Yjs relative positions.
-   * Anchor = start of selection, head = end of selection (may be equal for a collapsed cursor).
-   * Encoded as base64 Yjs relative positions for wire transmission.
-   */
+/**
+ * Awareness state carried over the encrypted broadcast.
+ *
+ * Two shapes coexist on this wire:
+ * - Markdown (Lexical) sends `{ cursor?: { anchor, head }, user: { name, color } }`.
+ * - Extension editors send the y-protocols Awareness state, which always
+ *   includes a `user: { id, name, color }` standard block plus arbitrary
+ *   editor-specific keys (e.g. `selectedElementIds`, `tool`, `editingNodeId`).
+ *
+ * Server-side validation: none. The DocumentRoom relays the encrypted blob
+ * verbatim. This is a private protocol consumed only by Nimbalyst clients,
+ * so widening the type here is safe.
+ */
+export type AwarenessState = Record<string, unknown> & {
+  /** Required user block. `id` is optional in the markdown path; required in
+   *  the extension path so the SDK hook can dedupe remote collaborators by
+   *  stable user id rather than y-protocols clientID. */
+  user: { name: string; color: string; id?: string; [k: string]: unknown };
+  /** Lexical-style cursor block (markdown path only). */
   cursor?: {
     anchor: SerializedRelativePosition;
     head: SerializedRelativePosition;
   };
-  /** User info for rendering remote cursors */
-  user: { name: string; color: string };
-}
+};

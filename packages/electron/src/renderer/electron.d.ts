@@ -688,12 +688,18 @@ interface ElectronAPI {
 
   // Document Sync (collaborative editing)
   documentSync: {
-    open: (workspacePath: string, documentId: string, title?: string) => Promise<{
+    open: (
+      workspacePath: string,
+      documentId: string,
+      title?: string,
+      documentType?: string,
+    ) => Promise<{
       success: boolean;
       config?: {
         orgId: string;
         documentId: string;
         title: string;
+        documentType?: string;
         orgKeyBase64: string;
         orgKeyFingerprint?: string;
         serverUrl: string;

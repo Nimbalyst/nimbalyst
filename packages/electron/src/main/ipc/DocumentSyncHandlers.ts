@@ -97,6 +97,7 @@ export function registerDocumentSyncHandlers(): void {
     workspacePath: string;
     documentId: string;
     title?: string;
+    documentType?: string;
   }) => {
     if (!isAuthenticated()) {
       return { success: false, error: 'Not authenticated. Sign in first.' };
@@ -204,6 +205,7 @@ export function registerDocumentSyncHandlers(): void {
         orgId,
         documentId: payload.documentId,
         title: payload.title || payload.documentId,
+        documentType: payload.documentType,
         orgKeyBase64,
         orgKeyFingerprint: orgKeyFp,
         serverUrl,
