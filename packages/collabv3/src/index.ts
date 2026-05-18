@@ -1212,6 +1212,53 @@ async function authenticateB2BToken(
     ok: false, error, sessionToken: '', sessionJwt: '', userId: '', email: '', expiresAt: '', orgId: '',
   });
 
+  // Convert a Stytch B2B auth response into a B2BAuthResult, failing if Stytch
+  // did not issue a session. Stytch returns 200 OK with populated member/org
+  // but empty session_token/session_jwt when step-up (MFA/password) is required;
+  // surface that as an actionable error instead of building a broken deep link.
+  const requireSession = (
+    data: {
+      member?: { member_id: string; email_address?: string };
+      member_session?: { expires_at: string };
+      organization?: { organization_id: string };
+      session_token?: string;
+      session_jwt?: string;
+      member_authenticated?: boolean;
+      mfa_required?: unknown;
+      primary_required?: unknown;
+    },
+    step: string,
+    fallbackEmail: string,
+  ): B2BAuthResult => {
+    if (!data.session_token || !data.session_jwt) {
+      const reason = data.mfa_required
+        ? 'multi-factor authentication is required for this organization'
+        : data.primary_required
+        ? 'a password is required for this organization'
+        : data.member_authenticated === false
+        ? 'additional authentication steps are required for this organization'
+        : 'no session was issued by the identity provider';
+      log.error(`Stytch ${step} returned no session: ${reason}`, {
+        hasMember: !!data.member,
+        hasOrg: !!data.organization,
+        hasMemberSession: !!data.member_session,
+        memberAuthenticated: data.member_authenticated,
+      });
+      return failResult(
+        `Sign-in failed: ${reason}. Step-up authentication is not yet supported by the desktop app -- please contact support.`,
+      );
+    }
+    return {
+      ok: true,
+      sessionToken: data.session_token,
+      sessionJwt: data.session_jwt,
+      userId: data.member?.member_id || '',
+      email: data.member?.email_address || fallbackEmail,
+      expiresAt: data.member_session?.expires_at || '',
+      orgId: data.organization?.organization_id || '',
+    };
+  };
+
   const b2bAuth = `Basic ${btoa(`${env.STYTCH_PROJECT_ID}:${env.STYTCH_SECRET_KEY}`)}`;
 
   // Step 1: Authenticate via B2B discovery
@@ -1245,18 +1292,12 @@ async function authenticateB2BToken(
       organization?: { organization_id: string };
       session_token?: string;
       session_jwt?: string;
+      member_authenticated?: boolean;
+      mfa_required?: unknown;
+      primary_required?: unknown;
     };
 
-    return {
-      ok: true,
-      error: '',
-      sessionToken: authData.session_token || '',
-      sessionJwt: authData.session_jwt || '',
-      userId: authData.member?.member_id || '',
-      email: authData.member?.email_address || '',
-      expiresAt: authData.member_session?.expires_at || '',
-      orgId: authData.organization?.organization_id || '',
-    };
+    return requireSession(authData, 'magic_links/authenticate', '');
   }
 
   if (tokenType === 'discovery_oauth' || tokenType === 'oauth') {
@@ -1350,6 +1391,9 @@ async function authenticateB2BToken(
       organization?: { organization_id: string };
       session_token?: string;
       session_jwt?: string;
+      member_authenticated?: boolean;
+      mfa_required?: unknown;
+      primary_required?: unknown;
     };
 
     if (createData.organization?.organization_id) {
@@ -1369,15 +1413,7 @@ async function authenticateB2BToken(
       });
     }
 
-    return {
-      ok: true,
-      sessionToken: createData.session_token || '',
-      sessionJwt: createData.session_jwt || '',
-      userId: createData.member?.member_id || '',
-      email: createData.member?.email_address || email,
-      expiresAt: createData.member_session?.expires_at || '',
-      orgId: createData.organization?.organization_id || '',
-    };
+    return requireSession(createData, 'discovery/organizations/create', email);
   }
 
   // Step 3: Exchange intermediate session for org-scoped session
@@ -1405,17 +1441,12 @@ async function authenticateB2BToken(
     organization?: { organization_id: string };
     session_token?: string;
     session_jwt?: string;
+    member_authenticated?: boolean;
+    mfa_required?: unknown;
+    primary_required?: unknown;
   };
 
-  return {
-    ok: true,
-    sessionToken: exchangeData.session_token || '',
-    sessionJwt: exchangeData.session_jwt || '',
-    userId: exchangeData.member?.member_id || '',
-    email: exchangeData.member?.email_address || email,
-    expiresAt: exchangeData.member_session?.expires_at || '',
-    orgId: exchangeData.organization?.organization_id || '',
-  };
+  return requireSession(exchangeData, 'discovery/intermediate_sessions/exchange', email);
 }
 
 /**
