@@ -1,10 +1,34 @@
 /**
  * Types for DocumentSync -- client-side Yjs + encryption layer.
  *
- * These are the client-side equivalents of the DocClientMessage/DocServerMessage
- * types defined in collabv3/src/types.ts. Duplicated here to avoid a dependency
- * on the collabv3 package (which is a Cloudflare Worker, not a library).
+ * Wire-protocol message shapes come from `@nimbalyst/collab-protocol` and
+ * are shared with the sync server. This file adds the client-side config
+ * surface, review-gate state, and awareness types the renderer consumes.
  */
+
+import type { KeyEnvelopeMessage as ProtocolKeyEnvelopeMessage } from '@nimbalyst/collab-protocol';
+
+export type {
+  DocClientMessage,
+  DocServerMessage,
+  DocSyncRequestMessage,
+  DocUpdateMessage,
+  DocCompactMessage,
+  DocAwarenessMessage,
+  AddKeyEnvelopeMessage,
+  RequestKeyEnvelopeMessage,
+  DocSetMetadataMessage,
+  DocSyncResponseMessage,
+  DocUpdateBroadcastMessage,
+  DocUpdateAckMessage,
+  DocAwarenessBroadcastMessage,
+  DocErrorMessage,
+  EncryptedDocUpdate,
+  EncryptedDocSnapshot,
+} from '@nimbalyst/collab-protocol';
+
+/** Wire key-envelope delivery message (`type: 'keyEnvelope'`). */
+export type DocKeyEnvelopeMessage = ProtocolKeyEnvelopeMessage;
 
 // ============================================================================
 // Configuration
@@ -169,86 +193,4 @@ export interface AwarenessState {
   };
   /** User info for rendering remote cursors */
   user: { name: string; color: string };
-}
-
-// ============================================================================
-// Wire Protocol (client-side copies of collabv3 types)
-// ============================================================================
-
-/** Client -> Server messages */
-export type DocClientMessage =
-  | { type: 'docSyncRequest'; sinceSeq: number }
-  | { type: 'docUpdate'; encryptedUpdate: string; iv: string; clientUpdateId?: string; orgKeyFingerprint?: string }
-  | { type: 'docCompact'; encryptedState: string; iv: string; replacesUpTo: number; orgKeyFingerprint?: string }
-  | { type: 'docAwareness'; encryptedState: string; iv: string }
-  | { type: 'addKeyEnvelope'; targetUserId: string; wrappedKey: string; iv: string; senderPublicKey: string }
-  | { type: 'requestKeyEnvelope' }
-  | { type: 'docSetMetadata'; entries: Record<string, string> };
-
-/** Server -> Client messages */
-export type DocServerMessage =
-  | DocSyncResponseMessage
-  | DocUpdateBroadcastMessage
-  | DocUpdateAckMessage
-  | DocAwarenessBroadcastMessage
-  | DocKeyEnvelopeMessage
-  | DocErrorMessage;
-
-export interface DocSyncResponseMessage {
-  type: 'docSyncResponse';
-  updates: EncryptedDocUpdate[];
-  snapshot?: EncryptedDocSnapshot;
-  hasMore: boolean;
-  cursor: number;
-}
-
-export interface DocUpdateBroadcastMessage {
-  type: 'docUpdateBroadcast';
-  encryptedUpdate: string;
-  iv: string;
-  senderId: string;
-  sequence: number;
-}
-
-export interface DocUpdateAckMessage {
-  type: 'docUpdateAck';
-  clientUpdateId: string;
-  sequence: number;
-}
-
-export interface DocAwarenessBroadcastMessage {
-  type: 'docAwarenessBroadcast';
-  encryptedState: string;
-  iv: string;
-  fromUserId: string;
-}
-
-export interface DocKeyEnvelopeMessage {
-  type: 'keyEnvelope';
-  wrappedKey: string;
-  iv: string;
-  senderPublicKey: string;
-  /** User ID of the sender who created this envelope */
-  senderUserId: string;
-}
-
-export interface DocErrorMessage {
-  type: 'error';
-  code: string;
-  message: string;
-}
-
-export interface EncryptedDocUpdate {
-  sequence: number;
-  encryptedUpdate: string;
-  iv: string;
-  senderId: string;
-  createdAt: number;
-}
-
-export interface EncryptedDocSnapshot {
-  encryptedState: string;
-  iv: string;
-  replacesUpTo: number;
-  createdAt: number;
 }
