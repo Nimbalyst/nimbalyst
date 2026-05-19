@@ -1141,6 +1141,26 @@ export class OpenAICodexProvider extends BaseAgentProvider {
         this.liveProtocolSessions.set(sessionId, session);
       }
 
+      // Persist a newly created thread ID immediately, before streaming the
+      // turn. Codex turns can pause on PromptForUserInput / AskUserQuestion
+      // and never reach the terminal `complete` path that historically wrote
+      // providerSessionId to the DB. If we wait until turn end, an app restart
+      // during that blocked state loses the only resumable thread handle and
+      // the next prompt starts a fresh conversation.
+      if (sessionId && session.id) {
+        if (existingSessionId && session.id !== existingSessionId) {
+          throw new Error(
+            `[CODEX] Thread resume mismatch: requested resume of ` +
+            `"${existingSessionId}" but protocol returned thread "${session.id}". ` +
+            `The prior conversation is not loaded. Aborting so the user sees the ` +
+            `failure rather than silently starting a fresh thread.`
+          );
+        }
+        if (!existingSessionId) {
+          this.sessions.captureSessionId(sessionId, session.id);
+        }
+      }
+
       // Store initialization data for analytics (picked up by AIService).
       // `transport` lets us bucket sessions by which codex transport drove
       // them, so we can compare reliability/quality between sdk and app-server
@@ -1304,22 +1324,11 @@ export class OpenAICodexProvider extends BaseAgentProvider {
         }
       }
 
-      // Capture session ID after stream completes
-      // The protocol layer captures thread ID from thread.started event during streaming
+      // Capture session ID after stream completes as a safety net for older
+      // call paths. New threads are now persisted immediately after
+      // createSession() succeeds so blocked turns survive restart.
       if (sessionId && session.id) {
         if (session.id !== existingSessionId) {
-          // If we asked the protocol to resume an existing thread and it handed us
-          // back a different one, the prior conversation was not loaded. Fail loud
-          // rather than silently overwriting the mapping and continuing on a fresh
-          // thread the user thinks is a continuation.
-          if (isResumedThread) {
-            throw new Error(
-              `[CODEX] Thread resume mismatch: requested resume of ` +
-              `"${existingSessionId}" but protocol returned thread "${session.id}". ` +
-              `The prior conversation is not loaded. Aborting so the user sees the ` +
-              `failure rather than silently starting a fresh thread.`
-            );
-          }
           console.log('[CODEX] Saving new thread ID:', {
             nimbalystSessionId: sessionId,
             codexThreadId: session.id
