@@ -472,6 +472,6 @@ interface LastEventState {
   id: number;
   eventType: TranscriptEventType;
   searchableText: string | null;
-  mode: 'agent' | 'planning' | undefined;
+  mode: 'agent' | 'planning' | 'auto' | undefined;
   subagentId: string | null;
 }
