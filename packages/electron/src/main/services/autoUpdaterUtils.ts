@@ -18,13 +18,6 @@ export function categorizeDownloadDuration(durationMs: number): 'fast' | 'medium
   return 'slow';
 }
 
-/**
- * Classify update errors for analytics and toast handling.
- *
- * Branch order matters: a network error mentioning "cannot be executed"
- * stays classified as network. Documents the precedence so a future
- * reorder does not silently change behavior.
- */
 // electron-updater runs its requests through Electron's Chromium net stack,
 // which reports connectivity failures as `net::ERR_*` strings that none of the
 // Node-style checks (enotfound / econnrefused / timeout) match. The most common
@@ -37,6 +30,13 @@ export function categorizeDownloadDuration(durationMs: number): 'fast' | 'medium
 const CHROMIUM_NETWORK_ERROR =
   /net::err_(name_not_resolved|name_resolution_failed|dns_\w+|icann_name_collision|internet_disconnected|network_\w+|connection_\w+|proxy_connection_failed|address_unreachable|socket_not_connected|timed_out)/;
 
+/**
+ * Classify update errors for analytics and toast handling.
+ *
+ * Branch order matters: a network error mentioning "cannot be executed"
+ * stays classified as network. Documents the precedence so a future
+ * reorder does not silently change behavior.
+ */
 export function classifyUpdateError(error: Error): string {
   const message = error.message.toLowerCase();
   if (
