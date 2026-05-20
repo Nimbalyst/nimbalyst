@@ -12,6 +12,7 @@ import type { BrowserWindow } from 'electron';
 import { logger } from '../../utils/logger';
 import type { PermissionScope } from '@nimbalyst/runtime';
 import { TrayManager } from '../../tray/TrayManager';
+import { resolveRequestUserInputPromptTargets } from '../../mcp/tools/codexToolCallResolver';
 
 const log = logger.ai;
 
@@ -295,19 +296,40 @@ function handleRequestUserInputResponse(
   );
 
   const { ipcMain } = require('electron');
+  const { waiterPromptIds: promptIdAliases, rawPromptId } =
+    resolveRequestUserInputPromptTargets(promptId);
 
-  import('../../mcp/tools/interactiveToolHandlers').then(({ getRequestUserInputResponseChannel }) => {
-    const channel = getRequestUserInputResponseChannel(sessionId, promptId);
-    const hasWaiter = ipcMain.listenerCount(channel) > 0;
-    if (hasWaiter) {
-      log.info(`[Mobile] Emitting on RequestUserInput channel: ${channel}`);
-      ipcMain.emit(channel, {}, {
+  import('../../mcp/tools/interactiveToolHandlers').then(({
+    getRequestUserInputResponseChannel,
+    getRequestUserInputFallbackResponseChannel,
+  }) => {
+    let hasWaiter = false;
+    for (const promptIdAlias of promptIdAliases) {
+      const channel = getRequestUserInputResponseChannel(sessionId, promptIdAlias);
+      if (ipcMain.listenerCount(channel) > 0) {
+        hasWaiter = true;
+        log.info(`[Mobile] Emitting on RequestUserInput channel: ${channel}`);
+        ipcMain.emit(channel, {}, {
+          answers: response.cancelled ? {} : (response.answers ?? {}),
+          cancelled: response.cancelled === true,
+          respondedBy: 'mobile',
+        });
+      }
+    }
+    const fallbackChannel = getRequestUserInputFallbackResponseChannel(sessionId);
+    if (!hasWaiter && ipcMain.listenerCount(fallbackChannel) > 0) {
+      hasWaiter = true;
+      log.info(`[Mobile] Emitting on RequestUserInput fallback channel: ${fallbackChannel}`);
+      ipcMain.emit(fallbackChannel, {}, {
+        promptId,
+        ...(rawPromptId ? { rawPromptId } : {}),
         answers: response.cancelled ? {} : (response.answers ?? {}),
         cancelled: response.cancelled === true,
         respondedBy: 'mobile',
       });
-    } else {
-      log.info(`[Mobile] No MCP waiter for RequestUserInput on ${channel} -- relying on DB poll`);
+    }
+    if (!hasWaiter) {
+      log.info(`[Mobile] No MCP waiter for RequestUserInput on ${promptIdAliases.join(', ')} -- relying on DB poll`);
     }
   }).catch((err) => {
     log.warn('[Mobile] Failed to import interactiveToolHandlers:', err);
@@ -323,6 +345,7 @@ function handleRequestUserInputResponse(
       content: JSON.stringify({
         type: 'request_user_input_response',
         promptId,
+        ...(rawPromptId ? { rawPromptId } : {}),
         answers: response.cancelled ? {} : (response.answers ?? {}),
         cancelled: response.cancelled === true,
         respondedBy: 'mobile',

@@ -189,7 +189,7 @@ function registerWsHandler(id: string, handler: WsEventHandler): void {
  * Returns an object that implements the browser WebSocket interface
  * (enough for DocumentSyncProvider to use).
  */
-function createProxiedWebSocket(url: string): WebSocket {
+export function createProxiedWebSocket(url: string): WebSocket {
   const api = window.electronAPI?.documentSync;
   if (!api?.wsConnect) {
     throw new Error('WebSocket proxy API not available');

@@ -1,24 +1,12 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
+import type { PluggableList } from 'unified';
 import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-
-// Defense-in-depth against KaTeX's history of XSS / DoS advisories. Agent-
-// supplied math is untrusted, so disable anything that can elevate it (\href,
-// \url, custom macros) and bound the work the renderer can be coerced into
-// doing on a single equation.
-const KATEX_SAFE_OPTIONS = {
-  trust: false,
-  strict: 'ignore' as const,
-  throwOnError: false,
-  output: 'html' as const,
-  maxSize: 25,
-  maxExpand: 100,
-  macros: {},
-};
+import {
+  useTranscriptMarkdownContributions,
+  useTranscriptMarkdownStyles,
+} from '../contributions';
 
 // Inject MarkdownRenderer styles once (for syntax highlighting, scrollbar, and overflow wrapper)
 const injectMarkdownRendererStyles = () => {
@@ -373,6 +361,26 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
     if (typeof offset !== 'number') return undefined;
     return `cb:${String(messageId)}:${offset}`;
   }, [messageId]);
+
+  // Extension-contributed markdown plugins/components are merged on top of
+  // the core baseline. The transcript registry handles deduping styles and
+  // keeps the React tree subscribed to extension enable/disable events.
+  const contributions = useTranscriptMarkdownContributions();
+  useTranscriptMarkdownStyles(contributions.styles);
+
+  // Core ships only `remark-gfm` as the baseline; KaTeX, syntax themes, and
+  // any other domain-specific behavior now arrives via the transcript
+  // markdown contribution registry (see
+  // `packages/extensions/math` for the canonical KaTeX contributor).
+  const remarkPlugins = useMemo<PluggableList>(
+    () => [remarkGfm, ...contributions.remarkPlugins] as PluggableList,
+    [contributions.remarkPlugins],
+  );
+  const rehypePlugins = useMemo<PluggableList>(
+    () => [...contributions.rehypePlugins] as PluggableList,
+    [contributions.rehypePlugins],
+  );
+
   return (
     <div
       className={`markdown-content text-[0.9375rem] leading-relaxed max-w-full overflow-x-hidden break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 ${isUser ? 'font-medium' : 'font-normal'} ${isSystemMessage ? 'opacity-85 font-mono text-[0.95em]' : ''}`}
@@ -381,8 +389,8 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
       }}
     >
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[[rehypeKatex, KATEX_SAFE_OPTIONS]]}
+        remarkPlugins={remarkPlugins}
+        rehypePlugins={rehypePlugins}
         components={{
           // Code blocks with syntax highlighting
           code({ node, inline, className, children, ...props }: any) {
@@ -710,7 +718,10 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
             }}>
               {children}
             </del>
-          )
+          ),
+          // Extension overrides applied last so they can replace any of the
+          // core component handlers above.
+          ...contributions.components,
         }}
       >
         {content}

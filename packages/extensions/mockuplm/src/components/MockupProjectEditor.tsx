@@ -10,9 +10,18 @@ import { ReactFlowProvider } from '@xyflow/react';
 import { MockupProjectCanvas, type MockupProjectCanvasRef } from './MockupProjectCanvas';
 import { createMockupProjectStore, type MockupProjectStoreApi } from '../store/projectStore';
 import { createEmptyProject, type MockupProjectFile } from '../types/project';
-import { useEditorLifecycle, type EditorHostProps } from '@nimbalyst/extension-sdk';
+import {
+  useEditorLifecycle,
+  useCollaborativeEditor,
+  type EditorHostProps,
+} from '@nimbalyst/extension-sdk';
 import { getFilesystem } from '../index';
 import { type MockupTheme } from '../utils/themeEngine';
+import { MockupProjectBinding } from '../collab/mockupProjectBinding';
+import {
+  isMockupProjectYDocEmpty,
+  seedMockupProjectYDoc,
+} from '../collab/seed';
 
 export function MockupProjectEditor({ host }: EditorHostProps) {
   // Create a store instance per editor
@@ -119,6 +128,14 @@ export function MockupProjectEditor({ host }: EditorHostProps) {
     },
 
     applyContent: (data: MockupProjectFile) => {
+      // In collab mode the binding owns the store; createBinding projects
+      // the live Y.Doc into the store on bind. host.loadContent() returns
+      // only the share-flow seed (or '' parsed to an empty project for a
+      // recipient), so loading it here would clobber the already-synced
+      // store state. The binding's flushStoreToYDoc would then echo that
+      // empty state back into Y.Maps -- last-write-wins on meta keys
+      // resets the shared project name / viewport to defaults.
+      if (host.collaboration) return;
       store.getState().loadFromFile(data);
       store.getState().markClean();
     },
@@ -142,6 +159,59 @@ export function MockupProjectEditor({ host }: EditorHostProps) {
       },
     });
   }, [store, markDirty]);
+
+  // ---- Collaborative wiring (no-op when host.collaboration is undefined) ----
+  // Keyed entities + meta map (see mockupProjectBinding.ts). The binding
+  // owns the Zustand-store <-> Y.Doc bridge; in collab mode store mutations
+  // get reflected into Y.Maps and remote Y.Map changes get projected back
+  // into the store.
+  const collabProjectBindingRef = useRef<MockupProjectBinding | null>(null);
+  useCollaborativeEditor(host, {
+    isEmpty: isMockupProjectYDocEmpty,
+    initializeFromContent: seedMockupProjectYDoc,
+    createBinding: ({ yDoc, awareness }) => {
+      const binding = new MockupProjectBinding(
+        yDoc,
+        store,
+        { enableUndoManager: true },
+        awareness,
+      );
+      collabProjectBindingRef.current = binding;
+      return {
+        destroy: () => {
+          binding.destroy();
+          collabProjectBindingRef.current = null;
+        },
+      };
+    },
+  });
+
+  // Route Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z through the Y.UndoManager when
+  // collab is active. In local-only mode this listener is a no-op because
+  // collabProjectBindingRef stays null.
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      const binding = collabProjectBindingRef.current;
+      if (!binding?.undoManager) return;
+      const lower = event.key?.toLowerCase();
+      if (!lower || lower !== 'z') return;
+      if (!(event.ctrlKey || event.metaKey)) return;
+      // Let inputs handle their own undo
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.shiftKey) {
+        binding.redo();
+      } else {
+        binding.undo();
+      }
+    };
+    window.addEventListener('keydown', handler, { capture: true });
+    return () => window.removeEventListener('keydown', handler, { capture: true });
+  }, []);
 
   // Force re-render on store changes
   const [, forceUpdate] = useState(0);

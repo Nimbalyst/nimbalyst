@@ -71,6 +71,38 @@ describe('ClaudeCodeRawParser', () => {
       });
     });
 
+    it('parses wakeup_resume prompt as system_message, not user_message', async () => {
+      const parser = new ClaudeCodeRawParser();
+      const msg = makeRawMessage({
+        direction: 'input',
+        content: JSON.stringify({ prompt: 'Continue working on the feature', options: {} }),
+        metadata: { promptOrigin: 'wakeup_resume' },
+      });
+
+      const descriptors = await parser.parseMessage(msg, makeContext());
+
+      expect(descriptors).toHaveLength(1);
+      expect(descriptors[0]).toMatchObject({
+        type: 'system_message',
+        systemType: 'status',
+        reminderKind: 'wakeup_resume',
+        text: 'Continue working on the feature',
+      });
+    });
+
+    it('does not treat regular user prompt with promptOrigin absent as wakeup', async () => {
+      const parser = new ClaudeCodeRawParser();
+      const msg = makeRawMessage({
+        direction: 'input',
+        content: JSON.stringify({ prompt: 'Hello world', options: {} }),
+      });
+
+      const descriptors = await parser.parseMessage(msg, makeContext());
+
+      expect(descriptors).toHaveLength(1);
+      expect(descriptors[0].type).toBe('user_message');
+    });
+
     it('parses SDK format user message { type: "user", message: { content: "..." } }', async () => {
       const parser = new ClaudeCodeRawParser();
       const msg = makeRawMessage({

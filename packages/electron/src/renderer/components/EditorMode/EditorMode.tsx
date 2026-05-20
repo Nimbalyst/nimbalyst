@@ -349,10 +349,15 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   }, [currentFilePath, workspacePath]);
 
   // Dev helper: open a collaborative document from the console
-  // Usage: window.__openCollabDoc('my-doc-id', 'My Document Title')
+  // Usage: window.__openCollabDoc('my-doc-id', 'My Document Title', '<initialContent>?', 'documentType?')
   useEffect(() => {
     if (!import.meta.env.DEV) return;
-    (window as any).__openCollabDoc = async (documentId: string, title?: string) => {
+    (window as any).__openCollabDoc = async (
+      documentId: string,
+      title?: string,
+      initialContent?: string,
+      documentType?: string,
+    ) => {
       if (!workspacePath) {
         console.error('[openCollabDoc] No workspace path');
         return;
@@ -362,12 +367,101 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
         workspacePath,
         documentId,
         title,
+        initialContent,
+        documentType,
         addTab: tabsActions.addTab,
       });
       console.log('[openCollabDoc] Opened tab:', tabId);
       return tabId;
     };
-    return () => { delete (window as any).__openCollabDoc; };
+
+    // Playwright-only helper: open a collab doc without going through Stytch
+    // auth. Resolves the config via `document-sync:open-test` (gated by
+    // PLAYWRIGHT=1 in the main process) and re-uses the same `openCollabDocument`
+    // + `createProxiedWebSocket` plumbing the real share path uses. The test
+    // injects `test_user_id` / `test_org_id` by wrapping the URL passed
+    // through `createProxiedWebSocket` via `urlOverride` below.
+    (window as any).__openCollabDocTest = async (params: {
+      documentId: string;
+      title?: string;
+      initialContent?: string;
+      documentType?: string;
+      serverUrl: string;
+      orgId: string;
+      userId: string;
+      encryptionKeyBase64: string;
+      /** Optional query-string suffix appended to the WS URL (no leading ?). */
+      urlExtraQuery?: string;
+    }) => {
+      if (!workspacePath) {
+        throw new Error('[openCollabDocTest] No workspace path');
+      }
+      const testResult = await (window as any).electronAPI.invoke(
+        'document-sync:open-test',
+        {
+          serverUrl: params.serverUrl,
+          orgId: params.orgId,
+          userId: params.userId,
+          documentId: params.documentId,
+          title: params.title ?? params.documentId,
+          encryptionKeyBase64: params.encryptionKeyBase64,
+        },
+      );
+      if (!testResult?.success || !testResult.config) {
+        throw new Error(
+          `[openCollabDocTest] document-sync:open-test failed: ${testResult?.error ?? 'unknown'}`,
+        );
+      }
+      const cfg = testResult.config;
+      // Reconstruct CryptoKey from base64.
+      const binary = atob(cfg.orgKeyBase64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const documentKey = await crypto.subtle.importKey(
+        'raw',
+        bytes,
+        { name: 'AES-GCM', length: 256 },
+        false,
+        ['encrypt', 'decrypt'],
+      );
+
+      const { openCollabDocument, createProxiedWebSocket } = await import(
+        '../../utils/collabDocumentOpener'
+      );
+      const hasWsProxy = !!(window as any).electronAPI?.documentSync?.wsConnect;
+      const createWebSocket = hasWsProxy
+        ? (url: string) => {
+            const target = params.urlExtraQuery
+              ? `${url}${url.includes('?') ? '&' : '?'}${params.urlExtraQuery}`
+              : url;
+            return createProxiedWebSocket(target);
+          }
+        : undefined;
+
+      const tabId = openCollabDocument({
+        workspacePath,
+        orgId: cfg.orgId,
+        documentId: cfg.documentId,
+        title: cfg.title,
+        documentType: params.documentType,
+        documentKey,
+        serverUrl: cfg.serverUrl,
+        userId: cfg.userId,
+        userName: cfg.userName ?? 'Test User',
+        userEmail: cfg.userEmail ?? 'test@test.com',
+        initialContent: params.initialContent,
+        createWebSocket,
+        getJwt: async () => 'test-jwt',
+        addTab: tabsActions.addTab,
+      });
+      console.log('[openCollabDocTest] Opened tab:', tabId);
+      return tabId;
+    };
+
+    return () => {
+      delete (window as any).__openCollabDoc;
+      delete (window as any).__openCollabDocTest;
+    };
   }, [workspacePath, tabsActions]);
 
   // Update MCP document state for custom editors (non-markdown files)

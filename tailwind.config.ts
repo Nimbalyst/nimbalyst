@@ -13,6 +13,8 @@ import type { Config } from 'tailwindcss';
 const config: Config = {
   content: [
     './packages/*/src/**/*.{ts,tsx,js,jsx}',
+    './packages/extensions/*/src/**/*.{ts,tsx,js,jsx,html}',
+    './packages/extensions/*/samples/**/*.html',
     './packages/extension-sdk-docs/examples/*/src/**/*.{ts,tsx,js,jsx}',
   ],
   darkMode: ['variant', '&:is([data-theme="dark"] *, [data-theme="crystal-dark"] *)'],

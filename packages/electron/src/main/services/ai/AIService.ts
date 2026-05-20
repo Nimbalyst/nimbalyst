@@ -1232,8 +1232,13 @@ export class AIService {
         triggerQueuedPromptProcessing: (sessionId, workspacePath) =>
           this.triggerQueuedPromptProcessingForSession(sessionId, workspacePath),
         rollbackExecutingPrompts: async (sessionId) => {
+          // Use the delivery-aware sweep so that a mobile-initiated cancel
+          // doesn't re-deliver a prompt that already landed in the
+          // conversation. Returns the count of rows that actually moved
+          // back to pending (matches the prior contract).
           const { getQueuedPromptsStore } = await import('../RepositoryManager');
-          return getQueuedPromptsStore().rollbackExecuting(sessionId);
+          const { rolledBack } = await getQueuedPromptsStore().sweepExecutingForSession(sessionId);
+          return rolledBack;
         },
       });
     } catch (error) {
@@ -2537,18 +2542,24 @@ export class AIService {
         });
 
         // Defensive cleanup: if the in-flight turn was processing a queued
-        // prompt, drop the in-memory guard and reset any DB row stuck in
-        // 'executing' so the queue isn't permanently wedged after cancel.
+        // prompt, drop the in-memory guard and unwedge any DB row stuck in
+        // 'executing'. sweepExecutingForSession is delivery-aware -- a
+        // prompt whose user message already landed in ai_agent_messages is
+        // marked completed instead of rolled back, so the queue trigger
+        // that follows the abort doesn't immediately re-claim and re-send
+        // the same input (NIM-615).
         this.sessionsProcessingQueue.delete(sessionId);
         try {
           const { getQueuedPromptsStore } = await import('../RepositoryManager');
           const queueStore = getQueuedPromptsStore();
-          const rolledBack = await queueStore.rollbackExecuting(sessionId);
-          if (rolledBack > 0) {
-            logger.main.info(`[AIService] cancelRequest: rolled back ${rolledBack} executing prompt(s) for session ${sessionId}`);
+          const { completed, rolledBack } = await queueStore.sweepExecutingForSession(sessionId);
+          if (completed > 0 || rolledBack > 0) {
+            logger.main.info(
+              `[AIService] cancelRequest: swept session ${sessionId} -- ${completed} delivered marked completed, ${rolledBack} undelivered rolled back`
+            );
           }
-        } catch (rollbackErr) {
-          logger.main.error('[AIService] cancelRequest: rollbackExecuting failed:', rollbackErr);
+        } catch (sweepErr) {
+          logger.main.error('[AIService] cancelRequest: sweepExecutingForSession failed:', sweepErr);
         }
 
         provider.abort();
@@ -2567,10 +2578,11 @@ export class AIService {
     // distinguish the two paths.
     //
     // Defensive cleanup runs before the interrupt: clear the in-memory
-    // sessionsProcessingQueue guard and rollback any PGLite rows stuck in
-    // 'executing' so a hung abort can't permanently wedge the queue. The
-    // renderer follows up with an explicit ai:triggerQueueProcessing call,
-    // which is idempotent against the natural completion-handler path.
+    // sessionsProcessingQueue guard and unwedge any PGLite rows stuck in
+    // 'executing' via sweepExecutingForSession (delivery-aware -- already
+    // delivered prompts are marked completed, not rolled back, so the
+    // follow-up ai:triggerQueueProcessing doesn't re-send the same input
+    // -- NIM-615).
     safeHandle('ai:interruptCurrentTurn', async (_event, sessionId: string) => {
       if (!sessionId) {
         throw new Error('Session ID is required to interrupt');
@@ -2591,12 +2603,14 @@ export class AIService {
       try {
         const { getQueuedPromptsStore } = await import('../RepositoryManager');
         const queueStore = getQueuedPromptsStore();
-        const rolledBack = await queueStore.rollbackExecuting(sessionId);
-        if (rolledBack > 0) {
-          logger.main.info(`[AIService] interruptCurrentTurn: rolled back ${rolledBack} executing prompt(s) for session ${sessionId}`);
+        const { completed, rolledBack } = await queueStore.sweepExecutingForSession(sessionId);
+        if (completed > 0 || rolledBack > 0) {
+          logger.main.info(
+            `[AIService] interruptCurrentTurn: swept session ${sessionId} -- ${completed} delivered marked completed, ${rolledBack} undelivered rolled back`
+          );
         }
-      } catch (rollbackErr) {
-        logger.main.error('[AIService] interruptCurrentTurn: rollbackExecuting failed:', rollbackErr);
+      } catch (sweepErr) {
+        logger.main.error('[AIService] interruptCurrentTurn: sweepExecutingForSession failed:', sweepErr);
       }
 
       const result = await provider.interruptCurrentTurn();

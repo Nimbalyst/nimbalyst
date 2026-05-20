@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DocumentModel } from '../DocumentModel';
 import { DocumentModelRegistry } from '../DocumentModelRegistry';
-import type { DocumentBackingStore, ExternalChangeCallback } from '../types';
+import type { DocumentBackingStore } from '../types';
 
 function createMockStore(): DocumentBackingStore & { dispose: () => void } {
   return {
@@ -124,5 +124,65 @@ describe('DocumentModelRegistry', () => {
 
     DocumentModelRegistry.clear();
     expect(DocumentModelRegistry.getRegisteredPaths()).toHaveLength(0);
+  });
+
+  describe('rename', () => {
+    it('re-keys the registry entry without creating a new model', () => {
+      const { model: original, handle } = DocumentModelRegistry.getOrCreate('/test/old.md');
+      handle.setDirty(true);
+
+      expect(DocumentModelRegistry.rename('/test/old.md', '/test/new.md')).toBe(true);
+
+      expect(DocumentModelRegistry.has('/test/old.md')).toBe(false);
+      expect(DocumentModelRegistry.has('/test/new.md')).toBe(true);
+      // Same model object -- dirty buffer preserved
+      expect(DocumentModelRegistry.get('/test/new.md')).toBe(original);
+      expect(original.isDirty()).toBe(true);
+      expect(original.filePath).toBe('/test/new.md');
+
+      handle.detach();
+    });
+
+    it('is a no-op when the file is not open', () => {
+      expect(DocumentModelRegistry.rename('/test/not-open.md', '/test/other.md')).toBe(false);
+      expect(DocumentModelRegistry.has('/test/other.md')).toBe(false);
+    });
+
+    it('existing getOrCreate after rename returns the same model', () => {
+      const { model: original, handle } = DocumentModelRegistry.getOrCreate('/test/old.md');
+
+      expect(DocumentModelRegistry.rename('/test/old.md', '/test/new.md')).toBe(true);
+
+      // A second consumer opens the new path -- should get the existing model
+      const { model: reacquired, handle: h2 } = DocumentModelRegistry.getOrCreate('/test/new.md');
+      expect(reacquired).toBe(original);
+
+      handle.detach();
+      h2.detach();
+    });
+
+    it('releases a renamed model even when the caller still passes the old path', () => {
+      const { handle } = DocumentModelRegistry.getOrCreate('/test/old.md');
+
+      expect(DocumentModelRegistry.rename('/test/old.md', '/test/new.md')).toBe(true);
+      DocumentModelRegistry.release('/test/old.md', handle);
+
+      expect(DocumentModelRegistry.has('/test/new.md')).toBe(false);
+    });
+
+    it('refuses to overwrite an already-open destination model', () => {
+      const { model: source, handle: h1 } = DocumentModelRegistry.getOrCreate('/test/source.md');
+      const { model: destination, handle: h2 } = DocumentModelRegistry.getOrCreate('/test/destination.md');
+
+      expect(DocumentModelRegistry.rename('/test/source.md', '/test/destination.md')).toBe(false);
+
+      expect(DocumentModelRegistry.get('/test/source.md')).toBe(source);
+      expect(DocumentModelRegistry.get('/test/destination.md')).toBe(destination);
+      expect(source.filePath).toBe('/test/source.md');
+      expect(destination.filePath).toBe('/test/destination.md');
+
+      h1.detach();
+      h2.detach();
+    });
   });
 });

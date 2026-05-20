@@ -10,16 +10,18 @@
 import React, { useMemo } from 'react';
 import { defineExtension } from 'lexical';
 import {
-  DocumentLinkPlugin,
-  DocumentReferenceNode,
-  DocumentReferenceTransformer,
-  LegacyDocumentReferenceTransformer,
   TypeaheadMenuPlugin,
   registerExtensionEditorComponent,
   setExtensionContributions,
   setExtensionLexicalExtension,
   useAnchorElem,
 } from '@nimbalyst/runtime';
+import { DocumentLinkPlugin } from '@nimbalyst/runtime/plugins/DocumentLinkPlugin';
+import {
+  DocumentReferenceNode,
+  DocumentReferenceTransformer,
+  LegacyDocumentReferenceTransformer,
+} from '@nimbalyst/runtime/plugins/DocumentLinkPlugin/DocumentLinkNode';
 import { ElectronRendererDocumentService } from '../services/ElectronDocumentService';
 
 const SOURCE = 'document-link';

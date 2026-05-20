@@ -2,7 +2,7 @@
 
 Generated from `package-lock.json` and installed package legal files.
 
-- Packages scanned: 826
+- Packages scanned: 827
 - Review required: 0
 - Approved exceptions: 3
 
@@ -13,7 +13,7 @@ Generated from `package-lock.json` and installed package legal files.
 - BlueOak-1.0.0: 9
 - BSD-2-Clause: 6
 - BSD-3-Clause: 28
-- CC0-1.0: 1
+- CC0-1.0: 2
 - EPL-2.0: 1
 - ISC: 56
 - LGPL-3.0: 1

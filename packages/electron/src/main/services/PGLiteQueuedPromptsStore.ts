@@ -17,6 +17,8 @@ export interface QueuedPrompt {
     filePath?: string;
     content?: string;
     fileType?: string;
+    /** Identifies the origin of this queued prompt (e.g. 'wakeup_resume' for ScheduleWakeup). */
+    promptOrigin?: string;
   };
   createdAt: number;  // epoch ms
   claimedAt?: number; // epoch ms
@@ -33,6 +35,8 @@ export interface CreateQueuedPromptInput {
     filePath?: string;
     content?: string;
     fileType?: string;
+    /** Identifies the origin of this queued prompt (e.g. 'wakeup_resume' for ScheduleWakeup). */
+    promptOrigin?: string;
   };
 }
 
@@ -79,6 +83,39 @@ export interface QueuedPromptsStore {
    * the one-shot recovery sweep at app startup.
    */
   rollbackAllExecuting(): Promise<number>;
+
+  /**
+   * Boot-time sweep over `executing` rows that distinguishes "delivered but
+   * agent was still paused at quit" from "crashed before delivery."
+   *
+   * Why: a queued prompt is in `executing` for the entire duration of an
+   * agent turn, including while the agent is paused on AskUserQuestion /
+   * ExitPlanMode / permission requests. A naive rollback to `pending`
+   * causes the prompt to be re-claimed and re-sent on the next session
+   * activation, duplicating the original user input. We instead check
+   * whether the prompt was already injected into the conversation by
+   * looking for an `ai_agent_messages` input row in the same session
+   * dated at or after `claimed_at`. If delivered -> mark `completed`
+   * (the agent turn is no longer running, but the prompt did its job).
+   * If not delivered -> roll back to `pending` so a retry can pick it
+   * up (genuine crash before send).
+   *
+   * Returns the count of rows in each bucket.
+   */
+  sweepExecutingOnBoot(): Promise<{ completed: number; rolledBack: number }>;
+
+  /**
+   * Delivery-aware single-session variant of the boot sweep. Used by
+   * the cancel / interrupt / mobile-sync paths instead of the bare
+   * `rollbackExecuting`. Same rationale: clicking cancel mid-turn does
+   * not undo the user message that has already landed in
+   * `ai_agent_messages`. Rolling such a row back to `pending` causes
+   * the queue trigger that follows the abort to immediately re-claim
+   * and re-send it, duplicating the input. Mark delivered rows
+   * `completed`; roll back only rows that never made it to the
+   * conversation.
+   */
+  sweepExecutingForSession(sessionId: string): Promise<{ completed: number; rolledBack: number }>;
 
   /** Delete all completed/failed prompts older than a certain age */
   cleanup(olderThanMs: number): Promise<number>;
@@ -291,6 +328,125 @@ export function createPGLiteQueuedPromptsStore(
         console.log(`[QueuedPromptsStore] Boot sweep: rolled back ${rows.length} executing prompt(s) across all sessions`);
       }
       return rows.length;
+    },
+
+    async sweepExecutingOnBoot(): Promise<{ completed: number; rolledBack: number }> {
+      await ensureReady();
+
+      // Pass 1: rows whose user message was already logged to
+      // ai_agent_messages -- the prompt was delivered and the agent was
+      // just paused (e.g. on AskUserQuestion) when the app quit. Mark
+      // completed so the next session activation doesn't re-claim and
+      // re-send the original prompt.
+      //
+      // Three branches join in this update:
+      //
+      // (a) `executing` rows whose input arrived after `claimed_at` --
+      //     standard "delivered then paused" case.
+      // (b) `pending` rows whose prompt text appears in a later input
+      //     for the same session -- leftover corruption from older
+      //     builds that ran the blanket `rollbackAllExecuting` sweep on
+      //     boot. POSITION > 0 implies the text is already in the
+      //     conversation, so the row must not be re-delivered.
+      // (c) `pending` rows older than 24h -- abandoned. Catches the
+      //     long-tail of (b) where the content match misses because
+      //     JSON escaping (newlines, quotes, pasted attachments)
+      //     differs between the queued prompt and the logged input. A
+      //     legitimately-queued prompt is processed within seconds of
+      //     creation; a row sitting >24h pending is effectively
+      //     abandoned regardless of whether it was technically
+      //     delivered.
+      const completedResult = await db.query<{ id: string }>(
+        `UPDATE queued_prompts
+         SET status = 'completed', completed_at = CURRENT_TIMESTAMP
+         WHERE (
+           (status = 'executing' AND claimed_at IS NOT NULL
+            AND EXISTS (
+              SELECT 1 FROM ai_agent_messages m
+              WHERE m.session_id = queued_prompts.session_id
+                AND m.direction = 'input'
+                AND m.created_at >= queued_prompts.claimed_at
+            ))
+           OR
+           (status = 'pending'
+            AND EXISTS (
+              SELECT 1 FROM ai_agent_messages m
+              WHERE m.session_id = queued_prompts.session_id
+                AND m.direction = 'input'
+                AND m.created_at >= queued_prompts.created_at
+                AND POSITION(queued_prompts.prompt IN m.content) > 0
+            ))
+           OR
+           (status = 'pending'
+            AND created_at < NOW() - INTERVAL '1 day')
+         )
+         RETURNING id`
+      );
+
+      // Pass 2: anything still executing crashed before its input was
+      // ever logged. Roll back to pending so it can be retried.
+      const rolledBackResult = await db.query<{ id: string }>(
+        `UPDATE queued_prompts
+         SET status = 'pending', claimed_at = NULL
+         WHERE status = 'executing'
+         RETURNING id`
+      );
+
+      const completed = completedResult.rows.length;
+      const rolledBack = rolledBackResult.rows.length;
+
+      if (completed > 0 || rolledBack > 0) {
+        console.log(
+          `[QueuedPromptsStore] Boot sweep: marked ${completed} delivered prompt(s) completed, rolled back ${rolledBack} undelivered prompt(s)`
+        );
+      }
+
+      return { completed, rolledBack };
+    },
+
+    async sweepExecutingForSession(sessionId: string): Promise<{ completed: number; rolledBack: number }> {
+      await ensureReady();
+
+      // Pass 1: same delivery check as sweepExecutingOnBoot, but scoped
+      // to a single session. Used on cancel/interrupt to avoid the
+      // immediate re-claim that follows when an already-delivered prompt
+      // is rolled back to pending.
+      const completedResult = await db.query<{ id: string }>(
+        `UPDATE queued_prompts
+         SET status = 'completed', completed_at = CURRENT_TIMESTAMP
+         WHERE status = 'executing'
+           AND session_id = $1
+           AND claimed_at IS NOT NULL
+           AND EXISTS (
+             SELECT 1 FROM ai_agent_messages m
+             WHERE m.session_id = queued_prompts.session_id
+               AND m.direction = 'input'
+               AND m.created_at >= queued_prompts.claimed_at
+           )
+         RETURNING id`,
+        [sessionId]
+      );
+
+      // Pass 2: roll back anything still executing for this session that
+      // never made it to the conversation.
+      const rolledBackResult = await db.query<{ id: string }>(
+        `UPDATE queued_prompts
+         SET status = 'pending', claimed_at = NULL
+         WHERE status = 'executing' AND session_id = $1
+         RETURNING id`,
+        [sessionId]
+      );
+
+      const completed = completedResult.rows.length;
+      const rolledBack = rolledBackResult.rows.length;
+
+      if (completed > 0 || rolledBack > 0) {
+        console.log(
+          `[QueuedPromptsStore] Session sweep (${sessionId}): marked ${completed} delivered prompt(s) completed, rolled back ${rolledBack} undelivered prompt(s)`
+        );
+      }
+
+      return { completed, rolledBack };
     },
 
     async cleanup(olderThanMs: number): Promise<number> {

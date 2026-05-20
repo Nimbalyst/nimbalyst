@@ -718,6 +718,23 @@ export function registerWorkspaceHandlers() {
         try {
             const newPath = join(dirname(oldPath), newName);
 
+            if (newPath !== oldPath && existsSync(newPath)) {
+                let isSameFile = false;
+                try {
+                    const [oldStats, newStats] = await Promise.all([
+                        stat(oldPath),
+                        stat(newPath),
+                    ]);
+                    isSameFile = oldStats.dev === newStats.dev && oldStats.ino === newStats.ino;
+                } catch {
+                    isSameFile = false;
+                }
+
+                if (!isSameFile) {
+                    return { success: false, error: 'File already exists' };
+                }
+            }
+
             // Stop watching before rename to prevent false delete detection
             for (const [windowId, state] of windowStates) {
                 if (state?.filePath === oldPath) {

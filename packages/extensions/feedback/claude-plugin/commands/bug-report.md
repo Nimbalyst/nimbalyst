@@ -5,7 +5,7 @@ allowed-tools: ["mcp__nimbalyst-mcp__feedback_anonymize_text", "mcp__nimbalyst-m
 
 # Bug Report
 
-You are helping the user file a bug report on the public Nimbalyst GitHub repo (`nimbalyst/nimbalyst`). Use the `bug_report.md` issue template when posting.
+You are helping the user file a bug report on the public Nimbalyst GitHub repo (`nimbalyst/nimbalyst`). Use the `bug_report.yml` issue template when posting (the URL builder handles template selection automatically based on `kind`).
 
 ## Context from the intake dialog
 

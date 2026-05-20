@@ -39,7 +39,7 @@ export const feedbackToolSchemas = [
   },
   {
     name: 'feedback_open_github_issue',
-    description: `Open a pre-filled GitHub new-issue page in the user's browser, targeting ${FEEDBACK_REPO}. Picks the right template (bug_report.md or feature_request.md) and label based on \`kind\`. Returns { ok: true } when the URL was short enough to include the body. Returns { ok: false, reason: "too-long", url } when the body would have been truncated — in that case, show the body in chat as a code block, open the returned URL (title only), and tell the user to paste. The user must approve before this is called.`,
+    description: `Open a pre-filled GitHub new-issue page in the user's browser, targeting ${FEEDBACK_REPO}. Picks the right issue-form template (bug_report.yml or feature_request.yml) based on \`kind\` and routes the body into the template's primary textarea field. Type ("Bug" / "Feature") and the \`status:needs-triage\` label come from the template's frontmatter. Returns { ok: true } when the URL was short enough to include the body. Returns { ok: false, reason: "too-long", url } when the body would have been truncated — in that case, show the body in chat as a code block, open the returned URL (title only), and tell the user to paste. The user must approve before this is called.`,
     inputSchema: {
       type: 'object',
       properties: {

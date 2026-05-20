@@ -10,11 +10,21 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback, forwardRef } from 'react';
-import { useEditorLifecycle, type EditorHostProps } from '@nimbalyst/extension-sdk';
+import {
+  useEditorLifecycle,
+  useCollaborativeEditor,
+  type EditorHostProps,
+} from '@nimbalyst/extension-sdk';
 import { captureMockupComposite } from '../utils/screenshotUtils';
 import { renderMockupHtml } from '../utils/mockupDomUtils';
 import { MockupDiffViewer } from './MockupDiffViewer';
 import { injectTheme, type MockupTheme } from '../utils/themeEngine';
+import { MockupBinding } from '../collab/mockupBinding';
+import {
+  getYMockupText,
+  isMockupYDocEmpty,
+  seedMockupYDoc,
+} from '../collab/seed';
 
 // Import shared types for mockup annotations from runtime package
 import type { DrawingPath, MockupSelection } from '@nimbalyst/runtime';
@@ -76,9 +86,23 @@ export const MockupEditor = forwardRef<any, EditorHostProps>(function MockupEdit
   // Track content version to trigger iframe re-render
   const [contentVersion, setContentVersion] = useState(0);
 
+  // Collab binding ref, populated by useCollaborativeEditor when collab is
+  // active. Held in a ref (not state) so applyContent's stable closure can
+  // schedule syncs without re-creating the lifecycle hook.
+  const collabBindingRef = useRef<MockupBinding | null>(null);
+
   // useEditorLifecycle handles: loading, saving, echo detection, file changes, theme, diff mode
   const { markDirty, isLoading, error, theme, diffState } = useEditorLifecycle<string>(host, {
     applyContent: (html: string) => {
+      // In collab mode the binding's createBinding is the single source of
+      // truth for initial content. host.loadContent() returns only the
+      // share-flow seed (or '' for a recipient), so applying it here would
+      // either be redundant (matches Y.Text) or actively wrong: a late
+      // resolution of loadContent() would arrive AFTER createBinding has
+      // already populated contentRef, and the resulting scheduleSync() would
+      // push the seed/empty string back into Y.Text and clobber whatever
+      // remote teammates have done in the meantime.
+      if (host.collaboration) return;
       contentRef.current = html;
       setContentVersion((v) => v + 1);
       clearAllAnnotations();
@@ -90,6 +114,63 @@ export const MockupEditor = forwardRef<any, EditorHostProps>(function MockupEdit
       clearAllAnnotations();
     },
   });
+
+  // ---- Collaborative wiring (no-op when host.collaboration is undefined) ----
+  // Single Y.Text carries the canonical HTML. Local edits arrive through
+  // applyContent (source-mode round-trips, AI tool writes) and the binding
+  // diffs against its last-synced baseline to emit minimal Y.Text ops.
+  // Remote edits come back via onRemoteContent, which sets contentRef +
+  // bumps the iframe render trigger.
+  useCollaborativeEditor(host, {
+    isEmpty: isMockupYDocEmpty,
+    initializeFromContent: seedMockupYDoc,
+    createBinding: ({ yDoc, awareness }) => {
+      const initial = getYMockupText(yDoc).toString();
+      // Editor may not have run applyContent yet if collab beat the load.
+      // Seed contentRef from Y.Text so getCurrentHtml has the right baseline.
+      if (!contentRef.current) {
+        contentRef.current = initial;
+        setContentVersion((v) => v + 1);
+      }
+      const binding = new MockupBinding(
+        yDoc,
+        initial,
+        {
+          getCurrentHtml: () => contentRef.current ?? '',
+          onRemoteContent: (content: string) => {
+            contentRef.current = content;
+            setContentVersion((v) => v + 1);
+            clearAllAnnotations();
+            collabBindingRef.current?.noteAppliedRemote(content);
+          },
+        },
+        awareness,
+      );
+      collabBindingRef.current = binding;
+      return {
+        destroy: () => {
+          // Flush any pending edit so a closing tab doesn't drop the last
+          // sync interval; the binding is about to be destroyed either way.
+          binding.syncNow();
+          binding.destroy();
+          collabBindingRef.current = null;
+        },
+      };
+    },
+  });
+
+  // Publish selection to awareness so remote clients can render "X is
+  // looking at this element" indicators.
+  useEffect(() => {
+    collabBindingRef.current?.setLocalAwareness({
+      selection: selectedElement
+        ? {
+            selector: selectedElement.selector,
+            tagName: selectedElement.tagName,
+          }
+        : null,
+    });
+  }, [selectedElement]);
 
   // Check if this mockup was opened from a project (for back-link)
   const projectOrigin = (window.__mockupProjectOrigin || {})[filePath] as string | undefined;

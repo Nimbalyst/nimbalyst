@@ -1,21 +1,12 @@
-import { defineConfig, Plugin } from 'vite';
+import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 
-// Plugin to inject a process shim at the top of the bundle
-function processShimPlugin(): Plugin {
-  return {
-    name: 'process-shim',
-    renderChunk(code) {
-      const shim = `
+const PROCESS_SHIM_BANNER = `
 if (typeof process === 'undefined') {
   globalThis.process = { env: { NODE_ENV: 'production' }, browser: true, platform: '' };
 }
 `;
-      return shim + code;
-    },
-  };
-}
 
 export default defineConfig({
   plugins: [
@@ -23,7 +14,6 @@ export default defineConfig({
       jsxRuntime: 'automatic',
       jsxImportSource: 'react',
     }),
-    processShimPlugin(),
   ],
   define: {
     'process.env.NODE_ENV': JSON.stringify('production'),
@@ -50,6 +40,7 @@ export default defineConfig({
           'react-dom': 'ReactDOM',
           'react/jsx-runtime': 'jsxRuntime',
         },
+        banner: PROCESS_SHIM_BANNER,
         assetFileNames: (assetInfo) => {
           if (assetInfo.names?.some((name) => name.endsWith('.css'))) {
             return 'index.css';

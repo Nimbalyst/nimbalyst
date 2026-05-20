@@ -211,7 +211,7 @@ A concise reference of all features in the product. Keep this up to date as feat
 - Shared document list
 - Key envelope distribution for new members
 - Durable Objects per entity (session, document, tracker, team, index)
-- **Extension-provided collab editors** — SDK `useCollaborativeEditor` hook lets any extension (Excalidraw shipped; others can opt in via `collaboration.supported` manifest flag) share its file type to team with real-time multi-client editing, cursors, and selection
+- **Extension-provided collab editors** — SDK `useCollaborativeEditor` hook lets any extension (Excalidraw, CSV spreadsheet, DatamodelLM shipped; others can opt in via `collaboration.supported` manifest flag) share its file type to team with real-time multi-client editing, cursors, and selection
 - **Client-side snapshot compaction** — connected clients periodically send `docCompact` so initial sync stays fast as edit history grows (single-elector by lowest userId)
 
 ## Tracker System
@@ -352,7 +352,7 @@ A concise reference of all features in the product. Keep this up to date as feat
 - Inline log-gathering consent checkbox with anonymization warning
 - Each path launches a guided Claude agent session via the `nimbalyst-feedback` claude-plugin (`/nimbalyst-feedback:bug-report` and `/nimbalyst-feedback:feature-request`)
 - Two-pass anonymization: regex pass via `feedback_anonymize_text` MCP tool, then LLM second-pass review before any redacted text is shown to the user
-- Issue posting via `feedback_open_github_issue` MCP tool, which opens a pre-filled `github.com/nimbalyst/nimbalyst/issues/new` URL using the right template (`bug_report.md` or `feature_request.md`); falls back to copy-paste when the body exceeds the safe URL length
+- Issue posting via `feedback_open_github_issue` MCP tool, which opens a pre-filled `github.com/nimbalyst/nimbalyst/issues/new` URL using the right issue-form template (`bug_report.yml` or `feature_request.yml`) and routes the body into the template's primary textarea field; the template's frontmatter applies the GitHub issue type and `status:needs-triage` label automatically. Falls back to copy-paste when the body exceeds the safe URL length
 - Secondary links: Browse existing issues, Discuss on GitHub Discussions, Email private feedback to support@nimbalyst.com
 
 ## Analytics

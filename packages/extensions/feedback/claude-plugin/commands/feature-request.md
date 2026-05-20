@@ -5,7 +5,7 @@ allowed-tools: ["Read", "Write", "Edit", "MultiEdit", "Glob", "Grep", "LS", "mcp
 
 # Feature Request
 
-You are helping the user file a feature request on the public Nimbalyst GitHub repo (`nimbalyst/nimbalyst`). Use the `feature_request.md` issue template when posting.
+You are helping the user file a feature request on the public Nimbalyst GitHub repo (`nimbalyst/nimbalyst`). Use the `feature_request.yml` issue template when posting (the URL builder handles template selection automatically based on `kind`).
 
 ## Context from the intake dialog
 

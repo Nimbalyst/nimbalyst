@@ -228,6 +228,12 @@ export interface MarketplaceInstallRecord {
   checksum: string;
   source: 'marketplace' | 'github-url';
   githubUrl?: string;
+  // Populated only when source === 'github-url'. Differentiates the two
+  // GitHub install paths and carries enough metadata for a future "check
+  // GitHub Releases for newer versions" flow.
+  githubReleaseTag?: string;
+  githubReleaseAssetName?: string;
+  githubInstallMethod?: 'release-asset' | 'clone-source';
 }
 
 /**

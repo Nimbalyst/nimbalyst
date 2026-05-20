@@ -42,7 +42,11 @@
         "component": "DatamodelLMEditor",
         "supportsSourceMode": true,
         "supportsDiffMode": false,
-        "supportsTranscriptEmbed": true
+        "supportsTranscriptEmbed": true,
+        "collaboration": {
+          "supported": true,
+          "awarenessFields": ["editingEntityId", "selectedEntityId", "selectedRelationshipId"]
+        }
       }
     ],
     "aiTools": [

@@ -23,21 +23,23 @@ export interface BuildIssueUrlResult {
 const SAFE_URL_LENGTH = 6000;
 
 const TEMPLATE_BY_KIND: Record<FeedbackKind, string> = {
-  bug: 'bug_report.md',
-  feature: 'feature_request.md',
+  bug: 'bug_report.yml',
+  feature: 'feature_request.yml',
 };
 
-const LABELS_BY_KIND: Record<FeedbackKind, string> = {
-  bug: 'bug',
-  feature: 'enhancement',
+// Issue-form field IDs (must match the `id:` values in the .yml templates).
+// `.yml` issue forms ignore the legacy `?body=` param -- prefill happens per
+// field id instead.
+const BODY_FIELD_BY_KIND: Record<FeedbackKind, string> = {
+  bug: 'problem',
+  feature: 'request',
 };
 
 function buildBaseUrl(kind: FeedbackKind, title: string, body?: string): string {
   const params = new URLSearchParams();
   params.set('template', TEMPLATE_BY_KIND[kind]);
-  params.set('labels', LABELS_BY_KIND[kind]);
   if (title) params.set('title', title);
-  if (body) params.set('body', body);
+  if (body) params.set(BODY_FIELD_BY_KIND[kind], body);
   return `https://github.com/${FEEDBACK_REPO}/issues/new?${params.toString()}`;
 }
 

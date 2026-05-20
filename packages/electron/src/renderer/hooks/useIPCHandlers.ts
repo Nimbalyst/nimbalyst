@@ -12,6 +12,7 @@ import {
 import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
 import { SearchReplaceStateManager } from '@nimbalyst/runtime';
 import { store } from '@nimbalyst/runtime/store';
+import { DocumentModelRegistry } from '../services/document-model/DocumentModelRegistry';
 import { aiApi } from '../services/aiApi';
 import { getFileName } from '../utils/pathUtils';
 import { isCollabUri } from '../utils/collabUri';
@@ -409,6 +410,14 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     // Listen for show preferences event
     cleanupFns.push(window.electronAPI.onFileRenamed((data) => {
       // console.log('File renamed:', data);
+
+      // Migrate the DocumentModel to the new path BEFORE updating the tab.
+      // useDocumentModel() re-runs synchronously when TabEditor re-renders with
+      // the new filePath prop -- if the registry still has the old path at that
+      // point, it releases the old model (losing the dirty buffer) and creates a
+      // fresh one that loads from disk. By re-keying first, the hook finds the
+      // existing model and reuses it, preserving unsaved edits.
+      DocumentModelRegistry.rename(data.oldPath, data.newPath);
 
       // Update the tab for this file
       if (editorModeRef.current?.tabs) {

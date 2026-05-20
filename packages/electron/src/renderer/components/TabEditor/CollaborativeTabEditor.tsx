@@ -571,6 +571,18 @@ const ExtensionCollabBranch: React.FC<ExtensionCollabBranchProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Markdown collaboration is connected by Lexical's CollaborationPlugin via
+  // CollabLexicalProvider.connect(). Custom editors bypass that plugin, so the
+  // host must explicitly connect the shared DocumentSyncProvider here.
+  useEffect(() => {
+    void syncProvider.connect().catch((error) => {
+      console.error('[ExtensionCollabBranch] Failed to connect DocumentSyncProvider:', {
+        documentId: activeConfig.documentId,
+        error,
+      });
+    });
+  }, [syncProvider, activeConfig.documentId]);
+
   const collaboration = useMemo(
     () =>
       createCollaborationContext({

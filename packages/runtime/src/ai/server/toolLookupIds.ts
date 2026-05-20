@@ -60,6 +60,26 @@ export function parseCodexToolLookupId(promptId: string): ParsedCodexToolLookupI
 }
 
 /**
+ * Return all known aliases for a Codex tool-call ID.
+ *
+ * The transcript/UI often uses the synthetic `nimtc|...` lookup ID while the
+ * MCP transport may still be keyed by the raw `call_...` item id. Returning
+ * both keeps IPC and durable-response matching tolerant to either form.
+ */
+export function getCodexToolLookupAliases(promptId: string): string[] {
+  if (!promptId) {
+    return [];
+  }
+
+  const parsed = parseCodexToolLookupId(promptId);
+  if (!parsed) {
+    return [promptId];
+  }
+
+  return Array.from(new Set([promptId, parsed.itemId]));
+}
+
+/**
  * Resolve a renderer prompt ID back to the durable git commit proposal row.
  *
  * Direct proposalId/toolUseId matches win. For synthetic Codex IDs, pick the

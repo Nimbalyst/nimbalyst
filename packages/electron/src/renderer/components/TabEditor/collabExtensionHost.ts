@@ -181,6 +181,9 @@ export function createCollaborationContext(args: {
     loadInitialContent: async () => {
       return activeConfig.initialContent ?? '';
     },
+    flushLocalState: async () => {
+      await syncProvider.flushLocalState();
+    },
   };
 }
 

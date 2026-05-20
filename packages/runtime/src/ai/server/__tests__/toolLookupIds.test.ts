@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildCodexToolLookupId,
+  getCodexToolLookupAliases,
   parseCodexToolLookupId,
   resolveGitCommitProposalLookup,
 } from '../toolLookupIds';
@@ -15,6 +16,16 @@ describe('toolLookupIds', () => {
       timestampMs: 1234567890,
       index: 42,
     });
+  });
+
+  it('returns both synthetic and raw aliases for Codex lookup IDs', () => {
+    const lookupId = buildCodexToolLookupId('call_abc', 1234567890, 42);
+
+    expect(getCodexToolLookupAliases(lookupId)).toEqual([
+      lookupId,
+      'call_abc',
+    ]);
+    expect(getCodexToolLookupAliases('call_abc')).toEqual(['call_abc']);
   });
 
   it('prefers direct toolUseId matches', () => {

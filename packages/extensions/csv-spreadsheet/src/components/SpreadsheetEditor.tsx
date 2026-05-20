@@ -208,6 +208,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
   // This avoids React props overwriting RevoGrid's internal state on re-renders
   const pendingDataRef = useRef<{ source: Record<string, string | number>[]; pinnedTop: Record<string, string | number>[] } | null>(null);
   const dataLoadedRef = useRef(false);
+  const loadedCsvContentRef = useRef('');
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -241,6 +242,7 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
   // ---- EditorHost lifecycle (loading, echo detection, file changes, save, theme) ----
   const { isLoading, error: loadError, theme, markDirty: _markDirty } = useEditorLifecycle(host, {
     applyContent: (content: string) => {
+      loadedCsvContentRef.current = content;
       // Parse CSV and set RevoGrid source imperatively
       const { data } = parseCSV(content);
       const gridData = convertToGridSource(data.rows, data.headerRowCount);
@@ -424,6 +426,27 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
     isEmpty: isCsvYDocEmpty,
     initializeFromContent: seedCsvYDoc,
     createBinding: ({ yDoc, awareness }) => {
+      const applyCsvContent = (content: string) => {
+        loadedCsvContentRef.current = content;
+        const { data } = parseCSV(content);
+        const gridData = convertToGridSource(data.rows, data.headerRowCount);
+        // Stash for the deferred ref-callback path. The collab createBinding
+        // can fire applyCsvContent before the grid is mounted -- if so, the
+        // ref callback's pendingDataRef branch is what populates the grid on
+        // mount. Without this, an earlier lifecycle applyContent('') wins by
+        // leaving an empty pendingDataRef in place and the reopened tab
+        // comes back blank.
+        pendingDataRef.current = gridData;
+        const grid = revoGridRef.current;
+        if (grid) {
+          grid.source = gridData.source;
+          grid.pinnedTopSource = gridData.pinnedTop;
+          dataLoadedRef.current = true;
+        }
+        spreadsheetMetaRef.current.loadFromCSV(content);
+        spreadsheetMetaRef.current.markClean();
+      };
+
       // Initial baseline = whatever Y.Text already has (the seed we just
       // wrote OR the content sync'd from another client).
       const initial = getYCsv(yDoc).toString();
@@ -433,28 +456,35 @@ export function SpreadsheetEditor({ host }: EditorHostProps) {
         {
           getCurrentCsv: async () => {
             const gridOps = gridOpsRef.current;
-            if (!gridOps) return initial;
+            if (!gridOps) return loadedCsvContentRef.current || initial;
             return await gridOps.toCSV();
           },
           onRemoteContent: (content: string) => {
             // Route through the same applyContent path the host uses for
             // external file changes. The grid is reloaded; metadata gets
             // re-parsed; selection survives if the cell still exists.
-            const { data } = parseCSV(content);
-            const gridData = convertToGridSource(data.rows, data.headerRowCount);
-            const grid = revoGridRef.current;
-            if (grid) {
-              grid.source = gridData.source;
-              grid.pinnedTopSource = gridData.pinnedTop;
-            }
-            spreadsheetMetaRef.current.loadFromCSV(content);
-            spreadsheetMetaRef.current.markClean();
+            applyCsvContent(content);
             collabBindingRef.current?.noteAppliedRemote(content);
           },
         },
         awareness,
       );
       collabBindingRef.current = binding;
+      // Recipient opens commonly mount with `host.loadContent() === ''` and
+      // rely on the already-synced Y.Text as the first real payload. Consume
+      // that snapshot immediately; otherwise there may be no subsequent remote
+      // change event to wake the grid up from its blank local fallback.
+      if (initial.length > 0) {
+        applyCsvContent(initial);
+        binding.noteAppliedRemote(initial);
+      } else if (loadedCsvContentRef.current.length > 0) {
+        // First-share opens can render from host.loadContent() before the Y.Text
+        // has been populated. Push that already-loaded local CSV immediately so a
+        // close/reopen does not depend on the poll interval or unmount flush.
+        void binding.syncNow().catch((error) => {
+          console.error('[SpreadsheetEditor] Failed to push initial local CSV to collab doc:', error);
+        });
+      }
       collabActiveRef.current = true;
       return {
         destroy: () => {

@@ -341,6 +341,7 @@ export function ClaudeCodePanel({
         description="Display API usage limits in the navigation gutter"
         checked={usageIndicatorEnabled}
         onChange={setUsageIndicatorEnabled}
+        testId="claude-agent-usage-indicator-toggle"
       />
 
       {/* Custom Claude Installation */}

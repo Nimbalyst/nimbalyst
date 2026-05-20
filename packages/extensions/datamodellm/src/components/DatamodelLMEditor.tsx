@@ -14,7 +14,13 @@ import { createDataModelStore, type DataModelStoreApi } from '../store';
 import { createEmptyDataModel, type DataModelFile } from '../types';
 import { parsePrismaSchema, serializeToPrismaSchema } from '../prismaParser';
 import { captureDataModelCanvas, copyScreenshotToClipboard } from '../utils/screenshotUtils';
-import { useEditorLifecycle, type EditorHostProps } from '@nimbalyst/extension-sdk';
+import {
+  useEditorLifecycle,
+  useCollaborativeEditor,
+  type EditorHostProps,
+} from '@nimbalyst/extension-sdk';
+import { DataModelBinding } from '../collab/datamodelBinding';
+import { isDataModelYDocEmpty, seedDataModelYDoc } from '../collab/seed';
 
 export function DatamodelLMEditor({ host }: EditorHostProps) {
   const { filePath } = host;
@@ -33,6 +39,10 @@ export function DatamodelLMEditor({ host }: EditorHostProps) {
   // Create a store instance for this editor (content lives here, not React state)
   const storeRef = useRef<DataModelStoreApi | null>(null);
   const canvasRef = useRef<DataModelCanvasRef>(null);
+  // The editor's root DOM element -- used by the collab binding to install
+  // its capture-phase undo/redo keyboard handler. Not needed in local-only
+  // mode (the binding never runs).
+  const rootElRef = useRef<HTMLDivElement | null>(null);
 
   if (!storeRef.current) {
     storeRef.current = createDataModelStore();
@@ -100,6 +110,23 @@ export function DatamodelLMEditor({ host }: EditorHostProps) {
     };
   }, [filePath, store]);
 
+  // ---- Collaborative wiring (no-op when host.collaboration is undefined) ---
+  // The binding takes the Y.Doc as authoritative on mount, replacing the
+  // local store's nanoid ids with the deterministic stable ids the seed
+  // wrote. Subsequent local edits diff into Y.Doc; remote Y.Doc edits apply
+  // back through the store's incremental actions (preserving selection).
+  // See packages/extensions/datamodellm/src/collab/datamodelBinding.ts.
+  const { isCollaborative, status: collabStatus } = useCollaborativeEditor(host, {
+    isEmpty: isDataModelYDocEmpty,
+    initializeFromContent: seedDataModelYDoc,
+    createBinding: ({ yDoc, awareness }) => {
+      const binding = new DataModelBinding(yDoc, store, awareness, {
+        rootEl: rootElRef.current,
+      });
+      return { destroy: () => binding.destroy() };
+    },
+  });
+
   // Handle screenshot capture
   const handleScreenshot = useCallback(async () => {
     const canvasElement = canvasRef.current?.getCanvasElement();
@@ -133,7 +160,13 @@ export function DatamodelLMEditor({ host }: EditorHostProps) {
   }
 
   return (
-    <div className="datamodel-editor" data-theme={theme} data-read-only={readOnly}>
+    <div
+      className="datamodel-editor"
+      data-theme={theme}
+      data-read-only={readOnly}
+      data-collab-status={isCollaborative ? collabStatus : undefined}
+      ref={rootElRef}
+    >
       {!readOnly && (
         <DataModelToolbar store={store} onScreenshot={handleScreenshot} host={host} />
       )}

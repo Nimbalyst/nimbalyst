@@ -1,5 +1,6 @@
-import { _electron } from '@playwright/test';
-import type { ElectronApplication, Page } from 'playwright';
+import { _electron, chromium } from '@playwright/test';
+import type { Browser, ElectronApplication, Page } from 'playwright';
+import { spawn, type ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import * as os from 'os';
@@ -34,6 +35,149 @@ export const ACTIVE_FILE_TAB_SELECTOR = '.file-tabs-container .tab.active .tab-t
  */
 export type TestPermissionMode = 'ask' | 'allow-all' | 'none';
 
+export interface CdpElectronApp {
+  firstWindow(): Promise<Page>;
+  close(): Promise<void>;
+}
+
+async function clearTestDatabase(preserveTestDatabase?: boolean): Promise<void> {
+  if (preserveTestDatabase) {
+    return;
+  }
+  const testDbPath = path.join(os.tmpdir(), 'nimbalyst-test-db');
+  try {
+    await fs.rm(testDbPath, { recursive: true, force: true });
+  } catch {
+    // Ignore errors - directory might not exist
+  }
+}
+
+async function findDevServerUrl(): Promise<string> {
+  const devServerUrls = ['http://127.0.0.1:5273', 'http://[::1]:5273'];
+  let lastError: Error | null = null;
+
+  for (const url of devServerUrls) {
+    try {
+      const response = await fetch(url, { method: 'HEAD' });
+      if (response.ok) {
+        return url;
+      }
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+  }
+
+  throw new Error(
+    `\n\n❌ Dev server is not running!\n\n` +
+    `Playwright tests require the Vite dev server to be running on port 5273.\n` +
+    `Please start it in a separate terminal:\n\n` +
+    `  cd packages/electron && npm run dev\n\n` +
+    `Then run the tests again.\n\n` +
+    `Original error: ${lastError?.message ?? 'Unknown error'}\n`
+  );
+}
+
+function buildElectronArgs(electronMain: string, workspace?: string): string[] {
+  const args = [electronMain];
+  if (process.platform === 'linux' && process.getuid && process.getuid() === 0) {
+    args.push('--no-sandbox');
+  }
+  if (workspace) {
+    args.push('--workspace', workspace);
+  }
+  return args;
+}
+
+function buildTestEnv(
+  devServerUrl: string,
+  options?: {
+    env?: Record<string, string>;
+    permissionMode?: TestPermissionMode;
+  }
+): Record<string, string | undefined> {
+  const { ELECTRON_RUN_AS_NODE, ELECTRON_NO_ATTACH_CONSOLE, NODE_PATH, ...cleanEnv } = process.env;
+  const testEnv: Record<string, string | undefined> = {
+    ...cleanEnv,
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? 'playwright-test-key',
+    ELECTRON_DISABLE_SECURITY_WARNINGS: '1',
+    ELECTRON_RENDERER_URL: devServerUrl,
+    PLAYWRIGHT: '1',
+    NIMBALYST_CDP_PORT: '9333',
+    ...options?.env,
+  };
+
+  const permissionMode = options?.permissionMode ?? 'allow-all';
+  if (permissionMode !== 'none') {
+    testEnv.NIMBALYST_PERMISSION_MODE = permissionMode;
+  }
+
+  if (options?.env && 'ENABLE_SESSION_RESTORE' in options.env) {
+    delete testEnv.PLAYWRIGHT;
+    delete testEnv.ENABLE_SESSION_RESTORE;
+  }
+
+  return testEnv;
+}
+
+async function waitForCdpEndpoint(port: string, timeoutMs = TEST_TIMEOUTS.SIDEBAR_LOAD): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let lastError: Error | null = null;
+
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/json/version`);
+      if (response.ok) {
+        return;
+      }
+      lastError = new Error(`CDP endpoint returned HTTP ${response.status}`);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+
+  throw new Error(`Timed out waiting for CDP endpoint on port ${port}: ${lastError?.message ?? 'unknown error'}`);
+}
+
+async function findMainAppPage(browser: Browser, timeoutMs = TEST_TIMEOUTS.SIDEBAR_LOAD): Promise<Page> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    for (const context of browser.contexts()) {
+      for (const page of context.pages()) {
+        const url = page.url();
+        if (url.startsWith('devtools://')) continue;
+        if (url === 'about:blank') continue;
+        return page;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+
+  throw new Error('Timed out waiting for the main Electron window page');
+}
+
+async function closeSpawnedElectron(
+  browser: Browser,
+  child: ChildProcess,
+): Promise<void> {
+  await browser.close().catch(() => undefined);
+  if (child.exitCode !== null || child.killed) {
+    return;
+  }
+  child.kill('SIGTERM');
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      resolve();
+    }, 5000);
+    child.once('exit', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
 export async function launchElectronApp(options?: {
   workspace?: string;
   env?: Record<string, string>;
@@ -55,80 +199,13 @@ export async function launchElectronApp(options?: {
 
   // Clear the test database directory to prevent corruption issues from previous runs
   // The test database is stored in the system temp directory with a fixed name
-  if (!options?.preserveTestDatabase) {
-    const testDbPath = path.join(os.tmpdir(), 'nimbalyst-test-db');
-    try {
-      await fs.rm(testDbPath, { recursive: true, force: true });
-    } catch {
-      // Ignore errors - directory might not exist
-    }
-  }
-
-  // Check if dev server is running (try both IPv4 and IPv6)
-  const devServerUrls = ['http://127.0.0.1:5273', 'http://[::1]:5273'];
-  let devServerUrl: string | null = null;
-  let lastError: Error | null = null;
-
-  for (const url of devServerUrls) {
-    try {
-      const response = await fetch(url, { method: 'HEAD' });
-      if (response.ok) {
-        devServerUrl = url;
-        break;
-      }
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-    }
-  }
-
-  if (!devServerUrl) {
-    throw new Error(
-      `\n\n❌ Dev server is not running!\n\n` +
-      `Playwright tests require the Vite dev server to be running on port 5273.\n` +
-      `Please start it in a separate terminal:\n\n` +
-      `  cd packages/electron && npm run dev\n\n` +
-      `Then run the tests again.\n\n` +
-      `Original error: ${lastError?.message ?? 'Unknown error'}\n`
-    );
-  }
-
-  const args = [electronMain];
-
-  // Add --no-sandbox when running in a container (Linux as root)
-  // This is required for Electron to run in Docker containers
-  if (process.platform === 'linux' && process.getuid && process.getuid() === 0) {
-    args.push('--no-sandbox');
-  }
-
-  if (options?.workspace) {
-    args.push('--workspace', options.workspace);
-  }
-
-  // Build env
-  const testEnv: Record<string, string | undefined> = {
-    ...process.env,
-    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? 'playwright-test-key',
-    ELECTRON_DISABLE_SECURITY_WARNINGS: '1',
-    ELECTRON_RENDERER_URL: devServerUrl, // Use dev server for HMR
-    PLAYWRIGHT: '1', // Default: skip session restoration
-    // Use a different CDP port so the test Electron doesn't conflict
-    // with a running Nimbalyst instance on the default port (9222)
-    NIMBALYST_CDP_PORT: '9333',
-    ...options?.env,
-  };
-
-  // Set permission mode - defaults to 'allow-all' to skip trust toast in tests
-  // Pass permissionMode: 'none' explicitly to test the trust toast behavior
-  const permissionMode = options?.permissionMode ?? 'allow-all';
-  if (permissionMode !== 'none') {
-    testEnv.NIMBALYST_PERMISSION_MODE = permissionMode;
-  }
-
-  // If test passes ENABLE_SESSION_RESTORE, remove PLAYWRIGHT to allow restoration
-  if (options?.env && 'ENABLE_SESSION_RESTORE' in options.env) {
-    delete testEnv.PLAYWRIGHT;
-    delete testEnv.ENABLE_SESSION_RESTORE; // Don't pass this to Electron
-  }
+  await clearTestDatabase(options?.preserveTestDatabase);
+  const devServerUrl = await findDevServerUrl();
+  const args = buildElectronArgs(electronMain, options?.workspace);
+  const testEnv = buildTestEnv(devServerUrl, {
+    env: options?.env,
+    permissionMode: options?.permissionMode,
+  });
 
   const app = await _electron.launch({
     ...(recordVideoConfig ? { recordVideo: recordVideoConfig } : {}),
@@ -143,6 +220,58 @@ export async function launchElectronApp(options?: {
   });
 
   return app;
+}
+
+export async function launchElectronAppViaCdp(options?: {
+  workspace?: string;
+  env?: Record<string, string>;
+  permissionMode?: TestPermissionMode;
+  preserveTestDatabase?: boolean;
+}): Promise<CdpElectronApp> {
+  const electronMain = path.resolve(__dirname, '../out/main/index.js');
+  const electronCwd = path.resolve(__dirname, '../../../');
+  const cdpPort = options?.env?.NIMBALYST_CDP_PORT ?? '9333';
+
+  await clearTestDatabase(options?.preserveTestDatabase);
+  const devServerUrl = await findDevServerUrl();
+  const args = buildElectronArgs(electronMain, options?.workspace);
+  const testEnv = buildTestEnv(devServerUrl, {
+    env: options?.env,
+    permissionMode: options?.permissionMode,
+  });
+
+  const electronBinary = (await import('electron')).default as unknown as string;
+  const child = spawn(electronBinary, args, {
+    cwd: electronCwd,
+    env: testEnv,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  child.stdout?.on('data', (chunk) => {
+    process.stdout.write(String(chunk));
+  });
+  child.stderr?.on('data', (chunk) => {
+    process.stderr.write(String(chunk));
+  });
+
+  await waitForCdpEndpoint(cdpPort);
+  const browser = await chromium.connectOverCDP(`http://127.0.0.1:${cdpPort}`);
+
+  let mainPage: Page | null = null;
+
+  return {
+    async firstWindow(): Promise<Page> {
+      if (mainPage && !mainPage.isClosed()) {
+        return mainPage;
+      }
+      mainPage = await findMainAppPage(browser);
+      await setupPageWithLogging(mainPage);
+      return mainPage;
+    },
+    async close(): Promise<void> {
+      await closeSpawnedElectron(browser, child);
+    },
+  };
 }
 
 export async function createTempWorkspace(): Promise<string> {
@@ -260,4 +389,3 @@ export async function pressKeyboardShortcut(page: Page, shortcut: string): Promi
     document.dispatchEvent(event);
   }, { key, modifiers });
 }
-

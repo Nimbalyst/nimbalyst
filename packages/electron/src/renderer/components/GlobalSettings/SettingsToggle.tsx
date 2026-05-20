@@ -16,6 +16,7 @@ export function SettingsToggle({
   description,
   disabled,
   variant = 'inline',
+  testId,
 }: {
   checked: boolean;
   onChange: (checked: boolean) => void;
@@ -24,10 +25,11 @@ export function SettingsToggle({
   disabled?: boolean;
   /** 'inline' for compact rows, 'enable' for the primary provider toggle */
   variant?: 'inline' | 'enable';
+  testId?: string;
 }) {
   if (variant === 'enable') {
     return (
-      <div className="provider-enable flex items-center justify-between gap-4 py-4 mb-4 border-b border-[var(--nim-border)]">
+      <div data-testid={testId} className="provider-enable flex items-center justify-between gap-4 py-4 mb-4 border-b border-[var(--nim-border)]">
         <div>
           <span className="provider-enable-label text-sm font-medium text-[var(--nim-text)]">{name}</span>
           {description && (

@@ -102,6 +102,14 @@ export interface CollaborationContext {
    * reason about file paths in collab mode.
    */
   loadInitialContent(): Promise<string | ArrayBuffer>;
+
+  /**
+   * Ask the host transport to flush the current Y.Doc state upstream.
+   *
+   * The SDK uses this after seeding a first-open collaborative document from
+   * in-memory share payloads. Most editors should not call it directly.
+   */
+  flushLocalState?(): Promise<void>;
 }
 
 // ============================================================================

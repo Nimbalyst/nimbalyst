@@ -35,8 +35,6 @@ body:
     attributes:
       label: Nimbalyst version
       placeholder: e.g. 0.58.3
-    validations:
-      required: true
   - type: dropdown
     id: os
     attributes:
@@ -47,5 +45,3 @@ body:
         - Linux
         - iOS
         - Other
-    validations:
-      required: true

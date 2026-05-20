@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { TranscriptViewMessage } from '../../../../ai/server/transcript/TranscriptProjector';
 import {
   extractEditsFromToolMessage,
+  isTranscriptAtBottom,
   parseUnifiedDiffToReplacements,
+  shouldAutoScrollTranscript,
   toolCallDiffsToEdits,
 } from '../RichTranscriptView';
 
@@ -393,5 +395,20 @@ describe('extractEditsFromToolMessage', () => {
     expect(edits).toHaveLength(2);
     expect(edits[0].replacements[0].oldText).toBe('Alpha');
     expect(edits[1].replacements[0].oldText).toBe('Beta');
+  });
+});
+
+describe('transcript auto-scroll thresholds', () => {
+  it('treats distances under the shared threshold as being at the bottom', () => {
+    expect(isTranscriptAtBottom(49)).toBe(true);
+    expect(isTranscriptAtBottom(50)).toBe(false);
+  });
+
+  it('does not auto-scroll when the user already scrolled away past the bottom threshold', () => {
+    expect(shouldAutoScrollTranscript(false, 80)).toBe(false);
+  });
+
+  it('still auto-scrolls when the transcript was sticky before the new content arrived', () => {
+    expect(shouldAutoScrollTranscript(true, 200)).toBe(true);
   });
 });

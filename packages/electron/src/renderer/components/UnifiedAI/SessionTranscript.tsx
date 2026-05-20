@@ -17,8 +17,10 @@
 import React, { useCallback, useRef, useImperativeHandle, forwardRef, useEffect, useState, useMemo } from 'react';
 import { useAtom, useSetAtom, useAtomValue } from 'jotai';
 import { store, setInteractiveWidgetHost } from '@nimbalyst/runtime/store';
-import { AgentTranscriptPanel, TodoItem, type InteractiveWidgetHost, type PermissionScope } from '@nimbalyst/runtime';
 import type { SessionData, ChatAttachment, TranscriptViewMessage } from '@nimbalyst/runtime/ai/server/types';
+import { AgentTranscriptPanel } from '@nimbalyst/runtime/ui/AgentTranscript/components/AgentTranscriptPanel';
+import type { InteractiveWidgetHost, PermissionScope } from '@nimbalyst/runtime/ui/AgentTranscript/components/CustomToolWidgets/InteractiveWidgetHost';
+import type { TodoItem } from '@nimbalyst/runtime/ui/AgentTranscript/types';
 import { isToolLikeMessage } from '@nimbalyst/runtime/ui/AgentTranscript/utils/messageTypeHelpers';
 import { AIInput, AIInputRef } from './AIInput';
 import { PromptQueueList } from './PromptQueueList';

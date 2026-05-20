@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useAtomValue } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
 import { MaterialSymbol } from '@nimbalyst/runtime';
 import { useTheme } from '../../../hooks/useTheme';
+import { marketplaceInstallProgressAtom } from '../../../store/atoms/appCommands';
 
 // Registry types (mirror main process types)
 interface RegistryExtension {
@@ -113,6 +115,17 @@ export function ExtensionMarketplacePanel({
   const [githubUrl, setGithubUrl] = useState('');
   const [githubInstalling, setGithubInstalling] = useState(false);
   const [availableUpdates, setAvailableUpdates] = useState<Record<string, { currentVersion: string; availableVersion: string }>>({});
+
+  // GitHub-install progress: the central listener bumps an atom on every
+  // install-progress IPC event. We watch the atom only while an install is
+  // active, and ignore versions that arrived before this install started.
+  const installProgress = useAtomValue(marketplaceInstallProgressAtom);
+  const installProgressBaselineRef = useRef<number>(0);
+  useEffect(() => {
+    if (!githubInstalling || !installProgress) return;
+    if (installProgress.version <= installProgressBaselineRef.current) return;
+    setStatusMessage(installProgress.message);
+  }, [githubInstalling, installProgress]);
 
   // Check if user has previously accepted the marketplace risk warning
   useEffect(() => {
@@ -287,6 +300,9 @@ export function ExtensionMarketplacePanel({
   const handleGithubInstall = useCallback(async () => {
     if (!githubUrl.trim()) return;
 
+    // Baseline the progress atom version so we only react to events emitted
+    // by this install, not stale ones from a previous run.
+    installProgressBaselineRef.current = installProgress?.version ?? 0;
     setGithubInstalling(true);
     setStatusMessage(`Installing from GitHub...`);
 
@@ -317,7 +333,7 @@ export function ExtensionMarketplacePanel({
     }
 
     setTimeout(() => setStatusMessage(''), 5000);
-  }, [githubUrl, posthog]);
+  }, [githubUrl, posthog, installProgress?.version]);
 
   const isExtensionInstalled = useCallback((extensionId: string): boolean => {
     return !!installedExtensions[extensionId] || allInstalledIds.has(extensionId);

@@ -100,7 +100,7 @@ export interface DocumentModelOptions {
 }
 
 export class DocumentModel {
-  readonly filePath: string;
+  filePath: string;
   private backingStore: DocumentBackingStore;
   private options: Required<DocumentModelOptions>;
 
@@ -915,6 +915,38 @@ export class DocumentModel {
 
   // -- Lifecycle ------------------------------------------------------------
 
+  /**
+   * Replace the backing store and update filePath in-place.
+   * Called by DocumentModelRegistry.rename() when a file is renamed so the
+   * existing in-memory state (dirty buffer, autosave timer, attachments) is
+   * preserved rather than discarding it and reloading from disk.
+   */
+  migrateToNewPath(newPath: string, newStore: DocumentBackingStore): void {
+    // Tear down old backing-store subscriptions held by this model
+    this.externalChangeCleanup?.();
+    this.externalChangeCleanup = null;
+    this.fileDeletedCleanup?.();
+    this.fileDeletedCleanup = null;
+
+    // Dispose the old store's own internal subscriptions (atom watchers, etc.)
+    this.backingStore.dispose?.();
+
+    // Switch to the new store and path
+    this.backingStore = newStore;
+    this.filePath = newPath;
+
+    // Re-subscribe with the new store
+    this.externalChangeCleanup = newStore.onExternalChange(
+      this.handleExternalChange.bind(this),
+    );
+    if (typeof newStore.onDeletion === 'function') {
+      this.fileDeletedCleanup = newStore.onDeletion(this.markDeleted.bind(this));
+    }
+
+    // The file now exists at the new path, so clear the deleted guard
+    this.deleted = false;
+  }
+
   dispose(): void {
     this.disposed = true;
 
@@ -941,9 +973,6 @@ export class DocumentModel {
     // Clear event listeners
     this.eventListeners.clear();
 
-    // Dispose backing store if it has a dispose method
-    if ('dispose' in this.backingStore && typeof (this.backingStore as any).dispose === 'function') {
-      (this.backingStore as any).dispose();
-    }
+    this.backingStore.dispose?.();
   }
 }

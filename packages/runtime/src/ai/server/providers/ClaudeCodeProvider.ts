@@ -640,6 +640,9 @@ export class ClaudeCodeProvider extends BaseAgentProvider {
           metadataToLog.messageType = 'teammate_message_injected';
           metadataToLog.teammateName = teammateMatch[1];
         }
+        if (documentContext?.promptOrigin) {
+          metadataToLog.promptOrigin = documentContext.promptOrigin;
+        }
         await this.logAgentMessage(sessionId, 'claude-code', 'input', JSON.stringify({
           prompt: message,
           options: {

@@ -56,6 +56,9 @@ export interface DocumentContext {
   // Pre-built prompts from DocumentContextService (for user message additions)
   documentContextPrompt?: string;  // File path, cursor, selection, content/diff, transitions
   editingInstructions?: string;    // One-time editing instructions (only first message with doc)
+
+  /** Identifies the origin of this message when it comes from an automated source (e.g. 'wakeup_resume'). */
+  promptOrigin?: string;
 }
 
 export interface ChatAttachment {

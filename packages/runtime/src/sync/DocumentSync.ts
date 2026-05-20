@@ -455,6 +455,23 @@ export class DocumentSyncProvider {
     return new Map(this.awarenessStates);
   }
 
+  /**
+   * Force the provider to treat the current Y.Doc as local state that should
+   * be persisted upstream.
+   *
+   * Used by custom-editor collaboration bootstrap after a first-open seed from
+   * in-memory share payloads. This avoids depending on observer/replay timing
+   * when the seed happens after the initial empty sync completes.
+   */
+  async flushLocalState(): Promise<void> {
+    const update = Y.encodeStateAsUpdate(this.ydoc);
+    if (update.length <= 2) return;
+    this.enqueuePendingLocalUpdate(update);
+    if (this.ws && this.ws.readyState === WebSocket.OPEN && this.synced) {
+      await this.replayPendingUpdate();
+    }
+  }
+
   // --------------------------------------------------------------------------
   // Review Gate API
   // --------------------------------------------------------------------------

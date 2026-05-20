@@ -8,6 +8,8 @@
 
 import {LexicalEditor} from 'lexical';
 import * as React from 'react';
+const addSignIconUrl = new URL('../../images/icons/add-sign.svg', import.meta.url).href;
+const minusSignIconUrl = new URL('../../images/icons/minus-sign.svg', import.meta.url).href;
 
 import {
   MAX_ALLOWED_FONT_SIZE,
@@ -101,7 +103,10 @@ export default function FontSize({
         className="toolbar-item font-decrement p-0 mr-[3px]"
         aria-label="Decrease font size"
         title={`Decrease font size (${SHORTCUTS.DECREASE_FONT_SIZE})`}>
-        <i className="format minus-icon bg-[url('../../images/icons/minus-sign.svg')] bg-no-repeat bg-center" />
+        <i
+          className="format minus-icon bg-no-repeat bg-center"
+          style={{ backgroundImage: `url(${minusSignIconUrl})` }}
+        />
       </button>
 
       <input
@@ -130,7 +135,10 @@ export default function FontSize({
         className="toolbar-item font-increment p-0 ml-[3px]"
         aria-label="Increase font size"
         title={`Increase font size (${SHORTCUTS.INCREASE_FONT_SIZE})`}>
-        <i className="format add-icon bg-[url('../../images/icons/add-sign.svg')] bg-no-repeat bg-center" />
+        <i
+          className="format add-icon bg-no-repeat bg-center"
+          style={{ backgroundImage: `url(${addSignIconUrl})` }}
+        />
       </button>
     </>
   );

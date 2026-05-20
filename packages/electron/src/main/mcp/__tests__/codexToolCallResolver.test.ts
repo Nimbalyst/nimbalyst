@@ -1,0 +1,98 @@
+import { AgentMessagesRepository } from "@nimbalyst/runtime";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import {
+  extractCodexTurnMetadataFromRequest,
+  extractToolUseIdFromMcpRequest,
+  findCodexAppServerToolCallId,
+  resolveRequestUserInputPromptTargets,
+  resolveToolUseIdFromMcpRequest,
+} from "../tools/codexToolCallResolver";
+
+describe("codexToolCallResolver", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("extracts Codex turn metadata from MCP request _meta", () => {
+    expect(extractCodexTurnMetadataFromRequest({
+      params: {
+        _meta: {
+          "x-codex-turn-metadata": {
+            session_id: "session-1",
+            thread_id: "thread-1",
+            turn_id: "turn-1",
+          },
+        },
+      },
+    })).toEqual({
+      sessionId: "session-1",
+      threadId: "thread-1",
+      turnId: "turn-1",
+    });
+  });
+
+  it("extracts a direct tool-use id from provider metadata", () => {
+    expect(extractToolUseIdFromMcpRequest({
+      params: {
+        _meta: {
+          "openai/toolCallId": "call_direct",
+        },
+      },
+    })).toBe("call_direct");
+  });
+
+  it("finds the raw call id for the matching turn and tool", () => {
+    const contents = [
+      JSON.stringify({
+        method: "item/started",
+        params: {
+          turnId: "turn-0",
+          item: { type: "mcpToolCall", tool: "PromptForUserInput", id: "call_old" },
+        },
+      }),
+      JSON.stringify({
+        method: "item/started",
+        params: {
+          turnId: "turn-1",
+          item: { type: "mcpToolCall", tool: "PromptForUserInput", id: "call_match" },
+        },
+      }),
+    ];
+
+    expect(findCodexAppServerToolCallId(contents, "turn-1", "PromptForUserInput")).toBe("call_match");
+    expect(findCodexAppServerToolCallId(contents, "turn-1", "AskUserQuestion")).toBeNull();
+  });
+
+  it("resolves the tool-use id from recent Codex app-server messages when direct metadata is missing", async () => {
+    vi.spyOn(AgentMessagesRepository, "list").mockResolvedValue([
+      {
+        content: JSON.stringify({
+          method: "item/started",
+          params: {
+            turnId: "turn-1",
+            item: { type: "mcpToolCall", tool: "PromptForUserInput", id: "call_recovered" },
+          },
+        }),
+      },
+    ] as any);
+
+    await expect(resolveToolUseIdFromMcpRequest({
+      params: {
+        _meta: {
+          "x-codex-turn-metadata": {
+            turn_id: "turn-1",
+          },
+        },
+      },
+    }, "session-1", "PromptForUserInput")).resolves.toBe("call_recovered");
+  });
+
+  it("expands synthetic prompt ids into waiter aliases", () => {
+    expect(resolveRequestUserInputPromptTargets("nimtc|call_test|1779232811883|72")).toEqual({
+      promptId: "nimtc|call_test|1779232811883|72",
+      rawPromptId: "call_test",
+      waiterPromptIds: ["nimtc|call_test|1779232811883|72", "call_test"],
+    });
+  });
+});

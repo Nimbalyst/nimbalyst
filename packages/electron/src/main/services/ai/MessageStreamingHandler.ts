@@ -1139,6 +1139,11 @@ export class MessageStreamingHandler {
         // Pre-built prompts from DocumentContextService (for user message additions)
         documentContextPrompt: userMessageAdditions.documentContextPrompt,
         editingInstructions: userMessageAdditions.editingInstructions,
+
+        // Origin of this message (e.g. 'wakeup_resume' for ScheduleWakeup-triggered prompts).
+        // The transcript parser uses this to render wakeup resumes as a system marker
+        // instead of a user-lane message.
+        promptOrigin: documentContext?.promptOrigin,
       };
 
       // Update MCP document state for Claude Code provider so it knows which tools to show

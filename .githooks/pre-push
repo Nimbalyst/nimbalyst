@@ -1,5 +1,8 @@
 #!/bin/sh
 set -eu
 
+echo "[pre-push] Running typecheck..."
+npm run typecheck
+
 echo "[pre-push] Running non-provider unit tests..."
 npm run test:prepush

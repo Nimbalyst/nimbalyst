@@ -19,6 +19,7 @@ import { safeHandle, safeOn } from '../utils/ipcRegistry';
 import type { SessionCreateResult } from '../../shared/ipc/types';
 import { TrayManager } from '../tray/TrayManager';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
+import { resolveRequestUserInputPromptTargets } from '../mcp/tools/codexToolCallResolver';
 
 // Initialize session manager
 const sessionManager = new SessionManager();
@@ -1300,6 +1301,9 @@ export async function registerSessionHandlers() {
             const { sessionId, promptId, promptType, response, respondedBy } = params;
             const { database } = await import('../database/PGLiteDatabaseWorker');
             const timestamp = Date.now();
+            const requestUserInputTargets = promptType === 'request_user_input_request'
+                ? resolveRequestUserInputPromptTargets(promptId)
+                : null;
             const canonicalPromptId = promptType === 'git_commit_proposal_request'
                 ? await resolveGitCommitProposalPromptId(sessionId, promptId)
                 : promptId;
@@ -1351,6 +1355,7 @@ export async function registerSessionHandlers() {
                 responseContent = {
                     type: 'request_user_input_response',
                     promptId: canonicalPromptId,
+                    ...(requestUserInputTargets?.rawPromptId ? { rawPromptId: requestUserInputTargets.rawPromptId } : {}),
                     answers: response.answers || {},
                     cancelled: response.cancelled === true,
                     respondedAt: timestamp,
@@ -1444,17 +1449,40 @@ export async function registerSessionHandlers() {
             // durable fallback for cases where the MCP transport drops.)
             if (promptType === 'request_user_input_request') {
                 const { ipcMain } = await import('electron');
-                const { getRequestUserInputResponseChannel } = await import('../mcp/tools/interactiveToolHandlers');
-                const channel = getRequestUserInputResponseChannel(sessionId, canonicalPromptId);
-                if (ipcMain.listenerCount(channel) > 0) {
-                    ipcMain.emit(channel, null, {
+                const {
+                    getRequestUserInputResponseChannel,
+                    getRequestUserInputFallbackResponseChannel,
+                } = await import('../mcp/tools/interactiveToolHandlers');
+                const waiterPromptIds = requestUserInputTargets?.waiterPromptIds ?? [canonicalPromptId];
+                let notifiedWaiter = false;
+
+                for (const waiterPromptId of waiterPromptIds) {
+                    const channel = getRequestUserInputResponseChannel(sessionId, waiterPromptId);
+                    if (ipcMain.listenerCount(channel) > 0) {
+                        notifiedWaiter = true;
+                        ipcMain.emit(channel, null, {
+                            answers: response.answers,
+                            cancelled: response.cancelled === true,
+                            respondedBy,
+                        });
+                    }
+                }
+
+                const fallbackChannel = getRequestUserInputFallbackResponseChannel(sessionId);
+                if (!notifiedWaiter && ipcMain.listenerCount(fallbackChannel) > 0) {
+                    notifiedWaiter = true;
+                    ipcMain.emit(fallbackChannel, null, {
+                        promptId: canonicalPromptId,
+                        ...(requestUserInputTargets?.rawPromptId ? { rawPromptId: requestUserInputTargets.rawPromptId } : {}),
                         answers: response.answers,
                         cancelled: response.cancelled === true,
                         respondedBy,
                     });
-                } else {
+                }
+
+                if (!notifiedWaiter) {
                     console.warn(
-                        `[SessionHandlers] No MCP waiter for RequestUserInput on channel: ${channel}. ` +
+                        `[SessionHandlers] No MCP waiter for RequestUserInput on channels: ${waiterPromptIds.join(', ')}. ` +
                         `Response was persisted to DB; the handler may have already resolved or the subprocess exited.`,
                     );
                 }

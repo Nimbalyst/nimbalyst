@@ -43,6 +43,14 @@ export interface DocumentBackingStore {
    * omit it. Returns an unsubscribe function.
    */
   onDeletion?(callback: () => void): () => void;
+
+  /**
+   * Release subscriptions and internal resources.
+   * Called when the backing store is replaced (e.g. on file rename) or
+   * when the DocumentModel is disposed.
+   * Optional -- implementations without resources to release can omit it.
+   */
+  dispose?(): void;
 }
 
 export interface ExternalChangeInfo {

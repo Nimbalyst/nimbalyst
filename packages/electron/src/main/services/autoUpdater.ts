@@ -14,6 +14,11 @@ import {
   classifyUpdateError,
   isWindowsRenameLockError,
 } from './autoUpdaterUtils';
+import { installAtomFeedFilter } from './electronUpdaterPatch';
+
+// Install the atom-feed filter before any AutoUpdaterService is constructed
+// (which is the first thing that triggers electron-updater to read the feed).
+installAtomFeedFilter();
 
 // Re-export the pure utilities so callers that already pulled them from this
 // module keep working. Unit tests should import from `autoUpdaterUtils`

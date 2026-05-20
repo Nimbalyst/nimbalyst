@@ -16,6 +16,7 @@ import { DiskBackedStore } from './DiskBackedStore';
 import type { DocumentModelEditorHandle, DocumentModelState } from './types';
 
 interface RegistryEntry {
+  currentPath: string;
   model: DocumentModel;
   refCount: number;
 }
@@ -24,6 +25,7 @@ export type DocumentModelFactory = (filePath: string) => DocumentModel;
 
 class DocumentModelRegistryImpl {
   private entries = new Map<string, RegistryEntry>();
+  private handleEntries = new Map<DocumentModelEditorHandle, RegistryEntry>();
   private modelFactory: DocumentModelFactory | null = null;
 
   /**
@@ -50,12 +52,13 @@ class DocumentModelRegistryImpl {
       const model = this.modelFactory
         ? this.modelFactory(normalizedPath)
         : this.createDefaultModel(normalizedPath, options);
-      entry = { model, refCount: 0 };
+      entry = { currentPath: normalizedPath, model, refCount: 0 };
       this.entries.set(normalizedPath, entry);
     }
 
     entry.refCount++;
     const handle = entry.model.attach();
+    this.handleEntries.set(handle, entry);
 
     return { model: entry.model, handle };
   }
@@ -64,17 +67,17 @@ class DocumentModelRegistryImpl {
    * Release a reference to a DocumentModel.
    * When ref count reaches zero, the model is disposed.
    */
-  release(filePath: string, handle: DocumentModelEditorHandle): void {
-    const normalizedPath = this.normalizePath(filePath);
-    const entry = this.entries.get(normalizedPath);
+  release(_filePath: string, handle: DocumentModelEditorHandle): void {
+    const entry = this.handleEntries.get(handle);
     if (!entry) return;
 
     handle.detach();
     entry.refCount--;
+    this.handleEntries.delete(handle);
 
     if (entry.refCount <= 0) {
       entry.model.dispose();
-      this.entries.delete(normalizedPath);
+      this.entries.delete(entry.currentPath);
     }
   }
 
@@ -110,6 +113,44 @@ class DocumentModelRegistryImpl {
   }
 
   /**
+   * Migrate a model to a new file path in-place (file rename).
+   *
+   * Moves the registry key from oldPath to newPath and updates the model's
+   * backing store so that subsequent loads/saves target the new path. All
+   * in-memory state is preserved -- dirty buffer, autosave timer, attached
+   * editors -- so callers do NOT lose unsaved edits.
+   *
+   * If oldPath has no registered model the call is a no-op (file was not open).
+   * Must be called BEFORE updating any UI that would cause useDocumentModel()
+   * to re-run with newPath; otherwise the hook creates a fresh (clean) model.
+   */
+  rename(oldPath: string, newPath: string): boolean {
+    const normalizedOld = this.normalizePath(oldPath);
+    const normalizedNew = this.normalizePath(newPath);
+    if (normalizedOld === normalizedNew) return true;
+
+    const entry = this.entries.get(normalizedOld);
+    if (!entry) return false;
+
+    const existingDestination = this.entries.get(normalizedNew);
+    if (existingDestination && existingDestination !== entry) {
+      console.warn(
+        '[DocumentModelRegistry] Refusing rename to an already-registered path:',
+        normalizedNew,
+      );
+      return false;
+    }
+
+    const newStore = new DiskBackedStore(normalizedNew);
+    entry.model.migrateToNewPath(normalizedNew, newStore);
+
+    this.entries.delete(normalizedOld);
+    entry.currentPath = normalizedNew;
+    this.entries.set(normalizedNew, entry);
+    return true;
+  }
+
+  /**
    * Flush all dirty editors across all models.
    * Used during mode switches.
    */
@@ -131,6 +172,7 @@ class DocumentModelRegistryImpl {
       entry.model.dispose();
     }
     this.entries.clear();
+    this.handleEntries.clear();
   }
 
   // -- Internal -------------------------------------------------------------

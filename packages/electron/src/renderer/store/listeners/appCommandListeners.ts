@@ -18,6 +18,7 @@ import {
   confirmCloseUnsavedRequestAtom,
   extensionMarketplaceInstallRequestAtom,
   fileSaveRequestAtom,
+  marketplaceInstallProgressAtom,
   navigationGoBackRequestAtom,
   navigationGoForwardRequestAtom,
   newMockupRequestAtom,
@@ -33,6 +34,7 @@ import {
   toggleAIChatPanelRequestAtom,
   unifiedOnboardingRequestAtom,
   windowsClaudeCodeWarningRequestAtom,
+  type InstallProgressStage,
 } from '../atoms/appCommands';
 
 let onboardingCounter = 0;
@@ -42,6 +44,7 @@ let setContentModeCounter = 0;
 let agentInsertPlanReferenceCounter = 0;
 let showProjectSelectionDialogCounter = 0;
 let showExtensionProjectIntroDialogCounter = 0;
+let marketplaceInstallProgressCounter = 0;
 
 let initialized = false;
 
@@ -160,6 +163,19 @@ export function initAppCommandListeners(): () => void {
     },
   );
   if (typeof u11 === 'function') cleanups.push(u11);
+
+  const u12 = window.electronAPI?.on?.(
+    'extension-marketplace:install-progress',
+    (event: { stage: InstallProgressStage; message: string }) => {
+      marketplaceInstallProgressCounter += 1;
+      store.set(marketplaceInstallProgressAtom, {
+        version: marketplaceInstallProgressCounter,
+        stage: event.stage,
+        message: event.message,
+      });
+    },
+  );
+  if (typeof u12 === 'function') cleanups.push(u12);
 
   return () => {
     initialized = false;

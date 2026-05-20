@@ -88,6 +88,15 @@ export class ClaudeCodeRawParser implements IRawMessageParser {
             reminderKind: this.extractReminderKind(msg.metadata),
             createdAt: msg.createdAt,
           });
+        } else if (msg.metadata?.promptOrigin === 'wakeup_resume') {
+          descriptors.push({
+            type: 'system_message',
+            text: parsed.prompt,
+            systemType: 'status',
+            reminderKind: 'wakeup_resume',
+            searchable: false,
+            createdAt: msg.createdAt,
+          });
         } else {
           const mode = (msg.metadata?.mode as 'agent' | 'planning' | 'auto') ?? 'agent';
           descriptors.push({

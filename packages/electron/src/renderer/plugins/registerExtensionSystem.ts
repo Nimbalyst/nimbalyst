@@ -459,24 +459,24 @@ function setupRendererEvalListener(): void {
     console.log('[ExtensionSystem] Renderer eval request');
 
     try {
-      // Wrap in async IIFE to support await expressions and statements
-      // Try as expression first (e.g. "1 + 2", "await fetch(...)"), fall back to statements (e.g. "const x = 1; x")
-      let asyncEval;
+      const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as new (
+        ...args: string[]
+      ) => () => Promise<unknown>;
+
+      // Compile as an async function to support await expressions and
+      // multi-statement snippets without relying on eval().
+      let asyncEval: () => Promise<unknown>;
       try {
-        // eslint-disable-next-line no-eval
-        asyncEval = eval(`(async () => { return (${data.expression}); })()`);
+        asyncEval = new AsyncFunction(`return (${data.expression});`);
       } catch (syntaxErr) {
         if (syntaxErr instanceof SyntaxError) {
-          // Expression failed to parse — treat as statement(s) where the last expression is the result
-          // eslint-disable-next-line no-eval
-          asyncEval = eval(`(async () => { ${data.expression} })()`);
+          asyncEval = new AsyncFunction(data.expression);
         } else {
           throw syntaxErr;
         }
       }
 
-      // Await the result (handles both sync and async expressions)
-      const result = await asyncEval;
+      const result = await asyncEval();
 
       electronAPI.send(data.responseChannel, {
         value: serializeEvalResult(result)

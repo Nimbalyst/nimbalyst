@@ -3,17 +3,8 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
-
-export interface ValidationResult {
-  /** Whether the bundle passed validation */
-  valid: boolean;
-
-  /** Critical errors that will cause runtime failures */
-  errors: string[];
-
-  /** Warnings that may cause issues */
-  warnings: string[];
-}
+import type { ValidationResult } from './validationTypes.js';
+export type { ValidationResult } from './validationTypes.js';
 
 /**
  * Validates an extension bundle for common issues.

@@ -41,6 +41,11 @@ export default defineConfig({
         // Nimbalyst services
         /^@nimbalyst\/runtime/,
         '@nimbalyst/editor-context',
+        // yJS must resolve to the host's copy at runtime -- `instanceof Y.Doc`
+        // checks fail if the extension bundles its own (same constraint as
+        // React). The host's runtime exposes both modules.
+        'yjs',
+        /^y-protocols(\/.*)?$/,
       ],
       // NOTE: zustand, html2canvas, @xyflow/react are bundled by the extension
       // This gives the extension control over its own versions

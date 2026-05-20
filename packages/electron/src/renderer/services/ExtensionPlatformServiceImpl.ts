@@ -42,6 +42,8 @@ import {
   useEditorLifecycle,
   useCollaborativeEditor,
   COLLAB_INIT_ORIGIN,
+  setTranscriptMarkdownContributions,
+  clearTranscriptMarkdownContributions,
 } from '@nimbalyst/runtime';
 
 // yJS singletons shared with extensions: the host's Y.Doc passes by reference
@@ -300,6 +302,8 @@ ${exportNames.map((name) => `export const ${name} = __mod?.${name};`).join('\n')
           aiTools: module.aiTools || module.default?.aiTools || [],
           nodes: module.nodes || module.default?.nodes || {},
           transformers: module.transformers || module.default?.transformers || {},
+          lexicalExtensions:
+            module.lexicalExtensions || module.default?.lexicalExtensions || {},
           hostComponents: module.hostComponents || module.default?.hostComponents || {},
           slashCommandHandlers: module.slashCommandHandlers || module.default?.slashCommandHandlers || {},
           panels: module.panels || module.default?.panels || {},
@@ -469,6 +473,8 @@ CHECK:
         useEditorLifecycle,
         useCollaborativeEditor,
         COLLAB_INIT_ORIGIN,
+        setTranscriptMarkdownContributions,
+        clearTranscriptMarkdownContributions,
         // Editor components - extensions can use these instead of bundling their own
         // MarkdownEditor is the configured wrapper with platform features (image handling, toolbar)
         MarkdownEditor: NimbalystMarkdownEditor,

@@ -1144,6 +1144,68 @@ describe('OpenAICodexProvider', () => {
     expect(chunks.some((chunk) => chunk.type === 'text')).toBe(true);
   });
 
+  it('captures a new Codex thread ID before a blocked turn completes', async () => {
+    const createSession = vi.fn(async () => ({
+      id: 'thread-blocked',
+      platform: 'codex-app-server',
+      raw: { fake: true },
+    }));
+    const protocol = {
+      platform: 'codex-app-server',
+      createSession,
+      resumeSession: vi.fn(),
+      forkSession: vi.fn(),
+      async *sendMessage() {
+        yield {
+          type: 'tool_call',
+          toolCall: {
+            id: 'call_blocked',
+            name: 'mcp__nimbalyst-mcp__PromptForUserInput',
+            arguments: {
+              title: 'Blocked prompt',
+              fields: [],
+            },
+          },
+        };
+      },
+      abortSession: vi.fn(),
+      cleanupSession: vi.fn(),
+    } as any;
+
+    const provider = new OpenAICodexProvider(
+      { apiKey: 'test-key' },
+      { protocol },
+    );
+    await provider.initialize({ apiKey: 'test-key', model: 'openai-codex:gpt-5' });
+
+    const providerSessionReceived = vi.fn();
+    provider.on('session:providerSessionReceived', providerSessionReceived);
+
+    const iterator = provider.sendMessage(
+      'ask for approval',
+      undefined,
+      'session-blocked',
+      [],
+      process.cwd(),
+    )[Symbol.asyncIterator]();
+
+    const firstChunk = await iterator.next();
+    expect(firstChunk.done).toBe(false);
+    expect(firstChunk.value).toMatchObject({
+      type: 'tool_call',
+      toolCall: expect.objectContaining({ id: 'call_blocked' }),
+    });
+
+    expect(provider.getProviderSessionData('session-blocked')).toEqual({
+      providerSessionId: 'thread-blocked',
+      codexThreadId: 'thread-blocked',
+    });
+    expect(providerSessionReceived).toHaveBeenCalledWith({
+      sessionId: 'session-blocked',
+      providerSessionId: 'thread-blocked',
+    });
+  });
+
   it('reuses the same live ProtocolSession across consecutive turns on one Nimbalyst session', async () => {
     // Mock protocol -- the cache lives at the provider layer, so we want to
     // pin down its create/resume/reuse behavior without depending on the SDK

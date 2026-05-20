@@ -35,25 +35,38 @@ export function useDocumentModel(
     handle: DocumentModelEditorHandle;
   } | null>(null);
 
-  // If filePath changed, release the old one and acquire a new one synchronously
-  if (!resultRef.current || resultRef.current.filePath !== filePath) {
-    // Release previous if it exists
-    if (resultRef.current) {
-      DocumentModelRegistry.release(resultRef.current.filePath, resultRef.current.handle);
-    }
+  if (!resultRef.current) {
     const { model, handle } = DocumentModelRegistry.getOrCreate(filePath, options);
     resultRef.current = { filePath, model, handle };
+  } else if (resultRef.current.filePath !== filePath) {
+    // Fast-path for file renames: the registry may have migrated the existing
+    // model in place before this component re-renders. If so, keep the current
+    // attachment rather than releasing/re-acquiring, which would drop dirty
+    // state when the old handle is the only attachment.
+    if (resultRef.current.model.filePath === filePath) {
+      resultRef.current.filePath = filePath;
+    } else {
+      DocumentModelRegistry.release(
+        resultRef.current.model.filePath,
+        resultRef.current.handle,
+      );
+      const { model, handle } = DocumentModelRegistry.getOrCreate(filePath, options);
+      resultRef.current = { filePath, model, handle };
+    }
   }
 
-  // Cleanup on unmount
+  // Cleanup on unmount. Path changes are handled synchronously above.
   useEffect(() => {
     return () => {
       if (resultRef.current) {
-        DocumentModelRegistry.release(resultRef.current.filePath, resultRef.current.handle);
+        DocumentModelRegistry.release(
+          resultRef.current.model.filePath,
+          resultRef.current.handle,
+        );
         resultRef.current = null;
       }
     };
-  }, [filePath]);
+  }, []);
 
   return {
     model: resultRef.current.model,

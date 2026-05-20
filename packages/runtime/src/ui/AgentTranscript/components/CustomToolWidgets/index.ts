@@ -126,16 +126,27 @@ import { SuperLoopProgressWidget } from './SuperLoopProgressWidget';
 import { UpdateSessionMetaWidget } from './UpdateSessionMetaWidget';
 import { TrackerToolWidget } from './TrackerToolWidget';
 
+import {
+  getTranscriptToolWidget,
+  setTranscriptToolWidgets,
+} from '../../contributions/TranscriptToolWidgetContributions';
+
 /**
- * Registry of custom tool widgets
+ * Built-in custom tool widget registrations.
  *
- * Keys are tool names (as they appear in message.toolCall.toolName)
- * Values are React components that render the custom widget
+ * These widgets render the host-shipped tool calls (Bash, AskUserQuestion,
+ * commit proposal, etc.). They are registered to the shared transcript
+ * widget registry at module load so extension-contributed widgets and
+ * built-ins live in the same lookup path; see
+ * `../../contributions/TranscriptToolWidgetContributions`.
  *
- * Note: MCP tools may have prefixed names (e.g., mcp__nimbalyst-mcp__capture_editor_screenshot)
- * Register both the base name and prefixed variants for full compatibility.
+ * Keys are tool names (as they appear in message.toolCall.toolName).
+ * MCP tools may have prefixed names (e.g.,
+ * `mcp__nimbalyst-mcp__capture_editor_screenshot`); register both the bare
+ * name and the prefixed variants when the legacy session log might contain
+ * either.
  */
-export const CUSTOM_TOOL_WIDGETS: CustomToolWidgetRegistry = {
+const BUILT_IN_TOOL_WIDGETS: CustomToolWidgetRegistry = {
   // Editor screenshot capture tool (works for mockups and all other editor types)
   'capture_editor_screenshot': EditorScreenshotWidget,
   'mcp__nimbalyst-mcp__capture_editor_screenshot': EditorScreenshotWidget,
@@ -208,37 +219,49 @@ export const CUSTOM_TOOL_WIDGETS: CustomToolWidgetRegistry = {
   'tracker_link_file': TrackerToolWidget,
 };
 
+// Identifier used when the host registers built-in widgets to the runtime
+// registry. Kept stable so this module can replace or clear its own slot
+// during dev reload without disturbing extension-contributed widgets.
+const BUILT_IN_TRANSCRIPT_WIDGET_SOURCE = 'nimbalyst:transcript-core';
+
+// Register built-ins once per module load. Extensions live alongside on the
+// same registry and resolve through `getCustomToolWidget` below.
+setTranscriptToolWidgets(BUILT_IN_TRANSCRIPT_WIDGET_SOURCE, BUILT_IN_TOOL_WIDGETS);
+
 /**
- * Get a custom widget component for a tool name, if one is registered
+ * Back-compat alias for the historical built-in widget map. Read-only.
+ * New code should prefer `getCustomToolWidget` / `getTranscriptToolWidget`,
+ * which see extension-contributed widgets as well.
+ */
+export const CUSTOM_TOOL_WIDGETS: CustomToolWidgetRegistry = BUILT_IN_TOOL_WIDGETS;
+
+/**
+ * Get a custom widget component for a tool name, if one is registered.
  *
- * This function handles MCP prefix stripping automatically:
- * - First checks for exact match
- * - Then strips 'mcp__nimbalyst__' prefix and checks again
- * - Then strips any 'mcp__*__' prefix pattern and checks again
+ * Resolution order:
+ *  1. Anything contributed via `setTranscriptToolWidgets` (including
+ *     built-ins and extension contributions) using exact match.
+ *  2. Same lookup with the `mcp__nimbalyst__` prefix stripped.
+ *  3. Same lookup with any `mcp__<server>__` prefix stripped.
+ *  4. Shell-wrapper fallback: if the tool name looks like a raw `bash -c`
+ *     / `powershell -Command` invocation persisted from a historical
+ *     session, render it with the bash widget.
+ *
+ * Steps 1-3 are delegated to the transcript widget registry so extensions
+ * can override or add widgets; step 4 stays local because it is bash-only
+ * back-compat tied to the regex constants in this file.
  *
  * @param toolName The name of the tool from the message
  * @returns The custom widget component, or undefined if none registered
  */
 export function getCustomToolWidget(toolName: string): CustomToolWidgetComponent | undefined {
-  // Direct match
-  if (CUSTOM_TOOL_WIDGETS[toolName]) {
-    return CUSTOM_TOOL_WIDGETS[toolName];
-  }
+  const fromRegistry = getTranscriptToolWidget(toolName);
+  if (fromRegistry) return fromRegistry;
 
-  // Strip nimbalyst MCP prefix
-  const withoutNimbalystPrefix = toolName.replace(/^mcp__nimbalyst__/, '');
-  if (withoutNimbalystPrefix !== toolName && CUSTOM_TOOL_WIDGETS[withoutNimbalystPrefix]) {
-    return CUSTOM_TOOL_WIDGETS[withoutNimbalystPrefix];
-  }
-
-  // Strip any MCP prefix pattern (mcp__serverName__)
-  const withoutAnyMcpPrefix = toolName.replace(/^mcp__[^_]+__/, '');
-  if (withoutAnyMcpPrefix !== toolName && CUSTOM_TOOL_WIDGETS[withoutAnyMcpPrefix]) {
-    return CUSTOM_TOOL_WIDGETS[withoutAnyMcpPrefix];
-  }
-
-  // Backward compatibility for shell commands that were persisted with the raw
-  // wrapper command as the tool name instead of the normalized command_execution type.
+  // Backward compatibility for shell commands that were persisted with the
+  // raw wrapper command as the tool name instead of the normalized
+  // command_execution type. Anchored to bash/zsh/sh/powershell/cmd
+  // invocations; everything else falls through to the generic tool card.
   if (SHELL_WRAPPER_NAME_REGEX.test(toolName) || WINDOWS_SHELL_NAME_REGEX.test(toolName)) {
     return BashWidget;
   }

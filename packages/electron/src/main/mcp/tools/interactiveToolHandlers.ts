@@ -7,6 +7,10 @@ import { getSessionStateManager } from "@nimbalyst/runtime/ai/server/SessionStat
 import { notificationService } from "../../services/NotificationService";
 import { TrayManager } from "../../tray/TrayManager";
 import { findWindowIdForWorkspacePath } from "../mcpWorkspaceResolver";
+import {
+  resolveRequestUserInputPromptTargets,
+  resolveToolUseIdFromMcpRequest,
+} from "./codexToolCallResolver";
 
 export function getInteractiveToolSchemas(sessionId: string | undefined) {
   if (!sessionId) return [];
@@ -138,30 +142,6 @@ type McpToolResult = {
   isError: boolean;
 };
 
-/**
- * Extract tool use ID from MCP request metadata.
- * Checks multiple possible field names across different providers.
- */
-export function extractToolUseIdFromMcpRequest(request: any): string | undefined {
-  const requestMeta =
-    request?.params && typeof request.params._meta === "object"
-      ? (request.params._meta as Record<string, unknown>)
-      : undefined;
-  return [
-    requestMeta?.["claudecode/toolUseId"],
-    requestMeta?.["openai/toolUseId"],
-    requestMeta?.["openai/toolCallId"],
-    requestMeta?.["toolUseId"],
-    requestMeta?.["tool_use_id"],
-    requestMeta?.["toolCallId"],
-    typeof request?.id === "string" || typeof request?.id === "number"
-      ? String(request.id)
-      : undefined,
-  ].find(
-    (value): value is string => typeof value === "string" && value.length > 0
-  );
-}
-
 export async function handleAskUserQuestion(
   args: any,
   sessionId: string | undefined,
@@ -254,7 +234,7 @@ export async function handleAskUserQuestion(
   }
 
   const questionId =
-    extractToolUseIdFromMcpRequest(request) ||
+    await resolveToolUseIdFromMcpRequest(request, sessionId, "AskUserQuestion") ||
     `ask-${sessionId || "unknown"}-${Date.now()}`;
   const questionResponseChannel = `ask-user-question-response:${sessionId || "unknown"}:${questionId}`;
   const fallbackSessionChannel = `ask-user-question:${sessionId || "unknown"}`;
@@ -487,7 +467,11 @@ export async function handleGitCommitProposal(
   }
 
   // Use provider tool-call ID as the proposal ID when available
-  const toolUseId = extractToolUseIdFromMcpRequest(request);
+  const toolUseId = await resolveToolUseIdFromMcpRequest(
+    request,
+    sessionId,
+    "developer_git_commit_proposal",
+  );
   const proposalId =
     toolUseId ||
     `git-commit-proposal-${Date.now()}-${Math.random()
@@ -1065,6 +1049,12 @@ export function getRequestUserInputResponseChannel(
   return `request-user-input-response:${sessionId || "unknown"}:${promptId}`;
 }
 
+export function getRequestUserInputFallbackResponseChannel(
+  sessionId: string,
+): string {
+  return `request-user-input-response:${sessionId || "unknown"}:__fallback__`;
+}
+
 export async function handleRequestUserInput(
   args: any,
   sessionId: string | undefined,
@@ -1082,9 +1072,12 @@ export async function handleRequestUserInput(
   }
 
   const promptId =
-    extractToolUseIdFromMcpRequest(request) ||
+    await resolveToolUseIdFromMcpRequest(request, sessionId, "PromptForUserInput") ||
     `rui-${sessionId || "unknown"}-${Date.now()}`;
+  const { waiterPromptIds: promptIdAliases } = resolveRequestUserInputPromptTargets(promptId);
+  const promptIdAliasSet = new Set(promptIdAliases);
   const responseChannel = getRequestUserInputResponseChannel(sessionId || "unknown", promptId);
+  const fallbackResponseChannel = getRequestUserInputFallbackResponseChannel(sessionId || "unknown");
 
   console.log(
     `[MCP Server] RequestUserInput waiting for response: promptId=${promptId}, sessionId=${sessionId}`,
@@ -1180,6 +1173,7 @@ export async function handleRequestUserInput(
         pollTimer = null;
       }
       ipcMain.removeListener(responseChannel, onResponse);
+      ipcMain.removeListener(fallbackResponseChannel, onFallbackResponse);
 
       const cancelled = result?.cancelled === true;
       const answers = result?.answers && typeof result.answers === "object"
@@ -1262,7 +1256,34 @@ export async function handleRequestUserInput(
       },
     ) => settle(result, "ipc");
 
+    const onFallbackResponse = (
+      _event: unknown,
+      result: {
+        promptId?: string;
+        rawPromptId?: string;
+        answers?: Record<string, unknown>;
+        cancelled?: boolean;
+        respondedBy?: "desktop" | "mobile";
+      },
+    ) => {
+      const responsePromptIds = [
+        typeof result.promptId === "string" ? result.promptId : null,
+        typeof result.rawPromptId === "string" ? result.rawPromptId : null,
+      ].filter((value): value is string => typeof value === "string" && value.length > 0);
+
+      const isSyntheticFallbackPrompt = promptId.startsWith("rui-");
+      if (
+        !isSyntheticFallbackPrompt
+        && responsePromptIds.length > 0
+        && !responsePromptIds.some((id) => promptIdAliasSet.has(id))
+      ) {
+        return;
+      }
+      settle(result, "ipc-fallback");
+    };
+
     ipcMain.on(responseChannel, onResponse);
+    ipcMain.on(fallbackResponseChannel, onFallbackResponse);
 
     // Database polling fallback for resilience to IPC drops.
     if (sessionId) {
@@ -1284,7 +1305,15 @@ export async function handleRequestUserInput(
           for (const msg of messages) {
             try {
               const content = JSON.parse(msg.content);
-              if (content.type === "request_user_input_response" && content.promptId === promptId) {
+              const responsePromptIds = [
+                typeof content.promptId === "string" ? content.promptId : null,
+                typeof content.rawPromptId === "string" ? content.rawPromptId : null,
+              ].filter((value): value is string => typeof value === "string" && value.length > 0);
+
+              if (
+                content.type === "request_user_input_response"
+                && responsePromptIds.some((id) => promptIdAliasSet.has(id))
+              ) {
                 if (content.cancelled) {
                   settle({ cancelled: true, respondedBy: content.respondedBy }, "db-poll");
                 } else {

@@ -29,7 +29,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { usePostHog } from 'posthog-js/react';
-import { MaterialSymbol, ProviderIcon, RichTranscriptView } from '@nimbalyst/runtime';
+import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
+import { RichTranscriptView } from '@nimbalyst/runtime/ui/AgentTranscript/components/RichTranscriptView';
 import type { SessionMeta } from '@nimbalyst/runtime';
 import type { TranscriptViewMessage } from '@nimbalyst/runtime/ai/server/types';
 import {
@@ -402,6 +403,7 @@ function TranscriptPeek({ sessionId, anchorRef, onClose }: TranscriptPeekProps) 
             sessionId={resolvedSessionId}
             messages={messages}
             settings={PEEK_SETTINGS}
+            persistScrollState={false}
           />
         </div>
       ) : (

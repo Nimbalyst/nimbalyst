@@ -42,13 +42,21 @@
         "supportsSourceMode": true,
         "supportsDiffMode": true,
         "supportsTranscriptEmbed": true,
-        "transcriptEmbedHeight": 480
+        "transcriptEmbedHeight": 480,
+        "collaboration": {
+          "supported": true,
+          "awarenessFields": ["selection", "editingFieldId"]
+        }
       },
       {
         "filePatterns": ["*.mockupproject"],
         "displayName": "Mockup Project",
         "component": "MockupProjectEditor",
-        "supportsSourceMode": true
+        "supportsSourceMode": true,
+        "collaboration": {
+          "supported": true,
+          "awarenessFields": ["selectedMockupId", "selectedConnectionId"]
+        }
       }
     ],
     "fileIcons": {

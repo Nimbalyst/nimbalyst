@@ -13,6 +13,7 @@ import ReactDOM from 'react-dom';
 import type { PromptMarker } from '../types';
 import { formatShortTime } from '../../../utils/dateUtils';
 import { MaterialSymbol } from '../../icons/MaterialSymbol';
+const tableOfContentsIconUrl = new URL('../../../images/icons/table-of-contents.svg', import.meta.url).href;
 
 // =============================================================================
 // PromptsMenuButton - Standalone prompts menu dropdown
@@ -118,7 +119,10 @@ export const PromptsMenuButton: React.FC<PromptsMenuButtonProps> = ({
         title="Show prompts in this session"
       >
         {/* Table of contents icon */}
-        <i className="icon table-of-contents w-5 h-5 bg-contain bg-no-repeat bg-[url('../../../images/icons/table-of-contents.svg')] dark:invert" />
+        <i
+          className="icon table-of-contents w-5 h-5 bg-contain bg-no-repeat dark:invert"
+          style={{ backgroundImage: `url(${tableOfContentsIconUrl})` }}
+        />
         {prompts.length > 0 && (
           <span className="prompts-badge absolute -top-1 -right-1 bg-[var(--nim-primary)] text-white text-[10px] font-semibold px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none shadow-sm">{prompts.length}</span>
         )}

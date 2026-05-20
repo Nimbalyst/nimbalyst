@@ -203,6 +203,7 @@ export function useCollaborativeEditor(
             collab.yDoc.transact(() => {
               cfg.initializeFromContent(collab.yDoc, content);
             }, COLLAB_INIT_ORIGIN);
+            await collab.flushLocalState?.();
           }
         } catch (err) {
           console.error(

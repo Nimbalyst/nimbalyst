@@ -33,7 +33,7 @@
   opacity: 0.5;
 
   background-size: cover;
-  background-image: url(/src/images/icons/scissors.svg);
+  background-image: url(../../../images/icons/scissors.svg);
   width: 16px;
   height: 16px;
 }

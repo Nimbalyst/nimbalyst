@@ -1,8 +1,9 @@
 {
   "name": "@nimbalyst/electron",
-  "version": "0.60.4",
+  "version": "0.60.6",
   "private": true,
   "license": "MIT",
+  "author": "Nimbalyst Team",
   "description": "Electron app for Nimbalyst",
   "main": "out/main/index.js",
   "bin": {
@@ -382,7 +383,8 @@
       "notarize": false,
       "extendInfo": {
         "NSLocalNetworkUsageDescription": "Nimbalyst needs access to local network devices for features like MCP servers and local AI model connections.",
-        "NSMicrophoneUsageDescription": "Nimbalyst uses the microphone for Voice Mode, allowing you to interact with the AI assistant using your voice."
+        "NSMicrophoneUsageDescription": "Nimbalyst uses the microphone for Voice Mode, allowing you to interact with the AI assistant using your voice.",
+        "NSAppleEventsUsageDescription": "Nimbalyst opens Terminal.app to run the Claude Code login and logout flows."
       }
     },
     "dmg": {
