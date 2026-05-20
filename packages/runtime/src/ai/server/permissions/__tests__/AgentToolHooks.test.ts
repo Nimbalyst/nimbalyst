@@ -165,6 +165,147 @@ describe('AgentToolHooks', () => {
     });
   });
 
+  describe('PermissionDenied hook (auto-mode classifier re-prompt)', () => {
+    it('returns no-op when session is not in auto mode', async () => {
+      const options = createMockOptions({ getCurrentMode: () => 'agent' });
+      const hooks = new AgentToolHooks(options);
+      const hook = hooks.createPermissionDeniedHook();
+
+      const result = await hook(
+        {
+          tool_name: 'Bash',
+          tool_input: { command: 'git reset --hard HEAD~1' },
+          reason: 'destructive git op',
+          reason_type: 'classifier',
+        },
+        'tool-use-denied-1',
+        { signal: new AbortController().signal }
+      );
+
+      expect(result).toEqual({});
+      expect(options.emit).not.toHaveBeenCalled();
+      expect(options.logAgentMessage).not.toHaveBeenCalled();
+    });
+
+    it('returns no-op for non-classifier deny sources even in auto mode', async () => {
+      const pending = new Map();
+      const options = createMockOptions({
+        getCurrentMode: () => 'auto',
+        getPendingToolPermissions: () => pending as any,
+      });
+      const hooks = new AgentToolHooks(options);
+      const hook = hooks.createPermissionDeniedHook();
+
+      const result = await hook(
+        {
+          tool_name: 'Bash',
+          tool_input: { command: 'ls' },
+          reason: 'blocked by deny rule',
+          reason_type: 'rule',
+        },
+        'tool-use-denied-2',
+        { signal: new AbortController().signal }
+      );
+
+      expect(result).toEqual({});
+      expect(options.emit).not.toHaveBeenCalled();
+    });
+
+    it('prompts user via ToolPermission widget and returns retry:true on approve', async () => {
+      const pending = new Map<string, {
+        resolve: (value: { decision: 'allow' | 'deny'; scope: 'once' | 'session' | 'always' | 'always-all' }) => void;
+        reject: (err: Error) => void;
+        request: any;
+      }>();
+      const sessionApprovedPatterns = new Set<string>();
+      const options = createMockOptions({
+        getCurrentMode: () => 'auto',
+        getPendingToolPermissions: () => pending,
+        getSessionApprovedPatterns: () => sessionApprovedPatterns,
+      });
+      const hooks = new AgentToolHooks(options);
+      const hook = hooks.createPermissionDeniedHook();
+
+      const resultPromise = hook(
+        {
+          tool_name: 'Bash',
+          tool_input: { command: 'git reset --hard HEAD~1' },
+          reason: 'destructive git op',
+          reason_type: 'classifier',
+        },
+        'tool-use-denied-3',
+        { signal: new AbortController().signal }
+      );
+
+      // Let the hook log & emit before responding
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(options.logAgentMessage).toHaveBeenCalledOnce();
+      const logCall = (options.logAgentMessage as any).mock.calls[0];
+      const persistedPayload = JSON.parse(logCall[3]);
+      expect(persistedPayload).toMatchObject({
+        type: 'nimbalyst_tool_use',
+        name: 'ToolPermission',
+        input: expect.objectContaining({
+          toolName: 'Bash',
+          warnings: expect.arrayContaining([
+            expect.stringContaining('destructive git op'),
+          ]),
+        }),
+      });
+      expect(options.emit).toHaveBeenCalledWith('toolPermission:pending', expect.any(Object));
+
+      const pendingEntry = Array.from(pending.values())[0];
+      expect(pendingEntry).toBeDefined();
+      pendingEntry.resolve({ decision: 'allow', scope: 'session' });
+
+      await expect(resultPromise).resolves.toEqual({
+        hookSpecificOutput: {
+          hookEventName: 'PermissionDenied',
+          retry: true,
+        },
+      });
+      // Session-scope approval should be cached so the SDK doesn't bounce the
+      // retry off the classifier again on the very next attempt.
+      expect(sessionApprovedPatterns.size).toBe(1);
+    });
+
+    it('returns no-op (denial stands) when the user denies the re-prompt', async () => {
+      const pending = new Map<string, any>();
+      const options = createMockOptions({
+        getCurrentMode: () => 'auto',
+        getPendingToolPermissions: () => pending,
+        getSessionApprovedPatterns: () => new Set<string>(),
+      });
+      const hooks = new AgentToolHooks(options);
+      const hook = hooks.createPermissionDeniedHook();
+
+      const resultPromise = hook(
+        {
+          tool_name: 'Bash',
+          tool_input: { command: 'rm -rf ~' },
+          reason: 'destructive',
+          reason_type: 'classifier',
+        },
+        'tool-use-denied-4',
+        { signal: new AbortController().signal }
+      );
+
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const pendingEntry = Array.from(pending.values())[0];
+      pendingEntry.resolve({ decision: 'deny', scope: 'once' });
+
+      await expect(resultPromise).resolves.toEqual({});
+      expect(options.emit).toHaveBeenCalledWith(
+        'toolPermission:resolved',
+        expect.objectContaining({ response: { decision: 'deny', scope: 'once' } })
+      );
+    });
+  });
+
   describe('ExitPlanMode pre-tool hook', () => {
     it('denies ExitPlanMode when planFilePath is missing and tells the agent to retry with it', async () => {
       const options = createMockOptions({

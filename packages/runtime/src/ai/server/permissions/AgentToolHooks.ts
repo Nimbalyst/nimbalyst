@@ -304,6 +304,188 @@ export class AgentToolHooks {
   }
 
   /**
+   * Create a permission-denied hook for the Claude Code SDK.
+   *
+   * Auto-mode classifier sometimes blocks a tool on its own without escalating
+   * through `canUseTool`. The SDK then emits a `permission_denied` system
+   * message and the tool fails. Claude Code CLI mirrors this case by asking
+   * the user to approve the original call -- this hook reproduces that flow
+   * inside Nimbalyst.
+   *
+   * Behaviour:
+   * - Only re-prompts when the session is in `auto` mode and the classifier
+   *   was the source of the denial (`reason_type === 'classifier'`).
+   * - Shows the regular ToolPermission widget with the classifier reason as
+   *   a warning so the user knows why the model flagged the call.
+   * - If the user approves, returns `retry: true` so the SDK re-runs the
+   *   original tool call; if the user denies (or aborts), returns `{}` and
+   *   the SDK's original denial stands.
+   *
+   * Outside auto mode (or when the deny source is not the classifier) we
+   * return `{}` so deny rules, `dontAsk` mode, and headless auto-deny keep
+   * their existing terminal behaviour.
+   */
+  createPermissionDeniedHook() {
+    return async (input: any, _toolUseID: string | undefined, options: { signal: AbortSignal }) => {
+      if (this.getCurrentMode?.() !== 'auto') {
+        return {};
+      }
+
+      const reasonType = input.reason_type as string | undefined;
+      if (reasonType && reasonType !== 'classifier') {
+        return {};
+      }
+
+      const toolName = input.tool_name as string;
+      const toolInput = input.tool_input;
+      const classifierReason = input.reason as string | undefined;
+
+      const getPendingToolPermissions = this.getPendingToolPermissions;
+      if (!getPendingToolPermissions) {
+        return {};
+      }
+
+      const requestId = `auto-denied-${this.sessionId || 'unknown'}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const pattern = generateToolPattern(toolName, toolInput);
+      const toolDescription = buildToolDescription(toolName, toolInput);
+      const patternDisplay = getPatternDisplayName(pattern);
+      const rawCommand = toolName === 'Bash' ? (toolInput?.command || '') : toolDescription;
+      const isDestructive = ['Write', 'Edit', 'MultiEdit', 'Bash'].includes(toolName);
+      const warnings = classifierReason
+        ? [`Auto-mode classifier flagged this call: ${classifierReason}`]
+        : ['Auto-mode classifier requested user approval before running this tool.'];
+
+      this.logSecurity('[PermissionDenied] Auto-mode classifier denied tool, re-prompting user:', {
+        toolName,
+        reasonType,
+        classifierReason,
+      });
+
+      const request = {
+        id: requestId,
+        toolName,
+        rawCommand,
+        actionsNeedingApproval: [{
+          action: {
+            pattern,
+            displayName: toolDescription,
+            command: toolName === 'Bash' ? rawCommand : '',
+            isDestructive,
+            referencedPaths: [],
+            hasRedirection: false,
+          },
+          decision: 'ask' as const,
+          reason: classifierReason || 'Auto-mode classifier requested user approval',
+          isDestructive,
+          isRisky: true,
+          warnings,
+          outsidePaths: [],
+          sensitivePaths: [],
+        }],
+        hasDestructiveActions: isDestructive,
+        createdAt: Date.now(),
+      };
+
+      if (this.sessionId) {
+        await this.logAgentMessage(
+          this.sessionId,
+          'claude-code',
+          'output',
+          JSON.stringify({
+            type: 'nimbalyst_tool_use',
+            id: requestId,
+            name: 'ToolPermission',
+            input: {
+              requestId,
+              toolName,
+              rawCommand,
+              pattern,
+              patternDisplayName: patternDisplay,
+              isDestructive,
+              warnings,
+              workspacePath: this.workspacePath,
+            }
+          })
+        );
+      }
+
+      const responsePromise = new Promise<{
+        decision: 'allow' | 'deny';
+        scope: 'once' | 'session' | 'always' | 'always-all';
+      }>((resolve, reject) => {
+        getPendingToolPermissions().set(requestId, { resolve, reject, request });
+
+        if (options.signal) {
+          options.signal.addEventListener('abort', () => {
+            getPendingToolPermissions().delete(requestId);
+            reject(new Error('Request aborted'));
+          }, { once: true });
+        }
+      });
+
+      this.emit('toolPermission:pending', {
+        requestId,
+        sessionId: this.sessionId,
+        workspacePath: this.workspacePath,
+        request,
+        timestamp: Date.now(),
+      });
+
+      try {
+        const response = await responsePromise;
+
+        this.emit('toolPermission:resolved', {
+          requestId,
+          sessionId: this.sessionId,
+          response,
+          timestamp: Date.now(),
+        });
+
+        if (response.decision !== 'allow') {
+          return {};
+        }
+
+        // Cache session-scoped approvals so the same call is not blocked again
+        // mid-turn. Compound bash patterns intentionally skip caching there;
+        // here the pattern is for the whole tool call, so the same rule
+        // applies: only cache when the user opted for a broader scope.
+        if (response.scope !== 'once' && this.getSessionApprovedPatterns) {
+          this.getSessionApprovedPatterns().add(pattern);
+        }
+
+        if ((response.scope === 'always' || response.scope === 'always-all') && this.patternSaver) {
+          try {
+            const patternToSave =
+              response.scope === 'always-all' && toolName === 'WebFetch' ? 'WebFetch' : pattern;
+            await this.patternSaver(this.workspacePath, patternToSave);
+          } catch (saveError) {
+            console.error('[AGENT-HOOKS] PermissionDenied: failed to persist pattern:', saveError);
+          }
+        }
+
+        return {
+          hookSpecificOutput: {
+            hookEventName: 'PermissionDenied' as const,
+            retry: true,
+          },
+        };
+      } catch (error) {
+        this.emit('toolPermission:resolved', {
+          requestId,
+          sessionId: this.sessionId,
+          response: { decision: 'deny', scope: 'once' },
+          timestamp: Date.now(),
+        });
+        this.logSecurity('[PermissionDenied] Re-prompt failed or aborted:', {
+          toolName,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        return {};
+      }
+    };
+  }
+
+  /**
    * Create a post-tool-use hook for the Claude Code SDK
    *
    * This hook adds delays to ensure file system has flushed writes,

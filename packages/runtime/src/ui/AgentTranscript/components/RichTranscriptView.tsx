@@ -2267,6 +2267,17 @@ export const RichTranscriptView = React.forwardRef<
     }
 
     if (message.type === 'system_message' && message.systemMessage?.systemType === 'permission_denied') {
+      // Auto-mode classifier denials are paired with a re-prompt from the
+      // PermissionDenied SDK hook (see AgentToolHooks.createPermissionDeniedHook).
+      // The user sees the regular ToolPermission widget with the classifier
+      // reason in its warnings, so rendering the red "Tool denied" card on top
+      // of that would be redundant and confusing -- skip it.
+      //
+      // Other deny sources (`rule`, `mode`, `asyncAgent`, headless auto-deny)
+      // stay visible because no re-prompt happens for those paths.
+      if (message.systemMessage.deniedReasonType === 'classifier') {
+        return null;
+      }
       return (
         <div
           key={messageKey}

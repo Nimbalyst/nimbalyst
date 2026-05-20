@@ -25,7 +25,11 @@ export interface BuildSdkOptionsDeps {
   resolveModelVariant: () => string;
   mcpConfigService: { getMcpServersConfig: (params: { sessionId?: string; workspacePath: string }) => Promise<Record<string, any>> };
   createCanUseToolHandler: (sessionId?: string, workspacePath?: string, permissionsPath?: string) => any;
-  toolHooksService: { createPreToolUseHook: () => any; createPostToolUseHook: () => any };
+  toolHooksService: {
+    createPreToolUseHook: () => any;
+    createPostToolUseHook: () => any;
+    createPermissionDeniedHook: () => any;
+  };
   teammateManager: {
     lastUsedCwd?: string | undefined;
     lastUsedSessionId?: string | undefined;
@@ -231,6 +235,13 @@ export async function buildSdkOptions(
     hooks: {
       'PreToolUse': [{ hooks: [toolHooksService.createPreToolUseHook()] }],
       'PostToolUse': [{ hooks: [toolHooksService.createPostToolUseHook()] }],
+      // PermissionDenied fires when the SDK denies a tool call without
+      // escalating through canUseTool (auto-mode classifier confident deny,
+      // headless auto-deny, deny rules, dontAsk mode). In auto-mode sessions
+      // we mirror the Claude Code CLI behaviour and re-prompt the user
+      // instead of leaving the call dead -- returning `retry: true` from the
+      // hook causes the SDK to re-run the original tool call.
+      'PermissionDenied': [{ hooks: [toolHooksService.createPermissionDeniedHook()] }],
     },
   };
 
