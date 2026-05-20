@@ -53,6 +53,8 @@ import {
   sessionProcessingAtom,
   sessionHasPendingInteractivePromptAtom,
   sessionWorktreeIdAtom,
+  sessionPhaseAtom,
+  sessionRegistryAtom,
   loadSessionDataAtom,
   reloadSessionDataAtom,
   updateSessionStoreAtom,
@@ -85,7 +87,6 @@ import { autoCommitEnabledAtom, setAutoCommitEnabledAtom } from '../../store/ato
 import { diffPeekSizeAtom, setDiffPeekSizeAtom } from '../../store/atoms/diffPeekSizeAtoms';
 import { registerSessionWorkspace, loadInitialSessionFileState } from '../../store/listeners/fileStateListeners';
 import { SESSION_PHASE_COLUMNS, setSessionPhaseAtom, type SessionPhase } from '../../store/atoms/sessionKanban';
-import { sessionRegistryAtom } from '../../store';
 
 /**
  * Expand @@[name](shortId) session mentions to @@[name](fullUuid).
@@ -453,8 +454,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const setDiffPeekSize = useSetAtom(setDiffPeekSizeAtom);
 
   // Session phase for kanban board
-  const sessionRegistry = useAtomValue(sessionRegistryAtom);
-  const currentPhase = sessionRegistry.get(sessionId)?.phase ?? null;
+  const currentPhase = useAtomValue(sessionPhaseAtom(sessionId));
   const setSessionPhase = useSetAtom(setSessionPhaseAtom);
   const handleSetPhase = useCallback((phase: string | null) => {
     setSessionPhase({ sessionId, phase: phase as SessionPhase | null });
@@ -831,6 +831,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     }
 
     // Expand @@[name](shortId) -> @@[name](fullUuid) for agent consumption
+    const sessionRegistry = store.get(sessionRegistryAtom);
     message = expandSessionMentions(message, sessionRegistry);
 
     setLastSubmitAt(Date.now());
@@ -887,7 +888,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       });
       setIsProcessing(false);
     }
-  }, [sessionId, sessionData, draftInput, draftAttachments, isLoading, getEffectiveDocumentContext, aiMode, workspacePath, setDraftInput, setDraftAttachments, setLastSubmitAt, resetHistory, updateSessionStore, handleQueue, setIsProcessing, messages, mode, onClearSession, onClearAgentSession, sessionRegistry, clearAIInputHistory]);
+  }, [sessionId, sessionData, draftInput, draftAttachments, isLoading, getEffectiveDocumentContext, aiMode, workspacePath, setDraftInput, setDraftAttachments, setLastSubmitAt, resetHistory, updateSessionStore, handleQueue, setIsProcessing, messages, mode, onClearSession, onClearAgentSession, clearAIInputHistory]);
 
   const handleCancel = useCallback(async () => {
     try {

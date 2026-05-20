@@ -752,6 +752,14 @@ export const sessionProviderAtom = atomFamily((sessionId: string) =>
 );
 
 /**
+ * Derived: Session kanban phase from registry metadata.
+ * Allows transcript consumers to subscribe only to one session's phase.
+ */
+export const sessionPhaseAtom = atomFamily((sessionId: string) =>
+  atom((get) => get(sessionRegistryAtom).get(sessionId)?.phase ?? null)
+);
+
+/**
  * Derived: Session messages from sessionData.
  * Allows components to subscribe only to messages without re-rendering on other field changes.
  */

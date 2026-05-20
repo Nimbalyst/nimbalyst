@@ -120,6 +120,7 @@ export {
   sessionActiveAtom,
   sessionTitleAtom,
   sessionProviderAtom,
+  sessionPhaseAtom,
   sessionParentIdDerivedAtom,
   sessionWorktreeIdAtom,
   openSessionsAtom,
