@@ -429,7 +429,7 @@ function createSharedMcpServer(
           return handleTrackerAddComment(args, workspacePath);
 
         case "feedback_anonymize_text":
-          return handleFeedbackAnonymizeText(args);
+          return handleFeedbackAnonymizeText(args, workspacePath);
 
         case "feedback_get_environment":
           return handleFeedbackGetEnvironment();

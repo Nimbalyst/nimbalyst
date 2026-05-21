@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- Changes to existing functionality go here -->
 
 ### Fixed
+- Bug-report anonymizer now redacts the reporting session's workspace path and recognizes Windows path forms, so workspace directory names and the OS username stop leaking into the prefilled public GitHub issue. The `feedback_anonymize_text` tool documents a `<WORKSPACE>` redaction, but the handler only ever passed `homeDir`, so workspace paths outside the home directory (e.g. `C:\Projects\...`) passed through verbatim. The home-directory match was also exact-string, so forward-slash, Git Bash (`/c/...`), WSL (`/mnt/c/...`), and JSON-escaped path forms bypassed it and leaked the username on Windows. The handler now passes the session workspace path through to the anonymizer, and the path matcher normalizes those forms case-insensitively. (#396)
 - Imported Claude Code sessions are now labelled with the model that was actually used instead of always showing Sonnet. The importer (`ClaudeCodeSessionSync`) never set a `model` on the new `ai_sessions` row, so the renderer fell back to a hardcoded `claude-code:sonnet` and every imported session showed Sonnet regardless of the real model. The importer now reads the per-turn model recorded on the JSONL assistant entries (e.g. `claude-opus-4-7`), maps it to the matching claude-code variant, and stores it on the session, falling back to the real default (`claude-code:opus-1m`) rather than Sonnet when no model is present. (#394)
 
 ### Removed

@@ -18,10 +18,52 @@ function escapeRegExp(input: string): string {
   return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/**
+ * Produce the string forms the same absolute path can take across logs, so a
+ * single configured path (e.g. `C:\Users\jane`, the value `os.homedir()` returns
+ * on Windows) still matches when a log line renders it differently. Without this
+ * the home/workspace replacement is an exact-string match and Windows path
+ * variants slip through, leaking the OS username and workspace directory names.
+ * Covers: forward-slash (`C:/Users/jane`), Git Bash/MSYS (`/c/Users/jane`),
+ * WSL (`/mnt/c/Users/jane`), and JSON-escaped (`C:\\Users\\jane`) forms.
+ */
+function expandPathVariants(p: string): string[] {
+  const variants = new Set<string>([p]);
+  const fwd = p.replace(/\\/g, '/');
+  const back = p.replace(/\//g, '\\');
+  variants.add(fwd);
+  variants.add(back);
+  variants.add(back.replace(/\\/g, '\\\\')); // JSON-escaped backslashes
+
+  // Windows drive form -> POSIX-ish forms.
+  const win = fwd.match(/^([A-Za-z]):\/(.*)$/);
+  if (win) {
+    const drive = win[1].toLowerCase();
+    const rest = win[2];
+    variants.add(`/${drive}/${rest}`); // Git Bash / MSYS
+    variants.add(`/mnt/${drive}/${rest}`); // WSL
+  }
+
+  // POSIX drive form (/c/... or /mnt/c/...) -> Windows forms.
+  const nix = fwd.match(/^\/(?:mnt\/)?([A-Za-z])\/(.*)$/);
+  if (nix) {
+    const drive = nix[1].toUpperCase();
+    const rest = nix[2];
+    variants.add(`${drive}:/${rest}`);
+    variants.add(`${drive}:\\${rest.replace(/\//g, '\\')}`);
+  }
+
+  // Drop variants too short to match safely (e.g. a bare drive root).
+  return [...variants].filter((v) => v.length >= 4);
+}
+
 function buildPathReplacer(paths: string[], replacement: string): (text: string) => string {
-  if (paths.length === 0) return (text) => text;
-  const sorted = [...new Set(paths.filter(Boolean))].sort((a, b) => b.length - a.length);
-  const pattern = new RegExp(sorted.map(escapeRegExp).join('|'), 'g');
+  const expanded = [...new Set(paths.filter(Boolean).flatMap(expandPathVariants))];
+  if (expanded.length === 0) return (text) => text;
+  // Longest first so a workspace path nested under home (or a longer variant)
+  // wins over a shorter prefix. Case-insensitive because Windows paths are.
+  const sorted = expanded.sort((a, b) => b.length - a.length);
+  const pattern = new RegExp(sorted.map(escapeRegExp).join('|'), 'gi');
   return (text) => text.replace(pattern, replacement);
 }
 

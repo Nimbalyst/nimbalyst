@@ -75,3 +75,58 @@ describe('LogAnonymizer', () => {
     expect(out).toBe('<WORKSPACE>/a vs <WORKSPACE>/b');
   });
 });
+
+// Windows path forms: os.homedir() returns the backslash form, but logs render
+// the same path several ways. Before the path-variant fix these all leaked the
+// username / workspace dir into the public issue.
+describe('LogAnonymizer Windows path forms', () => {
+  const WIN_HOME = 'C:\\Users\\andre';
+  const WIN_WS = 'C:\\Projects\\client-acme';
+  const winCfg = { homeDir: WIN_HOME, workspacePaths: [WIN_WS] };
+
+  it('redacts the native backslash home path', () => {
+    const out = anonymize('open C:\\Users\\andre\\Desktop\\a.md', winCfg);
+    expect(out).not.toMatch(/andre/i);
+  });
+
+  it('redacts the forward-slash Windows home path', () => {
+    const out = anonymize('open C:/Users/andre/Desktop/a.md', winCfg);
+    expect(out).not.toMatch(/andre/i);
+  });
+
+  it('redacts the Git Bash /c/ home path', () => {
+    const out = anonymize('cwd /c/Users/andre/proj', winCfg);
+    expect(out).not.toMatch(/andre/i);
+  });
+
+  it('redacts the WSL /mnt/c/ home path', () => {
+    const out = anonymize('cwd /mnt/c/Users/andre/proj', winCfg);
+    expect(out).not.toMatch(/andre/i);
+  });
+
+  it('redacts the JSON-escaped home path', () => {
+    const out = anonymize('"cwd":"C:\\\\Users\\\\andre\\\\x"', winCfg);
+    expect(out).not.toMatch(/andre/i);
+  });
+
+  it('matches the home path case-insensitively', () => {
+    const out = anonymize('open c:\\users\\andre\\x', winCfg);
+    expect(out).not.toMatch(/andre/i);
+  });
+
+  it('redacts a Windows workspace path outside the home dir', () => {
+    const out = anonymize('loaded C:\\Projects\\client-acme\\src\\m.ts', winCfg);
+    expect(out).toContain('<WORKSPACE>');
+    expect(out).not.toMatch(/client-acme/i);
+  });
+
+  it('does not over-redact a bare word that only appears as a path segment', () => {
+    // "acme" on its own is not the full workspace path and must pass through.
+    expect(anonymize('the acme module loaded', winCfg)).toContain('acme module');
+  });
+
+  it('still works with no workspace paths supplied', () => {
+    const out = anonymize('open C:\\Users\\andre\\x', { homeDir: WIN_HOME });
+    expect(out).not.toMatch(/andre/i);
+  });
+});

@@ -70,14 +70,19 @@ function jsonResult(value: unknown, isError = false): McpToolResult {
   return textResult(JSON.stringify(value, null, 2), isError);
 }
 
-export function handleFeedbackAnonymizeText(args: any): McpToolResult {
+export function handleFeedbackAnonymizeText(args: any, callerWorkspacePath?: string): McpToolResult {
   const text = typeof args?.text === 'string' ? args.text : '';
   if (!text) {
     return textResult('Error: `text` is required and must be a non-empty string.', true);
   }
 
   const homeDir = os.homedir();
-  const result = anonymize(text, { homeDir });
+  // Scrub the reporting session's workspace path too, not just the home dir.
+  // Workspaces commonly live outside the home directory (e.g. C:\Projects\...),
+  // so without this they pass through verbatim and leak directory names into
+  // the public GitHub issue.
+  const workspacePaths = callerWorkspacePath ? [callerWorkspacePath] : [];
+  const result = anonymize(text, { homeDir, workspacePaths });
   return textResult(result);
 }
 
