@@ -153,6 +153,14 @@ export function initSessionTranscriptListeners(): () => void {
     })
   );
 
+  cleanups.push(
+    window.electronAPI.on('transcript:session-reparsed', (event: { sessionId?: string }) => {
+      const sessionId = event?.sessionId;
+      if (!sessionId) return;
+      store.set(transcriptEventSignalAtom(sessionId), (prev) => prev + 1);
+    })
+  );
+
   // =========================================================================
   // Queued Prompts Received
   // =========================================================================

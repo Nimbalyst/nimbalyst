@@ -58,6 +58,7 @@ export interface TypeColumnConfig {
 /** Columns that exist independent of schema field definitions */
 const STRUCTURAL_COLUMNS: TrackerColumnDef[] = [
   { id: 'type', label: 'Type', width: 28, sortable: true, render: 'type-icon', defaultVisible: true, builtin: true },
+  { id: 'key', label: 'Key', width: 90, sortable: true, render: 'text', defaultVisible: true, sortKey: 'issueKey', builtin: true },
   { id: 'updated', label: 'Updated', width: 100, sortable: true, render: 'date', defaultVisible: true, sortKey: 'lastIndexed', builtin: true },
   { id: 'module', label: 'Source', width: 150, minWidth: 100, sortable: true, render: 'module', defaultVisible: false, builtin: true },
 ];
@@ -161,8 +162,8 @@ export function resolveColumnsForType(type: string): TrackerColumnDef[] {
 export function getDefaultColumnConfig(type: string): TypeColumnConfig {
   const columns = resolveColumnsForType(type);
 
-  // Default visible: structural 'type' first, then role columns by priority, then 'updated'
-  const visibleColumns: string[] = ['type'];
+  // Default visible: structural 'type' and 'key' first, then role columns by priority, then 'updated'
+  const visibleColumns: string[] = ['type', 'key'];
 
   // Sort role columns by display priority
   const roleColumns = columns
@@ -273,6 +274,7 @@ export function formatRelativeDate(date: Date): string {
 export function getCellValue(record: TrackerRecord, columnId: string): any {
   switch (columnId) {
     case 'type': return record.primaryType;
+    case 'key': return record.issueKey ?? '';
     case 'updated': return record.system.lastIndexed ? new Date(record.system.lastIndexed) : undefined;
     case 'module': return record.system.documentPath;
     default: return record.fields[columnId];

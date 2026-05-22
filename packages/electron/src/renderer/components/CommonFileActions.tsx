@@ -19,27 +19,7 @@ import { registerDocumentInIndex, pendingCollabDocumentAtom, workspaceHasTeamAto
 import { setWindowModeAtom } from '../store/atoms/windowMode';
 import { activeWorkspacePathAtom } from '../store/atoms/openProjects';
 import { customEditorRegistry } from './CustomEditors';
-
-/**
- * Derive the logical collab document type from a filename. Returns the file
- * extension without the leading dot (e.g. 'excalidraw', 'mindmap') for
- * extension-handled types, 'markdown' for `.md`/`.markdown`, or null if the
- * file is not eligible for collab share. Compound suffixes (`.mockup.html`)
- * are not yet collab-supported and return null.
- */
-function deriveCollabDocumentType(fileName: string): string | null {
-  const lower = fileName.toLowerCase();
-  if (lower.endsWith('.md') || lower.endsWith('.markdown')) return 'markdown';
-  // Look up by full filename via the registry so multi-segment extensions
-  // (`.reddit.watch.json`) match the longest registered suffix.
-  const registration = customEditorRegistry.findRegistrationForFile(lower);
-  if (registration?.collaboration?.supported) {
-    const dot = lower.lastIndexOf('.');
-    if (dot < 0) return null;
-    return lower.slice(dot + 1);
-  }
-  return null;
-}
+import { deriveCollabDocumentType } from '../utils/collabDocumentType';
 
 interface CommonFileActionsProps {
   filePath: string;
@@ -70,7 +50,7 @@ export function CommonFileActions({
   const actions = useFileActions(filePath, fileName);
   const hasTeam = useAtomValue(workspaceHasTeamAtom);
   const collabDocumentType = useMemo(
-    () => deriveCollabDocumentType(fileName),
+    () => deriveCollabDocumentType(fileName, customEditorRegistry),
     [fileName]
   );
   const handleShareToTeam = useCallback(async () => {

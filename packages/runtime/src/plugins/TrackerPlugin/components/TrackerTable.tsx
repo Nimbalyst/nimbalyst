@@ -33,6 +33,7 @@ import {
 } from './trackerColumns';
 import { UserAvatar } from './UserAvatar';
 import { DisplayOptionsPanel } from './DisplayOptionsPanel';
+import { useTrackerRows } from './useTrackerRows';
 
 export type SortColumn = 'title' | 'type' | 'status' | 'priority' | 'progress' | 'module' | 'lastIndexed' | (string & {});
 export type SortDirection = 'asc' | 'desc';
@@ -453,8 +454,11 @@ export function convertFullDocumentToTrackerItems(metadata: any[], trackerType: 
 /**
  * Render a cell value based on column definition.
  * Extracted to keep the row rendering clean.
+ *
+ * Exported so the new `TrackerTableGrid` view can render the same cell
+ * content without duplicating the field-by-field switch.
  */
-function renderCell(
+export function renderCell(
   col: TrackerColumnDef,
   item: TrackerRecord,
   value: any,
@@ -504,14 +508,15 @@ function renderCell(
         );
       }
       return (
-        <div className="min-w-0">
-          {item.issueKey && (
-            <div className="text-[10px] font-mono font-medium uppercase tracking-[0.08em] text-[var(--nim-text-faint)]">
-              {item.issueKey}
-            </div>
-          )}
-          <div className="title-text font-medium text-[var(--nim-text)]">{title}</div>
-        </div>
+        <div className="title-text text-[13px] font-medium text-[var(--nim-text)] truncate min-w-0">{title}</div>
+      );
+
+    case 'key':
+      if (!item.issueKey) return null;
+      return (
+        <span className="text-[11px] font-mono font-medium uppercase tracking-[0.04em] text-[var(--nim-text-faint)] truncate">
+          {item.issueKey}
+        </span>
       );
 
     case 'status': {
@@ -785,83 +790,6 @@ export function TrackerTable({
     return () => document.removeEventListener('mousedown', handler);
   }, [showFilterMenu]);
 
-  // Inline editing state
-  const [editingCell, setEditingCell] = useState<{ itemId: string; field: 'status' | 'priority' | 'title' } | null>(null);
-  const [editingTitle, setEditingTitle] = useState('');
-  const titleInputRef = useRef<HTMLInputElement>(null);
-
-  /** Whether an item's fields can be edited inline */
-  const isItemEditable = useCallback((item: TrackerRecord): boolean => {
-    // Native (by source or no module), frontmatter, import, and inline items are all editable
-    return item.source === 'native' || !item.system.documentPath || item.source === 'frontmatter' || item.source === 'import' || item.source === 'inline';
-  }, []);
-
-  // Multi-select state
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const lastClickedIndexRef = useRef<number>(-1);
-  const tableRef = useRef<HTMLDivElement>(null);
-
-  // Keyboard focus state (which row has keyboard focus, independent of selection)
-  const [focusedIndex, setFocusedIndex] = useState<number>(-1);
-
-  // Context menu state
-  const [contextAnchor, setContextAnchor] = useState<DOMRect | null>(null);
-
-  // Floating context menu
-  const { refs: contextRefs, floatingStyles: contextFloatingStyles } = useFloating({
-    placement: 'right-start',
-    middleware: [offset(2), flip({ padding: 8 }), shift({ padding: 8 })],
-  });
-  useEffect(() => {
-    if (contextAnchor) {
-      contextRefs.setReference({ getBoundingClientRect: () => contextAnchor });
-    }
-  }, [contextAnchor, contextRefs]);
-
-  // Clear selection when items change significantly
-  useEffect(() => {
-    setSelectedIds(new Set());
-    lastClickedIndexRef.current = -1;
-  }, [activeTypeFilter]);
-
-  // Track sorted items in a ref so event handlers can access them
-  const sortedItemsRef = useRef<TrackerRecord[]>([]);
-
-  // Focus title input when editing starts
-  useEffect(() => {
-    if (editingCell?.field === 'title' && titleInputRef.current) {
-      titleInputRef.current.focus();
-      titleInputRef.current.select();
-    }
-  }, [editingCell]);
-
-  const handleFieldUpdate = useCallback(async (item: TrackerRecord, field: string, value: string) => {
-    const electronAPI = (window as any).electronAPI;
-    if (!electronAPI?.documentService) return;
-
-    try {
-      if ((item.source === 'frontmatter' || item.source === 'import' || item.source === 'inline') && item.system.documentPath) {
-        if (electronAPI.documentService.updateTrackerItemInFile) {
-          await electronAPI.documentService.updateTrackerItemInFile({
-            itemId: item.id,
-            updates: { [field]: value },
-          });
-        }
-      } else if (!item.system.documentPath || item.source === 'native') {
-        const tracker = globalRegistry.get(item.primaryType);
-        const syncMode = tracker?.sync?.mode || 'local';
-        await electronAPI.documentService.updateTrackerItem({
-          itemId: item.id,
-          updates: { [field]: value },
-          syncMode,
-        });
-      }
-    } catch (err) {
-      console.error('[TrackerTable] Failed to update item:', err);
-    }
-    setEditingCell(null);
-  }, []);
-
   // Reset filters when tracker type changes (different types have different fields/statuses)
   useEffect(() => {
     setStatusFilter('all');
@@ -961,255 +889,40 @@ export function TrackerTable({
 
   // console.log('[TrackerTable] Render - items:', items.length, 'filtered:', filteredItems.length, 'typeFilter:', typeFilter);
   const sortedItems = sortItems(filteredItems, currentSortBy, currentSortDirection);
-  sortedItemsRef.current = sortedItems;
 
-  /** Handle checkbox click with shift-range and cmd/ctrl-toggle support */
-  /** Toggle select all / deselect all */
-  const handleSelectAll = useCallback(() => {
-    setSelectedIds(prev => {
-      if (prev.size === sortedItemsRef.current.length && prev.size > 0) {
-        return new Set();
-      }
-      return new Set(sortedItemsRef.current.map(i => i.id).filter(Boolean));
-    });
-  }, []);
+  // Row interaction model -- shared with TrackerTableGrid via useTrackerRows.
+  const rows = useTrackerRows({
+    items: sortedItems,
+    activeTypeFilter,
+    onItemSelect,
+    onDeleteItems,
+    onArchiveItems,
+    onSwitchToFilesMode,
+  });
 
-  /** Context menu handler */
-  const handleContextMenu = useCallback((e: React.MouseEvent, item: TrackerRecord, index: number) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    // If right-clicking an unselected item, select just that item
-    if (!selectedIds.has(item.id)) {
-      setSelectedIds(new Set([item.id]));
-      lastClickedIndexRef.current = index;
-    }
-    setFocusedIndex(index);
-    setContextAnchor(DOMRect.fromRect({ x: e.clientX, y: e.clientY, width: 0, height: 0 }));
-  }, [selectedIds]);
-
-  /** Close context menu */
-  const closeContextMenu = useCallback(() => setContextAnchor(null), []);
-
-  // Close context menu on outside click
-  useEffect(() => {
-    if (!contextAnchor) return;
-    const handler = () => setContextAnchor(null);
-    document.addEventListener('click', handler);
-    document.addEventListener('contextmenu', handler);
-    return () => {
-      document.removeEventListener('click', handler);
-      document.removeEventListener('contextmenu', handler);
-    };
-  }, [contextAnchor]);
-
-  /** Bulk status update for selected items */
-  const handleBulkStatusUpdate = useCallback(async (newStatus: string) => {
-    closeContextMenu();
-    const itemsToUpdate = sortedItemsRef.current.filter(i => selectedIds.has(i.id));
-    for (const item of itemsToUpdate) {
-      if (isItemEditable(item)) {
-        await handleFieldUpdate(item, 'status', newStatus);
-      }
-    }
-  }, [selectedIds, closeContextMenu, isItemEditable, handleFieldUpdate]);
-
-  /** Bulk priority update for selected items */
-  const handleBulkPriorityUpdate = useCallback(async (newPriority: string) => {
-    closeContextMenu();
-    const itemsToUpdate = sortedItemsRef.current.filter(i => selectedIds.has(i.id));
-    for (const item of itemsToUpdate) {
-      if (isItemEditable(item)) {
-        await handleFieldUpdate(item, 'priority', newPriority);
-      }
-    }
-  }, [selectedIds, closeContextMenu, isItemEditable, handleFieldUpdate]);
-
-  /** Keyboard navigation */
-  useEffect(() => {
-    const table = tableRef.current;
-    if (!table) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const items = sortedItemsRef.current;
-      if (items.length === 0) return;
-
-      switch (e.key) {
-        case 'ArrowDown': {
-          e.preventDefault();
-          setFocusedIndex(prev => {
-            const next = Math.min(prev + 1, items.length - 1);
-            if (e.shiftKey) {
-              setSelectedIds(s => { const n = new Set(s); n.add(items[next].id); return n; });
-            }
-            return next;
-          });
-          break;
-        }
-        case 'ArrowUp': {
-          e.preventDefault();
-          setFocusedIndex(prev => {
-            const next = Math.max(prev - 1, 0);
-            if (e.shiftKey) {
-              setSelectedIds(s => { const n = new Set(s); n.add(items[next].id); return n; });
-            }
-            return next;
-          });
-          break;
-        }
-        case ' ': {
-          e.preventDefault();
-          if (focusedIndex >= 0 && focusedIndex < items.length) {
-            const item = items[focusedIndex];
-            setSelectedIds(prev => {
-              const next = new Set(prev);
-              if (next.has(item.id)) next.delete(item.id);
-              else next.add(item.id);
-              return next;
-            });
-          }
-          break;
-        }
-        case 'Enter': {
-          e.preventDefault();
-          if (focusedIndex >= 0 && focusedIndex < items.length) {
-            const item = items[focusedIndex];
-            if (onItemSelect && item.id) {
-              onItemSelect(item.id);
-            }
-          }
-          break;
-        }
-        case 'Delete':
-        case 'Backspace': {
-          if (e.metaKey || e.ctrlKey) {
-            e.preventDefault();
-            if (selectedIds.size > 0 && onDeleteItems) {
-              const ids = Array.from(selectedIds);
-              if (window.confirm(`Delete ${ids.length} item${ids.length > 1 ? 's' : ''}? This cannot be undone.`)) {
-                onDeleteItems(ids);
-                setSelectedIds(new Set());
-              }
-            }
-          }
-          break;
-        }
-        case 'a': {
-          if (e.metaKey || e.ctrlKey) {
-            e.preventDefault();
-            handleSelectAll();
-          }
-          break;
-        }
-        case 'Escape': {
-          setSelectedIds(new Set());
-          setFocusedIndex(-1);
-          closeContextMenu();
-          break;
-        }
-      }
-    };
-
-    table.addEventListener('keydown', handleKeyDown);
-    return () => table.removeEventListener('keydown', handleKeyDown);
-  }, [focusedIndex, selectedIds, onItemSelect, onDeleteItems, handleSelectAll, closeContextMenu]);
-
-  // Scroll focused row into view
-  useEffect(() => {
-    if (focusedIndex < 0) return;
-    const rows = tableRef.current?.querySelectorAll('[data-testid="tracker-table-row"]');
-    const row = rows?.[focusedIndex];
-    if (row) row.scrollIntoView({ block: 'nearest' });
-  }, [focusedIndex]);
-
-  const handleRowClick = (item: TrackerRecord, index: number, e: React.MouseEvent) => {
-    // Multi-select: Cmd/Ctrl+click toggles, Shift+click extends range
-    if (e.metaKey || e.ctrlKey) {
-      e.preventDefault();
-      setSelectedIds(prev => {
-        const next = new Set(prev);
-        if (next.has(item.id)) next.delete(item.id);
-        else next.add(item.id);
-        return next;
-      });
-      lastClickedIndexRef.current = index;
-      return;
-    }
-    if (e.shiftKey && lastClickedIndexRef.current >= 0) {
-      e.preventDefault();
-      const from = Math.min(lastClickedIndexRef.current, index);
-      const to = Math.max(lastClickedIndexRef.current, index);
-      setSelectedIds(prev => {
-        const next = new Set(prev);
-        for (let i = from; i <= to; i++) {
-          if (sortedItemsRef.current[i]?.id) next.add(sortedItemsRef.current[i].id);
-        }
-        return next;
-      });
-      return;
-    }
-
-    // Plain click: clear selection
-    setSelectedIds(new Set());
-    lastClickedIndexRef.current = index;
-
-    // Track analytics
-    if (posthog) {
-      posthog.capture('tracker_item_clicked', {
-        trackerType: item.primaryType,
-        itemStatus: item.fields.status,
-        isInline: item.system.lineNumber !== undefined && item.system.lineNumber !== 0,
-      });
-    }
-
-    // If onItemSelect is provided (Tracker Mode), open detail panel instead
-    if (onItemSelect && item.id) {
-      onItemSelect(item.id);
-      return;
-    }
-
-    // Editable items (native, frontmatter, import) - start editing title inline
-    if (isItemEditable(item)) {
-      setEditingTitle((item.fields.title as string) ?? '');
-      setEditingCell({ itemId: item.id, field: 'title' });
-      return;
-    }
-
-    // Switch to files mode first if we're in agent mode
-    if (onSwitchToFilesMode) {
-      onSwitchToFilesMode();
-    }
-
-    openItemInEditor(item);
-  };
-
-  const openItemInEditor = (item: TrackerRecord) => {
-    if (onSwitchToFilesMode) {
-      onSwitchToFilesMode();
-    }
-
-    const documentService = (window as any).documentService;
-    if (documentService && documentService.openDocument) {
-      documentService.getDocumentByPath(item.system.documentPath).then((doc: any) => {
-        if (doc) {
-          const fullPath = item.system.workspace && doc.path
-            ? `${item.system.workspace}/${doc.path}`.replace(/\/+/g, '/')
-            : doc.path;
-
-          documentService.openDocument(doc.id).then(() => {
-            if (item.system.lineNumber !== undefined && item.system.lineNumber !== 0) {
-              const editorRegistry = (window as any).__editorRegistry;
-              if (editorRegistry && item.id) {
-                setTimeout(() => {
-                  editorRegistry.scrollToTrackerItem(fullPath, item.id);
-                }, 500);
-              }
-            }
-          });
-        }
-      });
-    }
-  };
+  // Local aliases so the existing JSX below stays readable.
+  const {
+    selectedIds,
+    setSelectedIds,
+    focusedIndex,
+    containerRef: tableRef,
+    editingCell,
+    setEditingCell,
+    editingTitle,
+    setEditingTitle,
+    titleInputRef,
+    handleFieldUpdate,
+    isItemEditable,
+    handleRowClick,
+    openItemInEditor,
+    contextAnchor,
+    contextRefs,
+    contextFloatingStyles,
+    handleContextMenu,
+    closeContextMenu,
+    handleBulkStatusUpdate,
+    handleBulkPriorityUpdate,
+  } = rows;
 
   const handleColumnClick = (column: SortColumn) => {
     const newDirection = currentSortBy === column && currentSortDirection === 'desc' ? 'asc' : 'desc';
@@ -1722,8 +1435,9 @@ export function TrackerTable({
   );
 }
 
-/** Context menu submenu with hover-expand */
-const ContextSubmenu: React.FC<{
+/** Context menu submenu with hover-expand. Exported for reuse in the new
+ *  TrackerTableGrid context menu. */
+export const ContextSubmenu: React.FC<{
   label: string;
   icon: string;
   children: React.ReactNode;

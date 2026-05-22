@@ -25,6 +25,17 @@ import { isAppleMobileWebKit } from '../../../utils/platform';
 // doesn't re-measure all items from scratch
 const vlistCacheMap = new Map<string, CacheSnapshot>();
 
+function summarizeRenderTeammates(
+  teammates: Array<{ agentId: string; status: 'running' | 'completed' | 'errored' | 'idle' }> | undefined
+): string {
+  if (!teammates || teammates.length === 0) return 'none';
+  return teammates.map(tm => `${tm.agentId}:${tm.status}`).join(', ');
+}
+
+function emitRichTranscriptRenderTrace(event: string, payload: Record<string, unknown>): void {
+  // console.info(`[RenderTrace][RichTranscriptView] ${event} ${JSON.stringify(payload)}`);
+}
+
 // Inject RichTranscriptView styles once (for animations, scrollbar, and complex selectors)
 const injectRichTranscriptStyles = () => {
   const styleId = 'rich-transcript-view-styles';
@@ -1048,6 +1059,19 @@ export const RichTranscriptView = React.forwardRef<
   const vlistBufferSize = isMobileWebKit ? MOBILE_TRANSCRIPT_BUFFER_PX : DESKTOP_TRANSCRIPT_BUFFER_PX;
 
   const settings = propsSettings || defaultSettings;
+  const previousRenderRef = useRef<{
+    messagesRef: TranscriptViewMessage[];
+    messageCount: number;
+    sessionStatus: string | undefined;
+    isProcessing: boolean | undefined;
+    hasPendingInteractivePrompt: boolean | undefined;
+    currentTeammatesRef: unknown;
+    currentTeammatesSummary: string;
+    isContainerVisible: boolean;
+    isScrollReady: boolean;
+    showPermissionBanner: boolean;
+    showSearchBar: boolean;
+  } | null>(null);
 
   useEffect(() => {
     isAtBottomRef.current = persistScrollState ? getSessionIsAtBottom(sessionId) : true;
@@ -1089,6 +1113,64 @@ export const RichTranscriptView = React.forwardRef<
     io.observe(el);
     return () => io.disconnect();
   }, []);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+
+    const nextState = {
+      messagesRef: messages,
+      messageCount: messages.length,
+      sessionStatus,
+      isProcessing,
+      hasPendingInteractivePrompt,
+      currentTeammatesRef: currentTeammates,
+      currentTeammatesSummary: summarizeRenderTeammates(currentTeammates),
+      isContainerVisible,
+      isScrollReady,
+      showPermissionBanner,
+      showSearchBar,
+    };
+    const previous = previousRenderRef.current;
+    if (!previous) {
+      emitRichTranscriptRenderTrace('initial', {
+        sessionId,
+        messageCount: nextState.messageCount,
+        sessionStatus,
+        isProcessing,
+        hasPendingInteractivePrompt,
+        currentTeammates: nextState.currentTeammatesSummary,
+        isContainerVisible,
+        isScrollReady,
+        showPermissionBanner,
+        showSearchBar,
+      });
+    } else {
+      const reasons: string[] = [];
+      if (previous.messagesRef !== nextState.messagesRef) reasons.push(`messages-ref ${previous.messageCount}->${nextState.messageCount}`);
+      if (previous.sessionStatus !== nextState.sessionStatus) reasons.push(`sessionStatus ${String(previous.sessionStatus)}->${String(nextState.sessionStatus)}`);
+      if (previous.isProcessing !== nextState.isProcessing) reasons.push(`isProcessing ${String(previous.isProcessing)}->${String(nextState.isProcessing)}`);
+      if (previous.hasPendingInteractivePrompt !== nextState.hasPendingInteractivePrompt) reasons.push(`pendingPrompt ${String(previous.hasPendingInteractivePrompt)}->${String(nextState.hasPendingInteractivePrompt)}`);
+      if (previous.currentTeammatesRef !== nextState.currentTeammatesRef) reasons.push(`currentTeammates ${previous.currentTeammatesSummary}->${nextState.currentTeammatesSummary}`);
+      if (previous.isContainerVisible !== nextState.isContainerVisible) reasons.push(`isContainerVisible ${String(previous.isContainerVisible)}->${String(nextState.isContainerVisible)}`);
+      if (previous.isScrollReady !== nextState.isScrollReady) reasons.push(`isScrollReady ${String(previous.isScrollReady)}->${String(nextState.isScrollReady)}`);
+      if (previous.showPermissionBanner !== nextState.showPermissionBanner) reasons.push(`showPermissionBanner ${String(previous.showPermissionBanner)}->${String(nextState.showPermissionBanner)}`);
+      if (previous.showSearchBar !== nextState.showSearchBar) reasons.push(`showSearchBar ${String(previous.showSearchBar)}->${String(nextState.showSearchBar)}`);
+      emitRichTranscriptRenderTrace('render', {
+        sessionId,
+        reasons,
+        messageCount: nextState.messageCount,
+        sessionStatus,
+        isProcessing,
+        hasPendingInteractivePrompt,
+        currentTeammates: nextState.currentTeammatesSummary,
+        isContainerVisible,
+        isScrollReady,
+        showPermissionBanner,
+        showSearchBar,
+      });
+    }
+    previousRenderRef.current = nextState;
+  });
 
   const runningTeammates = useMemo(
     () => currentTeammates?.filter(t => t.status === 'running') ?? [],

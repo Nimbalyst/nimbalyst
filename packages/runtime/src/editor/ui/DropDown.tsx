@@ -11,6 +11,7 @@ import type {JSX} from 'react';
 import {isDOMNode} from 'lexical';
 import * as React from 'react';
 import {
+  type RefCallback,
   ReactNode,
   useCallback,
   useEffect,
@@ -18,14 +19,23 @@ import {
   useRef,
   useState,
 } from 'react';
-import {createPortal} from 'react-dom';
+import {
+  autoUpdate,
+  flip,
+  FloatingPortal,
+  offset,
+  shift,
+  useDismiss,
+  useFloating,
+  useInteractions,
+  useRole,
+} from '@floating-ui/react';
 
 type DropDownContextType = {
   registerItem: (ref: React.RefObject<HTMLButtonElement>) => void;
 };
 
 const DropDownContext = React.createContext<DropDownContextType | null>(null);
-
 const dropDownPadding = 4;
 
 export function DropDownItem({
@@ -72,11 +82,17 @@ function DropDownItems({
   dropDownRef,
   onClose,
   className,
+  style,
+  onClick,
+  floatingProps,
 }: {
   children: React.ReactNode;
   dropDownRef: React.Ref<HTMLDivElement>;
   onClose: () => void;
   className?: string;
+  style?: React.CSSProperties;
+  onClick?: React.MouseEventHandler<HTMLDivElement>;
+  floatingProps?: Record<string, unknown>;
 }) {
   const [items, setItems] = useState<React.RefObject<HTMLButtonElement>[]>();
   const [highlightedItem, setHighlightedItem] =
@@ -139,7 +155,13 @@ function DropDownItems({
 
   return (
     <DropDownContext.Provider value={contextValue}>
-      <div className={`dropdown ${className}` } ref={dropDownRef} onKeyDown={handleKeyDown}>
+      <div
+        className={`dropdown ${className}` }
+        ref={dropDownRef}
+        style={style}
+        {...floatingProps}
+        onKeyDown={handleKeyDown}
+        onClick={onClick}>
         {children}
       </div>
     </DropDownContext.Provider>
@@ -165,90 +187,53 @@ export default function DropDown({
   stopCloseOnClickSelf?: boolean;
   className?: string;
 }): JSX.Element {
-  const dropDownRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [buttonElement, setButtonElement] = useState<HTMLButtonElement | null>(null);
   const [showDropDown, setShowDropDown] = useState(false);
-
-  // Find the editor container to render dropdowns within
-  const getPortalContainer = useCallback(() => {
-    if (buttonRef.current) {
-      const editorContainer = buttonRef.current.closest('.nimbalyst-editor');
-      if (editorContainer) {
-        return editorContainer;
-      }
-    }
-    return document.body;
-  }, []);
-
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     setShowDropDown(false);
-    if (buttonRef && buttonRef.current) {
-      buttonRef.current.focus();
+    if (buttonElement) {
+      buttonElement.focus();
     }
-  };
-
-  useEffect(() => {
-    const button = buttonRef.current;
-    const dropDown = dropDownRef.current;
-
-    if (showDropDown && button !== null && dropDown !== null) {
-      const {top, left} = button.getBoundingClientRect();
-      dropDown.style.top = `${top + button.offsetHeight + dropDownPadding}px`;
-      dropDown.style.left = `${Math.min(
-        left,
-        window.innerWidth - dropDown.offsetWidth - 20,
-      )}px`;
-    }
-  }, [dropDownRef, buttonRef, showDropDown]);
-
-  useEffect(() => {
-    const button = buttonRef.current;
-
-    if (button !== null && showDropDown) {
-      const handle = (event: MouseEvent) => {
-        const target = event.target;
-        if (!isDOMNode(target)) {
-          return;
-        }
-        if (stopCloseOnClickSelf) {
-          if (dropDownRef.current && dropDownRef.current.contains(target)) {
-            return;
-          }
-        }
-        if (!button.contains(target)) {
-          setShowDropDown(false);
-        }
-      };
-      document.addEventListener('click', handle);
-
-      return () => {
-        document.removeEventListener('click', handle);
-      };
-    }
-    return undefined;
-  }, [dropDownRef, buttonRef, showDropDown, stopCloseOnClickSelf]);
-
-  useEffect(() => {
-    const handleButtonPositionUpdate = () => {
-      if (showDropDown) {
-        const button = buttonRef.current;
-        const dropDown = dropDownRef.current;
-        if (button !== null && dropDown !== null) {
-          const {top} = button.getBoundingClientRect();
-          const newPosition = top + button.offsetHeight + dropDownPadding;
-          if (newPosition !== dropDown.getBoundingClientRect().top) {
-            dropDown.style.top = `${newPosition}px`;
-          }
-        }
+  }, [buttonElement]);
+  const {refs, floatingStyles, context} = useFloating({
+    open: showDropDown,
+    onOpenChange: (open) => {
+      if (open) {
+        setShowDropDown(true);
+      } else {
+        handleClose();
       }
-    };
+    },
+    placement: 'bottom-start',
+    strategy: 'fixed',
+    whileElementsMounted: autoUpdate,
+    middleware: [
+      offset(dropDownPadding),
+      flip({padding: 8}),
+      shift({padding: 8}),
+    ],
+  });
+  const dismiss = useDismiss(context, {
+    outsidePress: true,
+    escapeKey: true,
+  });
+  const role = useRole(context, {role: 'menu'});
+  const {getReferenceProps, getFloatingProps} = useInteractions([dismiss, role]);
 
-    document.addEventListener('scroll', handleButtonPositionUpdate);
+  const setReferenceRef: RefCallback<HTMLButtonElement> = useCallback(
+    (node) => {
+      setButtonElement(node);
+      refs.setReference(node);
+    },
+    [refs],
+  );
 
-    return () => {
-      document.removeEventListener('scroll', handleButtonPositionUpdate);
-    };
-  }, [buttonRef, dropDownRef, showDropDown]);
+  const setFloatingRef: RefCallback<HTMLDivElement> = useCallback(
+    (node) => {
+      refs.setFloating(node);
+    },
+    [refs],
+  );
 
   return (
     <>
@@ -257,8 +242,10 @@ export default function DropDown({
         disabled={disabled}
         aria-label={buttonAriaLabel || buttonLabel}
         className={buttonClassName}
-        onClick={() => setShowDropDown(!showDropDown)}
-        ref={buttonRef}>
+        ref={setReferenceRef}
+        {...getReferenceProps({
+          onClick: () => setShowDropDown(!showDropDown),
+        })}>
         {buttonIconClassName && <span className={buttonIconClassName} />}
         {buttonLabel && (
           <span className="text dropdown-button-text">{buttonLabel}</span>
@@ -267,11 +254,25 @@ export default function DropDown({
       </button>
 
       {showDropDown &&
-        createPortal(
-          <DropDownItems dropDownRef={dropDownRef} onClose={handleClose} className={className}>
-            {children}
-          </DropDownItems>,
-          getPortalContainer(),
+        (
+          <FloatingPortal>
+            <DropDownItems
+              dropDownRef={setFloatingRef}
+              onClose={handleClose}
+              className={className}
+              style={floatingStyles}
+              onClick={(event: React.MouseEvent<HTMLDivElement>) => {
+                if (!isDOMNode(event.target)) {
+                  return;
+                }
+                if (!stopCloseOnClickSelf) {
+                  handleClose();
+                }
+              }}
+              floatingProps={getFloatingProps()}>
+              {children}
+            </DropDownItems>
+          </FloatingPortal>
         )}
     </>
   );

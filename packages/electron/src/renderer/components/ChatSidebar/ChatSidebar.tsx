@@ -27,6 +27,8 @@ export interface ChatSidebarRef {
 
 export interface ChatSidebarProps {
   workspacePath: string;
+  /** Whether the parent mode/panel is actively visible */
+  isActive?: boolean;
   documentContext?: SerializableDocumentContext;
   /** Getter function for document context - async, reads from disk */
   getDocumentContext?: () => Promise<SerializableDocumentContext>;
@@ -45,6 +47,7 @@ export interface ChatSidebarProps {
 
 export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
   workspacePath,
+  isActive = true,
   documentContext,
   getDocumentContext,
   onFileOpen,
@@ -93,12 +96,18 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
 
   // Initialize session list on mount
   useEffect(() => {
+    if (!isActive) return;
     initSessionList(workspacePath);
-  }, [workspacePath]);
+  }, [isActive, workspacePath]);
 
   // Initialize session - select most recent or create new if none exist
   // CRITICAL: Only runs once on mount to avoid creating duplicate sessions
   useEffect(() => {
+    if (!isActive) {
+      setIsLoading(false);
+      return;
+    }
+
     const initSession = async () => {
       // Prevent concurrent initialization
       if (isInitializingRef.current) {
@@ -167,7 +176,7 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
     initSession();
     // CRITICAL: Only run once on mount - workspacePath changes trigger full remount anyway
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspacePath]);
+  }, [isActive, workspacePath]);
 
   const handleFileClick = useCallback(async (filePath: string) => {
     if (onFileOpen) {
@@ -262,7 +271,7 @@ export const ChatSidebar = forwardRef<ChatSidebarRef, ChatSidebarProps>(({
   }, [onWidthChange]);
 
   // When collapsed, render nothing (toggle button is in the title bar)
-  if (isCollapsed) {
+  if (isCollapsed || !isActive) {
     return null;
   }
 

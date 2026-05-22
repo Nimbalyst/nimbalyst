@@ -73,6 +73,7 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
   const shareKeys = useAtomValue(shareKeysAtom);
   const removeShare = useSetAtom(removeSessionShareAtom);
   const reference = useMemo(() => virtualElement(position.x, position.y), [position.x, position.y]);
+  const isDevMode = import.meta.env.DEV || window.IS_DEV_MODE;
 
   const menu = useFloatingMenu({
     placement: 'right-start',
@@ -141,6 +142,32 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
       errorNotificationService.showError('Unshare failed', error instanceof Error ? error.message : 'An unexpected error occurred');
     }
   }, [onClose, shareInfo, sessionId, removeShare]);
+
+  const handleForceReparseSession = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onClose();
+
+    try {
+      const result = await window.electronAPI.invoke('transcript:force-reparse-session', sessionId);
+      if (result?.success) {
+        errorNotificationService.showInfo(
+          'Transcript reprocessed',
+          'Canonical transcript events were rebuilt for this session.',
+          { duration: 3000 },
+        );
+      } else {
+        errorNotificationService.showError(
+          'Failed to reprocess transcript',
+          result?.error || 'An unexpected error occurred',
+        );
+      }
+    } catch (error) {
+      errorNotificationService.showError(
+        'Failed to reprocess transcript',
+        error instanceof Error ? error.message : 'An unexpected error occurred',
+      );
+    }
+  }, [onClose, sessionId]);
 
   return (
     <FloatingPortal>
@@ -279,6 +306,16 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
           <MaterialSymbol icon="download" size={14} />
           Export as HTML
         </button>
+
+        {isDevMode && (
+          <>
+            <div className="h-px bg-[var(--nim-border)] my-1" />
+            <button className={menuItemClass} onClick={handleForceReparseSession}>
+              <MaterialSymbol icon="sync" size={14} />
+              Reprocess transcript
+            </button>
+          </>
+        )}
 
         {/* Group 5: Destructive actions */}
         {(onArchive || onUnarchive || onDelete) && (

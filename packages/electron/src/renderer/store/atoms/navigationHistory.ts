@@ -53,7 +53,7 @@ export interface AgentNavigationState {
  */
 export interface TrackerNavigationState {
   selectedType: string;
-  viewMode: 'table' | 'kanban';
+  viewMode: 'list' | 'table' | 'kanban';
 }
 
 /**

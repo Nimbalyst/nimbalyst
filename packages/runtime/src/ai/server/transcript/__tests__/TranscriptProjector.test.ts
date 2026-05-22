@@ -166,6 +166,13 @@ describe('TranscriptProjector', () => {
     expect(vm.messages).toHaveLength(2);
     expect(vm.messages[0].type).toBe('user_message');
     expect(vm.messages[1].type).toBe('subagent');
+    expect(vm.messages[1].toolCall).toMatchObject({
+      toolName: 'Task',
+      status: 'completed',
+      arguments: { prompt: 'Find files' },
+      result: 'Found 3 files',
+      providerToolCallId: 'sub-1',
+    });
     expect(vm.messages[1].subagent!.childEvents).toHaveLength(2);
     expect(vm.messages[1].subagent!.childEvents[0].type).toBe('tool_call');
     expect(vm.messages[1].subagent!.childEvents[1].type).toBe('assistant_message');

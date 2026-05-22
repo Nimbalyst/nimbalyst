@@ -293,7 +293,12 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
       store.set(collabAwarenessAtom(filePath), users);
     });
 
-    const collabProvider = new CollabLexicalProvider(syncProvider);
+    const collabProvider = new CollabLexicalProvider(syncProvider, {
+      // Shared docs are server-authoritative. Let the server's initial sync
+      // land before Lexical considers the room bootstrapped, otherwise a local
+      // seed can duplicate or resurrect content.
+      deferInitialSync: true,
+    });
 
     syncProviderRef.current = syncProvider;
     collabProviderRef.current = collabProvider;

@@ -33,6 +33,8 @@ interface FileEditsSidebarProps {
   selectedFiles?: Set<string>;
   /** Callback when file selection changes */
   onSelectionChange?: (filePath: string, selected: boolean) => void;
+  /** Optional per-file gate for whether a file can be selected for commit */
+  isFileSelectable?: (filePath: string) => boolean;
   /** Callback to select/deselect all files */
   onSelectAll?: (selected: boolean) => void;
   /** Callback for bulk selection changes (add/remove multiple files at once) */
@@ -99,6 +101,7 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
   showCheckboxes = false,
   selectedFiles,
   onSelectionChange,
+  isFileSelectable,
   onSelectAll,
   onBulkSelectionChange,
   showRootCheckbox,
@@ -413,17 +416,24 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
     return !status || status.status === 'unchanged';
   }, [gitStatus, getRelativePath]);
 
+  const isSelectableForCommit = useCallback((filePath: string): boolean => {
+    if (isFileCommitted(filePath)) {
+      return false;
+    }
+    return isFileSelectable ? isFileSelectable(filePath) : true;
+  }, [isFileCommitted, isFileSelectable]);
+
   // Calculate root-level selection state for "Select All" checkbox
   const rootSelectionInfo = useMemo(() => {
     const allFilePaths = editedFiles.map(f => f.filePath);
-    const uncommittedPaths = allFilePaths.filter(p => !isFileCommitted(p));
-    const uncommittedCount = uncommittedPaths.length;
+    const selectablePaths = allFilePaths.filter(isSelectableForCommit);
+    const uncommittedCount = selectablePaths.length;
 
     if (uncommittedCount === 0) {
       return { state: 'none' as const, uncommittedCount: 0 };
     }
 
-    const selectedCount = uncommittedPaths.filter(p => selectedFiles?.has(p)).length;
+    const selectedCount = selectablePaths.filter(p => selectedFiles?.has(p)).length;
     if (selectedCount === 0) {
       return { state: 'none' as const, uncommittedCount };
     }
@@ -431,7 +441,7 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
       return { state: 'all' as const, uncommittedCount };
     }
     return { state: 'some' as const, uncommittedCount };
-  }, [editedFiles, selectedFiles, isFileCommitted]);
+  }, [editedFiles, selectedFiles, isSelectableForCommit]);
 
   // Get file status color class based on operation and git status
   const getFileStatusColor = (filePath: string, operation?: string): string => {
@@ -601,6 +611,7 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
     const isDeleted = operation === 'delete' || gitFileStatus?.status === 'deleted';
     const tooltip = getFileStatusTooltip(filePath, operation);
     const committed = isFileCommitted(filePath);
+    const selectable = isSelectableForCommit(filePath);
     const isSelected = selectedFiles?.has(filePath) ?? false;
     const isPinned = isActive(filePath);
 
@@ -644,11 +655,11 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
           )}
           {/* Checkbox for commit selection - only show when in checkbox mode */}
           {showCheckboxes && (
-            committed ? (
-              // Placeholder for committed files (no checkbox)
+            !selectable ? (
+              // Placeholder for non-selectable files (committed or outside commit scope)
               <div className="file-edits-sidebar__checkbox-placeholder w-4 h-4 shrink-0" />
             ) : (
-              // Checkbox for uncommitted files
+              // Checkbox for selectable files
               <div
                 onClick={handleCheckboxClick}
                 className={`file-edits-sidebar__checkbox w-4 h-4 shrink-0 rounded-[3px] border-[1.5px] cursor-pointer flex items-center justify-center transition-all ${
@@ -716,7 +727,7 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
   // Helper to check if all uncommitted files in a directory are selected
   const getDirectorySelectionState = (node: DirectoryNode): 'none' | 'some' | 'all' => {
     const allPaths = collectFilePaths(node);
-    const uncommittedPaths = allPaths.filter(p => !isFileCommitted(p));
+    const uncommittedPaths = allPaths.filter(isSelectableForCommit);
 
     if (uncommittedPaths.length === 0) return 'none'; // All files are committed
 
@@ -730,7 +741,7 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
   const handleDirectoryCheckboxClick = (e: React.MouseEvent, node: DirectoryNode) => {
     e.stopPropagation();
     const allPaths = collectFilePaths(node);
-    const uncommittedPaths = allPaths.filter(p => !isFileCommitted(p));
+    const uncommittedPaths = allPaths.filter(isSelectableForCommit);
     const selectionState = getDirectorySelectionState(node);
 
     // If none or some are selected, select all. If all are selected, deselect all.
@@ -753,7 +764,7 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
 
     // Check if directory has any uncommitted files (for checkbox visibility)
     const allPaths = collectFilePaths(node);
-    const hasUncommittedFiles = allPaths.some(p => !isFileCommitted(p));
+    const hasUncommittedFiles = allPaths.some(isSelectableForCommit);
     const selectionState = getDirectorySelectionState(node);
 
     return (

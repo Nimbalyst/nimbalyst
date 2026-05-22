@@ -62,6 +62,13 @@ interface AppServerItem {
   aggregated_output?: string;
   exit_code?: number;
   content?: Array<{ type: string; text?: string }>;
+  prompt?: string | null;
+  senderThreadId?: string;
+  receiverThreadIds?: string[];
+  model?: string | null;
+  reasoningEffort?: string | null;
+  agentsStates?: Record<string, { status?: string; message?: string | null }>;
+  items?: Array<Record<string, unknown>>;
 }
 
 export class CodexAppServerRawParser implements IRawMessageParser {
@@ -186,23 +193,34 @@ export class CodexAppServerRawParser implements IRawMessageParser {
     item: AppServerItem,
     context: ParseContext,
   ): Promise<CanonicalEventDescriptor[]> {
-    if (item.type !== 'mcpToolCall') return [];
-    if (!item.id || !item.server || !item.tool) return [];
-    const rawItemId = item.id;
-    const editGroupId = await this.resolveEditGroupId(msg, rawItemId, context);
-    const toolName = `mcp__${item.server}__${item.tool}`;
-    const parsed = parseMcpToolName(toolName);
-    return [{
-      type: 'tool_call_started',
-      toolName,
-      toolDisplayName: toolName,
-      arguments: (item.arguments as Record<string, unknown> | undefined) ?? {},
-      targetFilePath: null,
-      mcpServer: parsed?.server ?? item.server,
-      mcpTool: parsed?.tool ?? item.tool,
-      providerToolCallId: editGroupId,
-      createdAt: msg.createdAt,
-    }];
+    if (item.type === 'mcpToolCall') {
+      if (!item.id || !item.server || !item.tool) return [];
+      const rawItemId = item.id;
+      const editGroupId = await this.resolveEditGroupId(msg, rawItemId, context);
+      const toolName = `mcp__${item.server}__${item.tool}`;
+      const parsed = parseMcpToolName(toolName);
+      return [{
+        type: 'tool_call_started',
+        toolName,
+        toolDisplayName: toolName,
+        arguments: (item.arguments as Record<string, unknown> | undefined) ?? {},
+        targetFilePath: null,
+        mcpServer: parsed?.server ?? item.server,
+        mcpTool: parsed?.tool ?? item.tool,
+        providerToolCallId: editGroupId,
+        createdAt: msg.createdAt,
+      }];
+    }
+
+    if (item.type === 'collabAgentToolCall') {
+      return this.parseCollabAgentToolCallStarted(msg, item, context);
+    }
+
+    if (this.isGenericToolLikeItem(item)) {
+      return this.parseGenericToolLikeItem(msg, item, context);
+    }
+
+    return [];
   }
 
   private async parseItemCompleted(
@@ -234,12 +252,140 @@ export class CodexAppServerRawParser implements IRawMessageParser {
         descriptors.push(...await this.parseCommandExecution(msg, item, context));
         break;
       }
+      case 'collabAgentToolCall': {
+        descriptors.push(...await this.parseCollabAgentToolCallCompleted(msg, item, context));
+        break;
+      }
       case 'todoList':
       case 'todo_list': {
-        // Older SDK shape; here mostly defensive.
+        descriptors.push(...this.parseTodoListItem(msg, item));
+        break;
+      }
+      default: {
+        if (this.isGenericToolLikeItem(item)) {
+          descriptors.push(...await this.parseGenericToolLikeItem(msg, item, context));
+        }
         break;
       }
     }
+    return descriptors;
+  }
+
+  private async parseCollabAgentToolCallStarted(
+    msg: RawMessage,
+    item: AppServerItem,
+    context: ParseContext,
+  ): Promise<CanonicalEventDescriptor[]> {
+    if (!item.id || !item.tool) return [];
+
+    if (item.tool === 'spawnAgent') {
+      return [{
+        type: 'subagent_started',
+        subagentId: item.id,
+        agentType: 'Session',
+        prompt: item.prompt ?? '',
+        createdAt: msg.createdAt,
+      }];
+    }
+
+    return this.parseGenericCollabAgentToolCall(msg, item, context);
+  }
+
+  private async parseCollabAgentToolCallCompleted(
+    msg: RawMessage,
+    item: AppServerItem,
+    context: ParseContext,
+  ): Promise<CanonicalEventDescriptor[]> {
+    if (!item.id || !item.tool) return [];
+
+    if (item.tool === 'spawnAgent') {
+      return [{
+        type: 'subagent_completed',
+        subagentId: item.id,
+        status: 'completed',
+        resultSummary: this.buildSpawnAgentResultSummary(item),
+      }];
+    }
+
+    return this.parseGenericCollabAgentToolCall(msg, item, context);
+  }
+
+  private async parseGenericCollabAgentToolCall(
+    msg: RawMessage,
+    item: AppServerItem,
+    context: ParseContext,
+  ): Promise<CanonicalEventDescriptor[]> {
+    if (!item.id || !item.tool) return [];
+
+    const rawItemId = item.id;
+    const editGroupId = await this.resolveEditGroupId(msg, rawItemId, context);
+    const toolName = item.tool;
+    const descriptors: CanonicalEventDescriptor[] = [{
+      type: 'tool_call_started',
+      toolName,
+      toolDisplayName: toolName,
+      arguments: this.buildCollabAgentToolArguments(item),
+      targetFilePath: null,
+      mcpServer: null,
+      mcpTool: null,
+      providerToolCallId: editGroupId,
+      createdAt: msg.createdAt,
+    }];
+
+    if (item.status === 'completed' || item.status === 'failed') {
+      const isError = item.status !== 'completed';
+      descriptors.push({
+        type: 'tool_call_completed',
+        providerToolCallId: editGroupId,
+        status: isError ? 'error' : 'completed',
+        result: this.buildCollabAgentToolResult(item),
+        isError,
+      });
+      this.inFlightSyntheticIds.delete(rawItemId);
+    }
+
+    return descriptors;
+  }
+
+  private async parseGenericToolLikeItem(
+    msg: RawMessage,
+    item: AppServerItem,
+    context: ParseContext,
+  ): Promise<CanonicalEventDescriptor[]> {
+    if (!item.id || !item.type) return [];
+
+    const rawItemId = item.id;
+    const startedAlreadyEmitted = this.inFlightSyntheticIds.has(rawItemId);
+    const editGroupId = await this.resolveEditGroupId(msg, rawItemId, context);
+    const toolName = item.type;
+    const descriptors: CanonicalEventDescriptor[] = [];
+
+    if (!startedAlreadyEmitted) {
+      descriptors.push({
+        type: 'tool_call_started',
+        toolName,
+        toolDisplayName: toolName,
+        arguments: this.buildGenericToolLikeArguments(item),
+        targetFilePath: null,
+        mcpServer: null,
+        mcpTool: null,
+        providerToolCallId: editGroupId,
+        createdAt: msg.createdAt,
+      });
+    }
+
+    if (item.status === 'completed' || item.status === 'failed') {
+      const isError = item.status !== 'completed';
+      descriptors.push({
+        type: 'tool_call_completed',
+        providerToolCallId: editGroupId,
+        status: isError ? 'error' : 'completed',
+        result: this.buildGenericToolLikeResult(item),
+        isError,
+      });
+      this.inFlightSyntheticIds.delete(rawItemId);
+    }
+
     return descriptors;
   }
 
@@ -371,6 +517,29 @@ export class CodexAppServerRawParser implements IRawMessageParser {
     return descriptors;
   }
 
+  private parseTodoListItem(
+    msg: RawMessage,
+    item: AppServerItem,
+  ): CanonicalEventDescriptor[] {
+    if (!Array.isArray(item.items) || item.items.length === 0) return [];
+
+    const todoText = item.items
+      .filter((entry): entry is Record<string, unknown> => !!entry && typeof entry === 'object')
+      .map((entry) => {
+        const text = typeof entry.text === 'string' ? entry.text : String(entry.text ?? '');
+        return `- [${entry.completed ? 'x' : ' '}] ${text}`;
+      })
+      .join('\n');
+
+    if (!todoText) return [];
+
+    return [{
+      type: 'assistant_message',
+      text: todoText,
+      createdAt: msg.createdAt,
+    }];
+  }
+
   private parseTurnCompleted(msg: RawMessage, params: NonNullable<AppServerEnvelope['params']>): CanonicalEventDescriptor[] {
     // The `turn/completed` notification CAN carry usage but in practice usage
     // arrives via `thread/tokenUsage/updated` and the SDK parser pulls it from
@@ -438,5 +607,101 @@ export class CodexAppServerRawParser implements IRawMessageParser {
       if (text) return { resultText: text, isError: false };
     }
     return { resultText: result == null ? '' : JSON.stringify(result), isError: false };
+  }
+
+  private isGenericToolLikeItem(item: AppServerItem): boolean {
+    if (!item.id || !item.type) return false;
+    return !new Set([
+      'userMessage',
+      'agentMessage',
+      'reasoning',
+      'todoList',
+      'todo_list',
+      'error',
+      'fileChange',
+      'mcpToolCall',
+      'commandExecution',
+      'collabAgentToolCall',
+    ]).has(item.type);
+  }
+
+  private buildGenericToolLikeArguments(item: AppServerItem): Record<string, unknown> {
+    const record = item as Record<string, unknown>;
+    const args: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(record)) {
+      if (value === undefined) continue;
+      if (['id', 'type', 'status', 'result', 'error', 'aggregated_output', 'exit_code', 'text', 'content', 'items'].includes(key)) {
+        continue;
+      }
+      args[key] = value;
+    }
+    return args;
+  }
+
+  private buildGenericToolLikeResult(item: AppServerItem): string {
+    if (item.error?.message) return item.error.message;
+    if (typeof item.aggregated_output === 'string' && item.aggregated_output) return item.aggregated_output;
+
+    const directResult = this.extractToolResult(item).resultText;
+    if (directResult) return directResult;
+
+    const record = item as Record<string, unknown>;
+    const summary: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(record)) {
+      if (value === undefined) continue;
+      if (['id', 'type', 'status', 'text', 'content', 'items'].includes(key)) continue;
+      summary[key] = value;
+    }
+    return Object.keys(summary).length === 0 ? '' : JSON.stringify(summary);
+  }
+
+  private buildCollabAgentToolArguments(item: AppServerItem): Record<string, unknown> {
+    const args: Record<string, unknown> = {};
+    if (item.senderThreadId) args.senderThreadId = item.senderThreadId;
+    if (Array.isArray(item.receiverThreadIds) && item.receiverThreadIds.length > 0) {
+      args.receiverThreadIds = item.receiverThreadIds;
+    }
+    if (item.prompt) args.prompt = item.prompt;
+    if (item.model) args.model = item.model;
+    if (item.reasoningEffort) args.reasoningEffort = item.reasoningEffort;
+    if (item.agentsStates && Object.keys(item.agentsStates).length > 0) {
+      args.agentsStates = item.agentsStates;
+    }
+    return args;
+  }
+
+  private buildCollabAgentToolResult(item: AppServerItem): string {
+    const parts: string[] = [];
+
+    if (Array.isArray(item.receiverThreadIds) && item.receiverThreadIds.length > 0) {
+      parts.push(`receiver_thread_ids: ${item.receiverThreadIds.join(', ')}`);
+    }
+    if (item.model) {
+      parts.push(`model: ${item.model}`);
+    }
+    if (item.reasoningEffort) {
+      parts.push(`reasoning_effort: ${item.reasoningEffort}`);
+    }
+    if (item.agentsStates && Object.keys(item.agentsStates).length > 0) {
+      parts.push(`agents: ${JSON.stringify(item.agentsStates)}`);
+    }
+
+    return parts.join('\n');
+  }
+
+  private buildSpawnAgentResultSummary(item: AppServerItem): string {
+    const parts: string[] = [];
+    if (Array.isArray(item.receiverThreadIds) && item.receiverThreadIds.length > 0) {
+      parts.push(`receiver_thread_ids: ${item.receiverThreadIds.join(', ')}`);
+    } else {
+      parts.push('receiver_thread_ids: none');
+    }
+    if (item.model) {
+      parts.push(`model: ${item.model}`);
+    }
+    if (item.reasoningEffort) {
+      parts.push(`reasoning_effort: ${item.reasoningEffort}`);
+    }
+    return parts.join('\n');
   }
 }

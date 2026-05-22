@@ -16,7 +16,7 @@ import { store } from '@nimbalyst/runtime/store';
 import {
   sessionFileEditsAtom,
   sessionGitStatusAtom,
-  sessionPendingReviewFilesAtom,
+  setSessionPendingReviewFilesAtom,
   workspaceUncommittedFilesAtom,
   worktreeChangedFilesAtom,
   worktreeGitStatusAtom,
@@ -136,7 +136,7 @@ export async function loadInitialSessionFileState(sessionId: string, workspacePa
       workspacePath,
       sessionId
     );
-    store.set(sessionPendingReviewFilesAtom(sessionId), new Set(pendingFiles));
+    store.set(setSessionPendingReviewFilesAtom, { sessionId, pendingFiles });
 
   } catch (error) {
     console.error('[fileStateListeners] Failed to load initial state for session:', sessionId, error);
@@ -244,7 +244,7 @@ export function initFileStateListeners(workspacePath: string): () => void {
               wsPath,
               sessionId
             );
-            store.set(sessionPendingReviewFilesAtom(sessionId), new Set(pendingFiles));
+            store.set(setSessionPendingReviewFilesAtom, { sessionId, pendingFiles });
           }
         }
       } catch (error) {
@@ -333,7 +333,7 @@ export function initFileStateListeners(workspacePath: string): () => void {
               wsPath,
               sessionId
             );
-            store.set(sessionPendingReviewFilesAtom(sessionId), new Set(pendingFiles));
+            store.set(setSessionPendingReviewFilesAtom, { sessionId, pendingFiles });
           } catch (error) {
             console.error('[fileStateListeners] Failed to fetch pending files for session:', sessionId, error);
           }

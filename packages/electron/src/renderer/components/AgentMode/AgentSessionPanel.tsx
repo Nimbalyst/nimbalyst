@@ -12,7 +12,7 @@
  * if needed for further optimization.
  */
 
-import React, { useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
+import React, { memo, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { SessionTranscript, SessionTranscriptRef } from '../UnifiedAI/SessionTranscript';
 import type { SerializableDocumentContext } from '../../hooks/useDocumentContext';
 
@@ -39,7 +39,7 @@ export interface AgentSessionPanelProps {
  * and mounted/unmounted as sessions change. SessionTranscript already handles
  * all the atom subscriptions and IPC events for that session.
  */
-export const AgentSessionPanel = forwardRef<AgentSessionPanelRef, AgentSessionPanelProps>(({
+const AgentSessionPanelComponent = forwardRef<AgentSessionPanelRef, AgentSessionPanelProps>(({
   sessionId,
   workspacePath,
   onFileClick,
@@ -84,4 +84,7 @@ export const AgentSessionPanel = forwardRef<AgentSessionPanelRef, AgentSessionPa
   );
 });
 
+AgentSessionPanelComponent.displayName = 'AgentSessionPanel';
+
+export const AgentSessionPanel = memo(AgentSessionPanelComponent);
 AgentSessionPanel.displayName = 'AgentSessionPanel';

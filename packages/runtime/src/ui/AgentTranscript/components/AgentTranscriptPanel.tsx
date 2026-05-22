@@ -15,6 +15,26 @@ interface Todo {
   activeForm: string;
 }
 
+function summarizePanelTeammates(
+  teammates: Array<{ agentId: string; status: 'running' | 'completed' | 'errored' | 'idle' }> | undefined
+): string {
+  if (!teammates || teammates.length === 0) return 'none';
+  return teammates.map(tm => `${tm.agentId}:${tm.status}`).join(', ');
+}
+
+function logPanelMemoDiff(
+  sessionId: string,
+  reason: string,
+  details?: Record<string, unknown>
+): void {
+  if (!import.meta.env.DEV) return;
+  console.info(`[RenderTrace][AgentTranscriptPanel.memo] ${JSON.stringify({
+    sessionId,
+    reason,
+    ...details,
+  })}`);
+}
+
 interface AgentTranscriptPanelProps {
   sessionId: string;
   sessionData: SessionData;
@@ -488,35 +508,84 @@ export const AgentTranscriptPanel = React.memo(
   AgentTranscriptPanelComponent,
   (prevProps, nextProps) => {
     // Session ID changed - must re-render
-    if (prevProps.sessionId !== nextProps.sessionId) return false;
+    if (prevProps.sessionId !== nextProps.sessionId) {
+      logPanelMemoDiff(nextProps.sessionId, 'sessionId', {
+        prev: prevProps.sessionId,
+        next: nextProps.sessionId,
+      });
+      return false;
+    }
 
     // Processing state changed - must re-render (affects spinner, etc.)
-    if (prevProps.isProcessing !== nextProps.isProcessing) return false;
-    if (prevProps.hasPendingInteractivePrompt !== nextProps.hasPendingInteractivePrompt) return false;
+    if (prevProps.isProcessing !== nextProps.isProcessing) {
+      logPanelMemoDiff(nextProps.sessionId, 'isProcessing', {
+        prev: prevProps.isProcessing,
+        next: nextProps.isProcessing,
+      });
+      return false;
+    }
+    if (prevProps.hasPendingInteractivePrompt !== nextProps.hasPendingInteractivePrompt) {
+      logPanelMemoDiff(nextProps.sessionId, 'hasPendingInteractivePrompt', {
+        prev: prevProps.hasPendingInteractivePrompt,
+        next: nextProps.hasPendingInteractivePrompt,
+      });
+      return false;
+    }
 
     // Archived state changed - must re-render
-    if (prevProps.isArchived !== nextProps.isArchived) return false;
+    if (prevProps.isArchived !== nextProps.isArchived) {
+      logPanelMemoDiff(nextProps.sessionId, 'isArchived', {
+        prev: prevProps.isArchived,
+        next: nextProps.isArchived,
+      });
+      return false;
+    }
 
     // Sidebar visibility changed - must re-render
-    if (prevProps.hideSidebar !== nextProps.hideSidebar) return false;
-    if (prevProps.showFloatingActions !== nextProps.showFloatingActions) return false;
+    if (prevProps.hideSidebar !== nextProps.hideSidebar) {
+      logPanelMemoDiff(nextProps.sessionId, 'hideSidebar');
+      return false;
+    }
+    if (prevProps.showFloatingActions !== nextProps.showFloatingActions) {
+      logPanelMemoDiff(nextProps.sessionId, 'showFloatingActions');
+      return false;
+    }
 
     // Group by directory changed - must re-render
-    if (prevProps.groupByDirectory !== nextProps.groupByDirectory) return false;
+    if (prevProps.groupByDirectory !== nextProps.groupByDirectory) {
+      logPanelMemoDiff(nextProps.sessionId, 'groupByDirectory', {
+        prev: prevProps.groupByDirectory,
+        next: nextProps.groupByDirectory,
+      });
+      return false;
+    }
 
     // Workspace path changed - must re-render
-    if (prevProps.workspacePath !== nextProps.workspacePath) return false;
+    if (prevProps.workspacePath !== nextProps.workspacePath) {
+      logPanelMemoDiff(nextProps.sessionId, 'workspacePath');
+      return false;
+    }
 
     // Pending review files changed - must re-render
-    if (prevProps.pendingReviewFiles !== nextProps.pendingReviewFiles) return false;
+    if (prevProps.pendingReviewFiles !== nextProps.pendingReviewFiles) {
+      logPanelMemoDiff(nextProps.sessionId, 'pendingReviewFiles');
+      return false;
+    }
 
     // Todos changed - check array equality
-    if (prevProps.todos?.length !== nextProps.todos?.length) return false;
+    if (prevProps.todos?.length !== nextProps.todos?.length) {
+      logPanelMemoDiff(nextProps.sessionId, 'todos.length', {
+        prev: prevProps.todos?.length ?? 0,
+        next: nextProps.todos?.length ?? 0,
+      });
+      return false;
+    }
     if (prevProps.todos && nextProps.todos) {
       for (let i = 0; i < prevProps.todos.length; i++) {
         const prev = prevProps.todos[i];
         const next = nextProps.todos[i];
         if (prev.status !== next.status || prev.content !== next.content || prev.activeForm !== next.activeForm) {
+          logPanelMemoDiff(nextProps.sessionId, `todos[${i}]`, { prev, next });
           return false;
         }
       }
@@ -527,30 +596,74 @@ export const AgentTranscriptPanel = React.memo(
     const nextData = nextProps.sessionData;
 
     // Messages changed - check array reference (reloadSessionData creates new array)
-    if (prevData.messages !== nextData.messages) return false;
+    if (prevData.messages !== nextData.messages) {
+      logPanelMemoDiff(nextProps.sessionId, 'sessionData.messages', {
+        prevCount: prevData.messages?.length ?? 0,
+        nextCount: nextData.messages?.length ?? 0,
+        prevUpdatedAt: prevData.updatedAt,
+        nextUpdatedAt: nextData.updatedAt,
+      });
+      return false;
+    }
 
     // Provider changed - must re-render
-    if (prevData.provider !== nextData.provider) return false;
+    if (prevData.provider !== nextData.provider) {
+      logPanelMemoDiff(nextProps.sessionId, 'sessionData.provider', {
+        prev: prevData.provider,
+        next: nextData.provider,
+      });
+      return false;
+    }
 
     // Only re-render for metadata fields that actually affect transcript rendering.
     // A full metadata reference check caused idle-session churn (read-state, updatedAt, etc.)
     // which remounted virtualized rows and dropped text selection.
-    if (getSessionStatus(prevData) !== getSessionStatus(nextData)) return false;
+    if (getSessionStatus(prevData) !== getSessionStatus(nextData)) {
+      logPanelMemoDiff(nextProps.sessionId, 'sessionStatus', {
+        prev: getSessionStatus(prevData),
+        next: getSessionStatus(nextData),
+      });
+      return false;
+    }
 
     // Document context changed - check reference
-    if (prevData.documentContext !== nextData.documentContext) return false;
+    if (prevData.documentContext !== nextData.documentContext) {
+      logPanelMemoDiff(nextProps.sessionId, 'documentContext');
+      return false;
+    }
 
     // Token usage changed - check reference
-    if (prevData.tokenUsage !== nextData.tokenUsage) return false;
+    if (prevData.tokenUsage !== nextData.tokenUsage) {
+      logPanelMemoDiff(nextProps.sessionId, 'tokenUsage');
+      return false;
+    }
 
     // Worker status affects inline transcript state even when messages don't change.
-    if (prevProps.currentTeammates !== nextProps.currentTeammates) return false;
+    if (prevProps.currentTeammates !== nextProps.currentTeammates) {
+      logPanelMemoDiff(nextProps.sessionId, 'currentTeammates', {
+        prev: summarizePanelTeammates(prevProps.currentTeammates),
+        next: summarizePanelTeammates(nextProps.currentTeammates),
+      });
+      return false;
+    }
 
     // App start time changed - must re-render (restart indicator)
-    if (prevProps.appStartTime !== nextProps.appStartTime) return false;
+    if (prevProps.appStartTime !== nextProps.appStartTime) {
+      logPanelMemoDiff(nextProps.sessionId, 'appStartTime', {
+        prev: prevProps.appStartTime,
+        next: nextProps.appStartTime,
+      });
+      return false;
+    }
 
     // Phase changed - must re-render (floating actions phase picker)
-    if (prevProps.currentPhase !== nextProps.currentPhase) return false;
+    if (prevProps.currentPhase !== nextProps.currentPhase) {
+      logPanelMemoDiff(nextProps.sessionId, 'currentPhase', {
+        prev: prevProps.currentPhase,
+        next: nextProps.currentPhase,
+      });
+      return false;
+    }
 
     // All checks passed - skip re-render
     return true;

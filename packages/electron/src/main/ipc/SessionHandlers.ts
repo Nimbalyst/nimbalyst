@@ -1641,14 +1641,14 @@ export async function registerSessionHandlers() {
         await migrationService.forceReparseSession(sessionId, provider);
 
         // Nudge any open renderer view of this session to reload from DB so the
-        // user sees the reparse result without manually switching sessions. The
-        // existing ai:message-logged listener routes through the throttled
-        // reload pipeline.
+        // user sees the reparse result without manually switching sessions.
+        // Use a transcript-specific signal rather than faking ai:message-logged,
+        // which would incorrectly mutate unread/activity UI.
         for (const window of BrowserWindow.getAllWindows()) {
             if (!window.isDestroyed()) {
-                window.webContents.send('ai:message-logged', {
+                window.webContents.send('transcript:session-reparsed', {
                     sessionId,
-                    direction: 'output',
+                    workspacePath: session.workspacePath,
                 });
             }
         }

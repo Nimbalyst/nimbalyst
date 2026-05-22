@@ -1,5 +1,15 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useState, useEffect } from 'react';
+import {
+  autoUpdate,
+  flip,
+  FloatingPortal,
+  offset,
+  shift,
+  useDismiss,
+  useFloating,
+  useInteractions,
+  useRole,
+} from '@floating-ui/react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { MaterialSymbol, getProviderIcon } from '@nimbalyst/runtime';
 import { isAgentProvider, shouldBlockStartedSessionProviderSwitch } from '@nimbalyst/runtime/ai/server/types';
@@ -36,63 +46,32 @@ export function ModelSelector({
   const [isOpen, setIsOpen] = useState(false);
   const [models, setModels] = useState<Record<string, Model[]>>({});
   const [loading, setLoading] = useState(false);
-  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
   const providers = useAtomValue(providersAtom);
   const setWindowMode = useSetAtom(setWindowModeAtom);
   const navigateToSettings = useSetAtom(navigateToSettingsAtom);
-
-  // Compute fixed position for the dropdown when it opens
-  const openDropdown = useCallback(() => {
-    if (buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setDropdownPos({ top: rect.top, left: rect.left });
-    }
-    setIsOpen(true);
-  }, []);
-
-  const toggleDropdown = useCallback(() => {
-    if (isOpen) {
-      setIsOpen(false);
-    } else {
-      openDropdown();
-    }
-  }, [isOpen, openDropdown]);
+  const { refs, floatingStyles, context } = useFloating({
+    open: isOpen,
+    onOpenChange: setIsOpen,
+    placement: 'top-start',
+    strategy: 'fixed',
+    whileElementsMounted: autoUpdate,
+    middleware: [
+      offset(4),
+      flip({ fallbackPlacements: ['bottom-start', 'top-end', 'bottom-end'], padding: 8 }),
+      shift({ padding: 8 }),
+    ],
+  });
+  const dismiss = useDismiss(context, {
+    escapeKey: true,
+    outsidePress: (event) => !(event.target as Element | null)?.closest?.('.help-tooltip'),
+  });
+  const role = useRole(context, { role: 'menu' });
+  const { getReferenceProps, getFloatingProps } = useInteractions([dismiss, role]);
 
   // Clear cached models when provider settings change so next dropdown open fetches fresh data
   useEffect(() => {
     setModels({});
   }, [providers]);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-
-      // Don't close if clicking inside the dropdown or on the toggle button
-      if (dropdownRef.current && dropdownRef.current.contains(target)) {
-        return;
-      }
-      if (buttonRef.current && buttonRef.current.contains(target)) {
-        return;
-      }
-
-      // Don't close if clicking on a help tooltip (which is portaled to document.body)
-      const helpTooltip = (target as Element).closest?.('.help-tooltip');
-      if (helpTooltip) {
-        return;
-      }
-
-      setIsOpen(false);
-    };
-
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-    return undefined;
-  }, [isOpen]);
 
   // Load models when dropdown opens
   useEffect(() => {
@@ -205,18 +184,26 @@ export function ModelSelector({
   return (
     <div className="model-selector inline-block">
       <button
-        ref={buttonRef}
+        ref={refs.setReference}
         className="model-selector-button flex items-center gap-1 px-2 py-[3px] rounded-xl text-[11px] font-medium cursor-pointer transition-all duration-200 outline-none whitespace-nowrap max-w-[200px] bg-[var(--nim-bg-secondary)] text-[var(--nim-text-muted)] border border-[var(--nim-border)] hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)]"
-        onClick={toggleDropdown}
         aria-label={`Current model: ${getCurrentModelName()}`}
         data-testid="model-picker"
+        {...getReferenceProps({
+          onClick: () => setIsOpen(open => !open),
+        })}
       >
         <span className="model-selector-label overflow-hidden text-ellipsis">{getCurrentModelName()}</span>
         <MaterialSymbol icon="expand_more" size={14} className={`model-selector-arrow transition-transform duration-200 shrink-0 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
-      {isOpen && dropdownPos && createPortal(
-        <div className="model-selector-dropdown nim-scrollbar fixed min-w-[240px] max-w-[320px] max-h-[400px] overflow-y-auto rounded-lg p-1 z-[1000] bg-[var(--nim-bg)] border border-[var(--nim-border)] shadow-[0_4px_12px_rgba(0,0,0,0.15)]" style={{ bottom: `${window.innerHeight - dropdownPos.top + 4}px`, left: `${dropdownPos.left}px` }} ref={dropdownRef}>
+      {isOpen && (
+        <FloatingPortal>
+          <div
+            ref={refs.setFloating}
+            className="model-selector-dropdown nim-scrollbar min-w-[240px] max-w-[320px] max-h-[min(400px,calc(100vh-24px))] overflow-y-auto rounded-lg p-1 z-[1000] bg-[var(--nim-bg)] border border-[var(--nim-border)] shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
+            style={floatingStyles}
+            {...getFloatingProps()}
+          >
           {loading ? (
             <div className="model-selector-loading p-3 text-center text-xs text-[var(--nim-text-faint)]">Loading models...</div>
           ) : Object.keys(models).length === 0 ? (
@@ -320,8 +307,8 @@ export function ModelSelector({
               </button>
             </>
           )}
-        </div>,
-        document.body
+          </div>
+        </FloatingPortal>
       )}
     </div>
   );

@@ -39,6 +39,7 @@ import { BadGitStateDialog } from './BadGitStateDialog';
 import { HelpTooltip } from '../../help';
 import { refreshWorktreeChangedFiles } from '../../store/listeners/fileStateListeners';
 import { getWorktreeNameFromPath } from '../../utils/pathUtils';
+import { isPathInWorkspace } from '../../../shared/pathUtils';
 import { SuperFilesPanel } from './SuperFilesPanel';
 import { defaultAgentModelAtom } from '../../store/atoms/appSettings';
 import { type AgentModelOption } from './AgentModelPicker';
@@ -88,6 +89,20 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
     const isCommitting = useAtomValue(isCommittingAtom);
     const setIsCommitting = useSetAtom(isCommittingAtom);
 
+    const gitWorkspacePath = worktreePath || workspacePath;
+    const isWorkspaceCommittablePath = useCallback((filePath: string) => {
+      if (!filePath) {
+        return false;
+      }
+
+      // Worktree git state uses relative paths internally; keep accepting those.
+      if (!filePath.startsWith('/') && !/^[A-Za-z]:[\\/]/.test(filePath)) {
+        return true;
+      }
+
+      return isPathInWorkspace(filePath, gitWorkspacePath);
+    }, [gitWorkspacePath]);
+
     // Local state for commit workflow mode (manual vs smart)
     const [commitMode, setCommitMode] = useState<'manual' | 'smart'>('smart');
 
@@ -95,7 +110,10 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
     const defaultModel = useAtomValue(defaultAgentModelAtom);
     // Per-workstream git state (persisted)
     const stagedFilesArr = useAtomValue(workstreamStagedFilesAtom(workstreamId));
-    const stagedFiles = new Set(stagedFilesArr); // Convert to Set for compatibility
+    const stagedFiles = useMemo(
+      () => new Set(stagedFilesArr.filter((filePath) => isWorkspaceCommittablePath(filePath))),
+      [isWorkspaceCommittablePath, stagedFilesArr]
+    );
     const setStagedFilesAction = useSetAtom(setWorkstreamStagedFilesAtom);
     const commitMessage = useAtomValue(workstreamCommitMessageAtom(workstreamId));
     const setCommitMessageAction = useSetAtom(setWorkstreamCommitMessageAtom);
@@ -103,16 +121,22 @@ export const GitOperationsPanel: React.FC<GitOperationsPanelProps> = React.memo(
 
     // Helper functions to wrap atom actions with workstreamId
     const setStagedFiles = useCallback((files: Set<string>) => {
-      setStagedFilesAction({ workstreamId, files: Array.from(files) });
-    }, [workstreamId, setStagedFilesAction]);
+      setStagedFilesAction({
+        workstreamId,
+        files: Array.from(files).filter((filePath) => isWorkspaceCommittablePath(filePath)),
+      });
+    }, [isWorkspaceCommittablePath, workstreamId, setStagedFilesAction]);
 
     const setCommitMessage = useCallback((message: string) => {
       setCommitMessageAction({ workstreamId, message });
     }, [workstreamId, setCommitMessageAction]);
 
     const stageAll = useCallback((files: string[]) => {
-      setStagedFilesAction({ workstreamId, files });
-    }, [workstreamId, setStagedFilesAction]);
+      setStagedFilesAction({
+        workstreamId,
+        files: files.filter((filePath) => isWorkspaceCommittablePath(filePath)),
+      });
+    }, [isWorkspaceCommittablePath, workstreamId, setStagedFilesAction]);
 
     const clearStaging = useCallback(() => {
       setStagedFilesAction({ workstreamId, files: [] });

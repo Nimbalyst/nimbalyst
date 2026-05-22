@@ -1029,12 +1029,19 @@ export class AIService {
             });
             if (session && syncProvider.syncSessionsToIndex) {
               // logger.main.info('[AIService] Syncing new session to index:', session.id);
+              // parentSessionId must be present here -- syncSessionsToIndex
+              // builds a fresh index entry from this payload and clobbers any
+              // partial parentSessionId set by the updateMetadata() above. Mobile
+              // clients (iOS) need the parent association on the first sight of
+              // the session or it shows up as a free-floating sibling.
               syncProvider.syncSessionsToIndex([{
                 id: session.id,
                 title: session.title ?? 'Untitled',
                 provider: session.provider,
                 model: session.model,
                 mode: session.mode,
+                sessionType: session.sessionType,
+                parentSessionId: request.parentSessionId ?? session.parentSessionId ?? undefined,
                 workspaceId: session.workspacePath,
                 workspacePath: session.workspacePath,
                 messageCount: session.messages.length,
@@ -1198,6 +1205,8 @@ export class AIService {
                 provider: 'claude-code',
                 model: defaultModel,
                 mode: 'agent',
+                sessionType: 'session',
+                worktreeId: worktree.id,
                 workspaceId: request.projectId,
                 workspacePath: request.projectId,
                 messageCount: 0,

@@ -577,6 +577,23 @@ export function initSessionStateListeners(): () => void {
   };
 
   /**
+   * Handle transcript reparse completion without mutating unread/activity
+   * state. A canonical reparse changes transcript structure, not session
+   * activity.
+   */
+  const handleTranscriptSessionReparsed = (data: { sessionId: string; workspacePath?: string }) => {
+    const { sessionId, workspacePath: eventWorkspacePath } = data;
+    if (!sessionId) return;
+
+    const registry = store.get(sessionRegistryAtom);
+    const sessionMeta = registry.get(sessionId);
+    const workspacePath = eventWorkspacePath || sessionMeta?.workspaceId || null;
+    if (!workspacePath) return;
+
+    store.set(reloadSessionDataAtom, { sessionId, workspacePath });
+  };
+
+  /**
    * Handle coalesced batch-write events from AgentMessageWriteQueue.
    *
    * The queue emits one event per affected session per flush, replacing the
@@ -959,9 +976,11 @@ export function initSessionStateListeners(): () => void {
   let cleanupSyncReadState: (() => void) | undefined;
   let cleanupSyncDraftInput: (() => void) | undefined;
   let cleanupTranscriptEvent: (() => void) | undefined;
+  let cleanupTranscriptSessionReparsed: (() => void) | undefined;
   let cleanupMessagesLoggedBatch: (() => void) | undefined;
   if (window.electronAPI?.on) {
     cleanupTranscriptEvent = window.electronAPI.on('transcript:event', handleTranscriptEvent);
+    cleanupTranscriptSessionReparsed = window.electronAPI.on('transcript:session-reparsed', handleTranscriptSessionReparsed);
     cleanupMessageLogged = window.electronAPI.on('ai:message-logged', handleMessageLogged);
     cleanupMessagesLoggedBatch = window.electronAPI.on('ai:messages-logged-batch', handleMessagesLoggedBatch);
     cleanupTitleUpdated = window.electronAPI.on('session:title-updated', handleTitleUpdated);
@@ -1024,6 +1043,7 @@ export function initSessionStateListeners(): () => void {
     cleanupSyncReadState?.();
     cleanupSyncDraftInput?.();
     cleanupTranscriptEvent?.();
+    cleanupTranscriptSessionReparsed?.();
     transcriptAccumulator.clear();
   };
 }

@@ -480,6 +480,7 @@ const CollabModeInner: React.FC<CollabModeProps> = ({
       {hasTabs && (
         <ChatSidebar
           workspacePath={workspacePath}
+          isActive={isActive}
           getDocumentContext={getDocumentContext}
           onFileOpen={async (filePath) => onFileOpen(filePath)}
           width={chatWidth}

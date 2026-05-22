@@ -237,4 +237,174 @@ describe('CodexAppServerRawParser', () => {
       status: 'completed',
     });
   });
+
+  it('parses collabAgentToolCall spawnAgent into subagent start/completed descriptors', async () => {
+    const parser = new CodexAppServerRawParser();
+    const startMsg = makeRawMessage({
+      id: 20,
+      content: envelope('item/started', {
+        threadId: 't-1',
+        turnId: 'turn-1',
+        item: {
+          id: 'spawn-1',
+          type: 'collabAgentToolCall',
+          tool: 'spawnAgent',
+          status: 'inProgress',
+          prompt: 'Create a plan',
+        },
+      }),
+    });
+    const startedDescs = await parser.parseMessage(startMsg, makeContext({
+      hasSubagent: (subagentId: string) => subagentId === 'spawn-1',
+    }));
+    expect(startedDescs).toEqual([{
+      type: 'subagent_started',
+      subagentId: 'spawn-1',
+      agentType: 'Session',
+      prompt: 'Create a plan',
+      createdAt: startMsg.createdAt,
+    }]);
+
+    const completedMsg = makeRawMessage({
+      id: 21,
+      content: envelope('item/completed', {
+        threadId: 't-1',
+        turnId: 'turn-1',
+        item: {
+          id: 'spawn-1',
+          type: 'collabAgentToolCall',
+          tool: 'spawnAgent',
+          status: 'completed',
+          prompt: 'Create a plan',
+          receiverThreadIds: ['thread-child-1'],
+          model: 'gpt-5.4',
+          reasoningEffort: 'high',
+        },
+      }),
+    });
+    const completedDescs = await parser.parseMessage(completedMsg, makeContext({
+      hasSubagent: (subagentId: string) => subagentId === 'spawn-1',
+    }));
+    expect(completedDescs).toEqual([{
+      type: 'subagent_completed',
+      subagentId: 'spawn-1',
+      status: 'completed',
+      resultSummary: 'receiver_thread_ids: thread-child-1\nmodel: gpt-5.4\nreasoning_effort: high',
+    }]);
+  });
+
+  it('parses non-spawn collabAgentToolCall items into tool-call descriptors', async () => {
+    const parser = new CodexAppServerRawParser();
+    const startMsg = makeRawMessage({
+      id: 30,
+      content: envelope('item/started', {
+        threadId: 't-1',
+        turnId: 'turn-1',
+        item: {
+          id: 'wait-1',
+          type: 'collabAgentToolCall',
+          tool: 'wait',
+          status: 'inProgress',
+          receiverThreadIds: ['thread-child-1', 'thread-child-2'],
+        },
+      }),
+    });
+    const startedDescs = await parser.parseMessage(startMsg, makeContext());
+    expect(startedDescs).toHaveLength(1);
+    expect(startedDescs[0]).toMatchObject({
+      type: 'tool_call_started',
+      toolName: 'wait',
+      arguments: {
+        receiverThreadIds: ['thread-child-1', 'thread-child-2'],
+      },
+    });
+    const startedProviderId = (startedDescs[0] as { providerToolCallId: string }).providerToolCallId;
+
+    const completedMsg = makeRawMessage({
+      id: 31,
+      content: envelope('item/completed', {
+        threadId: 't-1',
+        turnId: 'turn-1',
+        item: {
+          id: 'wait-1',
+          type: 'collabAgentToolCall',
+          tool: 'wait',
+          status: 'completed',
+          receiverThreadIds: ['thread-child-1', 'thread-child-2'],
+        },
+      }),
+    });
+    const completedDescs = await parser.parseMessage(completedMsg, makeContext());
+    expect(completedDescs).toHaveLength(2);
+    expect(completedDescs[0]).toMatchObject({
+      type: 'tool_call_started',
+      toolName: 'wait',
+    });
+    expect(completedDescs[1]).toMatchObject({
+      type: 'tool_call_completed',
+      providerToolCallId: startedProviderId,
+      status: 'completed',
+      result: 'receiver_thread_ids: thread-child-1, thread-child-2',
+    });
+  });
+
+  it('parses todoList items into an assistant checklist message', async () => {
+    const parser = new CodexAppServerRawParser();
+    const msg = makeRawMessage({
+      id: 40,
+      content: envelope('item/completed', {
+        threadId: 't-1',
+        turnId: 'turn-1',
+        item: {
+          id: 'todo-1',
+          type: 'todoList',
+          status: 'completed',
+          items: [
+            { text: 'Inspect transcript parser', completed: true },
+            { text: 'Add collab-agent coverage', completed: false },
+          ],
+        },
+      }),
+    });
+    const descs = await parser.parseMessage(msg, makeContext());
+    expect(descs).toEqual([{
+      type: 'assistant_message',
+      text: '- [x] Inspect transcript parser\n- [ ] Add collab-agent coverage',
+      createdAt: msg.createdAt,
+    }]);
+  });
+
+  it('falls back to a generic tool call for unknown tool-like app-server items', async () => {
+    const parser = new CodexAppServerRawParser();
+    const msg = makeRawMessage({
+      id: 50,
+      content: envelope('item/completed', {
+        threadId: 't-1',
+        turnId: 'turn-1',
+        item: {
+          id: 'web-1',
+          type: 'webSearch',
+          status: 'completed',
+          query: 'claude code transcripts',
+          result: {
+            content: [{ type: 'text', text: 'search complete' }],
+          },
+        },
+      }),
+    });
+    const descs = await parser.parseMessage(msg, makeContext());
+    expect(descs).toHaveLength(2);
+    expect(descs[0]).toMatchObject({
+      type: 'tool_call_started',
+      toolName: 'webSearch',
+      arguments: {
+        query: 'claude code transcripts',
+      },
+    });
+    expect(descs[1]).toMatchObject({
+      type: 'tool_call_completed',
+      status: 'completed',
+      result: 'search complete',
+    });
+  });
 });

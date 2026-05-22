@@ -40,6 +40,60 @@ describe('OpenAICodexProvider', () => {
     OpenAICodexProvider.setSecurityLogger(() => {});
   });
 
+  it('updates currentTodos for app-server todoList raw events', async () => {
+    const updateMetadata = vi.fn(async () => {});
+    AISessionsRepository.setStore({
+      ensureReady: async () => {},
+      create: async () => {},
+      updateMetadata,
+      get: async () => ({ metadata: { existing: true } } as any),
+      list: async () => [],
+      search: async () => [],
+      delete: async () => {},
+    });
+
+    try {
+      const provider = new OpenAICodexProvider({ apiKey: 'test-key' });
+      (provider as any).handleTodoListEvent({
+        method: 'item/completed',
+        params: {
+          item: {
+            id: 'todo-1',
+            type: 'todoList',
+            items: [
+              { text: 'Inspect transcript parser', completed: true },
+              { text: 'Add parity coverage', completed: false },
+            ],
+          },
+        },
+      }, 'session-appserver-todos');
+
+      await vi.waitFor(() => {
+        expect(updateMetadata).toHaveBeenCalledWith('session-appserver-todos', {
+          metadata: {
+            existing: true,
+            currentTodos: [
+              {
+                id: 'codex-todo-0',
+                content: 'Inspect transcript parser',
+                activeForm: 'Inspect transcript parser',
+                status: 'completed',
+              },
+              {
+                id: 'codex-todo-1',
+                content: 'Add parity coverage',
+                activeForm: 'Add parity coverage',
+                status: 'in_progress',
+              },
+            ],
+          },
+        });
+      });
+    } finally {
+      AISessionsRepository.clearStore();
+    }
+  });
+
   it('returns fallback models when SDK model discovery is unavailable', async () => {
     expect(OpenAICodexProvider.DEFAULT_MODEL).toBe('openai-codex:gpt-5.4');
 

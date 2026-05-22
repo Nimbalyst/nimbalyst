@@ -18,6 +18,7 @@ import { errorNotificationService } from '../../services/ErrorNotificationServic
 import { getRelativeTimeString } from '../../utils/dateFormatting';
 import { dialogRef, DIALOG_IDS } from '../../dialogs';
 import type { ShareDialogData } from '../../dialogs';
+import { SessionContextMenu } from './SessionContextMenu';
 
 /**
  * Unified component for rendering expandable session groups in the session history.
@@ -1054,12 +1055,8 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
-  const contextMenuRef = useRef<HTMLDivElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const shareInfo = useAtomValue(sessionShareAtom(session.id));
-  const shareKeys = useAtomValue(shareKeysAtom);
-
-  const removeShare = useSetAtom(removeSessionShareAtom);
 
   const displayTitle = session.title || 'Untitled Session';
 
@@ -1070,47 +1067,34 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
     setShowContextMenu(true);
   }, []);
 
-  const handleDelete = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDelete = () => {
     setShowContextMenu(false);
     onDelete?.();
   };
 
-  const handleArchive = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleArchive = () => {
     setShowContextMenu(false);
     onArchive?.();
   };
 
-  const handleUnarchive = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleUnarchive = () => {
     setShowContextMenu(false);
     onUnarchive?.();
   };
 
-  const handlePinToggle = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handlePinToggle = (isPinned: boolean) => {
     setShowContextMenu(false);
-    onPinToggle?.(!session.isPinned);
+    onPinToggle?.(isPinned);
   };
 
-  const handleBranch = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleBranch = () => {
     setShowContextMenu(false);
     onBranch?.();
   };
 
-  const handleRemoveFromWorkstream = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleRemoveFromWorkstream = () => {
     setShowContextMenu(false);
     onRemoveFromWorkstream?.();
-  };
-
-  const handleRenameClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowContextMenu(false);
-    setRenameValue(displayTitle);
-    setIsRenaming(true);
   };
 
   const handleRenameSubmit = () => {
@@ -1132,59 +1116,6 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
     }
   };
 
-  const handleCopySessionId = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowContextMenu(false);
-    copyToClipboard(session.id);
-  };
-
-  const handleExportHtml = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowContextMenu(false);
-    (window as any).electronAPI?.exportSessionToHtml({ sessionId: session.id });
-  };
-
-  const handleCopyTranscript = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowContextMenu(false);
-    (window as any).electronAPI?.exportSessionToClipboard({ sessionId: session.id });
-  };
-
-  const handleShareLink = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowContextMenu(false);
-    dialogRef.current?.open<ShareDialogData>(DIALOG_IDS.SHARE, {
-      contentType: 'session',
-      sessionId: session.id,
-      title: displayTitle,
-    });
-  };
-
-  const handleCopyShareLink = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowContextMenu(false);
-    if (!shareInfo) return;
-    const url = buildShareUrl(shareInfo.shareId, shareKeys.get(session.id));
-    copyToClipboard(url);
-    errorNotificationService.showInfo('Share link copied', 'The share link has been copied to your clipboard.', { duration: 3000 });
-  };
-
-  const handleUnshare = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowContextMenu(false);
-    if (!shareInfo) return;
-    try {
-      const result = await (window as any).electronAPI?.deleteShare({ shareId: shareInfo.shareId, sessionId: session.id });
-      if (result?.success) {
-        removeShare(session.id);
-        errorNotificationService.showInfo('Session unshared', 'The share link has been removed.', { duration: 3000 });
-      } else if (result?.error) {
-        errorNotificationService.showError('Unshare failed', result.error);
-      }
-    } catch (error) {
-      errorNotificationService.showError('Unshare failed', error instanceof Error ? error.message : 'An unexpected error occurred');
-    }
-  };
 
   useEffect(() => {
     if (isRenaming && renameInputRef.current) {
@@ -1201,7 +1132,6 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
       } ${session.isArchived ? 'opacity-60 hover:opacity-80' : ''} focus:outline-2 focus:outline-[var(--nim-border-focus)] focus:outline-offset-[-2px]`}
       onClick={onClick}
       onContextMenu={handleContextMenu}
-      onMouseLeave={() => setShowContextMenu(false)}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
@@ -1255,117 +1185,25 @@ const WorkstreamSessionItem: React.FC<WorkstreamSessionItemProps> = ({
 
       {/* Context Menu */}
       {showContextMenu && (
-        <div
-          ref={contextMenuRef}
-          className="workstream-group-context-menu fixed z-[1000] min-w-[140px] bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] p-1"
-          style={{
-            left: contextMenuPosition.x,
-            top: contextMenuPosition.y
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {onPinToggle && (
-            <button
-              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
-              onClick={handlePinToggle}
-            >
-              <MaterialSymbol icon="push_pin" size={14} />
-              {session.isPinned ? 'Unpin' : 'Pin'}
-            </button>
-          )}
-          {onRename && (
-            <button
-              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
-              onClick={handleRenameClick}
-            >
-              <MaterialSymbol icon="edit" size={14} />
-              Rename
-            </button>
-          )}
-          {onBranch && (
-            <button
-              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
-              onClick={handleBranch}
-            >
-              <MaterialSymbol icon="fork_right" size={14} />
-              Branch conversation
-            </button>
-          )}
-          {onRemoveFromWorkstream && (
-            <button
-              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
-              onClick={handleRemoveFromWorkstream}
-            >
-              <MaterialSymbol icon="drive_file_move_rtl" size={14} />
-              Remove from workstream
-            </button>
-          )}
-          <button
-            className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
-            onClick={handleCopySessionId}
-          >
-            <MaterialSymbol icon="content_copy" size={14} />
-            Copy Session ID
-          </button>
-          {shareInfo ? (
-            <>
-              <button
-                className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
-                onClick={handleCopyShareLink}
-              >
-                <MaterialSymbol icon="content_copy" size={14} />
-                Copy share link
-              </button>
-              <button
-                className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
-                onClick={handleUnshare}
-              >
-                <MaterialSymbol icon="link_off" size={14} />
-                Unshare
-              </button>
-            </>
-          ) : (
-            <button
-              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
-              onClick={handleShareLink}
-            >
-              <MaterialSymbol icon="link" size={14} />
-              Share link
-            </button>
-          )}
-          <button
-            className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
-            onClick={handleExportHtml}
-          >
-            <MaterialSymbol icon="download" size={14} />
-            Export as HTML
-          </button>
-          <button
-            className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
-            onClick={handleCopyTranscript}
-          >
-            <MaterialSymbol icon="assignment" size={14} />
-            Copy transcript
-          </button>
-          {(onArchive || onUnarchive) && (
-            <button
-              className="workstream-group-context-menu-item flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-text)] text-left rounded transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
-              onClick={session.isArchived ? handleUnarchive : handleArchive}
-            >
-              <MaterialSymbol icon={session.isArchived ? "unarchive" : "archive"} size={14} />
-              {session.isArchived ? 'Unarchive' : 'Archive'}
-            </button>
-          )}
-          {onDelete && (
-            <button
-              className="workstream-group-context-menu-item destructive flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--nim-error)] text-left rounded transition-colors duration-150 hover:bg-[rgba(239,68,68,0.1)]"
-              onClick={handleDelete}
-            >
-              <MaterialSymbol icon="delete" size={14} />
-              Delete
-            </button>
-          )}
-        </div>
+        <SessionContextMenu
+          sessionId={session.id}
+          title={displayTitle}
+          position={contextMenuPosition}
+          onClose={() => setShowContextMenu(false)}
+          isArchived={session.isArchived}
+          isPinned={session.isPinned}
+          isWorkstream={(session.childCount ?? 0) > 0}
+          isWorktreeSession={!!session.worktreeId}
+          parentSessionId={session.parentSessionId}
+          phase={session.phase}
+          onRename={onRename ? () => { setRenameValue(displayTitle); setIsRenaming(true); } : undefined}
+          onPinToggle={onPinToggle ? handlePinToggle : undefined}
+          onBranch={onBranch ? handleBranch : undefined}
+          onRemoveFromWorkstream={onRemoveFromWorkstream ? handleRemoveFromWorkstream : undefined}
+          onArchive={onArchive ? handleArchive : undefined}
+          onUnarchive={onUnarchive ? handleUnarchive : undefined}
+          onDelete={onDelete ? handleDelete : undefined}
+        />
       )}
     </div>
   );

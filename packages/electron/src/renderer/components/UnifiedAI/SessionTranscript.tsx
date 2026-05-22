@@ -43,9 +43,16 @@ import {
   sessionDraftInputAtom,
   sessionDraftAttachmentsAtom,
   sessionStoreAtom,
+  sessionLoadedAtom,
   sessionMessagesAtom,
   sessionProviderAtom,
   sessionTokenUsageAtom,
+  sessionStatusAtom,
+  sessionCurrentTeammatesAtom,
+  sessionCurrentTodosAtom,
+  sessionWorktreePathAtom,
+  sessionDocumentContextAtom,
+  sessionEffortLevelRawAtom,
   sessionLoadingAtom,
   sessionModeAtom,
   sessionModelAtom,
@@ -120,6 +127,17 @@ function makeOptimisticError(text: string, extra?: Partial<TranscriptViewMessage
     systemMessage: { systemType: 'error' },
     ...extra,
   };
+}
+
+function summarizeTeammates(
+  teammates: Array<{ agentId: string; status: 'running' | 'completed' | 'errored' | 'idle' }> | undefined
+): string {
+  if (!teammates || teammates.length === 0) return 'none';
+  return teammates.map(tm => `${tm.agentId}:${tm.status}`).join(', ');
+}
+
+function emitSessionRenderTrace(event: string, payload: Record<string, unknown>): void {
+  console.info(`[RenderTrace][SessionTranscript] ${event} ${JSON.stringify(payload)}`);
 }
 
 function makeOptimisticUserMessage(
@@ -275,6 +293,69 @@ async function updateSessionMetadataField<T>(
   }
 }
 
+// Props for the input wrapper — same as AIInput minus the value/onChange
+// pair (which the wrapper owns) and attachments handling (we wire it up
+// directly so the attachments subscription is isolated too).
+type SessionAIInputProps = Omit<
+  React.ComponentProps<typeof AIInput>,
+  'value' | 'onChange' | 'attachments' | 'onAttachmentAdd' | 'onAttachmentRemove'
+> & {
+  sessionId: string;
+  workspacePath: string;
+  enableAttachments: boolean;
+  onAttachmentAdd?: (attachment: ChatAttachment) => void;
+  onAttachmentRemove?: (attachmentId: string) => void;
+};
+
+/**
+ * Thin wrapper that owns the draft-input and draft-attachments
+ * subscriptions for one session. Extracted from SessionTranscript so that
+ * each keystroke re-renders only this component (and the textarea inside
+ * AIInput) instead of cascading through the entire transcript / banners /
+ * queue list — which used to break text selection in the messages area.
+ *
+ * Also owns the debounced persistence of the draft to PGLite (formerly in
+ * SessionTranscript), since that effect needs to fire on every draftInput
+ * change.
+ */
+const SessionAIInput = forwardRef<AIInputRef, SessionAIInputProps>(function SessionAIInput(
+  { sessionId, workspacePath, enableAttachments, onAttachmentAdd, onAttachmentRemove, ...rest },
+  ref,
+) {
+  const [draftInput, setDraftInputRaw] = useAtom(sessionDraftInputAtom(sessionId));
+  const draftAttachments = useAtomValue(sessionDraftAttachmentsAtom(sessionId));
+  const setDraftLocalModifiedAt = useSetAtom(sessionDraftLocalModifiedAtAtom(sessionId));
+
+  const handleChange = useCallback((value: string) => {
+    setDraftInputRaw(value);
+    setDraftLocalModifiedAt(Date.now());
+  }, [setDraftInputRaw, setDraftLocalModifiedAt]);
+
+  // Debounced persistence of draft input to database — survives restarts.
+  useEffect(() => {
+    if (!workspacePath) return;
+    const timeoutId = setTimeout(() => {
+      window.electronAPI.invoke('ai:saveDraftInput', sessionId, draftInput, workspacePath)
+        .catch(err => console.error('[SessionAIInput] Failed to persist draft input:', err));
+    }, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [sessionId, draftInput, workspacePath]);
+
+  return (
+    <AIInput
+      ref={ref}
+      value={draftInput}
+      onChange={handleChange}
+      workspacePath={workspacePath}
+      sessionId={sessionId}
+      attachments={enableAttachments ? draftAttachments : undefined}
+      onAttachmentAdd={enableAttachments ? onAttachmentAdd : undefined}
+      onAttachmentRemove={enableAttachments ? onAttachmentRemove : undefined}
+      {...rest}
+    />
+  );
+});
+
 /**
  * SessionTranscript - Fully encapsulated transcript + input for one session
  */
@@ -324,6 +405,18 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const [isProcessing, setIsProcessing] = useAtom(sessionProcessingAtom(sessionId));
   const hasPendingInteractivePrompt = useAtomValue(sessionHasPendingInteractivePromptAtom(sessionId));
   const worktreeId = useAtomValue(sessionWorktreeIdAtom(sessionId));
+  const hasSessionData = useAtomValue(sessionLoadedAtom(sessionId));
+  // NOTE: deliberately NOT subscribing to sessionUpdatedAtAtom. updatedAt churns
+  // ~10 Hz during streaming, and nothing downstream actually depends on it
+  // for rendering — AgentTranscriptPanel/RichTranscriptView ignore it in their
+  // memo comparators. Subscribing here was repainting the input/queue/banners
+  // every few ms and breaking text selection.
+  const sessionStatus = useAtomValue(sessionStatusAtom(sessionId));
+  const metadataTeammates = useAtomValue(sessionCurrentTeammatesAtom(sessionId));
+  const currentTodos = useAtomValue(sessionCurrentTodosAtom(sessionId)) as Todo[];
+  const sessionWorktreePath = useAtomValue(sessionWorktreePathAtom(sessionId));
+  const sessionDocumentContext = useAtomValue(sessionDocumentContextAtom(sessionId));
+  const rawEffortLevel = useAtomValue(sessionEffortLevelRawAtom(sessionId));
   const loadSessionData = useSetAtom(loadSessionDataAtom);
   const reloadSessionData = useSetAtom(reloadSessionDataAtom);
   const updateSessionStore = useSetAtom(updateSessionStoreAtom);
@@ -336,15 +429,49 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const defaultModel = useAtomValue(defaultAgentModelAtom);
   const defaultEffortLevel = useAtomValue(defaultEffortLevelAtom);
 
-  // Still need full sessionData for certain operations (updating, checking loaded state)
-  const sessionData = useAtomValue(sessionStoreAtom(sessionId));
+  const sessionData = useMemo(() => {
+    if (!hasSessionData) return null;
+    const snapshot = store.get(sessionStoreAtom(sessionId));
+    return {
+      ...(snapshot ?? {}),
+      id: snapshot?.id ?? sessionId,
+      workspacePath: snapshot?.workspacePath ?? workspacePath,
+      worktreePath: sessionWorktreePath ?? snapshot?.worktreePath ?? undefined,
+      messages,
+      provider,
+      tokenUsage,
+      documentContext: sessionDocumentContext ?? snapshot?.documentContext,
+      // Read updatedAt imperatively from the snapshot — see note above on why
+      // we don't subscribe to it.
+      updatedAt: snapshot?.updatedAt ?? 0,
+      metadata: {
+        ...(snapshot?.metadata ?? {}),
+        effortLevel: rawEffortLevel ?? (snapshot?.metadata as Record<string, unknown> | undefined)?.effortLevel ?? null,
+        sessionStatus,
+        currentTeammates: metadataTeammates,
+        currentTodos,
+      },
+    } as SessionData;
+  }, [
+    hasSessionData,
+    sessionId,
+    workspacePath,
+    messages,
+    provider,
+    tokenUsage,
+    sessionDocumentContext,
+    sessionWorktreePath,
+    rawEffortLevel,
+    sessionStatus,
+    metadataTeammates,
+    currentTodos,
+  ]);
 
   // Effort level: read from session metadata, fall back to global default
   const showEffortLevel = useMemo(() => supportsEffortLevel(currentModel), [currentModel]);
   const effortLevel = useMemo(() => {
-    const raw = (sessionData?.metadata as Record<string, unknown> | undefined)?.effortLevel;
-    return raw != null ? parseEffortLevel(raw) : defaultEffortLevel;
-  }, [sessionData?.metadata, defaultEffortLevel]);
+    return rawEffortLevel != null ? parseEffortLevel(rawEffortLevel) : defaultEffortLevel;
+  }, [rawEffortLevel, defaultEffortLevel]);
 
   // Memoize the teammate list passed to AgentTranscriptPanel so its memo
   // comparison doesn't see a new array reference on every keystroke. Without
@@ -353,16 +480,51 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   // tripped AgentTranscriptPanel's `currentTeammates` reference check and
   // re-rendered the entire transcript per character typed.
   const transcriptTeammates = useMemo(() => [
-    ...(((sessionData?.metadata?.currentTeammates as Array<{
-      agentId: string;
-      status: 'running' | 'completed' | 'errored' | 'idle';
-    }> | undefined) ?? [])),
+    ...(metadataTeammates ?? []),
     ...(additionalTeammates ?? []),
-  ], [sessionData?.metadata, additionalTeammates]);
+  ], [metadataTeammates, additionalTeammates]);
 
-  // Draft input state via Jotai atoms - only this component re-renders on typing
-  const [draftInput, setDraftInputRaw] = useAtom(sessionDraftInputAtom(sessionId));
-  const [draftAttachments, setDraftAttachments] = useAtom(sessionDraftAttachmentsAtom(sessionId));
+  const previousRenderRef = useRef<{
+    messageCount: number;
+    messageRef: TranscriptViewMessage[] | undefined;
+    tokenUsageRef: unknown;
+    tokenUsageSummary: string;
+    provider: unknown;
+    isProcessing: boolean;
+    hasPendingInteractivePrompt: boolean;
+    aiMode: unknown;
+    currentModel: unknown;
+    isArchived: boolean;
+    pendingReviewFilesRef: unknown;
+    pendingReviewFilesSummary: string;
+    pendingPromptsCount: number;
+    queuedPromptsCount: number;
+    todosRef: unknown;
+    todosSummary: string;
+    sessionErrorRef: unknown;
+    promptAdditionsRef: unknown;
+    currentPhase: unknown;
+    appStartTime: number | null;
+    scrollToTeammateTarget: string | null;
+    scrollToMessageTarget: string | null;
+    sessionStatus: unknown;
+    metadataTeammatesRef: unknown;
+    metadataTeammatesSummary: string;
+    additionalTeammatesRef: unknown;
+    additionalTeammatesSummary: string;
+    mergedTeammatesRef: unknown;
+    mergedTeammatesSummary: string;
+    updatedAt: unknown;
+  } | null>(null);
+
+  // Draft input setters only — the actual draftInput / draftAttachments
+  // subscriptions live inside <SessionAIInput>. Subscribing here would
+  // re-render the entire transcript on every keystroke and break text
+  // selection in the messages area. Code paths that need the current value
+  // (handleSend, handleQueue, openSessionWithDraft callers) read it
+  // imperatively via store.get().
+  const setDraftInputRaw = useSetAtom(sessionDraftInputAtom(sessionId));
+  const setDraftAttachments = useSetAtom(sessionDraftAttachmentsAtom(sessionId));
   const setLastSubmitAt = useSetAtom(sessionLastSubmitAtAtom(sessionId));
   const setDraftLocalModifiedAt = useSetAtom(sessionDraftLocalModifiedAtAtom(sessionId));
   const clearAIInputHistory = useSetAtom(clearAIInputHistoryAtom);
@@ -372,21 +534,6 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     setDraftInputRaw(value);
     setDraftLocalModifiedAt(Date.now());
   }, [setDraftInputRaw, setDraftLocalModifiedAt]);
-
-  // Debounced persistence of draft input to database
-  // This ensures drafts survive app restarts
-  useEffect(() => {
-    // Don't persist empty drafts or undefined workspacePath
-    if (!workspacePath) return;
-
-    const timeoutId = setTimeout(() => {
-      // Only persist if there's actual content (or we need to clear a previously saved draft)
-      window.electronAPI.invoke('ai:saveDraftInput', sessionId, draftInput, workspacePath)
-        .catch(err => console.error('[SessionTranscript] Failed to persist draft input:', err));
-    }, 1000); // 1 second debounce
-
-    return () => clearTimeout(timeoutId);
-  }, [sessionId, draftInput, workspacePath]);
 
   // Prompt history navigation via Jotai atoms
   const navigateHistory = useSetAtom(navigateSessionHistoryAtom);
@@ -412,7 +559,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const openInExternalEditor = useSetAtom(openInExternalEditorAtom);
 
   // Local state
-  const [todos, setTodos] = useState<Todo[]>([]);
+  const todos = currentTodos;
   const pendingReviewFiles = useAtomValue(sessionPendingReviewFilesAtom(sessionId));
   // Prompt additions state (dev mode) - uses Jotai atom for persistence across navigation
   const [promptAdditions, setPromptAdditions] = useAtom(sessionPromptAdditionsAtom(sessionId));
@@ -471,7 +618,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   // ============================================================
   useEffect(() => {
     if (!sessionId || !workspacePath) return;
-    if (!sessionData) {
+    if (!hasSessionData) {
       loadSessionData({ sessionId, workspacePath });
     } else if (!isProcessing) {
       // Session data exists but session is idle/completed -- reload from DB
@@ -479,8 +626,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       // (e.g., the user navigated away during streaming and came back after completion)
       reloadSessionData({ sessionId, workspacePath });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, workspacePath]);
+  }, [sessionId, workspacePath, hasSessionData, isProcessing, loadSessionData, reloadSessionData]);
 
   // Ensure centralized file/pending atoms are initialized for this session in Files mode.
   useEffect(() => {
@@ -497,7 +643,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   const hasFocusedRef = useRef(false);
   const visibilityObserverRef = useRef<IntersectionObserver | null>(null);
   useEffect(() => {
-    if (!sessionData || hasFocusedRef.current) return;
+    if (!hasSessionData || hasFocusedRef.current) return;
 
     // Defer to next tick so the DOM is ready after render
     const timerId = setTimeout(() => {
@@ -528,7 +674,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       visibilityObserverRef.current?.disconnect();
       visibilityObserverRef.current = null;
     };
-  }, [sessionData]);
+  }, [hasSessionData]);
 
   // ============================================================
   // IPC events handled by centralized listeners (sessionStateListeners.ts, sessionTranscriptListeners.ts)
@@ -568,7 +714,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       // For Codex sessions, OpenAI auth errors are already displayed by the
       // canonical transcript events (via the persisted raw event). Skip creating a
       // duplicate in-memory error message that would show two auth widgets.
-      const isCodexOpenAIAuthError = sessionData?.provider === 'openai-codex' &&
+      const isCodexOpenAIAuthError = provider === 'openai-codex' &&
         sessionError.message.toLowerCase().includes('api.openai.com') &&
         (sessionError.message.toLowerCase().includes('401 unauthorized') ||
          (sessionError.message.toLowerCase().includes('401') && sessionError.message.toLowerCase().includes('authentication')));
@@ -588,7 +734,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         updateSessionStore({
           sessionId,
           updates: {
-            messages: [...(sessionData?.messages || []), errorMessage],
+            messages: [...messages, errorMessage],
           },
         });
       }
@@ -599,11 +745,11 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     };
 
     handleError();
-  }, [sessionError, sessionId, sessionData?.messages, updateSessionStore, setIsProcessing, confirm]);
+  }, [sessionError, sessionId, provider, messages, updateSessionStore, setIsProcessing, confirm]);
 
   // Derived values
   const isLoading = isProcessing;
-  const sessionHasMessages = (sessionData?.messages?.length ?? 0) > 0;
+  const sessionHasMessages = messages.length > 0;
 
   // ============================================================
   // Confirmation dialogs (ExitPlanMode, AskUserQuestion, ToolPermission)
@@ -658,18 +804,6 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   }, [queuedPrompts.length, isLoading, sessionId, workspacePath]);
 
   // ============================================================
-  // Todos
-  // ============================================================
-  useEffect(() => {
-    const currentTodos = sessionData?.metadata?.currentTodos;
-    if (Array.isArray(currentTodos)) {
-      setTodos(currentTodos);
-    } else {
-      setTodos([]);
-    }
-  }, [sessionData?.metadata?.currentTodos]);
-
-  // ============================================================
   // Expose ref methods
   // ============================================================
   useImperativeHandle(ref, () => ({
@@ -679,10 +813,6 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   // ============================================================
   // Handlers
   // ============================================================
-  const handleInputChange = useCallback((value: string) => {
-    setDraftInput(value);
-  }, [setDraftInput]);
-
   const handleAttachmentAdd = useCallback((attachment: ChatAttachment) => {
     setDraftAttachments(prev => [...prev, attachment]);
   }, [setDraftAttachments]);
@@ -700,19 +830,23 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       const effectiveContext = await getEffectiveDocumentContext();
       const serializableContext = serializeDocumentContext(effectiveContext);
 
+      // Read attachments imperatively — we don't subscribe to keep typing
+      // from re-rendering the entire transcript.
+      const currentAttachments = store.get(sessionDraftAttachmentsAtom(sessionId)) ?? [];
+
       // If there's already a pending queued prompt, append to it instead of
       // creating a separate entry. This bundles multiple queued messages into
       // one prompt, matching how Claude Code handles stacked queries.
       const lastQueued = queuedPrompts[queuedPrompts.length - 1];
       let combinedPrompt = message.trim();
-      let combinedAttachments = draftAttachments;
+      let combinedAttachments = currentAttachments;
 
       if (lastQueued) {
         // Delete the existing queued prompt so we can replace it
         await window.electronAPI.invoke('ai:deleteQueuedPrompt', lastQueued.id);
         combinedPrompt = lastQueued.prompt + '\n\n' + message.trim();
         // Merge attachments from both prompts
-        combinedAttachments = [...(lastQueued.attachments || []), ...draftAttachments];
+        combinedAttachments = [...(lastQueued.attachments || []), ...currentAttachments];
       }
 
       const result = await window.electronAPI.invoke(
@@ -744,18 +878,21 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     } finally {
       setIsQueueing(false);
     }
-  }, [sessionId, getEffectiveDocumentContext, draftAttachments, setDraftInput, setDraftAttachments, setLastSubmitAt, isQueueing, queuedPrompts, clearAIInputHistory]);
+  }, [sessionId, getEffectiveDocumentContext, setDraftInput, setDraftAttachments, setLastSubmitAt, isQueueing, queuedPrompts, clearAIInputHistory]);
 
   const handleSend = useCallback(async () => {
-    if (!draftInput.trim() || !sessionData) return;
+    // Read draft state imperatively — we deliberately don't subscribe to
+    // these atoms in SessionTranscript (see SessionAIInput).
+    const currentDraftInput = store.get(sessionDraftInputAtom(sessionId)) ?? '';
+    if (!currentDraftInput.trim() || !sessionData) return;
 
     if (isLoading) {
-      handleQueue(draftInput.trim());
+      handleQueue(currentDraftInput.trim());
       return;
     }
 
-    let message = draftInput.trim();
-    const attachments = draftAttachments;
+    let message = currentDraftInput.trim();
+    const attachments = store.get(sessionDraftAttachmentsAtom(sessionId)) ?? [];
 
     // Intercept /plan command - strip it and switch to planning mode
     // Match "/plan" only when followed by whitespace or end of string (not "/planning" or "/planify")
@@ -888,7 +1025,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       });
       setIsProcessing(false);
     }
-  }, [sessionId, sessionData, draftInput, draftAttachments, isLoading, getEffectiveDocumentContext, aiMode, workspacePath, setDraftInput, setDraftAttachments, setLastSubmitAt, resetHistory, updateSessionStore, handleQueue, setIsProcessing, messages, mode, onClearSession, onClearAgentSession, clearAIInputHistory]);
+  }, [sessionId, sessionData, isLoading, getEffectiveDocumentContext, aiMode, workspacePath, setDraftInput, setDraftAttachments, setLastSubmitAt, resetHistory, updateSessionStore, handleQueue, setIsProcessing, messages, mode, onClearSession, onClearAgentSession, clearAIInputHistory]);
 
   // Launch a sibling session from a `launch: new-session` action prompt.
   // Builds the originating-session mention prefix here (in the renderer) so the
@@ -1245,7 +1382,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         return;
       }
 
-      const basePath = sessionData?.worktreePath || workspacePath;
+      const basePath = sessionWorktreePath || workspacePath;
       const absolutePlanPath = resolvePlanFilePath(planFilePath, basePath);
       if (!absolutePlanPath && planFilePath) {
         console.warn('[SessionTranscript] Could not resolve plan file path, using raw path in draft:', planFilePath);
@@ -1268,7 +1405,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     } catch (error) {
       console.error('[SessionTranscript] Failed to start new session for implementation:', error);
     }
-  }, [sessionChildren, sessionParentId, workspacePath, worktreeId, onCreateWorktreeSession, createChildSession, convertToWorkstream, sessionData?.worktreePath, posthog, defaultModel, openSessionWithDraft, stopExitPlanModeSession]);
+  }, [sessionChildren, sessionParentId, workspacePath, worktreeId, onCreateWorktreeSession, createChildSession, convertToWorkstream, sessionWorktreePath, posthog, defaultModel, openSessionWithDraft, stopExitPlanModeSession]);
 
   const handleExitPlanModeCancel = useCallback(async (requestId: string, confirmSessionId: string) => {
     try {
@@ -1402,7 +1539,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         try {
           // Execute the git commit via IPC
           // Use worktree path for git operations when in a worktree session
-          const gitWorkspacePath = sessionData?.worktreePath || workspacePath;
+          const gitWorkspacePath = sessionWorktreePath || workspacePath;
           const result = await window.electronAPI.invoke(
             'git:commit',
             gitWorkspacePath,
@@ -1468,7 +1605,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
       gitFileDiff: async (filePath: string) => {
         try {
-          const gitWorkspacePath = sessionData?.worktreePath || workspacePath;
+          const gitWorkspacePath = sessionWorktreePath || workspacePath;
           const result = await window.electronAPI.invoke(
             'git:file-diff',
             gitWorkspacePath,
@@ -1578,7 +1715,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     sessionId,
     workspacePath,
     worktreeId,
-    sessionData?.worktreePath,
+    sessionWorktreePath,
     handleExitPlanModeApprove,
     handleExitPlanModeStartNewSession,
     handleExitPlanModeDeny,
@@ -1594,7 +1731,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
   ]);
 
   // Feature flags
-  const enableSlashCommands = supportsWorkspaceSlashCommands(sessionData?.provider);
+  const enableSlashCommands = supportsWorkspaceSlashCommands(provider);
   const enableAttachments = true;
   const enableHistoryNavigation = true;
 
@@ -1704,6 +1841,150 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
     setScrollToMessage(null);
   }, [scrollToMessage, setScrollToMessage, sessionId, messages]);
 
+  useEffect(() => {
+    if (!import.meta.env.DEV || !sessionData) return;
+
+    const nextState = {
+      messageCount: sessionData.messages?.length ?? 0,
+      messageRef: sessionData.messages,
+      tokenUsageRef: tokenUsage,
+      tokenUsageSummary: JSON.stringify(tokenUsage ?? null),
+      provider,
+      isProcessing,
+      hasPendingInteractivePrompt,
+      aiMode,
+      currentModel,
+      isArchived,
+      pendingReviewFilesRef: pendingReviewFiles,
+      pendingReviewFilesSummary: JSON.stringify(Array.from(pendingReviewFiles).sort()),
+      pendingPromptsCount: pendingPrompts.length,
+      queuedPromptsCount: queuedPrompts.length,
+      todosRef: todos,
+      todosSummary: JSON.stringify(todos),
+      sessionErrorRef: sessionError,
+      promptAdditionsRef: promptAdditions,
+      currentPhase,
+      appStartTime,
+      scrollToTeammateTarget: scrollToTeammate ? `${scrollToTeammate.sessionId}:${scrollToTeammate.agentId}` : null,
+      scrollToMessageTarget: scrollToMessage ? `${scrollToMessage.sessionId}:${scrollToMessage.timestamp}` : null,
+      sessionStatus: sessionData.metadata?.sessionStatus,
+      metadataTeammatesRef: metadataTeammates,
+      metadataTeammatesSummary: summarizeTeammates(metadataTeammates),
+      additionalTeammatesRef: additionalTeammates,
+      additionalTeammatesSummary: summarizeTeammates(additionalTeammates),
+      mergedTeammatesRef: transcriptTeammates,
+      mergedTeammatesSummary: summarizeTeammates(transcriptTeammates),
+      updatedAt: sessionData.updatedAt,
+    };
+
+    const previous = previousRenderRef.current;
+    if (!previous) {
+      emitSessionRenderTrace('initial', {
+        sessionId,
+        messageCount: nextState.messageCount,
+        tokenUsage: nextState.tokenUsageSummary,
+        provider: nextState.provider,
+        isProcessing: nextState.isProcessing,
+        hasPendingInteractivePrompt: nextState.hasPendingInteractivePrompt,
+        aiMode: nextState.aiMode,
+        currentModel: nextState.currentModel,
+        isArchived: nextState.isArchived,
+        pendingReviewFiles: nextState.pendingReviewFilesSummary,
+        pendingPromptsCount: nextState.pendingPromptsCount,
+        queuedPromptsCount: nextState.queuedPromptsCount,
+        todos: nextState.todosSummary,
+        hasSessionError: Boolean(nextState.sessionErrorRef),
+        hasPromptAdditions: Boolean(nextState.promptAdditionsRef),
+        currentPhase: nextState.currentPhase,
+        appStartTime: nextState.appStartTime,
+        scrollToTeammateTarget: nextState.scrollToTeammateTarget,
+        scrollToMessageTarget: nextState.scrollToMessageTarget,
+        sessionStatus: nextState.sessionStatus,
+        metadataTeammates: nextState.metadataTeammatesSummary,
+        additionalTeammates: nextState.additionalTeammatesSummary,
+        mergedTeammates: nextState.mergedTeammatesSummary,
+        updatedAt: nextState.updatedAt,
+      });
+    } else {
+      const reasons: string[] = [];
+      if (previous.messageRef !== nextState.messageRef) reasons.push(`messages-ref ${previous.messageCount}->${nextState.messageCount}`);
+      if (previous.tokenUsageRef !== nextState.tokenUsageRef) reasons.push(`tokenUsage ${previous.tokenUsageSummary}->${nextState.tokenUsageSummary}`);
+      if (previous.provider !== nextState.provider) reasons.push(`provider ${String(previous.provider)}->${String(nextState.provider)}`);
+      if (previous.isProcessing !== nextState.isProcessing) reasons.push(`isProcessing ${String(previous.isProcessing)}->${String(nextState.isProcessing)}`);
+      if (previous.hasPendingInteractivePrompt !== nextState.hasPendingInteractivePrompt) reasons.push(`pendingInteractivePrompt ${String(previous.hasPendingInteractivePrompt)}->${String(nextState.hasPendingInteractivePrompt)}`);
+      if (previous.aiMode !== nextState.aiMode) reasons.push(`aiMode ${String(previous.aiMode)}->${String(nextState.aiMode)}`);
+      if (previous.currentModel !== nextState.currentModel) reasons.push(`currentModel ${String(previous.currentModel)}->${String(nextState.currentModel)}`);
+      if (previous.isArchived !== nextState.isArchived) reasons.push(`isArchived ${String(previous.isArchived)}->${String(nextState.isArchived)}`);
+      if (previous.pendingReviewFilesRef !== nextState.pendingReviewFilesRef) reasons.push(`pendingReviewFiles ${previous.pendingReviewFilesSummary}->${nextState.pendingReviewFilesSummary}`);
+      if (previous.pendingPromptsCount !== nextState.pendingPromptsCount) reasons.push(`pendingPrompts ${previous.pendingPromptsCount}->${nextState.pendingPromptsCount}`);
+      if (previous.queuedPromptsCount !== nextState.queuedPromptsCount) reasons.push(`queuedPrompts ${previous.queuedPromptsCount}->${nextState.queuedPromptsCount}`);
+      if (previous.todosRef !== nextState.todosRef) reasons.push(`todos ${previous.todosSummary}->${nextState.todosSummary}`);
+      if (previous.sessionErrorRef !== nextState.sessionErrorRef) reasons.push(`sessionError ${String(Boolean(previous.sessionErrorRef))}->${String(Boolean(nextState.sessionErrorRef))}`);
+      if (previous.promptAdditionsRef !== nextState.promptAdditionsRef) reasons.push(`promptAdditions ${String(Boolean(previous.promptAdditionsRef))}->${String(Boolean(nextState.promptAdditionsRef))}`);
+      if (previous.currentPhase !== nextState.currentPhase) reasons.push(`currentPhase ${String(previous.currentPhase)}->${String(nextState.currentPhase)}`);
+      if (previous.appStartTime !== nextState.appStartTime) reasons.push(`appStartTime ${String(previous.appStartTime)}->${String(nextState.appStartTime)}`);
+      if (previous.scrollToTeammateTarget !== nextState.scrollToTeammateTarget) reasons.push(`scrollToTeammate ${String(previous.scrollToTeammateTarget)}->${String(nextState.scrollToTeammateTarget)}`);
+      if (previous.scrollToMessageTarget !== nextState.scrollToMessageTarget) reasons.push(`scrollToMessage ${String(previous.scrollToMessageTarget)}->${String(nextState.scrollToMessageTarget)}`);
+      if (previous.sessionStatus !== nextState.sessionStatus) reasons.push(`sessionStatus ${String(previous.sessionStatus)}->${String(nextState.sessionStatus)}`);
+      if (previous.metadataTeammatesRef !== nextState.metadataTeammatesRef) reasons.push(`metadata-teammates ${previous.metadataTeammatesSummary}->${nextState.metadataTeammatesSummary}`);
+      if (previous.additionalTeammatesRef !== nextState.additionalTeammatesRef) reasons.push(`additional-teammates ${previous.additionalTeammatesSummary}->${nextState.additionalTeammatesSummary}`);
+      if (previous.mergedTeammatesRef !== nextState.mergedTeammatesRef) reasons.push(`merged-teammates ${previous.mergedTeammatesSummary}->${nextState.mergedTeammatesSummary}`);
+      if (previous.updatedAt !== nextState.updatedAt) reasons.push(`updatedAt ${String(previous.updatedAt)}->${String(nextState.updatedAt)}`);
+      emitSessionRenderTrace('render', {
+        sessionId,
+        reasons,
+        messageCount: nextState.messageCount,
+        tokenUsage: nextState.tokenUsageSummary,
+        provider: nextState.provider,
+        isProcessing: nextState.isProcessing,
+        hasPendingInteractivePrompt: nextState.hasPendingInteractivePrompt,
+        aiMode: nextState.aiMode,
+        currentModel: nextState.currentModel,
+        isArchived: nextState.isArchived,
+        pendingReviewFiles: nextState.pendingReviewFilesSummary,
+        pendingPromptsCount: nextState.pendingPromptsCount,
+        queuedPromptsCount: nextState.queuedPromptsCount,
+        todos: nextState.todosSummary,
+        hasSessionError: Boolean(nextState.sessionErrorRef),
+        hasPromptAdditions: Boolean(nextState.promptAdditionsRef),
+        currentPhase: nextState.currentPhase,
+        appStartTime: nextState.appStartTime,
+        scrollToTeammateTarget: nextState.scrollToTeammateTarget,
+        scrollToMessageTarget: nextState.scrollToMessageTarget,
+        sessionStatus: nextState.sessionStatus,
+        metadataTeammates: nextState.metadataTeammatesSummary,
+        additionalTeammates: nextState.additionalTeammatesSummary,
+        mergedTeammates: nextState.mergedTeammatesSummary,
+        updatedAt: nextState.updatedAt,
+      });
+    }
+
+    previousRenderRef.current = nextState;
+  }, [
+    sessionId,
+    sessionData,
+    tokenUsage,
+    provider,
+    isProcessing,
+    hasPendingInteractivePrompt,
+    aiMode,
+    currentModel,
+    isArchived,
+    pendingReviewFiles,
+    pendingPrompts,
+    queuedPrompts,
+    todos,
+    sessionError,
+    promptAdditions,
+    currentPhase,
+    appStartTime,
+    scrollToTeammate,
+    scrollToMessage,
+    metadataTeammates,
+    additionalTeammates,
+    transcriptTeammates,
+  ]);
+
   // Loading state
   if (!sessionData) {
     return (
@@ -1809,20 +2090,19 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
       {/* Note: All interactive prompts (ToolPermission, ExitPlanMode, AskUserQuestion) use inline widgets in transcript */}
 
-      {/* Input area */}
-      <AIInput
+      {/* Input area — wrapped so the draftInput subscription doesn't
+          re-render the entire SessionTranscript on every keystroke. */}
+      <SessionAIInput
         ref={inputRef}
         testId={mode === 'chat' ? 'files-mode-chat-input' : 'agent-mode-chat-input'}
-        value={draftInput}
-        onChange={handleInputChange}
         onSend={handleSend}
         onCancel={handleCancel}
         isLoading={isLoading}
         workspacePath={workspacePath}
         sessionId={sessionId}
-        attachments={enableAttachments ? draftAttachments : undefined}
-        onAttachmentAdd={enableAttachments ? handleAttachmentAdd : undefined}
-        onAttachmentRemove={enableAttachments ? handleAttachmentRemove : undefined}
+        enableAttachments={enableAttachments}
+        onAttachmentAdd={handleAttachmentAdd}
+        onAttachmentRemove={handleAttachmentRemove}
         enableSlashCommands={enableSlashCommands}
         onNavigateHistory={enableHistoryNavigation ? handleNavigateHistory : undefined}
         placeholder={

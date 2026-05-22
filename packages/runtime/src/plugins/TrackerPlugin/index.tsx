@@ -975,8 +975,11 @@ export { globalRegistry, getRoleField, getFieldByRole } from './models/TrackerDa
 
 // Export components
 export { StatusBar } from './components/StatusBar';
-export { TrackerTable, convertFullDocumentToTrackerItems, resolveTrackerFrontmatter } from './components/TrackerTable';
+export { TrackerTable, convertFullDocumentToTrackerItems, resolveTrackerFrontmatter, renderCell, ContextSubmenu } from './components/TrackerTable';
 export type { SortColumn, SortDirection } from './components/TrackerTable';
+export { TrackerTableGrid } from './components/TrackerTableGrid';
+export { useTrackerRows } from './components/useTrackerRows';
+export type { UseTrackerRowsOptions, UseTrackerRowsResult, EditingCellRef, EditingField } from './components/useTrackerRows';
 export { TrackerFieldEditor } from './components/TrackerFieldEditor';
 export { UserAvatar } from './components/UserAvatar';
 export { DisplayOptionsPanel } from './components/DisplayOptionsPanel';

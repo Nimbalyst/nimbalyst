@@ -53,6 +53,31 @@ let currentWorkspacePath: string | null = null;
 // ============================================================
 
 /**
+ * One-shot migration for the `'table'` viewMode literal.
+ *
+ * Before this change, `'table'` meant the row-list view (now called `'list'`).
+ * After this change, `'table'` means the new grid. Workspaces persisted by
+ * older builds carry `viewMode: 'table'` with the old meaning. Rewrite those
+ * once to `'list'` and set `viewModeMigrated: true` so the next load passes
+ * `'table'` through untouched -- enabling users to pick the new grid.
+ *
+ * Why a per-load idempotent flag instead of a save-time rewrite: workspace
+ * state lives on multiple machines and installs. A flag is robust against
+ * a workspace that an older build touched last.
+ */
+function migrateViewMode(
+  raw: unknown,
+  alreadyMigrated: boolean,
+): TrackerModeLayout['viewMode'] {
+  if (raw === 'list' || raw === 'kanban') return raw;
+  if (raw === 'table') {
+    if (!alreadyMigrated) return 'list';
+    return 'table';
+  }
+  return DEFAULT_MODE_LAYOUT.viewMode;
+}
+
+/**
  * Initialize tracker layout from workspace state.
  * Call this when workspace path is known.
  */
@@ -67,17 +92,28 @@ export async function initTrackerPanelLayout(workspacePath: string): Promise<voi
 
     const savedModeLayout = workspaceState?.trackerModeLayout;
     if (savedModeLayout && typeof savedModeLayout === 'object') {
-      store.set(trackerModeLayoutAtom, {
+      const alreadyMigrated = savedModeLayout.viewModeMigrated === true;
+      const migratedViewMode = migrateViewMode(savedModeLayout.viewMode, alreadyMigrated);
+
+      const newLayout: TrackerModeLayout = {
         selectedType: savedModeLayout.selectedType ?? DEFAULT_MODE_LAYOUT.selectedType,
         activeFilters: Array.isArray(savedModeLayout.activeFilters)
           ? savedModeLayout.activeFilters
           : DEFAULT_MODE_LAYOUT.activeFilters,
-        viewMode: savedModeLayout.viewMode ?? DEFAULT_MODE_LAYOUT.viewMode,
+        viewMode: migratedViewMode,
         selectedItemId: savedModeLayout.selectedItemId ?? DEFAULT_MODE_LAYOUT.selectedItemId,
         sidebarWidth: savedModeLayout.sidebarWidth ?? DEFAULT_MODE_LAYOUT.sidebarWidth,
         detailPanelWidth: savedModeLayout.detailPanelWidth ?? DEFAULT_MODE_LAYOUT.detailPanelWidth,
         typeColumnConfigs: savedModeLayout.typeColumnConfigs ?? DEFAULT_MODE_LAYOUT.typeColumnConfigs,
-      });
+        viewModeMigrated: true,
+      };
+
+      store.set(trackerModeLayoutAtom, newLayout);
+
+      // Persist the flag immediately so we never re-run the rewrite.
+      if (!alreadyMigrated) {
+        scheduleModeLayoutPersist(workspacePath, newLayout);
+      }
     }
   } catch (err) {
     console.error('[trackers] Failed to load layout:', err);
@@ -104,8 +140,18 @@ export interface TrackerModeLayout {
   selectedType: string;
   /** Active filter chips (empty = show all, multiple = intersection) */
   activeFilters: TrackerFilterChip[];
-  /** Table or kanban display */
-  viewMode: 'table' | 'kanban';
+  /**
+   * Display mode for the tracker main view.
+   * - `list`   -- title-left / badges-right row list (`TrackerTable`).
+   * - `table`  -- true grid with aligned header and resizable columns
+   *               (`TrackerTableGrid`).
+   * - `kanban` -- column-per-status board (`KanbanBoard`).
+   *
+   * Legacy persisted state used `'table'` for the list view; loads through
+   * `initTrackerPanelLayout` rewrite that to `'list'` once, gated by
+   * `viewModeMigrated`.
+   */
+  viewMode: 'list' | 'table' | 'kanban';
   /** Currently selected tracker item ID (opens detail panel when non-null) */
   selectedItemId: string | null;
   /** Sidebar width in pixels */
@@ -114,16 +160,23 @@ export interface TrackerModeLayout {
   detailPanelWidth: number;
   /** Per-type column configuration (keyed by tracker type, 'all' for the all-types view) */
   typeColumnConfigs: Record<string, TypeColumnConfig>;
+  /**
+   * Set to `true` once the one-shot `'table' -> 'list'` rewrite has run for
+   * this workspace. Future loads pass `viewMode` through untouched so users
+   * can pick the new `'table'` grid without it being clobbered.
+   */
+  viewModeMigrated?: boolean;
 }
 
 const DEFAULT_MODE_LAYOUT: TrackerModeLayout = {
   selectedType: 'all',
   activeFilters: [],
-  viewMode: 'table',
+  viewMode: 'list',
   selectedItemId: null,
   sidebarWidth: 220,
   detailPanelWidth: 400,
   typeColumnConfigs: {},
+  viewModeMigrated: true,
 };
 
 /** Main atom for tracker mode layout. */
@@ -139,7 +192,7 @@ export const trackerModeActiveFiltersAtom = atom(
   (get) => get(trackerModeLayoutAtom).activeFilters
 );
 
-/** View mode (table/kanban) in tracker mode. */
+/** View mode (`list` row-list, `table` grid, or `kanban` board) in tracker mode. */
 export const trackerModeViewModeAtom = atom(
   (get) => get(trackerModeLayoutAtom).viewMode
 );

@@ -2601,18 +2601,28 @@ export class OpenAICodexProvider extends BaseAgentProvider {
   }
 
   /**
-   * Detect Codex todo_list items and update session metadata with currentTodos.
-   * Maps Codex's {text, completed} format to the TodoItem format used by sidebar widgets.
+   * Detect Codex todo items and update session metadata with currentTodos.
+   * Supports both SDK raw events (`item.type = "todo_list"`) and app-server
+   * notifications (`metadata.rawEvent = { method, params: { item: { type:
+   * "todoList", ... } } }`).
    */
   private handleTodoListEvent(rawEvent: unknown, sessionId: string): void {
     if (!rawEvent || typeof rawEvent !== 'object') return;
 
     const record = rawEvent as Record<string, unknown>;
-    const item = record.item;
+    const nestedParams = record.params;
+    const item = record.item
+      ?? (
+        nestedParams
+        && typeof nestedParams === 'object'
+        && !Array.isArray(nestedParams)
+          ? (nestedParams as Record<string, unknown>).item
+          : undefined
+      );
     if (!item || typeof item !== 'object' || Array.isArray(item)) return;
 
     const itemRecord = item as Record<string, unknown>;
-    if (itemRecord.type !== 'todo_list' || !Array.isArray(itemRecord.items)) return;
+    if ((itemRecord.type !== 'todo_list' && itemRecord.type !== 'todoList') || !Array.isArray(itemRecord.items)) return;
 
     const todos = (itemRecord.items as Array<Record<string, unknown>>)
       .filter(t => t != null && typeof t === 'object')

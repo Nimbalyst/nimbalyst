@@ -276,6 +276,26 @@ function projectEvent(
         ...p,
         childEvents: [],
       };
+      base.toolCall = {
+        toolName: 'Task',
+        toolDisplayName: 'Task',
+        status: p.status === 'completed' ? 'completed' : 'running',
+        description: null,
+        arguments: {
+          prompt: p.prompt,
+          ...(p.isBackground ? { run_in_background: true } : {}),
+          ...(p.teammateName ? { name: p.teammateName } : {}),
+          ...(p.teamName ? { team_name: p.teamName } : {}),
+          ...(p.teammateMode ? { mode: p.teammateMode } : {}),
+          ...(p.model ? { model: p.model } : {}),
+        },
+        targetFilePath: null,
+        mcpServer: null,
+        mcpTool: null,
+        result: p.resultSummary,
+        providerToolCallId: event.providerToolCallId ?? event.subagentId,
+        progress: [],
+      };
       break;
     }
     case 'turn_ended': {

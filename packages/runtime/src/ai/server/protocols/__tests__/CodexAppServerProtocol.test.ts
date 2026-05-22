@@ -463,6 +463,78 @@ describe('CodexAppServerProtocol', () => {
     protocol.cleanupSession(session);
   });
 
+  it('falls back to generic tool_call events for unknown tool-like app-server items', async () => {
+    const protocol = new CodexAppServerProtocol();
+    const sessionPromise = protocol.createSession({ workspacePath: '/tmp/ws' });
+    const initReq = await nextWrittenMatching(child, 'initialize');
+    child.emitLine({ id: initReq.id, result: { codexHome: '/fake', platformFamily: 'unix', platformOs: 'macos', userAgent: 'fake/0' } });
+    const startReq = await nextWrittenMatching(child, 'thread/start');
+    child.emitLine({ id: startReq.id, result: { thread: { id: 't-generic' } } });
+    const session = await sessionPromise;
+
+    const events: ProtocolEvent[] = [];
+    const collector = (async () => {
+      for await (const ev of protocol.sendMessage(session, { content: 'search the web' })) {
+        events.push(ev);
+      }
+    })();
+
+    const turnReq = await nextWrittenMatching(child, 'turn/start');
+    child.emitLine({ id: turnReq.id, result: { turn: { id: 'turn-1', items: [], status: 'inProgress' } } });
+
+    child.emitLine({
+      method: 'item/started',
+      params: {
+        threadId: 't-generic',
+        turnId: 'turn-1',
+        item: {
+          id: 'web-1',
+          type: 'webSearch',
+          status: 'inProgress',
+          query: 'claude code transcripts',
+        },
+      },
+    });
+
+    child.emitLine({
+      method: 'item/completed',
+      params: {
+        threadId: 't-generic',
+        turnId: 'turn-1',
+        item: {
+          id: 'web-1',
+          type: 'webSearch',
+          status: 'completed',
+          query: 'claude code transcripts',
+          result: { hits: 3 },
+        },
+      },
+    });
+    child.emitLine({ method: 'turn/completed', params: { threadId: 't-generic', turn: { id: 'turn-1', status: 'completed' } } });
+
+    await collector;
+
+    const toolCalls = events.filter((e) => e.type === 'tool_call');
+    expect(toolCalls).toHaveLength(2);
+    expect(toolCalls[0].toolCall).toMatchObject({
+      id: 'web-1',
+      name: 'webSearch',
+      arguments: { query: 'claude code transcripts' },
+    });
+    expect(toolCalls[0].toolCall?.result).toBeUndefined();
+    expect(toolCalls[1].toolCall).toMatchObject({
+      id: 'web-1',
+      name: 'webSearch',
+      arguments: { query: 'claude code transcripts' },
+      result: {
+        success: true,
+        result: { hits: 3 },
+      },
+    });
+
+    protocol.cleanupSession(session);
+  });
+
   it('does not duplicate notifications across multiple sendMessage calls on the same session', async () => {
     const protocol = new CodexAppServerProtocol();
     const sessionPromise = protocol.createSession({ workspacePath: '/tmp/ws' });

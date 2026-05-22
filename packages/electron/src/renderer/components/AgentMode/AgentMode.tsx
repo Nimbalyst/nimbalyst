@@ -40,6 +40,7 @@ import {
   refreshSessionListAtom,
   removeSessionFullAtom,
   updateSessionStoreAtom,
+  sessionAgentRoleAtom,
   sessionRegistryAtom,
   sessionStoreAtom,
   pushNavigationEntryAtom,
@@ -994,11 +995,13 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
   }, [refreshSessions]);
 
   // Check if the selected session is a meta-agent
-  const sessionRegistry = useAtomValue(sessionRegistryAtom);
-  const isSelectedMetaAgent = useMemo(() => {
-    if (!selectedWorkstream) return false;
-    return sessionRegistry.get(selectedWorkstream.id)?.agentRole === 'meta-agent';
-  }, [selectedWorkstream?.id, sessionRegistry]);
+  const selectedWorkstreamId = selectedWorkstream?.id ?? null;
+  const selectedAgentRoleAtom = useMemo(
+    () => (selectedWorkstreamId ? sessionAgentRoleAtom(selectedWorkstreamId) : atom<'standard'>('standard')),
+    [selectedWorkstreamId]
+  );
+  const selectedAgentRole = useAtomValue(selectedAgentRoleAtom);
+  const isSelectedMetaAgent = selectedWorkstreamId !== null && selectedAgentRole === 'meta-agent';
 
   // Content for the right side
   const rightContent = selectedWorkstream ? (

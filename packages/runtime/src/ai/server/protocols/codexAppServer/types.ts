@@ -214,6 +214,7 @@ export type CodexItemKind =
   | 'commandExecution'
   | 'fileChange'
   | 'mcpToolCall'
+  | 'collabAgentToolCall'
   | 'webSearch'
   | 'todoList'
   | 'error';
@@ -268,6 +269,22 @@ export interface McpToolCallItem extends BaseItemPayload<'mcpToolCall'> {
   status: 'in_progress' | 'completed' | 'failed';
 }
 
+export interface CollabAgentToolCallItem extends BaseItemPayload<'collabAgentToolCall'> {
+  tool: string;
+  prompt?: string | null;
+  senderThreadId?: string;
+  receiverThreadIds?: string[];
+  model?: string | null;
+  reasoningEffort?: string | null;
+  agentsStates?: Record<string, { status?: string; message?: string | null }>;
+  status: 'inProgress' | 'completed' | 'failed';
+}
+
+export interface TodoListItem extends BaseItemPayload<'todoList'> {
+  items: Array<{ text?: string; completed?: boolean }>;
+  status?: 'inProgress' | 'completed' | 'failed';
+}
+
 export type AnyItem =
   | UserMessageItem
   | AgentMessageItem
@@ -275,6 +292,8 @@ export type AnyItem =
   | CommandExecutionItem
   | FileChangeItem
   | McpToolCallItem
+  | CollabAgentToolCallItem
+  | TodoListItem
   | BaseItemPayload;
 
 export interface ItemStartedNotification {

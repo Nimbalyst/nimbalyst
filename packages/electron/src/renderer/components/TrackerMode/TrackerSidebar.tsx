@@ -57,14 +57,27 @@ export const TrackerSidebar: React.FC<TrackerSidebarProps> = ({
               <div className="flex items-center rounded border border-nim overflow-hidden">
                   <button
                     className={`flex items-center justify-center w-7 h-6 transition-colors ${
+                      viewMode === 'list'
+                        ? 'bg-nim-active text-nim'
+                        : 'bg-nim-secondary text-nim-muted hover:text-nim'
+                    }`}
+                    onClick={() => onViewModeChange('list')}
+                    title="List view"
+                    data-testid="tracker-view-mode-list"
+                  >
+                    <MaterialSymbol icon="view_list" size={16} />
+                  </button>
+                  <button
+                    className={`flex items-center justify-center w-7 h-6 border-l border-nim transition-colors ${
                       viewMode === 'table'
                         ? 'bg-nim-active text-nim'
                         : 'bg-nim-secondary text-nim-muted hover:text-nim'
                     }`}
                     onClick={() => onViewModeChange('table')}
                     title="Table view"
+                    data-testid="tracker-view-mode-table"
                   >
-                    <MaterialSymbol icon="table_rows" size={16} />
+                    <MaterialSymbol icon="table_chart" size={16} />
                   </button>
                   <button
                     className={`relative flex items-center justify-center w-7 h-6 border-l border-nim transition-colors ${
@@ -74,6 +87,7 @@ export const TrackerSidebar: React.FC<TrackerSidebarProps> = ({
                     }`}
                     onClick={() => onViewModeChange('kanban')}
                     title="Kanban view (alpha)"
+                    data-testid="tracker-view-mode-kanban"
                   >
                     <MaterialSymbol icon="view_kanban" size={16} />
                     <AlphaBadge size="dot" className="absolute -top-1 -right-1 pointer-events-none" />

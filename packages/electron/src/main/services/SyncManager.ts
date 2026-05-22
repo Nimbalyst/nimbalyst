@@ -668,14 +668,18 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
               // missing a value the desktop has.
               (localSession.worktreeId && !serverSession.worktreeId) ||
               (localSession.sessionType && !serverSession.sessionType) ||
-              (localSession.parentSessionId && !serverSession.parentSessionId) ||
               (localSession.provider && !serverSession.provider) ||
               (localSession.model && !serverSession.model) ||
               (localSession.mode && !serverSession.mode) ||
-              // Archive state diverged. updateMetadata intentionally doesn't bump
-              // updated_at (sort stability), so timestamp comparison won't catch
-              // archives. Re-push the index entry without message sync.
-              (Boolean(localSession.isArchived) !== Boolean(serverSession.isArchived))
+              // Value-mismatch checks for fields whose changes don't bump
+              // updated_at. updateMetadata intentionally keeps updated_at stable
+              // for pins/reparents/archives/title-edits to avoid resorting the
+              // list on iOS, so the timestamp comparison above can't catch a
+              // real divergence. Heal those on the next reconnect.
+              (Boolean(localSession.isArchived) !== Boolean(serverSession.isArchived)) ||
+              (Boolean(localSession.isPinned) !== Boolean(serverSession.isPinned)) ||
+              ((localSession.parentSessionId ?? null) !== (serverSession.parentSessionId ?? null)) ||
+              (localSession.title !== serverSession.title)
             ) {
               sessionsNeedingIndexUpdate.push(localSession);
             }

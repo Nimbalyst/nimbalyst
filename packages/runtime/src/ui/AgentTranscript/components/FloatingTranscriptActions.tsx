@@ -8,8 +8,18 @@
  * This component follows the same design pattern as FloatingDocumentActionsPlugin
  * in the TabEditor, with consistent styling, positioning, and interaction patterns.
  */
-import React, { useState, useEffect, useRef } from 'react';
-import ReactDOM from 'react-dom';
+import React, { useState, useMemo } from 'react';
+import {
+  autoUpdate,
+  flip,
+  FloatingPortal,
+  offset,
+  shift,
+  useDismiss,
+  useFloating,
+  useInteractions,
+  useRole,
+} from '@floating-ui/react';
 import type { PromptMarker } from '../types';
 import { formatShortTime } from '../../../utils/dateUtils';
 import { MaterialSymbol } from '../../icons/MaterialSymbol';
@@ -26,10 +36,6 @@ interface PromptsMenuButtonProps {
   className?: string;
   /** Optional class name for the button */
   buttonClassName?: string;
-  /** Optional class name for the dropdown menu */
-  dropdownClassName?: string;
-  /** Use portal to render dropdown at document body (fixes position:fixed issues with transformed ancestors) */
-  usePortal?: boolean;
 }
 
 /**
@@ -41,31 +47,26 @@ export const PromptsMenuButton: React.FC<PromptsMenuButtonProps> = ({
   onNavigateToPrompt,
   className,
   buttonClassName,
-  dropdownClassName,
-  usePortal = false
 }) => {
   const [showMenu, setShowMenu] = useState(false);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  // Close menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        buttonRef.current &&
-        !buttonRef.current.contains(event.target as Node) &&
-        menuRef.current &&
-        !menuRef.current.contains(event.target as Node)
-      ) {
-        setShowMenu(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
+  const { refs, floatingStyles, context } = useFloating({
+    open: showMenu,
+    onOpenChange: setShowMenu,
+    placement: 'bottom-end',
+    strategy: 'fixed',
+    whileElementsMounted: autoUpdate,
+    middleware: [
+      offset(8),
+      flip({ fallbackPlacements: ['top-end', 'bottom-start', 'top-start'], padding: 8 }),
+      shift({ padding: 8 }),
+    ],
+  });
+  const dismiss = useDismiss(context, {
+    outsidePress: true,
+    escapeKey: true,
+  });
+  const role = useRole(context, { role: 'menu' });
+  const { getReferenceProps, getFloatingProps } = useInteractions([dismiss, role]);
 
   // Handle prompt selection
   const handlePromptClick = (marker: PromptMarker) => {
@@ -80,43 +81,50 @@ export const PromptsMenuButton: React.FC<PromptsMenuButtonProps> = ({
   };
 
   const dropdownContent = showMenu ? (
-    <div
-      className={dropdownClassName || 'floating-transcript-prompts-dropdown absolute top-11 right-11 min-w-80 max-w-[480px] max-h-[500px] overflow-y-auto bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-lg z-[11] pointer-events-auto'}
-      ref={menuRef}
-    >
-      {prompts.length > 0 ? (
-        <ul className="prompts-list list-none m-0 py-1 px-0">
-          {prompts.map((prompt) => (
-            <li
-              key={prompt.id}
-              className="prompts-item flex items-start gap-2 px-3 py-2.5 cursor-pointer transition-colors border-b border-[var(--nim-border)] last:border-b-0 hover:bg-[var(--nim-bg-hover)]"
-              onClick={() => handlePromptClick(prompt)}
-              title={prompt.promptText}
-            >
-              <div className="prompts-item-number text-[var(--nim-text-faint)] text-[11px] font-semibold min-w-8 text-right pt-0.5">#{prompt.id}</div>
-              <div className="prompts-item-text flex-1 text-[var(--nim-text)] text-[13px] leading-snug overflow-hidden text-ellipsis line-clamp-2">
-                {truncatePrompt(prompt.promptText)}
-              </div>
-              <div className="prompts-item-timestamp text-[var(--nim-text-faint)] text-[11px] whitespace-nowrap pt-0.5">
-                {formatShortTime(prompt.timestamp)}
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <div className="prompts-empty py-6 px-4 text-center text-[var(--nim-text-faint)] text-[13px]">No prompts in this session</div>
-      )}
-    </div>
+    <FloatingPortal>
+      <div
+        ref={refs.setFloating}
+        style={floatingStyles}
+        className="floating-transcript-prompts-dropdown min-w-80 max-w-[480px] max-h-[min(500px,calc(100vh-24px))] overflow-y-auto bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-lg z-[1000] pointer-events-auto"
+        {...getFloatingProps()}
+      >
+        {prompts.length > 0 ? (
+          <ul className="prompts-list list-none m-0 py-1 px-0">
+            {prompts.map((prompt) => (
+              <li
+                key={prompt.id}
+                className="prompts-item flex items-start gap-2 px-3 py-2.5 cursor-pointer transition-colors border-b border-[var(--nim-border)] last:border-b-0 hover:bg-[var(--nim-bg-hover)]"
+                onClick={() => handlePromptClick(prompt)}
+                title={prompt.promptText}
+              >
+                <div className="prompts-item-number text-[var(--nim-text-faint)] text-[11px] font-semibold min-w-8 text-right pt-0.5">#{prompt.id}</div>
+                <div className="prompts-item-text flex-1 text-[var(--nim-text)] text-[13px] leading-snug overflow-hidden text-ellipsis line-clamp-2">
+                  {truncatePrompt(prompt.promptText)}
+                </div>
+                <div className="prompts-item-timestamp text-[var(--nim-text-faint)] text-[11px] whitespace-nowrap pt-0.5">
+                  {formatShortTime(prompt.timestamp)}
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="prompts-empty py-6 px-4 text-center text-[var(--nim-text-faint)] text-[13px]">No prompts in this session</div>
+        )}
+      </div>
+    </FloatingPortal>
   ) : null;
 
   return (
-    <div className={className || 'prompts-menu-container relative inline-flex'}>
+    <div className={className || 'prompts-menu-container inline-flex'}>
       <button
-        ref={buttonRef}
+        ref={refs.setReference}
         className={buttonClassName || 'floating-transcript-button pointer-events-auto w-9 h-9 rounded-md border border-[var(--nim-border)] bg-[var(--nim-bg)] text-[var(--nim-text)] cursor-pointer flex items-center justify-center transition-all relative shadow-sm hover:bg-[var(--nim-bg-tertiary)] active:scale-95'}
-        onClick={() => setShowMenu(!showMenu)}
         aria-label="Prompts Menu"
+        aria-expanded={showMenu}
         title="Show prompts in this session"
+        {...getReferenceProps({
+          onClick: () => setShowMenu(open => !open),
+        })}
       >
         {/* Table of contents icon */}
         <i
@@ -127,11 +135,7 @@ export const PromptsMenuButton: React.FC<PromptsMenuButtonProps> = ({
           <span className="prompts-badge absolute -top-1 -right-1 bg-[var(--nim-primary)] text-white text-[10px] font-semibold px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none shadow-sm">{prompts.length}</span>
         )}
       </button>
-
-      {/* Prompts Dropdown Menu - optionally rendered via portal */}
-      {usePortal && dropdownContent
-        ? ReactDOM.createPortal(dropdownContent, document.body)
-        : dropdownContent}
+      {dropdownContent}
     </div>
   );
 };
@@ -181,27 +185,70 @@ export const FloatingTranscriptActions: React.FC<FloatingTranscriptActionsProps>
   searchBarVisible = false,
 }) => {
   const [showPhaseMenu, setShowPhaseMenu] = useState(false);
-  const phaseButtonRef = useRef<HTMLButtonElement>(null);
-  const phaseMenuRef = useRef<HTMLDivElement>(null);
-
-  // Close phase menu when clicking outside
-  useEffect(() => {
-    if (!showPhaseMenu) return;
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        phaseButtonRef.current &&
-        !phaseButtonRef.current.contains(event.target as Node) &&
-        phaseMenuRef.current &&
-        !phaseMenuRef.current.contains(event.target as Node)
-      ) {
-        setShowPhaseMenu(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showPhaseMenu]);
+  const { refs, floatingStyles, context } = useFloating({
+    open: showPhaseMenu,
+    onOpenChange: setShowPhaseMenu,
+    placement: 'bottom-end',
+    strategy: 'fixed',
+    whileElementsMounted: autoUpdate,
+    middleware: [
+      offset(8),
+      flip({ fallbackPlacements: ['top-end', 'bottom-start', 'top-start'], padding: 8 }),
+      shift({ padding: 8 }),
+    ],
+  });
+  const dismiss = useDismiss(context, {
+    outsidePress: true,
+    escapeKey: true,
+  });
+  const role = useRole(context, { role: 'menu' });
+  const { getReferenceProps, getFloatingProps } = useInteractions([dismiss, role]);
 
   const currentPhaseCol = phaseColumns?.find(c => c.value === currentPhase);
+  const phaseMenu = useMemo(() => {
+    if (!showPhaseMenu || !phaseColumns) return null;
+
+    return (
+      <FloatingPortal>
+        <div
+          ref={refs.setFloating}
+          style={floatingStyles}
+          className="min-w-[160px] max-h-[min(320px,calc(100vh-24px))] overflow-y-auto p-1 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-lg z-[1000] pointer-events-auto outline-none"
+          {...getFloatingProps()}
+        >
+          {phaseColumns.map((col) => (
+            <button
+              key={col.value}
+              className={`flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] ${currentPhase === col.value ? 'text-[var(--nim-primary)]' : 'text-[var(--nim-text)]'}`}
+              onClick={() => {
+                onSetPhase?.(col.value);
+                setShowPhaseMenu(false);
+              }}
+            >
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: col.color }} />
+              {col.label}
+              {currentPhase === col.value && <MaterialSymbol icon="check" size={14} className="ml-auto" />}
+            </button>
+          ))}
+          {currentPhase && (
+            <>
+              <div className="h-px bg-[var(--nim-border)] my-1" />
+              <button
+                className="flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text-faint)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
+                onClick={() => {
+                  onSetPhase?.(null);
+                  setShowPhaseMenu(false);
+                }}
+              >
+                <MaterialSymbol icon="close" size={14} />
+                Remove from board
+              </button>
+            </>
+          )}
+        </div>
+      </FloatingPortal>
+    );
+  }, [currentPhase, floatingStyles, getFloatingProps, onSetPhase, phaseColumns, refs.setFloating, showPhaseMenu]);
 
   return (
     <div
@@ -211,13 +258,16 @@ export const FloatingTranscriptActions: React.FC<FloatingTranscriptActionsProps>
     >
       {/* Phase Picker Button */}
       {onSetPhase && phaseColumns && (
-        <div className="relative inline-flex">
+        <div className="inline-flex">
           <button
-            ref={phaseButtonRef}
+            ref={refs.setReference}
             className="floating-transcript-button pointer-events-auto h-9 rounded-md border border-[var(--nim-border)] bg-[var(--nim-bg)] text-[var(--nim-text)] cursor-pointer flex items-center gap-1.5 px-2.5 transition-all relative shadow-sm hover:bg-[var(--nim-bg-tertiary)] active:scale-95 text-[12px]"
-            onClick={() => setShowPhaseMenu(!showPhaseMenu)}
             aria-label="Set phase"
+            aria-expanded={showPhaseMenu}
             title={currentPhase ? `Phase: ${currentPhaseCol?.label || currentPhase}` : 'Set kanban phase'}
+            {...getReferenceProps({
+              onClick: () => setShowPhaseMenu(open => !open),
+            })}
           >
             {currentPhaseCol ? (
               <>
@@ -231,44 +281,9 @@ export const FloatingTranscriptActions: React.FC<FloatingTranscriptActionsProps>
               </>
             )}
           </button>
-          {showPhaseMenu && (
-            <div
-              ref={phaseMenuRef}
-              className="absolute top-11 right-0 min-w-[160px] p-1 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-lg z-[101] pointer-events-auto"
-            >
-              {phaseColumns.map((col) => (
-                <button
-                  key={col.value}
-                  className={`flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)] ${currentPhase === col.value ? 'text-[var(--nim-primary)]' : 'text-[var(--nim-text)]'}`}
-                  onClick={() => {
-                    onSetPhase(col.value);
-                    setShowPhaseMenu(false);
-                  }}
-                >
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: col.color }} />
-                  {col.label}
-                  {currentPhase === col.value && <MaterialSymbol icon="check" size={14} className="ml-auto" />}
-                </button>
-              ))}
-              {currentPhase && (
-                <>
-                  <div className="h-px bg-[var(--nim-border)] my-1" />
-                  <button
-                    className="flex items-center gap-2 w-full px-2.5 py-2 bg-transparent border-none rounded text-[var(--nim-text-faint)] text-[0.8125rem] cursor-pointer text-left transition-colors duration-150 hover:bg-[var(--nim-bg-hover)]"
-                    onClick={() => {
-                      onSetPhase(null);
-                      setShowPhaseMenu(false);
-                    }}
-                  >
-                    <MaterialSymbol icon="close" size={14} />
-                    Remove from board
-                  </button>
-                </>
-              )}
-            </div>
-          )}
         </div>
       )}
+      {phaseMenu}
 
       {/* Prompts Menu Button */}
       <PromptsMenuButton

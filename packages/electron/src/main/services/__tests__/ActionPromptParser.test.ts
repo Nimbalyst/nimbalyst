@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { parseActionPromptsFile } from '../ActionPromptParser';
+import {
+  DEFAULT_ACTION_PROMPTS_TEMPLATE,
+  parseActionPromptsFile,
+} from '../ActionPromptParser';
 
 describe('parseActionPromptsFile', () => {
   it('parses two simple actions with verbatim multi-line bodies', () => {
@@ -292,5 +295,31 @@ Body.
       expect(diagnostics).toEqual([]);
       expect(actions[0].config?.model).toBe('claude-code:opus-4-6');
     });
+  });
+
+  it('ships a default template with sibling-session launcher examples', () => {
+    const { actions, diagnostics } = parseActionPromptsFile(DEFAULT_ACTION_PROMPTS_TEMPLATE);
+
+    expect(diagnostics).toEqual([]);
+
+    const planningLauncher = actions.find((action) => action.id === 'plan-in-fresh-opus-session');
+    expect(planningLauncher?.config).toEqual({
+      launch: 'new-session',
+      model: 'claude-code:opus',
+      foreground: true,
+      autoSubmit: true,
+      worktree: false,
+    });
+    expect(planningLauncher?.body).toContain('Open a fresh sibling planning session.');
+
+    const worktreeLauncher = actions.find((action) => action.id === 'worktree-implementation-draft');
+    expect(worktreeLauncher?.config).toEqual({
+      launch: 'new-session',
+      model: undefined,
+      foreground: true,
+      autoSubmit: false,
+      worktree: true,
+    });
+    expect(worktreeLauncher?.body).toContain('Open a sibling coding session in a git worktree.');
   });
 });

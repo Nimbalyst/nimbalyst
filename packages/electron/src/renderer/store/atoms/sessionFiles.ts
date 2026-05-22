@@ -71,6 +71,45 @@ export const sessionPendingReviewFilesAtom = atomFamily((sessionId: string) =>
   atom<Set<string>>(new Set<string>())
 );
 
+export function preserveEquivalentSetRef<T>(
+  current: Set<T> | undefined,
+  next: Set<T> | undefined
+): Set<T> | undefined {
+  if (!current || !next) return next;
+  if (current === next) return current;
+  if (current.size !== next.size) return next;
+
+  for (const value of current) {
+    if (!next.has(value)) {
+      return next;
+    }
+  }
+
+  return current;
+}
+
+/**
+ * Update pending review files while preserving Set identity when contents
+ * are unchanged. This prevents transcript props from thrashing on global
+ * history refresh events.
+ */
+export const setSessionPendingReviewFilesAtom = atom(
+  null,
+  (
+    get,
+    set,
+    { sessionId, pendingFiles }: { sessionId: string; pendingFiles: Iterable<string> }
+  ) => {
+    const current = get(sessionPendingReviewFilesAtom(sessionId));
+    const next = pendingFiles instanceof Set ? pendingFiles : new Set(pendingFiles);
+    const normalized = preserveEquivalentSetRef(current, next) ?? next;
+
+    if (normalized !== current) {
+      set(sessionPendingReviewFilesAtom(sessionId), normalized);
+    }
+  }
+);
+
 // ============================================================================
 // Per-Workstream Derived Atoms
 // ============================================================================

@@ -62,9 +62,12 @@ Do **not** run `/promote-public-release` until the alpha prerelease build is gre
    - Create two versions:
 
    **A. Developer changelog notes (for `CHANGELOG.md`)**
-   - Include all meaningful changes.
-   - Technical language is fine.
-   - Categorize as `Added`, `Changed`, `Fixed`, `Removed`.
+   - **One short line per change. Hard cap: ~150 characters per bullet, single sentence, no sub-bullets.**
+   - Derive bullets from the commit `--oneline` shortlog, not from full commit message bodies. The body is for the PR; the changelog is for skim-reading.
+   - Technical language is fine, but do NOT include: root-cause analysis, file paths, function names, line / test counts, "previously X, now Y" before/after pairs, multi-sentence explanations, parenthetical "(closes #N)" trailers unless the issue is the most useful identifier.
+   - Categorize as `Added`, `Changed`, `Fixed`, `Removed`. Drop sections that have nothing.
+   - Squash near-duplicate commits (multiple "fix typecheck", multiple follow-ups to the same PR) into a single bullet.
+   - Skip purely internal noise: typecheck fixes, test-only changes, doc reshuffles, agent-instruction tweaks, lint, formatting, dependency bumps without behavior change. If it doesn't change behavior for any user (end-user or agent author), it doesn't belong in the changelog.
 
    **B. Public release draft notes (for `/promote-public-release`)**
    - Only include user-facing changes.
@@ -109,17 +112,47 @@ Do **not** run `/promote-public-release` until the alpha prerelease build is gre
 
 Valid release types: `patch`, `minor`, `major`
 
-Example `CHANGELOG.md` format:
+## Changelog entry style
+
+Aim for the original Nimbalyst changelog voice (see `[0.42.60]`, `[0.43.0]`, `[0.45.x]`): one short bullet per change, no paragraphs.
+
+### Good (target style)
+
 ```markdown
 ## [Unreleased]
 
 ### Added
-- New AI model support for GPT-4o
+- Shareable deep links for tracker items via "Copy Link" menu.
+- Shareable deep links for team documents via "Copy Link" menu.
+- Programmable actions can launch a new sibling session instead of prefilling.
+
+### Changed
+- File-based plan trackers now share the kanban with DB-backed items.
+- Stytch auth state centralized; gutter icon flips on signed-out sync.
+- Removed ~970k/wk of low-value PostHog events (file-edit / update-poll storms).
 
 ### Fixed
-- Fixed crash when opening large files
-- Fixed memory leak in file watcher
-
-## [0.42.60] - 2025-10-30
-...
+- Database lock dialog instead of false-positive lockout on recent locks (#272 follow-up).
+- AI-edit review diff preserved in CSV / datamodel custom editors (#328).
+- Auto-update toast no longer fires on transient DNS failures (#387).
+- Tracker "Updated" widget shows all field changes, not just the hardcoded set.
+- Dragging files into AI input inserts absolute-path markdown links.
+- Shared tracker bodies sync end-to-end through the collab Y.Doc.
+- Pasted Google-Docs-style images stored as assets instead of inline base64.
+- iOS Codex on app-server transport now renders messages.
 ```
+
+### Bad (what we have been doing — do not repeat)
+
+```markdown
+### Fixed
+- AI edits to a file open in a custom diff-mode editor (csv-spreadsheet) no longer
+  skip the red/green pending-review diff. Custom editors get file changes through
+  `EditorHost.subscribeToFileChanges`, and that path did not carry the in-flight-diff
+  guard the built-in Lexical/Monaco file-change handler already applies. So the AI
+  edit's own file-watcher echo reached the editor's external-change handler and
+  discarded the pending diff before it could render, and the pre-edit review tag
+  flipped to reviewed within milliseconds. [...] (#328)
+```
+
+That's a PR description, not a changelog entry. Cut to one line.

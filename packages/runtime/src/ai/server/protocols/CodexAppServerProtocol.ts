@@ -779,9 +779,32 @@ export class CodexAppServerProtocol implements AgentProtocol {
       });
       return;
     }
-    // commandExecution etc. continue to surface only on item/completed --
-    // those don't gate on user interaction so the widget-render race doesn't
-    // apply.
+
+    if (this.isGenericToolLikeItem(item)) {
+      push({
+        kind: 'event',
+        event: {
+          type: 'tool_call',
+          toolCall: {
+            id: (item as { id?: string }).id,
+            name: item.type,
+            arguments: this.buildGenericToolLikeArguments(item),
+          },
+          metadata: {
+            transport: 'app-server',
+            stage: 'started',
+            threadId: n.threadId,
+            turnId: n.turnId,
+            itemId: (item as { id?: string }).id,
+            method: 'item/started',
+          },
+        },
+      });
+      return;
+    }
+
+    // commandExecution etc. continue to surface only on item/completed by
+    // default unless they need a started-stage widget race fix.
   }
 
   private handleItemCompleted(
@@ -902,10 +925,94 @@ export class CodexAppServerProtocol implements AgentProtocol {
         return;
       }
       default: {
-        // userMessage / webSearch / todoList / error -- preserved by raw_event.
+        if (this.isGenericToolLikeItem(item)) {
+          push({
+            kind: 'event',
+            event: {
+              type: 'tool_call',
+              toolCall: {
+                id: (item as { id?: string }).id,
+                name: item.type,
+                arguments: this.buildGenericToolLikeArguments(item),
+                result: this.buildGenericToolLikeResult(item),
+              },
+              metadata: {
+                transport: 'app-server',
+                threadId: n.threadId,
+                turnId: n.turnId,
+                itemId: (item as { id?: string }).id,
+                method: 'item/completed',
+              },
+            },
+          });
+          return;
+        }
+
+        // userMessage / todoList / error -- preserved by raw_event.
         return;
       }
     }
+  }
+
+  private isGenericToolLikeItem(item: AnyItem): item is AnyItem & { id: string; type: string } {
+    if (!item || typeof item !== 'object') return false;
+    if (typeof item.id !== 'string' || !item.id) return false;
+    if (typeof item.type !== 'string' || !item.type) return false;
+    return !new Set([
+      'userMessage',
+      'agentMessage',
+      'reasoning',
+      'todoList',
+      'error',
+      'fileChange',
+      'mcpToolCall',
+      'commandExecution',
+    ]).has(item.type);
+  }
+
+  private buildGenericToolLikeArguments(item: AnyItem): Record<string, unknown> {
+    const record = item as Record<string, unknown>;
+    const args: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(record)) {
+      if (value === undefined) continue;
+      if (['id', 'type', 'status', 'result', 'error', 'aggregated_output', 'exit_code', 'text', 'content', 'items'].includes(key)) {
+        continue;
+      }
+      args[key] = value;
+    }
+    return args;
+  }
+
+  private buildGenericToolLikeResult(item: AnyItem): ToolResult | string {
+    const record = item as Record<string, unknown>;
+    const error = record.error as { message?: string } | undefined;
+    if (error?.message) {
+      return { success: false, error: error.message } as ToolResult;
+    }
+    if (record.result !== undefined) {
+      return {
+        success: record.status === 'completed',
+        result: record.result,
+      } as ToolResult;
+    }
+    if (typeof record.aggregated_output === 'string' || typeof record.exit_code === 'number') {
+      return {
+        success: record.status === 'completed',
+        output: record.aggregated_output,
+        exit_code: record.exit_code,
+      } as ToolResult;
+    }
+
+    const summary: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(record)) {
+      if (value === undefined) continue;
+      if (['id', 'type', 'status', 'text', 'content', 'items'].includes(key)) continue;
+      summary[key] = value;
+    }
+    return {
+      success: record.status === 'completed',
+      result: summary,
+    } as ToolResult;
   }
 
   private fileChangeResult(item: FileChangeItem): ToolResult {

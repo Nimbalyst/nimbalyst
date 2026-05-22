@@ -611,6 +611,12 @@ export class MetaAgentService {
       }
     }
 
+    // SyncedSessionStore is now the single push path: the create() above pushes
+    // title/provider/model/sessionType for the new workstream, and the
+    // updateMetadata() above pushes the reparented child's parentSessionId.
+    // Both reach iOS via the index channel without needing an explicit
+    // pushChange here.
+
     return { workstreamId, promotedParent: true };
   }
 

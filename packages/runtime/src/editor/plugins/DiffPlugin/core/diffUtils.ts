@@ -1136,7 +1136,6 @@ export function applyMarkdownDiffToDocument(
         },
         {discrete: true},
       );
-
       if (process?.env?.DIFF_DEBUG === '1') {
         editor.getEditorState().read(() => {
           const root = $getRoot();

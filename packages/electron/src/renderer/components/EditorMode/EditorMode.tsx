@@ -1151,6 +1151,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
           <ChatSidebar
             ref={chatSidebarRef}
             workspacePath={workspacePath}
+            isActive={isActive}
             isCollapsed={isAIChatCollapsed}
             onToggleCollapse={() => setIsAIChatCollapsed(prev => !prev)}
             width={aiChatWidth}

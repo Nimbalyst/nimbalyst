@@ -528,13 +528,16 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     mountEffectHandledPendingDiffRef.current = false;
 
     const checkAndApplyPendingDiffs = async () => {
+      const tCheckStart = performance.now();
       // For custom editors, wait a tick for their useEffect to register diff callbacks
       // This ensures diffRequestCallbackRef is set before we try to use it
       if (isCustom) {
         await new Promise(resolve => setTimeout(resolve, 50));
       }
       try {
+        const tGetPendingStart = performance.now();
         const pendingTags = await window.electronAPI.history.getPendingTags(filePath);
+        console.log(`[TabEditor.timing] getPendingTags: ${(performance.now() - tGetPendingStart).toFixed(1)}ms`);
         if (!pendingTags || pendingTags.length === 0) {
           return;
         }
@@ -555,9 +558,13 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
         // Get the baseline for diff comparison
         // This will be the latest incremental-approval tag if it exists, otherwise the pre-edit tag
+        const tBaselineStart = performance.now();
         const baseline = await window.electronAPI.invoke('history:get-diff-baseline', filePath);
+        console.log(`[TabEditor.timing] get-diff-baseline: ${(performance.now() - tBaselineStart).toFixed(1)}ms`);
         const oldContent = baseline ? baseline.content : pendingTag.content;
         const newContent = contentRef.current; // Use current content ref to get actual disk content
+
+        console.log(`[TabEditor.timing] oldContentLen=${oldContent?.length} newContentLen=${newContent?.length}`);
 
         logger.ui.info(`[TabEditor] Restoring pending AI edit on mount: tagId=${pendingTag.id}, status=${pendingTag.status}`);
         logger.ui.info(`[TabEditor] Diff content check: oldContentLength=${oldContent?.length}, newContentLength=${newContent?.length}, baseline=${!!baseline}, pendingTagContent=${pendingTag.content?.length}`);
@@ -616,15 +623,49 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             return;
           }
 
-          // For markdown files, use Lexical diff mode
+          // For markdown files, use Lexical diff mode.
+          // Skip it for oversize payloads: the TOPT tree-matcher in
+          // applyMarkdownDiffToDocument is O(N^2) in root-children count and
+          // hits V8's Map size cap (~16M entries) on documents with >~1500
+          // root nodes. On a real CHANGELOG-shaped 280KB-vs-413KB pending
+          // diff this pins the renderer for ~57s before throwing a swallowed
+          // "Map maximum size exceeded" error. Until we rewrite the matcher
+          // (see nimbalyst-local/plans/lexical-diff-size-guard.md) we bail
+          // out before entering the slow path. The pendingAIEditTag is
+          // already set above, so the approval bar still appears and the
+          // user can accept/reject from there -- they just don't get the
+          // inline diff highlighting for this one file.
+          const LEXICAL_DIFF_MAX_BYTES = 200_000;
+          if (
+            (oldContent?.length ?? 0) > LEXICAL_DIFF_MAX_BYTES ||
+            (newContent?.length ?? 0) > LEXICAL_DIFF_MAX_BYTES
+          ) {
+            logger.ui.warn(
+              `[TabEditor] Skipping Lexical diff on mount for oversize payload: ` +
+                `oldLen=${oldContent?.length ?? 0} newLen=${newContent?.length ?? 0} ` +
+                `threshold=${LEXICAL_DIFF_MAX_BYTES} file=${fileName}`,
+            );
+            fetchDiffSessionInfo(
+              pendingTag.sessionId,
+              pendingTag.createdAt ? new Date(pendingTag.createdAt).getTime() : Date.now(),
+            );
+            return;
+          }
+
           // Reset editor to old (tagged) content first
           const transformers = getEditorTransformers();
 
+          const tReparseStart = performance.now();
           editorRef.current.update(() => {
+            const tInsideUpdateStart = performance.now();
             const root = $getRoot();
             root.clear();
+            const tAfterClear = performance.now();
             $convertFromEnhancedMarkdownString(oldContent, transformers);
+            const tAfterConvert = performance.now();
+            console.log(`[TabEditor.timing]   inside update: clear=${(tAfterClear - tInsideUpdateStart).toFixed(1)}ms convertFromMarkdown=${(tAfterConvert - tAfterClear).toFixed(1)}ms`);
           }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
+          console.log(`[TabEditor.timing] clear+reparseOldContent (editor.update wall): ${(performance.now() - tReparseStart).toFixed(1)}ms`);
 
           contentRef.current = oldContent;
 
@@ -639,7 +680,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             const replacements = [{
               newText: newContent
             }];
+            const tDispatchStart = performance.now();
             editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
+            console.log(`[TabEditor.timing] APPLY_MARKDOWN_REPLACE_COMMAND dispatch: ${(performance.now() - tDispatchStart).toFixed(1)}ms`);
+            console.log(`[TabEditor.timing] TOTAL checkAndApplyPendingDiffs: ${(performance.now() - tCheckStart).toFixed(1)}ms`);
             console.log(`[TabEditor] Applied pending AI edit diff on mount`);
             // Fetch session info for the diff approval bar (for Lexical)
             fetchDiffSessionInfo(pendingTag.sessionId, pendingTag.createdAt ? new Date(pendingTag.createdAt).getTime() : Date.now());

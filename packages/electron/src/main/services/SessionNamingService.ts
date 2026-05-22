@@ -13,7 +13,6 @@ import {
 } from '../mcp/sessionNamingServer';
 import { getDatabase } from '../database/initialize';
 import { createWorktreeStore } from './WorktreeStore';
-import { getSyncProvider } from './SyncManager';
 import { getPreferredAgentLanguage } from '../utils/store';
 
 /**
@@ -143,6 +142,8 @@ export class SessionNamingService {
 
         // Set the metadata update function (for tags, phase, etc.)
         setUpdateSessionMetadataFn(async (sessionId: string, metadata: Record<string, unknown>) => {
+          // SyncedSessionStore.updateMetadata is the single source of truth for
+          // what reaches other devices; phase/tags forwarding lives there now.
           await AISessionsRepository.updateMetadata(sessionId, { metadata });
 
           // Notify renderer windows so UI updates in real time
@@ -151,18 +152,6 @@ export class SessionNamingService {
             if (!window.isDestroyed()) {
               window.webContents.send('sessions:session-updated', sessionId, metadata);
             }
-          }
-
-          // Push phase/tags to mobile sync so iOS gets updates in real-time
-          const syncProvider = getSyncProvider();
-          if (syncProvider && (metadata.phase !== undefined || metadata.tags !== undefined)) {
-            const syncMeta: Record<string, unknown> = {};
-            if (metadata.phase !== undefined) syncMeta.phase = metadata.phase as string;
-            if (metadata.tags !== undefined) syncMeta.tags = metadata.tags as string[];
-            syncProvider.pushChange(sessionId, {
-              type: 'metadata_updated',
-              metadata: syncMeta as any,
-            });
           }
         });
 

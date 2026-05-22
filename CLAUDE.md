@@ -6,11 +6,11 @@ Guidance for Claude Code (claude.ai/code) when working in this repository.
 
 ### Use @floating-ui/react for All Popover/Tooltip/Menu Positioning
 
-See [.claude/rules/floating-ui.md](./.claude/rules/floating-ui.md). Never manually calculate `position: fixed` coordinates — always use `@floating-ui/react` with `FloatingPortal`.
+See [floating-ui.md](./.claude/rules/floating-ui.md). Never manually calculate `position: fixed` coordinates — always use `@floating-ui/react` with `FloatingPortal`.
 
 ### No Dynamic Imports in Electron Main Process
 
-**NEVER convert static imports to dynamic `await import()`** unless absolutely necessary (confirmed circular reference) AND the user has approved it. Dynamic imports cause `__ELECTRON_LOG__` double-registration crashes and side-effect timing issues. All MCP servers and services in `index.ts` use static top-level imports. The only allowed exception is `bootstrap.ts` importing `index.ts` (see [packages/electron/MAIN_PROCESS_INIT.md](./packages/electron/MAIN_PROCESS_INIT.md)).
+**NEVER convert static imports to dynamic `await import()`** unless absolutely necessary (confirmed circular reference) AND the user has approved it. Dynamic imports cause `__ELECTRON_LOG__` double-registration crashes and side-effect timing issues. All MCP servers and services in `index.ts` use static top-level imports. The only allowed exception is `bootstrap.ts` importing `index.ts` (see [MAIN_PROCESS_INIT.md](./packages/electron/MAIN_PROCESS_INIT.md)).
 
 ### CollabV3 Data Isolation — DOs for Customer Data, D1 for Entity Management Only
 
@@ -55,7 +55,7 @@ Detailed patterns: [DEBUGGING_LOGS.md](./docs/DEBUGGING_LOGS.md).
 
 ### End-to-End Verification Before Declaring Victory
 
-For any bug whose verification requires a `/restart` or a user manually exercising a UI flow, the **first** deliverable is a failing test that the fix must make pass. Never announce "fixed" before observing the bug go from broken to working — either via a test that flips red→green, or via logs showing the failing step now succeeding. See [.claude/rules/end-to-end-verification.md](./.claude/rules/end-to-end-verification.md).
+For any bug whose verification requires a `/restart` or a user manually exercising a UI flow, the **first** deliverable is a failing test that the fix must make pass. Never announce "fixed" before observing the bug go from broken to working — either via a test that flips red→green, or via logs showing the failing step now succeeding. See [end-to-end-verification.md](./.claude/rules/end-to-end-verification.md).
 
 Past incident: the 2026-05-20 tracker-body workstream announced "fixed" at least four times before the user finally said "you're killing me." Each announcement was based on "the code path looks right" or "tests pass," neither of which is the same as "the user can open the tracker and see the body."
 
@@ -122,7 +122,7 @@ The app uses **PGLite** (PostgreSQL in WebAssembly) for all data storage.
 - **Never use `localStorage` in the renderer.** Use app-settings store (global), workspace-settings store (per-project), or PGLite (complex data like AI sessions/document history).
 - **All database timestamps must use `TIMESTAMPTZ`.** Never create `TIMESTAMP` (without timezone) columns; migrate legacy tables.
 
-See [packages/electron/DATABASE.md](./packages/electron/DATABASE.md) for tables, locations, shutdown rules, and timestamp handling.
+See [DATABASE.md](./packages/electron/DATABASE.md) for tables, locations, shutdown rules, and timestamp handling.
 
 ## Transcript Storage
 
@@ -169,8 +169,8 @@ Two-tier architecture — `ai_agent_messages` (raw append-only log, sole source 
 | [TRACKER_WORKFLOWS.md](./docs/TRACKER_WORKFLOWS.md) | Creating decision or bug tracker items as part of a fix or design decision. |
 | [ARCHITECTURE_DIAGRAMS.md](./docs/ARCHITECTURE_DIAGRAMS.md) | Making any architectural decision — create an Excalidraw diagram. |
 | [DEBUGGING_LOGS.md](./docs/DEBUGGING_LOGS.md) | Investigating bugs — use the log access tools, don't ask the user to paste logs. |
-| [packages/electron/MAIN_PROCESS_INIT.md](./packages/electron/MAIN_PROCESS_INIT.md) | Working on Electron main-process bootstrap, singleton init, or IPC handler registration. |
-| [packages/electron/DATABASE.md](./packages/electron/DATABASE.md) | Working with PGLite tables, shutdown, or timestamp handling. |
+| [MAIN_PROCESS_INIT.md](./packages/electron/MAIN_PROCESS_INIT.md) | Working on Electron main-process bootstrap, singleton init, or IPC handler registration. |
+| [DATABASE.md](./packages/electron/DATABASE.md) | Working with PGLite tables, shutdown, or timestamp handling. |
 
 ## AI Features (quick reference)
 
@@ -215,3 +215,5 @@ See the Critical Rules block above ("Always Run Your Own Observation Commands").
 ## Support
 
 User support docs live in `support/`. Notable: `force-restore-database-backup.md` for manual database restore.
+if i ask you to propose a commit, first update the `CHANGELOG.md` (at the repo root) and include it in the commit proposal
+if a commit is intended to fix a github issue, include the issue number and a closing reference in the commit message when appropriate

@@ -47,6 +47,7 @@ import { defaultAgentModelAtom } from '../../store/atoms/appSettings';
 import { usePostHog } from 'posthog-js/react';
 import { WorkspaceSummaryHeader, generateWorkspaceAccentColor } from '../WorkspaceSummaryHeader';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
+import { FloatingPortal, useFloatingMenu } from '../../hooks/useFloatingMenu';
 import './SessionHistory.css';
 
 // SessionItem is the shared SessionMeta type from the store atoms.
@@ -321,10 +322,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const sortBy = controlledSortOrder ?? internalSortOrder;
   const setSortBy = onSortOrderChange ?? setInternalSortOrder;
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
-  const [newDropdownOpen, setNewDropdownOpen] = useState(false);
-  const [newDropdownPosition, setNewDropdownPosition] = useState<{ x: number; y: number } | null>(null);
-  const newDropdownButtonRef = useRef<HTMLButtonElement>(null);
-  const newDropdownMenuRef = useRef<HTMLDivElement>(null);
+  const newDropdownMenu = useFloatingMenu({ placement: 'bottom-end', offsetPx: 4 });
   const [contentSearchTriggered, setContentSearchTriggered] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   // Use atom for showArchived state
@@ -1888,22 +1886,12 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
     setSortDropdownOpen(false);
   };
 
-  const toggleNewDropdown = (buttonElement?: HTMLButtonElement) => {
-    if (!newDropdownOpen) {
-      const button = buttonElement || newDropdownButtonRef.current;
-      if (button) {
-        const rect = button.getBoundingClientRect();
-        setNewDropdownPosition({
-          x: rect.right,
-          y: rect.bottom + 4
-        });
-      }
-    }
-    setNewDropdownOpen(!newDropdownOpen);
+  const toggleNewDropdown = () => {
+    newDropdownMenu.setIsOpen(!newDropdownMenu.isOpen);
   };
 
   // Handle new button click - if only one option available, trigger it directly
-  const handleNewButtonClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+  const handleNewButtonClick = () => {
     const availableOptions = [onNewSession, onNewWorktreeSession, onNewBlitz, onNewTerminal].filter(Boolean);
     if (availableOptions.length === 1) {
       // Only one option available, trigger it directly
@@ -1912,7 +1900,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       else if (onNewTerminal) onNewTerminal();
     } else {
       // Multiple options, show dropdown
-      toggleNewDropdown(e.currentTarget);
+      toggleNewDropdown();
     }
   };
 
@@ -1923,28 +1911,10 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       if (sortDropdownOpen && !target.closest('.session-history-sort-dropdown')) {
         setSortDropdownOpen(false);
       }
-      if (newDropdownOpen && !target.closest('.session-history-new-dropdown')) {
-        if (!newDropdownMenuRef.current || !newDropdownMenuRef.current.contains(target)) {
-          setNewDropdownOpen(false);
-          setNewDropdownPosition(null);
-        }
-      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [sortDropdownOpen, newDropdownOpen]);
-
-  // Close dropdown on window resize to prevent stale positioning
-  useEffect(() => {
-    const handleResize = () => {
-      if (newDropdownOpen) {
-        setNewDropdownOpen(false);
-        setNewDropdownPosition(null);
-      }
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [newDropdownOpen]);
+  }, [sortDropdownOpen]);
 
   // Group worktree sessions by worktreeId and compute worktree timestamps
   const worktreeGroupsData = useMemo(() => {
@@ -2605,7 +2575,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
             {(onNewSession || onNewWorktreeSession || onNewTerminal) && (
               <div className="session-history-new-dropdown relative z-10">
                 <button
-                  ref={newDropdownButtonRef}
+                  ref={newDropdownMenu.refs.setReference}
                   className="session-history-new-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
                   data-testid="new-dropdown-button"
                   onClick={handleNewButtonClick}
@@ -2705,7 +2675,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
             {(onNewSession || onNewWorktreeSession || onNewTerminal) && (
               <div className="session-history-new-dropdown relative z-10">
                 <button
-                  ref={newDropdownButtonRef}
+                  ref={newDropdownMenu.refs.setReference}
                   className="session-history-new-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
                   data-testid="new-dropdown-button"
                   onClick={handleNewButtonClick}
@@ -2737,24 +2707,21 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   // #306 this JSX lived only inside the main return; clicking the + button when
   // all sessions were archived (so the empty-state branch fired) opened the
   // dropdown state but the JSX never rendered, and the user saw nothing happen
-  // unless they used Ctrl+N. The dropdown is `position: fixed` against the
-  // viewport so re-rendering it from either return path produces identical
-  // visual placement. Reported by @TaiwanTammy on #306.
-  const newDropdownPortal = newDropdownOpen && newDropdownPosition && (
-    <div
-      ref={newDropdownMenuRef}
-      className="session-history-new-menu fixed min-w-40 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded overflow-hidden z-[1000] shadow-[0_4px_12px_rgba(0,0,0,0.15)] whitespace-nowrap"
-      style={{
-        right: `${window.innerWidth - newDropdownPosition.x}px`,
-        top: `${newDropdownPosition.y}px`
-      }}
-      onClick={(e) => e.stopPropagation()}
-    >
+  // unless they used Ctrl+N. Rendering the menu through FloatingPortal keeps the
+  // placement stable across either return path while escaping clipped ancestors.
+  const newDropdownPortal = newDropdownMenu.isOpen && (
+    <FloatingPortal>
+      <div
+        ref={newDropdownMenu.refs.setFloating}
+        className="session-history-new-menu min-w-40 bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded overflow-hidden z-[1000] shadow-[0_4px_12px_rgba(0,0,0,0.15)] whitespace-nowrap"
+        style={newDropdownMenu.floatingStyles}
+        {...newDropdownMenu.getFloatingProps()}
+      >
       {onNewSession && (
         <button
           className="session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1"
           data-testid="new-session-button"
-          onClick={() => { onNewSession(); setNewDropdownOpen(false); setNewDropdownPosition(null); }}
+          onClick={() => { onNewSession(); newDropdownMenu.setIsOpen(false); }}
         >
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
@@ -2767,7 +2734,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         <button
           className={`session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1 ${!isGitRepo ? 'opacity-50 cursor-not-allowed hover:bg-transparent' : ''}`}
           data-testid="new-worktree-session-button"
-          onClick={() => { if (isGitRepo) { onNewWorktreeSession(); setNewDropdownOpen(false); setNewDropdownPosition(null); } }}
+          onClick={() => { if (isGitRepo) { onNewWorktreeSession(); newDropdownMenu.setIsOpen(false); } }}
           disabled={!isGitRepo}
           title={!isGitRepo ? 'Worktrees require a git repository' : undefined}
         >
@@ -2787,7 +2754,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         <button
           className={`session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] ${!isGitRepo ? 'opacity-50 cursor-not-allowed hover:bg-transparent' : ''}`}
           data-testid="new-blitz-button"
-          onClick={() => { if (isGitRepo) { onNewBlitz(); setNewDropdownOpen(false); setNewDropdownPosition(null); } }}
+          onClick={() => { if (isGitRepo) { onNewBlitz(); newDropdownMenu.setIsOpen(false); } }}
           disabled={!isGitRepo}
           title={!isGitRepo ? 'Blitz requires a git repository' : undefined}
         >
@@ -2802,7 +2769,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         <button
           className="session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] [&>span]:flex-1"
           data-testid="new-terminal-button"
-          onClick={() => { onNewTerminal(); setNewDropdownOpen(false); setNewDropdownPosition(null); }}
+          onClick={() => { onNewTerminal(); newDropdownMenu.setIsOpen(false); }}
         >
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M3 5L7 9L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -2815,7 +2782,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         <button
           className={`session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)] ${!isGitRepo ? 'opacity-50 cursor-not-allowed hover:bg-transparent' : ''}`}
           data-testid="new-super-loop-button"
-          onClick={() => { if (isGitRepo) { openSuperLoopDialog(); setNewDropdownOpen(false); setNewDropdownPosition(null); } }}
+          onClick={() => { if (isGitRepo) { openSuperLoopDialog(); newDropdownMenu.setIsOpen(false); } }}
           disabled={!isGitRepo}
           title={!isGitRepo ? 'Super Loops require a git repository' : undefined}
         >
@@ -2831,14 +2798,15 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
         <button
           className="session-history-new-option flex items-center w-full px-3 py-2 text-[13px] bg-transparent border-none text-[var(--nim-text)] cursor-pointer transition-colors duration-150 text-left gap-2 hover:bg-[var(--nim-bg-hover)] [&_svg]:shrink-0 [&_svg]:text-[var(--nim-text-muted)]"
           data-testid="new-meta-agent-button"
-          onClick={() => { void handleNewMetaAgent(); setNewDropdownOpen(false); setNewDropdownPosition(null); }}
+          onClick={() => { void handleNewMetaAgent(); newDropdownMenu.setIsOpen(false); }}
         >
           <MaterialSymbol icon="hub" size={14} />
           <span className="flex-1">New Meta Agent</span>
           <AlphaBadge size="xs" />
         </button>
       )}
-    </div>
+      </div>
+    </FloatingPortal>
   );
 
   if (sessions.length === 0 && !hasSearchQuery) {
@@ -2868,7 +2836,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
               {(onNewSession || onNewWorktreeSession) && (
                 <div className="session-history-new-dropdown relative z-10">
                   <button
-                    ref={newDropdownButtonRef}
+                    ref={newDropdownMenu.refs.setReference}
                     className="session-history-new-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
                     data-testid="new-dropdown-button"
                     onClick={handleNewButtonClick}
@@ -2976,7 +2944,7 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
           {(onNewSession || onNewWorktreeSession || onNewTerminal) && (
             <div className="session-history-new-dropdown relative z-10">
               <button
-                ref={newDropdownButtonRef}
+                ref={newDropdownMenu.refs.setReference}
                 className="session-history-new-button flex items-center justify-center p-1.5 bg-[var(--nim-bg-secondary)] border border-[var(--nim-border)] rounded text-[var(--nim-text)] cursor-pointer transition-colors duration-150 shrink-0 hover:bg-[var(--nim-bg-hover)] hover:border-[var(--nim-primary)] active:bg-[var(--nim-bg-tertiary)] [&_svg]:block"
                 data-testid="new-dropdown-button"
                 onClick={handleNewButtonClick}

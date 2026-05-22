@@ -141,6 +141,7 @@ export interface SyncProvider {
       parentSessionId?: string;
       worktreeId?: string;
       isArchived?: boolean;
+      isPinned?: boolean;
       messageCount: number;
       lastMessageAt: number;
       createdAt: number;
@@ -335,6 +336,8 @@ export interface SessionIndexData {
   isArchived?: boolean;
   /** Whether the session is pinned */
   isPinned?: boolean;
+  /** Marker that the title was AI-chosen; prevents repeated rename attempts. */
+  hasBeenNamed?: boolean;
   /** Session ID this was branched/forked from */
   branchedFromSessionId?: string;
   /** Message ID at the branch point */
@@ -399,15 +402,27 @@ export interface SyncedSessionMetadata {
   sessionType?: string;
   /** Parent session ID for workstream/worktree hierarchy */
   parentSessionId?: string;
+  /** Worktree association (mirrored from ai_sessions.worktree_id). */
+  worktreeId?: string;
   provider?: string;
   model?: string;
   workspaceId?: string;
   workspacePath?: string;
   isArchived?: boolean;
+  /** Whether the session is pinned in the list on every device. */
+  isPinned?: boolean;
+  /** Marker that the title was AI-chosen; prevents repeated rename attempts. */
+  hasBeenNamed?: boolean;
   draftInput?: string;
   /** Epoch ms when draftInput was last updated by the sending device */
   draftUpdatedAt?: number;
-  updatedAt: number;
+  /**
+   * Set only when the change should bump session sort order on iOS (title,
+   * mode, archive, provider, model). Pins, reparents, archive flips, draft
+   * input, etc. deliberately push without updatedAt so the row keeps its
+   * place.
+   */
+  updatedAt?: number;
   /** Queued prompts waiting to be processed by desktop */
   queuedPrompts?: SyncedQueuedPrompt[];
   /** Signals that a message is waiting for desktop to process it */

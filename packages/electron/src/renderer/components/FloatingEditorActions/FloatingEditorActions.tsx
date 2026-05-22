@@ -17,6 +17,7 @@
  */
 
 import React from 'react';
+import { FloatingPortal, useFloatingMenu } from '../../hooks/useFloatingMenu';
 
 interface FloatingEditorActionsProps {
   children: React.ReactNode;
@@ -84,25 +85,40 @@ interface FloatingEditorMenuProps {
   children: React.ReactNode;
   isOpen: boolean;
   onClose: () => void;
+  anchorRef: React.RefObject<HTMLElement>;
 }
 
 export const FloatingEditorMenu: React.FC<FloatingEditorMenuProps> = ({
   children,
   isOpen,
   onClose,
+  anchorRef,
 }) => {
+  const menu = useFloatingMenu({
+    placement: 'bottom-end',
+    offsetPx: 8,
+    open: isOpen,
+    onOpenChange: (open) => {
+      if (!open) {
+        onClose();
+      }
+    },
+    reference: anchorRef.current,
+  });
+
   if (!isOpen) return null;
 
   return (
-    <>
+    <FloatingPortal>
       <div
-        className="floating-editor-menu-backdrop fixed inset-0 z-[99]"
-        onClick={onClose}
-      />
-      <div className="floating-editor-menu absolute top-11 right-0 min-w-[180px] bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] z-[100] pointer-events-auto py-1">
+        ref={menu.refs.setFloating}
+        className="floating-editor-menu min-w-[180px] bg-[var(--nim-bg)] border border-[var(--nim-border)] rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] z-[1000] pointer-events-auto py-1"
+        style={menu.floatingStyles}
+        {...menu.getFloatingProps()}
+      >
         {children}
       </div>
-    </>
+    </FloatingPortal>
   );
 };
 
