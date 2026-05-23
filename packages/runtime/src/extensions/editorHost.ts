@@ -12,5 +12,6 @@ export type {
   CollaborationContext,
   CollaborationStatus,
   CollaboratorInfo,
+  RevisionSnapshotAdapter,
   StandardAwarenessState,
 } from '@nimbalyst/extension-sdk';

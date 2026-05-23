@@ -14,6 +14,7 @@ import React, { useCallback } from 'react';
 import { useAtom } from 'jotai';
 import { historyDialogFileAtom } from '../../store';
 import { HistoryDialog } from './HistoryDialog';
+import { CollabHistoryDialog } from './CollabHistoryDialog';
 
 interface GlobalHistoryDialogProps {
   theme: string;
@@ -38,6 +39,13 @@ export const GlobalHistoryDialog: React.FC<GlobalHistoryDialogProps> = ({ theme,
   }, [filePath, setFilePath]);
 
   if (!filePath) return null;
+
+  // Shared documents use a different storage and restore path than local
+  // files. Route `collab://` URIs to the dedicated dialog, which talks to
+  // the TeamDocumentRoom revision API instead of local PGLite history.
+  if (filePath.startsWith('collab://')) {
+    return <CollabHistoryDialog collabUri={filePath} onClose={handleClose} />;
+  }
 
   return (
     <HistoryDialog

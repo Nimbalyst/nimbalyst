@@ -28,6 +28,7 @@ import type {
   CollaborationStatus,
   EditorHost,
   ExtensionStorage,
+  RevisionSnapshotAdapter,
   StandardAwarenessState,
 } from '@nimbalyst/runtime';
 import type { CollabDocumentConfig } from '../../utils/collabDocumentOpener';
@@ -161,8 +162,17 @@ export function createCollaborationContext(args: {
   syncProvider: DocumentSyncProvider;
   awareness: Awareness;
   activeConfig: CollabDocumentConfig;
+  /**
+   * Called whenever a custom editor registers (or unregisters) a revision
+   * snapshot adapter. The CollaborativeTabEditor uses this to publish a
+   * per-tab history controller so the shared-doc History dialog can
+   * preview and restore non-markdown documents.
+   */
+  onRevisionAdapterChange?: (adapter: RevisionSnapshotAdapter | null) => void;
 }): CollaborationContext {
-  const { syncProvider, awareness, activeConfig } = args;
+  const { syncProvider, awareness, activeConfig, onRevisionAdapterChange } = args;
+  let currentAdapter: RevisionSnapshotAdapter | null = null;
+
   return {
     yDoc: syncProvider.getYDoc(),
     awareness,
@@ -172,17 +182,22 @@ export function createCollaborationContext(args: {
       color: pickCursorColor(activeConfig.userId),
     },
     getStatus: () => syncProvider.getStatus() as CollaborationStatus,
-    // DocumentSyncProvider only accepts a single status callback (set in
-    // its constructor config). The host already uses that slot to write
-    // a Jotai atom and forward to CollabLexicalProvider, so we expose a
-    // separate fan-out for the SDK hook's subscribers and rely on the
-    // host calling `notifyCollabStatus` from its own status handler.
     onStatusChange: (cb) => statusFanout(syncProvider).subscribe(cb),
     loadInitialContent: async () => {
       return activeConfig.initialContent ?? '';
     },
     flushLocalState: async () => {
       await syncProvider.flushLocalState();
+    },
+    registerRevisionAdapter: (adapter: RevisionSnapshotAdapter) => {
+      currentAdapter = adapter;
+      onRevisionAdapterChange?.(adapter);
+      return () => {
+        if (currentAdapter === adapter) {
+          currentAdapter = null;
+          onRevisionAdapterChange?.(null);
+        }
+      };
     },
   };
 }
@@ -255,6 +270,8 @@ export interface CollabExtensionHostArgs {
   activeConfig: CollabDocumentConfig;
   collaboration: CollaborationContext;
   onDirtyChange?: (isDirty: boolean) => void;
+  /** Called when the user invokes the "History" action on this tab. */
+  onOpenHistory?: () => void;
 }
 
 /**
@@ -278,6 +295,7 @@ export function createCollabExtensionHost(
     activeConfig,
     collaboration,
     onDirtyChange,
+    onOpenHistory,
   } = args;
 
   const editorKey = makeEditorKey(filePath);
@@ -323,7 +341,9 @@ export function createCollabExtensionHost(
 
     onSaveRequested: () => () => {},
 
-    openHistory(): void {},
+    openHistory(): void {
+      onOpenHistory?.();
+    },
 
     storage,
 

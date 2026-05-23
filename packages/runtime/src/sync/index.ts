@@ -68,6 +68,18 @@ export {
   CollabLexicalProvider,
 } from './CollabLexicalProvider';
 
+export {
+  CollabHistoryClient,
+  CollabHistoryError,
+  decryptRevisionPayload,
+} from './collabHistoryClient';
+
+export type {
+  CollabHistoryClientConfig,
+  CreateRevisionInput,
+  LoadedRevision,
+} from './collabHistoryClient';
+
 export type {
   DocumentSyncConfig,
   DocumentSyncStatus,

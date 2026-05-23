@@ -110,6 +110,7 @@ export type {
   CollaborationContext,
   CollaborationStatus,
   CollaboratorInfo,
+  RevisionSnapshotAdapter,
   StandardAwarenessState,
 } from './editorHost';
 

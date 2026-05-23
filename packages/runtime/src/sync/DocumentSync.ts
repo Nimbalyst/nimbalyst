@@ -189,6 +189,7 @@ export class DocumentSyncProvider {
   private replayAckTimer: ReturnType<typeof setTimeout> | null = null;
   private replayingClientUpdateId: string | null = null;
   private surfaceReplayStatus = false;
+  private pendingWriteWaiters: Set<() => void> = new Set();
   private static readonly RECONNECT_BASE_MS = 1000;
   private static readonly RECONNECT_MAX_MS = 30_000;
   private static readonly REPLAY_ACK_TIMEOUT_MS = 10_000;
@@ -367,6 +368,42 @@ export class DocumentSyncProvider {
   /** Get the last known server sequence number. */
   getLastSeq(): number {
     return this.lastSeq;
+  }
+
+  /**
+   * Wait until all local writes have either been acknowledged or timed out.
+   * Returns false when the timeout elapses first.
+   */
+  async waitForPendingWrites(timeoutMs = 5_000): Promise<boolean> {
+    if (!this.hasUnsettledPendingWrites()) {
+      return true;
+    }
+
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+
+      const cleanup = () => {
+        this.pendingWriteWaiters.delete(waiter);
+        clearTimeout(timeout);
+      };
+
+      const waiter = () => {
+        if (settled || this.hasUnsettledPendingWrites()) return;
+        settled = true;
+        cleanup();
+        resolve(true);
+      };
+
+      const timeout = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(false);
+      }, timeoutMs);
+
+      this.pendingWriteWaiters.add(waiter);
+      waiter();
+    });
   }
 
   /**
@@ -1015,6 +1052,20 @@ export class DocumentSyncProvider {
     return !!(this.queuedPendingUpdate || this.inflightPendingUpdate);
   }
 
+  private hasUnsettledPendingWrites(): boolean {
+    return !!(
+      this.queuedPendingUpdate ||
+      this.inflightPendingUpdate ||
+      this.replayingClientUpdateId
+    );
+  }
+
+  private notifyPendingWriteWaiters(): void {
+    for (const waiter of Array.from(this.pendingWriteWaiters)) {
+      waiter();
+    }
+  }
+
   private getMergedPendingUpdate(): Uint8Array | null {
     if (this.queuedPendingUpdate && this.inflightPendingUpdate) {
       return Y.mergeUpdates([
@@ -1029,6 +1080,7 @@ export class DocumentSyncProvider {
     this.clearReplayAckTimer();
     if (!this.inflightPendingUpdate) {
       this.surfaceReplayStatus = false;
+      this.notifyPendingWriteWaiters();
       return;
     }
     this.queuedPendingUpdate = this.queuedPendingUpdate
@@ -1038,6 +1090,7 @@ export class DocumentSyncProvider {
     this.replayingClientUpdateId = null;
     this.surfaceReplayStatus = false;
     this.schedulePendingPersist();
+    this.notifyPendingWriteWaiters();
   }
 
   private finishReplayingPendingUpdate(): void {
@@ -1046,6 +1099,7 @@ export class DocumentSyncProvider {
     this.replayingClientUpdateId = null;
     this.surfaceReplayStatus = false;
     this.schedulePendingPersist();
+    this.notifyPendingWriteWaiters();
     if (this.synced && this.queuedPendingUpdate) {
       void this.replayPendingUpdate();
       return;

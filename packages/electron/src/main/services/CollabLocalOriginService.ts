@@ -440,13 +440,12 @@ async function overwriteSharedMarkdown(
   documentId: string,
   markdown: string,
 ): Promise<boolean> {
-  const result = await withHeadlessMarkdownDocument(workspacePath, documentId, async ({ headless }) => {
+  const result = await withHeadlessMarkdownDocument(workspacePath, documentId, async ({ headless, provider }) => {
     headless.applyUpdate(() => {
       $getRoot().clear();
       $convertFromEnhancedMarkdownString(markdown, getEditorTransformers());
     });
-    await new Promise(resolve => setTimeout(resolve, 300));
-    return true;
+    return provider.waitForPendingWrites(5_000);
   });
   return result === true;
 }

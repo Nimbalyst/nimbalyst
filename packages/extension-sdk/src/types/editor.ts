@@ -110,6 +110,55 @@ export interface CollaborationContext {
    * in-memory share payloads. Most editors should not call it directly.
    */
   flushLocalState?(): Promise<void>;
+
+  /**
+   * Register a revision-history snapshot adapter for this collaborative
+   * document. Extensions opt in by implementing `exportRevisionSnapshot`
+   * and `restoreRevisionSnapshot`; the host wires these into the
+   * shared-document History dialog so users can preview and restore past
+   * versions of the document.
+   *
+   * Call this once after binding the editor to the Y.Doc (e.g. inside the
+   * same effect that wires `useCollaborativeEditor`). The returned function
+   * unregisters the adapter -- call it on unmount.
+   *
+   * When no adapter is registered, the host falls back to a metadata-only
+   * history view: users can see when revisions were taken and by whom, but
+   * cannot preview or restore them.
+   *
+   * Implementations should serialize the editor-native state (e.g. an
+   * Excalidraw scene JSON) deterministically so dedupe-on-hash is stable.
+   */
+  registerRevisionAdapter?(adapter: RevisionSnapshotAdapter): () => void;
+}
+
+/**
+ * Editor-supplied snapshot round-trip for collaborative revision history.
+ * See `CollaborationContext.revisionAdapter`.
+ */
+export interface RevisionSnapshotAdapter {
+  /**
+   * Snapshot payload format identifier, e.g. `excalidraw-json` or
+   * `mindmap-yaml`. Treated as opaque by the server; used by the dialog to
+   * pick a renderer (or fall back to metadata-only display).
+   */
+  readonly contentFormat: string;
+
+  /** Capture the current document state as bytes. */
+  exportRevisionSnapshot(): Uint8Array | Promise<Uint8Array>;
+
+  /**
+   * Apply a previously captured snapshot back into the live document.
+   * Implementations should produce normal collaborative edits so the
+   * change broadcasts to peers via the standard Yjs path.
+   */
+  restoreRevisionSnapshot(plaintext: Uint8Array): void | Promise<void>;
+
+  /**
+   * Optional read-only preview component name for the History dialog. When
+   * absent, the dialog shows metadata only.
+   */
+  readonly previewKind?: 'text' | 'metadata-only';
 }
 
 // ============================================================================

@@ -31,12 +31,20 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { MarkdownEditor, DocumentPathProvider } from '@nimbalyst/runtime';
+import { $convertFromEnhancedMarkdownString, getEditorTransformers } from '@nimbalyst/runtime/editor';
 import { FixedTabHeaderContainer, FixedTabHeaderRegistry } from '@nimbalyst/runtime/plugins/shared/fixedTabHeader';
 import { LexicalDiffHeaderAdapter } from '../UnifiedDiffHeader';
-import { DocumentSyncProvider } from '@nimbalyst/runtime/sync';
+import { DocumentSyncProvider, CollabHistoryClient } from '@nimbalyst/runtime/sync';
 import { CollabLexicalProvider } from '@nimbalyst/runtime/sync';
+import { historyDialogFileAtom } from '../../store/atoms/historyDialog';
+import {
+  collabHistoryControllerBumpAtom,
+  registerCollabHistoryController,
+  type CollabHistoryController,
+} from '../../store/atoms/collabHistoryControllers';
+import { $getRoot, type LexicalEditor } from 'lexical';
 import type { EditorHost, ExtensionStorage } from '@nimbalyst/runtime';
 import type { CollabDocumentConfig } from '../../utils/collabDocumentOpener';
 import { resolveCollabConfigForUri } from '../../utils/collabDocumentOpener';
@@ -88,6 +96,21 @@ function randomCursorColor(): string {
     '#9B59B6', '#E06B8F', '#3B82F6', '#16A34A',
   ];
   return colors[Math.floor(Math.random() * colors.length)];
+}
+
+const AUTO_REVISION_POLL_MS = 30_000;
+const AUTO_REVISION_IDLE_MS = 60_000;
+const AUTO_REVISION_MIN_INTERVAL_MS = 5 * 60 * 1000;
+
+function normalizeSnapshotBytes(snapshot: Uint8Array | ArrayBuffer): Uint8Array {
+  return snapshot instanceof Uint8Array ? snapshot : new Uint8Array(snapshot);
+}
+
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', bytes as BufferSource);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 // ---------------------------------------------------------------------------
@@ -197,6 +220,17 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
   const [activeConfig, setActiveConfig] = useState(initialCollabConfig);
   const syncProviderRef = useRef<DocumentSyncProvider | null>(null);
   const collabProviderRef = useRef<CollabLexicalProvider | null>(null);
+  const getContentRef = useRef<(() => string) | null>(null);
+  const lexicalEditorRef = useRef<LexicalEditor | null>(null);
+  const historyControllerRef = useRef<CollabHistoryController | null>(null);
+  const bootstrapEnsuredRef = useRef(false);
+  const bootstrapInFlightRef = useRef(false);
+  const lastObservedSnapshotHashRef = useRef<string | null>(null);
+  const lastObservedSnapshotAtRef = useRef<number>(Date.now());
+  const lastRecordedRevisionHashRef = useRef<string | null>(null);
+  const lastAutoRevisionAtRef = useRef(0);
+  const setHistoryDialogFile = useSetAtom(historyDialogFileAtom);
+  const bumpHistoryControllers = useSetAtom(collabHistoryControllerBumpAtom);
   const isActiveRef = useRef(isActive);
   const cursorColor = useMemo(() => randomCursorColor(), []);
   const assetService = useMemo(() => new CollabAssetService(activeConfig), [activeConfig]);
@@ -209,6 +243,88 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
   // Captured Lexical editor instance -- needed by FixedTabHeader plugins
   // (search/replace, the unified diff header, etc.) when the agent applies edits.
   const [lexicalEditor, setLexicalEditor] = useState<any | null>(null);
+
+  useEffect(() => {
+    historyControllerRef.current = null;
+    bootstrapEnsuredRef.current = false;
+    bootstrapInFlightRef.current = false;
+    lastObservedSnapshotHashRef.current = null;
+    lastObservedSnapshotAtRef.current = Date.now();
+    lastRecordedRevisionHashRef.current = null;
+    lastAutoRevisionAtRef.current = 0;
+  }, [activeConfig.orgId, activeConfig.documentId, filePath]);
+
+  const createHistoryClient = useCallback(() => new CollabHistoryClient({
+    serverUrl: activeConfig.serverUrl,
+    getJwt: activeConfig.getJwt,
+    orgId: activeConfig.orgId,
+    documentId: activeConfig.documentId,
+    documentKey: activeConfig.documentKey,
+  }), [activeConfig]);
+
+  const createRevisionFromCurrentSnapshot = useCallback(async (
+    revisionKind: 'bootstrap' | 'manual' | 'auto',
+    options: { skipIfLatestMatches?: boolean } = {}
+  ): Promise<boolean> => {
+    const controller = historyControllerRef.current;
+    if (!controller?.exportSnapshot) return false;
+    if (controller.getStatus() !== 'connected') return false;
+
+    const snapshot = normalizeSnapshotBytes(await controller.exportSnapshot());
+    const contentHash = await sha256Hex(snapshot);
+    if (options.skipIfLatestMatches && contentHash === lastRecordedRevisionHashRef.current) {
+      lastObservedSnapshotHashRef.current = contentHash;
+      lastObservedSnapshotAtRef.current = Date.now();
+      return false;
+    }
+
+    await controller.client.createRevision({
+      revisionKind,
+      editorType: controller.editorType,
+      contentFormat: controller.contentFormat,
+      plaintext: snapshot,
+      basisSequence: controller.getBasisSequence(),
+    });
+
+    const now = Date.now();
+    lastObservedSnapshotHashRef.current = contentHash;
+    lastObservedSnapshotAtRef.current = now;
+    lastRecordedRevisionHashRef.current = contentHash;
+    if (revisionKind === 'auto') {
+      lastAutoRevisionAtRef.current = now;
+    }
+    return true;
+  }, []);
+
+  const ensureBootstrapRevision = useCallback(async (): Promise<void> => {
+    const controller = historyControllerRef.current;
+    if (!controller?.exportSnapshot) return;
+    if (controller.getStatus() !== 'connected') return;
+    if (bootstrapEnsuredRef.current || bootstrapInFlightRef.current) return;
+
+    bootstrapInFlightRef.current = true;
+    try {
+      const response = await controller.client.listRevisions({ limit: 1 });
+      const latestRevision = response.revisions[0] ?? null;
+      if (latestRevision) {
+        bootstrapEnsuredRef.current = true;
+        lastRecordedRevisionHashRef.current = latestRevision.contentHash;
+        lastObservedSnapshotHashRef.current = latestRevision.contentHash;
+        lastObservedSnapshotAtRef.current = Date.now();
+        if (latestRevision.revisionKind === 'auto') {
+          lastAutoRevisionAtRef.current = latestRevision.createdAt;
+        }
+        return;
+      }
+
+      await createRevisionFromCurrentSnapshot('bootstrap');
+      bootstrapEnsuredRef.current = true;
+    } catch (error) {
+      console.warn('[CollaborativeTabEditor] Failed to ensure bootstrap revision', error);
+    } finally {
+      bootstrapInFlightRef.current = false;
+    }
+  }, [createRevisionFromCurrentSnapshot]);
 
   // Re-key: when the rotation epoch changes, re-fetch config with new encryption key
   useEffect(() => {
@@ -278,6 +394,9 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
         if (syncProviderRef.current) {
           notifyCollabStatus(syncProviderRef.current, status);
         }
+        if (status === 'connected') {
+          void ensureBootstrapRevision();
+        }
       },
       initialPendingUpdateBase64: activeConfig.pendingUpdateBase64,
       onPendingUpdateChange: async (pendingUpdateBase64) => {
@@ -339,7 +458,7 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
       store.set(collabConnectionStatusAtom(filePath), 'disconnected');
       store.set(collabAwarenessAtom(filePath), new Map());
     };
-  }, [activeConfig, filePath]);
+  }, [activeConfig, ensureBootstrapRevision, filePath]);
 
   // Build the provider factory for CollaborationPlugin
   // This function is called by CollaborationPlugin with a doc ID and yjsDocMap.
@@ -441,7 +560,7 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
       },
 
       openHistory(): void {
-        // History not yet supported for collaborative documents
+        setHistoryDialogFile(filePath);
       },
 
       storage,
@@ -452,16 +571,88 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
 
       registerMenuItems(): void {},
     };
-  }, [filePath, fileName, isActive, onDirtyChange]);
+  }, [filePath, fileName, isActive, onDirtyChange, setHistoryDialogFile]);
 
-  // Expose a no-op manual save function
+  // Expose manual save as "save a shared revision". This keeps Cmd/Ctrl+S
+  // meaningful in collaboration mode even though there is no local disk save.
   useEffect(() => {
     if (onManualSaveReady) {
       onManualSaveReady(async () => {
-        // No-op for collaborative documents -- content syncs via Y.Doc
+        try {
+          await createRevisionFromCurrentSnapshot('manual');
+        } catch (error) {
+          console.warn('[CollaborativeTabEditor] Failed to create manual revision', error);
+        }
       });
     }
-  }, [onManualSaveReady]);
+  }, [createRevisionFromCurrentSnapshot, onManualSaveReady]);
+
+  // Periodic auto snapshots for collaborative docs. We watch the current
+  // editor snapshot on a low-frequency loop, mark when content last changed,
+  // and only emit an `auto` revision after the document has been idle for a
+  // bit and the latest content is not already represented by a known revision.
+  useEffect(() => {
+    let cancelled = false;
+    // Guard against overlapping ticks: exportSnapshot + sha256 + POST can
+    // exceed the poll interval, and two concurrent ticks would race on the
+    // bookkeeping refs (idle timer, last-recorded hash).
+    let running = false;
+
+    const tick = async () => {
+      if (running) return;
+      const controller = historyControllerRef.current;
+      if (!controller?.exportSnapshot) return;
+      if (controller.getStatus() !== 'connected') return;
+      if (!bootstrapEnsuredRef.current) return;
+
+      running = true;
+      try {
+        const snapshot = normalizeSnapshotBytes(await controller.exportSnapshot());
+        if (cancelled) return;
+
+        const contentHash = await sha256Hex(snapshot);
+        if (cancelled) return;
+
+        if (contentHash !== lastObservedSnapshotHashRef.current) {
+          lastObservedSnapshotHashRef.current = contentHash;
+          lastObservedSnapshotAtRef.current = Date.now();
+          return;
+        }
+
+        const now = Date.now();
+        if (now - lastObservedSnapshotAtRef.current < AUTO_REVISION_IDLE_MS) return;
+        if (now - lastAutoRevisionAtRef.current < AUTO_REVISION_MIN_INTERVAL_MS) return;
+        if (contentHash === lastRecordedRevisionHashRef.current) return;
+
+        try {
+          await controller.client.createRevision({
+            revisionKind: 'auto',
+            editorType: controller.editorType,
+            contentFormat: controller.contentFormat,
+            plaintext: snapshot,
+            basisSequence: controller.getBasisSequence(),
+          });
+          if (cancelled) return;
+          lastRecordedRevisionHashRef.current = contentHash;
+          lastAutoRevisionAtRef.current = now;
+        } catch (error) {
+          console.warn('[CollaborativeTabEditor] Failed to create auto revision', error);
+        }
+      } finally {
+        running = false;
+      }
+    };
+
+    void tick();
+    const intervalId = window.setInterval(() => {
+      void tick();
+    }, AUTO_REVISION_POLL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [activeConfig.documentId, activeConfig.orgId]);
 
   // Decrement the main-side collab-asset:// registry refcount on unmount
   // and on every activeConfig swap (key rotation re-resolves config, which
@@ -530,10 +721,67 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
   }, [localOrigin]);
   const handleLexicalEditorReady = useCallback((editor: any) => {
     setLexicalEditor((prev: any) => (prev === editor ? prev : editor));
+    lexicalEditorRef.current = editor ?? null;
     setTimeout(() => {
       FixedTabHeaderRegistry.getInstance().notifyChange();
     }, 150);
   }, []);
+
+  const handleGetContentReady = useCallback((fn: () => string) => {
+    getContentRef.current = fn;
+    onGetContentReady?.(fn);
+  }, [onGetContentReady]);
+
+  // Publish a per-tab history controller so the CollabHistoryDialog can
+  // list / load / create revisions against the live document key without
+  // re-resolving config or threading callbacks through Jotai.
+  useEffect(() => {
+    if (documentType !== 'markdown') return;
+    const syncProvider = syncProviderRef.current;
+    if (!syncProvider) return;
+    if (!lexicalEditor) return;
+
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+    const controller: CollabHistoryController = {
+      client: createHistoryClient(),
+      editorType: 'markdown',
+      contentFormat: 'markdown',
+      previewKind: 'text',
+      exportSnapshot: () => {
+        const getContent = getContentRef.current;
+        const markdown = getContent ? getContent() : '';
+        return encoder.encode(markdown);
+      },
+      applySnapshot: (plaintext: Uint8Array) => {
+        const editor = lexicalEditorRef.current;
+        if (!editor) return;
+        const markdown = decoder.decode(plaintext);
+        editor.update(() => {
+          const root = $getRoot();
+          root.clear();
+          $convertFromEnhancedMarkdownString(markdown, getEditorTransformers());
+        });
+      },
+      getBasisSequence: () => syncProvider.getLastSeq(),
+      getStatus: () => syncProvider.getStatus(),
+    };
+    historyControllerRef.current = controller;
+
+    const unregister = registerCollabHistoryController(
+      filePath,
+      controller,
+      () => bumpHistoryControllers()
+    );
+    void ensureBootstrapRevision();
+
+    return () => {
+      if (historyControllerRef.current === controller) {
+        historyControllerRef.current = null;
+      }
+      unregister();
+    };
+  }, [bumpHistoryControllers, createHistoryClient, documentType, ensureBootstrapRevision, filePath, lexicalEditor]);
 
   return (
     <div className="collaborative-tab-editor" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -582,7 +830,7 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
           }
           showShareLinkButton={false}
           showSharedDocButton={false}
-          showHistoryAction={false}
+          showHistoryAction={true}
           showCommonFileActions={false}
           extraActionItems={localOriginActionItems}
         />
@@ -612,7 +860,7 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
               <MarkdownEditor
                 host={editorHost}
                 config={markdownConfig}
-                onGetContent={onGetContentReady}
+                onGetContent={handleGetContentReady}
                 onEditorReady={handleLexicalEditorReady}
                 collaborationConfig={collaborationMemoConfig}
               />
@@ -626,6 +874,13 @@ export const CollaborativeTabEditor: React.FC<CollaborativeTabEditorProps> = ({
             fileName={fileName}
             isActive={isActive}
             activeConfig={activeConfig}
+            createHistoryClient={createHistoryClient}
+            onHistoryControllerChange={(controller) => {
+              historyControllerRef.current = controller;
+              if (controller?.exportSnapshot) {
+                void ensureBootstrapRevision();
+              }
+            }}
             onDirtyChange={onDirtyChange}
           />
         ) : (
@@ -649,6 +904,8 @@ interface ExtensionCollabBranchProps {
   fileName: string;
   isActive: boolean;
   activeConfig: CollabDocumentConfig;
+  createHistoryClient: () => CollabHistoryClient;
+  onHistoryControllerChange: (controller: CollabHistoryController | null) => void;
   onDirtyChange?: (isDirty: boolean) => void;
 }
 
@@ -659,8 +916,37 @@ const ExtensionCollabBranch: React.FC<ExtensionCollabBranchProps> = ({
   fileName,
   isActive,
   activeConfig,
+  createHistoryClient,
+  onHistoryControllerChange,
   onDirtyChange,
 }) => {
+  const setHistoryDialogFile = useSetAtom(historyDialogFileAtom);
+  const bumpHistoryControllers = useSetAtom(collabHistoryControllerBumpAtom);
+  const adapterRef = useRef<import('@nimbalyst/runtime').RevisionSnapshotAdapter | null>(null);
+  const unregisterControllerRef = useRef<(() => void) | null>(null);
+
+  const publishHistoryController = useCallback((adapter: import('@nimbalyst/runtime').RevisionSnapshotAdapter | null) => {
+    unregisterControllerRef.current?.();
+    unregisterControllerRef.current = null;
+
+    const controller: CollabHistoryController = {
+      client: createHistoryClient(),
+      editorType: activeConfig.documentType ?? 'custom',
+      contentFormat: adapter?.contentFormat ?? (activeConfig.documentType ?? 'metadata-only'),
+      previewKind: adapter?.previewKind ?? 'metadata-only',
+      exportSnapshot: adapter ? () => adapter.exportRevisionSnapshot() : undefined,
+      applySnapshot: adapter ? (bytes) => adapter.restoreRevisionSnapshot(bytes) : undefined,
+      getBasisSequence: () => syncProvider.getLastSeq(),
+      getStatus: () => syncProvider.getStatus(),
+    };
+
+    onHistoryControllerChange(controller);
+    unregisterControllerRef.current = registerCollabHistoryController(
+      filePath,
+      controller,
+      () => bumpHistoryControllers()
+    );
+  }, [activeConfig.documentType, bumpHistoryControllers, createHistoryClient, filePath, onHistoryControllerChange, syncProvider]);
   // Build the y-protocols Awareness + DocumentSync bridge.
   // Created once per provider instance; recreated when activeConfig changes
   // (which already recreates the syncProvider above).
@@ -696,15 +982,34 @@ const ExtensionCollabBranch: React.FC<ExtensionCollabBranchProps> = ({
     });
   }, [syncProvider, activeConfig.documentId]);
 
+  useEffect(() => {
+    if (!adapterRef.current) {
+      publishHistoryController(null);
+    }
+  }, [publishHistoryController]);
+
   const collaboration = useMemo(
     () =>
       createCollaborationContext({
         syncProvider,
         awareness: bridgeRef.current!.awareness,
         activeConfig,
+        onRevisionAdapterChange: (adapter) => {
+          adapterRef.current = adapter;
+          publishHistoryController(adapter);
+        },
       }),
-    [syncProvider, activeConfig]
+    [activeConfig, publishHistoryController, syncProvider]
   );
+
+  // Tear down the controller when the branch unmounts.
+  useEffect(() => {
+    return () => {
+      onHistoryControllerChange(null);
+      unregisterControllerRef.current?.();
+      unregisterControllerRef.current = null;
+    };
+  }, [onHistoryControllerChange]);
 
   const host = useMemo(
     () =>
@@ -716,8 +1021,9 @@ const ExtensionCollabBranch: React.FC<ExtensionCollabBranchProps> = ({
         activeConfig,
         collaboration,
         onDirtyChange,
+        onOpenHistory: () => setHistoryDialogFile(filePath),
       }),
-    [filePath, fileName, isActive, activeConfig, collaboration, onDirtyChange]
+    [filePath, fileName, isActive, activeConfig, collaboration, onDirtyChange, setHistoryDialogFile]
   );
 
   const ExtensionEditor = registration.component;
