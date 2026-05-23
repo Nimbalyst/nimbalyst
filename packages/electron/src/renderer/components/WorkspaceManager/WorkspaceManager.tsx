@@ -2,13 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 
 // Apply the active theme as a base dark/light class on the WorkspaceManager
 // (project picker) window. The picker does not load the extension theme
-// registry, so we rely on the main process's getThemeSync() to return a
-// resolved 'dark' | 'crystal-dark' | 'light' regardless of whether the
-// active theme is built-in, system, or extension-contributed.
+// registry, so we rely on the main process's getResolvedThemeSync() to return
+// 'dark' | 'crystal-dark' | 'light' regardless of whether the active theme is
+// built-in, system, or extension-contributed.
 const applyTheme = () => {
   if (typeof window === 'undefined') return;
 
-  const resolved = window.electronAPI?.getThemeSync?.() ?? 'light';
+  const resolved = window.electronAPI?.getResolvedThemeSync?.() ?? 'light';
   const root = document.documentElement;
 
   root.classList.remove('light-theme', 'dark-theme', 'crystal-dark-theme');

@@ -86,6 +86,7 @@ interface ElectronAPI {
   // Theme operations
   getTheme: () => Promise<string>;
   getThemeSync: () => string;
+  getResolvedThemeSync: () => string;
   getAppVersion: () => Promise<string>;
   setTheme: (theme: string) => Promise<void>;
 
