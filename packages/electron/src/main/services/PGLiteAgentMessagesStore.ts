@@ -8,11 +8,34 @@ import type {
 } from '@nimbalyst/runtime';
 import type { AgentMessagesStore } from '@nimbalyst/runtime/storage/repositories/AgentMessagesRepository';
 
-type PGliteLike = {
+type TransactionDb = {
   query<T = any>(sql: string, params?: any[]): Promise<{ rows: T[] }>;
 };
 
+type PGliteLike = TransactionDb & {
+  transaction?<T>(fn: (tx: TransactionDb) => Promise<T>): Promise<T>;
+};
+
 type EnsureReadyFn = () => Promise<void>;
+
+async function runTransaction<T>(
+  db: PGliteLike,
+  fn: (tx: TransactionDb) => Promise<T>
+): Promise<T> {
+  if (db.transaction) {
+    return db.transaction(fn);
+  }
+
+  await db.query('BEGIN', []);
+  try {
+    const result = await fn(db);
+    await db.query('COMMIT', []);
+    return result;
+  } catch (error) {
+    await db.query('ROLLBACK', []);
+    throw error;
+  }
+}
 
 export function createPGLiteAgentMessagesStore(db: PGliteLike, ensureDbReady?: EnsureReadyFn): AgentMessagesStore {
   const ensureReady = async () => {
@@ -35,11 +58,8 @@ export function createPGLiteAgentMessagesStore(db: PGliteLike, ensureDbReady?: E
         ? message.createdAt
         : new Date(message.createdAt);
 
-      // Insert the message and update the session's updated_at timestamp in one transaction
-      await db.query('BEGIN', []);
-
-      try {
-        await db.query(
+      await runTransaction(db, async (tx) => {
+        await tx.query(
           `INSERT INTO ai_agent_messages (
             session_id, source, direction, content, metadata, hidden, created_at, provider_message_id, searchable
           ) VALUES (
@@ -62,16 +82,11 @@ export function createPGLiteAgentMessagesStore(db: PGliteLike, ensureDbReady?: E
         // This ensures local DB and sync have identical timestamps
         // Also unarchive the session if it was archived - sending a new message
         // means the user wants to continue the conversation
-        await db.query(
+        await tx.query(
           `UPDATE ai_sessions SET updated_at = $2, is_archived = FALSE WHERE id = $1`,
           [message.sessionId, timestamp]
         );
-
-        await db.query('COMMIT', []);
-      } catch (error) {
-        await db.query('ROLLBACK', []);
-        throw error;
-      }
+      });
     },
 
     async createMany(messages: CreateAgentMessageInput[]): Promise<void> {
@@ -121,10 +136,8 @@ export function createPGLiteAgentMessagesStore(db: PGliteLike, ensureDbReady?: E
         }
       }
 
-      await db.query('BEGIN', []);
-
-      try {
-        await db.query(
+      await runTransaction(db, async (tx) => {
+        await tx.query(
           `INSERT INTO ai_agent_messages (
             session_id, source, direction, content, metadata, hidden, created_at, provider_message_id, searchable
           ) VALUES ${rowPlaceholders.join(', ')}`,
@@ -134,17 +147,12 @@ export function createPGLiteAgentMessagesStore(db: PGliteLike, ensureDbReady?: E
         // One UPDATE per affected session. Six concurrent sessions => six UPDATEs,
         // not 200. The transaction is single-acquire on the writer lock.
         for (const [sessionId, timestamp] of latestPerSession) {
-          await db.query(
+          await tx.query(
             `UPDATE ai_sessions SET updated_at = $2, is_archived = FALSE WHERE id = $1`,
             [sessionId, timestamp]
           );
         }
-
-        await db.query('COMMIT', []);
-      } catch (error) {
-        await db.query('ROLLBACK', []);
-        throw error;
-      }
+      });
     },
 
     async list(sessionId: string, options?: { limit?: number; offset?: number; includeHidden?: boolean }): Promise<AgentMessage[]> {

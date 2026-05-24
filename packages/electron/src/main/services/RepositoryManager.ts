@@ -22,7 +22,7 @@ import { createPGLiteDocumentsRepository } from './PGLiteDocumentsRepository';
 import { createPGLiteQueuedPromptsStore, type QueuedPromptsStore } from './PGLiteQueuedPromptsStore';
 import { createPGLiteSessionWakeupsStore, type SessionWakeupsStore } from './PGLiteSessionWakeupsStore';
 import { createTranscriptEventStore } from './TranscriptEventStore';
-import { database } from '../database/PGLiteDatabaseWorker';
+import { database, databaseBackend } from '../database/PGLiteDatabaseWorker';
 import { logger } from '../utils/logger';
 import { initializeSync, shutdownSync, isSyncEnabled, reinitializeSync } from './SyncManager';
 import { shutdownTrackerSync, initializeTrackerSync } from './TrackerSyncManager';
@@ -60,9 +60,15 @@ class RepositoryManager {
       }
 
       // Create database adapter
-      const dbAdapter = {
+      const dbAdapter: {
+        query: typeof database.query;
+        transaction?: <T>(fn: (tx: { query: typeof database.query }) => Promise<T>) => Promise<T>;
+      } = {
         query: database.query.bind(database),
       };
+      if (databaseBackend === 'postgres' && typeof (database as any).transaction === 'function') {
+        dbAdapter.transaction = (database as any).transaction.bind(database);
+      }
 
       // Create base session store
       this.baseSessionStore = createPGLiteSessionStore(

@@ -1,12 +1,6 @@
-import { AsyncLocalStorage } from 'async_hooks';
 import { Pool, type PoolClient } from 'pg';
 import { logger } from '../utils/logger';
 import { POSTGRES_SCHEMA_STATEMENTS } from './postgresSchema';
-
-interface TxContext {
-  client: PoolClient;
-  finished: boolean;
-}
 
 type TransactionHandle = {
   query<T = any>(sql: string, params?: any[]): Promise<{ rows: T[] }>;
@@ -17,7 +11,6 @@ export class PostgresDatabase {
   private pool: Pool | null = null;
   private initialized = false;
   private initPromise: Promise<void> | null = null;
-  private readonly txStorage = new AsyncLocalStorage<TxContext>();
 
   constructor(private readonly connectionString = process.env.NIMBALYST_DATABASE_URL) {}
 
@@ -76,55 +69,12 @@ export class PostgresDatabase {
       throw new Error('Database not initialized. Call initialize() first.');
     }
 
-    const normalized = sql.trim().replace(/;$/, '').toUpperCase();
-    if (normalized === 'BEGIN' || normalized === 'START TRANSACTION') {
-      return this.beginTransaction<T>(sql);
-    }
-
-    const ctx = this.txStorage.getStore();
-    if (ctx && !ctx.finished) {
-      return this.queryInTransaction<T>(ctx, sql, params, normalized);
+    if (this.isTransactionControlStatement(sql)) {
+      throw new Error('Use database.transaction() for Postgres transactions');
     }
 
     const result = await this.requirePool().query(sql, params);
     return { rows: result.rows as T[] };
-  }
-
-  private async beginTransaction<T>(sql: string): Promise<{ rows: T[] }> {
-    const client = await this.requirePool().connect();
-    const ctx: TxContext = { client, finished: false };
-
-    try {
-      await client.query(sql);
-      this.txStorage.enterWith(ctx);
-      return { rows: [] };
-    } catch (error) {
-      ctx.finished = true;
-      client.release();
-      throw error;
-    }
-  }
-
-  private async queryInTransaction<T>(
-    ctx: TxContext,
-    sql: string,
-    params: any[] | undefined,
-    normalized: string,
-  ): Promise<{ rows: T[] }> {
-    try {
-      const result = await ctx.client.query(sql, params);
-      if (normalized === 'COMMIT' || normalized === 'ROLLBACK') {
-        ctx.finished = true;
-        ctx.client.release();
-      }
-      return { rows: result.rows as T[] };
-    } catch (error) {
-      if (normalized === 'COMMIT' || normalized === 'ROLLBACK') {
-        ctx.finished = true;
-        ctx.client.release();
-      }
-      throw error;
-    }
   }
 
   async exec(sql: string): Promise<void> {
@@ -137,25 +87,32 @@ export class PostgresDatabase {
     }
 
     const client = await this.requirePool().connect();
-    const ctx: TxContext = { client, finished: false };
-
-    return this.txStorage.run(ctx, async () => {
-      try {
-        await client.query('BEGIN');
-        const result = await fn({
-          query: this.query.bind(this),
-          exec: this.exec.bind(this),
-        });
-        await client.query('COMMIT');
-        return result;
-      } catch (error) {
-        await client.query('ROLLBACK').catch(() => {});
-        throw error;
-      } finally {
-        ctx.finished = true;
-        client.release();
-      }
-    });
+    try {
+      await client.query('BEGIN');
+      const tx: TransactionHandle = {
+        query: async <T = any>(sql: string, params?: any[]) => {
+          if (this.isTransactionControlStatement(sql)) {
+            throw new Error('Nested transaction control is not supported');
+          }
+          const result = await client.query(sql, params);
+          return { rows: result.rows as T[] };
+        },
+        exec: async (sql: string) => {
+          if (this.isTransactionControlStatement(sql)) {
+            throw new Error('Nested transaction control is not supported');
+          }
+          await client.query(sql);
+        },
+      };
+      const result = await fn(tx);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async close(): Promise<void> {
@@ -186,6 +143,7 @@ export class PostgresDatabase {
     return {
       query: (sql: string, params?: any[]) => this.query(sql, params),
       exec: (sql: string) => this.exec(sql),
+      transaction: <T>(fn: (tx: TransactionHandle) => Promise<T>) => this.transaction(fn),
     };
   }
 
@@ -212,5 +170,13 @@ export class PostgresDatabase {
       throw new Error('Postgres pool not initialized');
     }
     return this.pool;
+  }
+
+  private isTransactionControlStatement(sql: string): boolean {
+    const normalized = sql.trim().replace(/;$/, '').toUpperCase();
+    return normalized === 'BEGIN'
+      || normalized === 'START TRANSACTION'
+      || normalized === 'COMMIT'
+      || normalized === 'ROLLBACK';
   }
 }
