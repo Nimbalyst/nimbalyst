@@ -23,6 +23,15 @@ describe('describeCodexConfigError', () => {
     expect(msg).toContain('MY_SERVER_API_KEY');
   });
 
+  it('quotes the TOML table key when the server name contains a dot', () => {
+    const msg = describeCodexConfigError(
+      'Error loading config.toml: url is not supported for stdio in mcp_servers.customer.io'
+    );
+    expect(msg).toContain('[mcp_servers."customer.io"]');
+    expect(msg).toContain('[mcp_servers."customer.io".env]');
+    expect(msg).toContain('CUSTOMER_IO_API_KEY');
+  });
+
   it('returns null for unrelated or empty errors', () => {
     expect(describeCodexConfigError('network error: ECONNREFUSED')).toBeNull();
     expect(describeCodexConfigError('Codex Exec exited with code 1')).toBeNull();

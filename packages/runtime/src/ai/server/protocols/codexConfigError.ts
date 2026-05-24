@@ -15,21 +15,24 @@ export function describeCodexConfigError(raw: string): string | null {
   if (!match) return null;
 
   const name = match[1];
+  // TOML bare keys allow only [A-Za-z0-9_-]. A name with any other character
+  // (e.g. a dot) must be quoted, or `[mcp_servers.a.b]` parses as nested tables.
+  const tomlKey = /^[A-Za-z0-9_-]+$/.test(name) ? name : JSON.stringify(name);
   const envKey = `${name.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_API_KEY`;
 
   return [
-    `The MCP server "${name}" in ~/.codex/config.toml uses a "url", which this Codex build does not support (it only launches stdio MCP servers via a "command"). Convert that entry one of two ways, then restart:`,
+    `The MCP server "${name}" in ~/.codex/config.toml uses a "url", which this Codex build does not support (it only launches stdio MCP servers via a "command"). Convert that entry, then restart.`,
     ``,
-    `1) Keep the same remote server, wrapped as a stdio process:`,
-    `     [mcp_servers.${name}]`,
+    `Universal fix - wrap the remote server as a stdio process:`,
+    `     [mcp_servers.${tomlKey}]`,
     `     command = "npx"`,
     `     args = ["-y", "mcp-remote", "<url>"]`,
     ``,
-    `2) Switch to a local stdio server authenticated with a Personal API Key (avoids OAuth token expiry):`,
-    `     [mcp_servers.${name}]`,
+    `If you run a local stdio build of this server (for example, a Personal API Key version that avoids OAuth token expiry), point Codex at it instead:`,
+    `     [mcp_servers.${tomlKey}]`,
     `     command = "python"`,
-    `     args = ["/path/to/${name}-mcp/server.py"]`,
-    `     [mcp_servers.${name}.env]`,
+    `     args = ["/path/to/${name}-server.py"]`,
+    `     [mcp_servers.${tomlKey}.env]`,
     `     ${envKey} = "<your key>"`,
   ].join('\n');
 }
