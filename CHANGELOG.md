@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Extension docs now cover all four markdown/transcript contribution surfaces in both the internal architecture doc and the public SDK docs, including declarative module exports, diff handlers, transcript renderer hooks, and the current `@nimbalyst/runtime` import surface.
 
 ### Fixed
+- Files Mode editor now surfaces AI edits to blockquote lines as red/green diffs, the same as plain paragraphs. (#433)
 - Project quick open now loads recent projects from stored recents instead of crawling every workspace on open.
 - Rebuild Extensions submenu now lists buildable extensions alphabetically.
 - Tracker list, table, and kanban views now share the session-style `#tag` typeahead filter.
