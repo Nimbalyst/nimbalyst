@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Re-uploading a local source into a shared markdown document now waits for the collab write to be acknowledged before tearing down the headless sync client.
 <!-- Bug fixes go here -->
 - Codex session-naming reminder no longer leaks into the chat transcript; its turn output is tagged so the transcript hides it. (#420)
+- Claude Usage popover now renders above the tracker toolbar by raising its stacking order so the usage panel is no longer covered by the toolbar's search bar. (#440) Thanks @Yogitmeister.
 
 ### Removed
 <!-- Removed features go here -->

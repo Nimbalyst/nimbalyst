@@ -139,11 +139,15 @@ export const ClaudeUsagePopover: React.FC<ClaudeUsagePopoverProps> = ({
 
   return (
     <FloatingPortal>
+      {/* z-[60] (above the default z-50) so the popover renders above the
+          tracker toolbar's host stacking context. FloatingPortal escapes to
+          document.body, but ancestor stacking on the toolbar route can still
+          outrank a plain z-50 in practice (#440). */}
       <div
         ref={menu.refs.setFloating}
         style={menu.floatingStyles}
         {...menu.getFloatingProps()}
-        className="w-60 bg-nim-secondary border border-nim rounded-lg shadow-lg z-50 overflow-y-auto"
+        className="w-60 bg-nim-secondary border border-nim rounded-lg shadow-lg z-[60] overflow-y-auto"
         data-testid="claude-usage-popover"
       >
         {/* Header */}
