@@ -15,6 +15,7 @@ import type {
 } from './panel';
 import type { BackendModuleContribution, ExtensionPermissionId } from './permissions';
 import type { ThemeColors } from './theme';
+import type { ExtensionCollabService } from './collab';
 
 /**
  * Manifest validation rejects extensions declaring more than this many
@@ -715,6 +716,14 @@ export interface ExtensionServices {
 
   /** Configuration service (only available if contributions.configuration is defined) */
   configuration?: ExtensionConfigurationService;
+
+  /**
+   * Collaboration service. Used by editors that ship a
+   * CollabContentAdapter to plug into host-level operations on their
+   * shared Y.Doc (re-upload, history, export, AI editing, search).
+   * See `packages/extension-sdk-docs/custom-editors.md`.
+   */
+  collab: ExtensionCollabService;
 }
 
 /**

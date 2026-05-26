@@ -38,6 +38,7 @@ import { FixedTabHeaderContainer, FixedTabHeaderRegistry } from '@nimbalyst/runt
 import { LexicalDiffHeaderAdapter } from '../UnifiedDiffHeader';
 import { DocumentSyncProvider, CollabHistoryClient } from '@nimbalyst/runtime/sync';
 import { CollabLexicalProvider } from '@nimbalyst/runtime/sync';
+import { createRevisionAdapterFromCollabContent } from '@nimbalyst/runtime/sync';
 import { historyDialogFileAtom } from '../../store/atoms/historyDialog';
 import {
   collabHistoryControllerBumpAtom,
@@ -48,7 +49,7 @@ import { $getRoot, type LexicalEditor } from 'lexical';
 import type { EditorHost, ExtensionStorage } from '@nimbalyst/runtime';
 import type { CollabDocumentConfig } from '../../utils/collabDocumentOpener';
 import { resolveCollabConfigForUri } from '../../utils/collabDocumentOpener';
-import { store, editorDirtyAtom, makeEditorKey } from '@nimbalyst/runtime/store';
+import { store, editorDirtyAtom, makeEditorKey, themeIdAtom } from '@nimbalyst/runtime/store';
 import type { Doc } from 'yjs';
 import type { Provider } from '@lexical/yjs';
 import {
@@ -927,13 +928,27 @@ const ExtensionCollabBranch: React.FC<ExtensionCollabBranchProps> = ({
     unregisterControllerRef.current?.();
     unregisterControllerRef.current = null;
 
+    // Fallback: if the extension didn't supply a per-tab snapshot adapter,
+    // try to synthesise one from the registered CollabContentAdapter for
+    // this documentType. This is the "fold" in
+    // design/Collaboration/collab-content-adapter.md -- extensions that
+    // register a content adapter get history support for free.
+    const effectiveAdapter =
+      adapter ??
+      (activeConfig.documentType
+        ? createRevisionAdapterFromCollabContent({
+            documentType: activeConfig.documentType,
+            getYDoc: () => syncProvider.getYDoc(),
+          })
+        : null);
+
     const controller: CollabHistoryController = {
       client: createHistoryClient(),
       editorType: activeConfig.documentType ?? 'custom',
-      contentFormat: adapter?.contentFormat ?? (activeConfig.documentType ?? 'metadata-only'),
-      previewKind: adapter?.previewKind ?? 'metadata-only',
-      exportSnapshot: adapter ? () => adapter.exportRevisionSnapshot() : undefined,
-      applySnapshot: adapter ? (bytes) => adapter.restoreRevisionSnapshot(bytes) : undefined,
+      contentFormat: effectiveAdapter?.contentFormat ?? (activeConfig.documentType ?? 'metadata-only'),
+      previewKind: effectiveAdapter?.previewKind ?? 'metadata-only',
+      exportSnapshot: effectiveAdapter ? () => effectiveAdapter.exportRevisionSnapshot() : undefined,
+      applySnapshot: effectiveAdapter ? (bytes) => effectiveAdapter.restoreRevisionSnapshot(bytes) : undefined,
       getBasisSequence: () => syncProvider.getLastSeq(),
       getStatus: () => syncProvider.getStatus(),
     };
@@ -1009,6 +1024,19 @@ const ExtensionCollabBranch: React.FC<ExtensionCollabBranchProps> = ({
     };
   }, [onHistoryControllerChange]);
 
+  // Theme bridge for the extension host. The host reads the current
+  // theme via `getTheme()` (always fresh, no host recreate) and
+  // subscribes to theme changes through `subscribeToThemeChanges`.
+  // Mirrors how TabEditor wires non-collab custom editors.
+  const themeChangeCallbackRef = useRef<((theme: string) => void) | null>(null);
+  useEffect(() => {
+    const unsubscribe = store.sub(themeIdAtom, () => {
+      const next = store.get(themeIdAtom);
+      themeChangeCallbackRef.current?.(next);
+    });
+    return unsubscribe;
+  }, []);
+
   const host = useMemo(
     () =>
       createCollabExtensionHost({
@@ -1020,6 +1048,15 @@ const ExtensionCollabBranch: React.FC<ExtensionCollabBranchProps> = ({
         collaboration,
         onDirtyChange,
         onOpenHistory: () => setHistoryDialogFile(filePath),
+        getTheme: () => store.get(themeIdAtom),
+        subscribeToThemeChanges: (callback) => {
+          themeChangeCallbackRef.current = callback;
+          return () => {
+            if (themeChangeCallbackRef.current === callback) {
+              themeChangeCallbackRef.current = null;
+            }
+          };
+        },
       }),
     [filePath, fileName, isActive, activeConfig, collaboration, onDirtyChange, setHistoryDialogFile]
   );

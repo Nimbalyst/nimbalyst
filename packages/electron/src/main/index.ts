@@ -151,6 +151,7 @@ import { windowStates, windows, resolveActiveWorkspacePath } from './window/wind
 import { getRecentItems } from './utils/store';
 import { registerOrgKeyHandlers, getOrgKey } from './services/OrgKeyService';
 import { registerDocumentSyncHandlers } from './ipc/DocumentSyncHandlers';
+import { registerBuiltinCollabContentAdapters } from './services/collabContentAdapterRegistration';
 import { registerCollabV3TestHandlers } from './ipc/CollabV3TestHandlers';
 import { getPermissionService } from './services/PermissionService';
 import { ClaudeSettingsManager } from './services/ClaudeSettingsManager';
@@ -1395,6 +1396,7 @@ app.whenReady().then(async () => {
 
     registerTeamHandlers();
     registerOrgKeyHandlers();
+    registerBuiltinCollabContentAdapters();
     registerDocumentSyncHandlers();
     registerCollabV3TestHandlers();
     markEnd('ipc-handlers');

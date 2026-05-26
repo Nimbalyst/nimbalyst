@@ -6,8 +6,9 @@
  * services so the renderer can open collab:// tabs.
  */
 
-import { net } from 'electron';
+import { BrowserWindow, dialog, net } from 'electron';
 import * as fs from 'fs/promises';
+import * as path from 'path';
 import { safeHandle } from '../utils/ipcRegistry';
 import { logger } from '../utils/logger';
 import { getCollabSyncWsUrl, getCollabSyncHttpUrl } from '../utils/collabSyncUrl';
@@ -817,4 +818,62 @@ export function registerDocumentSyncHandlers(): void {
       }
     });
   }
+
+  /**
+   * Save a copy of a shared collab document to disk.
+   *
+   * The renderer projects the live Y.Doc to bytes via the registered
+   * CollabContentAdapter (host knows the layout for this documentType),
+   * then hands the bytes to this IPC. Main shows a save dialog and
+   * writes the file. Same trust boundary as `share:revealInFinder` --
+   * never persists bytes outside the user-chosen path.
+   *
+   * Payload: { documentType, defaultFileName, bytes }
+   * Returns: { success: true, filePath } | { success: false, cancelled?: true, error?: string }
+   */
+  safeHandle('document-sync:export-to-file', async (event, payload: {
+    documentType: string;
+    defaultFileName: string;
+    fileExtensions?: string[];
+    bytes: ArrayBuffer | Uint8Array;
+  }) => {
+    if (!payload || typeof payload.documentType !== 'string' || typeof payload.defaultFileName !== 'string') {
+      return { success: false, error: 'Invalid payload.' };
+    }
+    if (!payload.bytes) {
+      return { success: false, error: 'Missing bytes to write.' };
+    }
+
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const filterExtensions = (payload.fileExtensions ?? [])
+      .map((ext) => (ext.startsWith('.') ? ext.slice(1) : ext))
+      .filter((ext) => ext.length > 0);
+
+    const dialogOptions: Electron.SaveDialogOptions = {
+      title: 'Save a copy',
+      defaultPath: payload.defaultFileName,
+      filters: filterExtensions.length > 0
+        ? [{ name: payload.documentType, extensions: filterExtensions }]
+        : undefined,
+    };
+
+    const result = window
+      ? await dialog.showSaveDialog(window, dialogOptions)
+      : await dialog.showSaveDialog(dialogOptions);
+
+    if (result.canceled || !result.filePath) {
+      return { success: false, cancelled: true };
+    }
+
+    try {
+      const buffer = payload.bytes instanceof Uint8Array
+        ? Buffer.from(payload.bytes)
+        : Buffer.from(new Uint8Array(payload.bytes));
+      await fs.writeFile(result.filePath, buffer);
+      return { success: true, filePath: result.filePath, fileName: path.basename(result.filePath) };
+    } catch (err) {
+      logger.main.error('[DocumentSync] export-to-file write failed:', err);
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
 }

@@ -19,6 +19,9 @@ import type {
 
 import { REQUIRED_EXTERNALS, validateExtensionBundle } from '@nimbalyst/extension-sdk';
 import { createExtensionConfig } from '@nimbalyst/extension-sdk/vite';
+
+// Collaboration: per-extension Y.Doc content contract
+import type { CollabContentAdapter } from '@nimbalyst/extension-sdk';
 ```
 
 ## Extension Entry Point
@@ -101,6 +104,7 @@ interface ExtensionServices {
   ui: ExtensionUIService;
   ai?: ExtensionAIService;
   configuration?: ExtensionConfigurationService;
+  collab: ExtensionCollabService;
 }
 ```
 
@@ -592,6 +596,59 @@ assertBackendModulesValid(manifest.id, manifest.contributions?.backendModules);
 `validateExtensionBundle()` already runs `validateBackendModules()` against
 the manifest it reads from disk; call the helpers directly only if you are
 validating a manifest you constructed in memory.
+
+## Collaboration: `CollabContentAdapter`
+
+The per-extension Y.Doc content contract. See [custom-editors.md](./custom-editors.md#making-your-editor-collaborative) for the full guide.
+
+```ts
+import type { Doc } from 'yjs';
+
+interface CollabContentAdapter<TStructured = unknown> {
+  documentType: string;
+  fileExtensions: string[];
+  mimeType?: string;
+  layoutVersion: number;
+  migrations?: CollabContentAdapterMigration[];
+
+  isEmpty(yDoc: Doc): boolean;
+  seedFromFile(yDoc: Doc, source: string | Uint8Array): void;
+  applyFromFile(yDoc: Doc, source: string | Uint8Array): void;
+  exportToFile(yDoc: Doc): string | Uint8Array;
+  toPlainText(yDoc: Doc): string;
+
+  // Optional: AI-write surface
+  toStructured?(yDoc: Doc): TStructured;
+  applyStructuredPatch?(yDoc: Doc, patch: unknown): void;
+
+  // Optional: revision-history overrides (defaults use Y.encodeStateAsUpdateV2)
+  exportRevisionSnapshot?(yDoc: Doc): Uint8Array;
+  restoreRevisionSnapshot?(yDoc: Doc, bytes: Uint8Array): void;
+}
+
+interface CollabContentAdapterMigration {
+  from: number;
+  to: number;
+  run(yDoc: Doc): void;
+}
+```
+
+### Registration
+
+Adapters are registered via the extension context, not via a global function. The host owns the registry; extensions only need the type.
+
+```ts
+interface ExtensionCollabService {
+  registerContentAdapter(adapter: CollabContentAdapter): { dispose(): void };
+}
+
+// Usage from activate():
+export async function activate(context: ExtensionContext) {
+  context.services.collab.registerContentAdapter(MyAdapter);
+}
+```
+
+The returned disposable is also tracked in `context.subscriptions`, so it unregisters automatically on `deactivate()`.
 
 ## Vite Helper
 

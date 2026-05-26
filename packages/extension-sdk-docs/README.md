@@ -6,7 +6,7 @@ Welcome to the Nimbalyst Extension SDK. This documentation will help you build e
 
 Extensions can add:
 
-- **Custom Editors** - New ways to view and edit file types (spreadsheets, diagrams, 3D models)
+- **Custom Editors** - New ways to view and edit file types (spreadsheets, diagrams, 3D models), including collaborative shared documents via `CollabContentAdapter`
 - **AI Tools** - Tools that Claude can use to interact with your extension
 - **AI Completions** - Call chat models (Claude, OpenAI, LM Studio) directly from your extension
 - **Slash Commands** - Commands users can invoke from the editor
