@@ -54,4 +54,12 @@ describe('GitWorktreeService.validateWorkspaceHasCommits', () => {
       .rejects
       .toThrow('workspacePath is required');
   });
+
+  it('throws "Not a git repository" for a folder that was never `git init`-ed', async () => {
+    // tmpDir exists but has no .git. Differentiates from the empty-repo case
+    // so callers can show a remediation message that matches the real cause.
+    await expect(service.validateWorkspaceHasCommits(tmpDir))
+      .rejects
+      .toThrow(/Not a git repository/);
+  });
 });

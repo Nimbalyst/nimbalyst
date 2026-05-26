@@ -697,6 +697,15 @@ export class GitWorktreeService {
     if (!workspacePath) {
       throw new Error('workspacePath is required');
     }
+    // Differentiate "not a git repo at all" from "git repo with no commits".
+    // simple-git's checkIsRepo defaults to IN_TREE which walks UP the directory
+    // tree and would return true if any ancestor has a .git. We need the
+    // workspacePath itself to be the repo root for worktree ops, so do a
+    // direct fs check for `.git` (file or directory - submodules use a file).
+    const gitMeta = path.join(workspacePath, '.git');
+    if (!fs.existsSync(gitMeta)) {
+      throw new Error(`Not a git repository: ${workspacePath}`);
+    }
     const git: SimpleGit = simpleGit(workspacePath);
     try {
       await git.raw(['rev-parse', '--verify', 'HEAD']);

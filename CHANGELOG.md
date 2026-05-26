@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 <!-- Bug fixes go here -->
-- Blitz no longer silently dismisses the dialog when run against a workspace whose git repo has no commits.
+- Blitz no longer silently dismisses the dialog when run against a workspace whose git repo has no commits. (#455)
 
 ### Removed
 <!-- Removed features go here -->
