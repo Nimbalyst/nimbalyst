@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 <!-- Bug fixes go here -->
 - Agent transcript no longer collapses `$7M ... $40M`-style currency text into LaTeX. (#462)
+- Blitz no longer silently dismisses the dialog when run against a workspace whose git repo has no commits. (#455)
 
 ### Removed
 <!-- Removed features go here -->

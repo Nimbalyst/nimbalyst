@@ -687,20 +687,36 @@ async function uninstallExtension(extensionId: string): Promise<InstallResult> {
       return { success: false, error: `Extension ${extensionId} was not installed via marketplace` };
     }
 
-    // BEFORE removing the directory, read the manifest to learn which
-    // aiProviders the extension contributed. We need this list to garbage-
+    // BEFORE removing the directory, read the manifest to learn which AI
+    // providers the extension contributed. We need this list to garbage-
     // collect the matching keys from ai-settings.providerSettings -- without
     // this step, the user's stored enabled/models choices persist on disk
     // forever and the renderer SettingsSidebar keeps rendering ghost provider
     // rows on the next boot even though no extension is registered.
+    //
+    // Read both `aiProviders` and `aiAgentProviders`. The agent-provider
+    // contribution shape proposed in the Agent-Providers-as-Extensions design
+    // doc uses `aiAgentProviders`, while a future chat-only contribution may
+    // reuse the older `aiProviders` name. Reading both keeps the GC working
+    // across the rename without a follow-up patch when either lands. An
+    // extension that declares both (e.g., for a transitional period) is
+    // handled idempotently downstream because the prune loop skips ids that
+    // are not in providerSettings.
     let contributedAiProviderIds: string[] = [];
     try {
       const manifestPath = path.join(installPath, 'manifest.json');
       const manifestRaw = await fs.readFile(manifestPath, 'utf8');
       const manifest = JSON.parse(manifestRaw) as {
-        contributions?: { aiProviders?: Array<{ id?: string }> };
+        contributions?: {
+          aiProviders?: Array<{ id?: string }>;
+          aiAgentProviders?: Array<{ id?: string }>;
+        };
       };
-      contributedAiProviderIds = (manifest.contributions?.aiProviders ?? [])
+      const collected = [
+        ...(manifest.contributions?.aiProviders ?? []),
+        ...(manifest.contributions?.aiAgentProviders ?? []),
+      ];
+      contributedAiProviderIds = collected
         .map((p) => p?.id)
         .filter((id): id is string => typeof id === 'string' && id.length > 0);
     } catch (err) {
