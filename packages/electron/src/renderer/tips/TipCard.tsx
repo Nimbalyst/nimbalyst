@@ -10,6 +10,38 @@ import { createPortal } from 'react-dom';
 import type { TipDefinition } from './types';
 
 /**
+ * Parse basic markdown in tip body text.
+ * Supports: **bold**, line breaks (paragraphs), and bullet lists (- or *).
+ */
+function parseMarkdownBody(text: string): React.ReactNode {
+  const paragraphs = text.split(/\n\n+/);
+
+  return paragraphs.map((paragraph, pIndex) => {
+    const trimmed = paragraph.trim();
+    if (!trimmed) return null;
+
+    const lines = trimmed.split('\n');
+    const isBulletList = lines.every((line) => /^[-*]\s/.test(line.trim()));
+
+    if (isBulletList) {
+      return (
+        <ul key={pIndex} className="tip-card-list list-disc pl-4 my-2 space-y-1">
+          {lines.map((line, lIndex) => (
+            <li key={lIndex}>{parseBoldText(line.replace(/^[-*]\s*/, '').trim())}</li>
+          ))}
+        </ul>
+      );
+    }
+
+    return (
+      <p key={pIndex} className="tip-card-paragraph my-2 first:mt-0 last:mb-0">
+        {parseBoldText(trimmed.replace(/\n/g, ' '))}
+      </p>
+    );
+  });
+}
+
+/**
  * Parse basic **bold** text within a string.
  */
 function parseBoldText(text: string): React.ReactNode {
@@ -67,7 +99,7 @@ export function TipCard({
     onSecondaryAction?.();
   }, [onSecondaryAction]);
 
-  const renderedBody = useMemo(() => parseBoldText(tip.content.body), [tip.content.body]);
+  const renderedBody = useMemo(() => parseMarkdownBody(tip.content.body), [tip.content.body]);
 
   const card = (
     <div

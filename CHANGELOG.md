@@ -10,9 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Contextual tips: small bottom-left cards that suggest tracker mode, worktree sessions, the keyboard-shortcuts dialog, and theme exploration based on local feature usage.
+- Tip body now renders basic markdown (paragraphs, bullets, bold).
 
 ### Changed
 <!-- Changes to existing functionality go here -->
+- Bumping a tip or walkthrough version now re-shows it even if the prior version was completed or dismissed.
 
 ### Fixed
 <!-- Bug fixes go here -->

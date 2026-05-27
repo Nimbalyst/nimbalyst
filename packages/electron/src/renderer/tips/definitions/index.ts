@@ -6,8 +6,16 @@
  */
 
 import type { TipDefinition } from '../types';
+import { keyboardShortcutsTip } from './keyboard-shortcuts';
 import { mobileKeepAwakeTip } from './mobile-keep-awake';
+import { themeExploreTip } from './theme-explore';
+import { trackerModeTip } from './tracker-mode';
+import { worktreeSessionTip } from './worktree-session';
 
 export const tips: TipDefinition[] = [
   mobileKeepAwakeTip,
+  worktreeSessionTip,
+  trackerModeTip,
+  keyboardShortcutsTip,
+  themeExploreTip,
 ];

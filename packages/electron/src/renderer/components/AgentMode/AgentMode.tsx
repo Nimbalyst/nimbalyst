@@ -67,6 +67,7 @@ import { fetchSessionSharesAtom } from '../../store';
 import type { WorktreeCreateResult, SessionCreateResult } from '../../../shared/ipc/types';
 import { BlitzDialog } from '../BlitzDialog/BlitzDialog';
 import { MetaAgentMode } from '../MetaAgentMode/MetaAgentMode';
+import { tipCreateWorktreeSessionRequestAtom } from '../../tips/atoms';
 
 export interface AgentModeRef {
   createNewSession: (initialDraft?: string) => Promise<string | undefined>;
@@ -450,6 +451,20 @@ export const AgentMode = forwardRef<AgentModeRef, AgentModeProps>(function Agent
       throw error;
     }
   }, [workspacePath, addSession, setSelectedWorkstream, defaultModel, isWorktreesAvailable, isGitRepo]);
+
+  const tipCreateWorktreeRequest = useAtomValue(tipCreateWorktreeSessionRequestAtom);
+  const processedTipCreateWorktreeRequestRef = useRef(0);
+  useEffect(() => {
+    if (
+      tipCreateWorktreeRequest === 0 ||
+      tipCreateWorktreeRequest === processedTipCreateWorktreeRequestRef.current
+    ) {
+      return;
+    }
+
+    processedTipCreateWorktreeRequestRef.current = tipCreateWorktreeRequest;
+    createNewWorktreeSession();
+  }, [tipCreateWorktreeRequest, createNewWorktreeSession]);
 
   // Create session in an existing worktree and return the session ID
   // This is the core logic shared by both addSessionToWorktree and createWorktreeSession
