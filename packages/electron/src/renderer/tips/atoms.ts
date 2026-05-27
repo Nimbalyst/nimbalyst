@@ -19,3 +19,9 @@ export const activeTipIdAtom = atom<string | null>(null);
  * Enforces the "one tip per app launch" cooldown.
  */
 export const tipShownThisSessionAtom = atom(false);
+
+/**
+ * Command atom for requesting a new worktree session from a tip action.
+ * AgentMode watches this and performs the actual worktree creation.
+ */
+export const tipCreateWorktreeSessionRequestAtom = atom<number>(0);
