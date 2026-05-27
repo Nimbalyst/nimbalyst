@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Catalog permission ids `spawn-process`, `network-loopback`, `network-internet`, and `filesystem` were unenforceable inside a Node backend (the module can `require('child_process')` directly) and are no longer accepted. Manifests that still list them load with a non-fatal warning; the ids are silently dropped when computing effective permissions.
 
 ### Fixed
+- CI `npm ci` no longer fails resolving `@nimbalyst/collab-adapters`; the workspace was missing from `package-lock.json` after the CollabContentAdapter commit.
 - Claude Code sessions now flip to "ready" the moment the model's turn finishes instead of sitting on the last output for up to 30 s while the SDK stdin grace period expired.
 - Claude Code sessions no longer reset mid-conversation when the agent spawns sub-agents. Sub-agent assistant chunks carry their own `session_id`; the transcript adapter was capturing that as the lead's, corrupting resume on the next turn. (#451, #456, #457)
 - Project quick open now loads recent projects from stored recents instead of crawling every workspace on open.
