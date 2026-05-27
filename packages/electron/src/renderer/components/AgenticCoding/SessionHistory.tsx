@@ -91,6 +91,10 @@ type UnifiedListItem =
   | { type: 'superLoop'; loop: SuperLoop; timestamp: number; rank: number }
   | { type: 'metaAgent'; metaSession: SessionItem; childSessions: SessionItem[]; timestamp: number; rank: number };
 
+// Virtual tag name used in the search-by-tag picker to filter sessions
+// attached to a worktree. Not stored on any session.
+const VIRTUAL_TAG_WORKTREE = 'worktree';
+
 // Search filter options for content search
 type SearchTimeRange = '7d' | '30d' | '90d' | 'all';
 type SearchDirection = 'all' | 'input' | 'output';
@@ -370,14 +374,26 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
   const tagDropdownRef = useRef<HTMLDivElement>(null);
   const searchTrackDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Tags available for selection: exclude already-active tags, optionally narrow by typed query
+  // Tags available for selection: exclude already-active tags, optionally narrow by typed query.
+  // Includes the virtual `#worktree` tag, which matches any session attached to a worktree.
   const filteredTagOptions = useMemo(() => {
     const activeSet = new Set(tagFilter.tags);
     const q = tagQuery.toLowerCase();
-    return allWorkspaceTags
-      .filter(t => !activeSet.has(t.name))
-      .filter(t => !q || t.name.toLowerCase().includes(q));
-  }, [allWorkspaceTags, tagFilter.tags, tagQuery]);
+    const virtuals: { name: string; count: number }[] = [];
+    if (!activeSet.has(VIRTUAL_TAG_WORKTREE)) {
+      let worktreeCount = 0;
+      for (const s of allSessions) if (s.worktreeId) worktreeCount++;
+      if (worktreeCount > 0) {
+        virtuals.push({ name: VIRTUAL_TAG_WORKTREE, count: worktreeCount });
+      }
+    }
+    const real = allWorkspaceTags.filter(
+      t => !activeSet.has(t.name) && t.name !== VIRTUAL_TAG_WORKTREE,
+    );
+    return [...virtuals, ...real].filter(
+      t => !q || t.name.toLowerCase().includes(q),
+    );
+  }, [allWorkspaceTags, allSessions, tagFilter.tags, tagQuery]);
 
   const addTagFilter = useCallback((tag: string) => {
     if (!tagFilter.tags.includes(tag)) {
@@ -707,7 +723,10 @@ const SessionHistoryComponent: React.FC<SessionHistoryProps> = ({
       }
       if (hasTagFilter) {
         const sessionTags = session.tags ?? [];
-        if (!activeTags.some(t => sessionTags.includes(t))) return false;
+        const matchesAny = activeTags.some(t =>
+          t === VIRTUAL_TAG_WORKTREE ? !!session.worktreeId : sessionTags.includes(t),
+        );
+        if (!matchesAny) return false;
       }
       return true;
     });
