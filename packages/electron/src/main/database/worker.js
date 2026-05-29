@@ -18,7 +18,81 @@
 const { parentPort, workerData } = require('worker_threads');
 const { PGlite } = require('@electric-sql/pglite');
 const path = require('path');
+const inspector = require('node:inspector');
+const { performance } = require('node:perf_hooks');
 const { serializeWorkerError } = require('./workerErrorSerialization');
+
+// ---------------------------------------------------------------------------
+// CPU profile auto-capture for the PGLite worker.
+// Same pattern as the SQLite worker: poll event-loop utilization, capture a
+// 5s CPU profile via inspector.Session when ELU stays >= 0.8, write to the
+// same logs dir as main.log. inspector.Session on main can't see this isolate,
+// so without this we have no signal when PGLite pegs CPU.
+// ---------------------------------------------------------------------------
+const WORKER_PROFILE_TTL_MS = 60_000;
+const WORKER_PROFILE_DURATION_MS = 5_000;
+const WORKER_ELU_THRESHOLD = 0.8;
+const WORKER_ELU_TRIGGER_SAMPLES = 2;
+let pgliteProfileInFlight = false;
+let pgliteLastProfileAt = 0;
+let pgliteHighEluStreak = 0;
+
+async function capturePgliteWorkerCpuProfile(triggerElu) {
+  if (pgliteProfileInFlight) return;
+  const now = Date.now();
+  if (now - pgliteLastProfileAt < WORKER_PROFILE_TTL_MS) return;
+  pgliteProfileInFlight = true;
+  pgliteLastProfileAt = now;
+
+  const session = new inspector.Session();
+  try {
+    session.connect();
+    const post = (method, params) =>
+      new Promise((resolve, reject) => {
+        session.post(method, params, (err, result) => {
+          if (err) reject(err); else resolve(result);
+        });
+      });
+    await post('Profiler.enable');
+    await post('Profiler.start');
+    await new Promise((r) => setTimeout(r, WORKER_PROFILE_DURATION_MS));
+    const { profile } = await post('Profiler.stop');
+
+    const fs = require('fs').promises;
+    const logsDir = path.join(workerData.userDataPath, 'logs');
+    await fs.mkdir(logsDir, { recursive: true });
+    const filename = `cpu-pglite-worker-${new Date().toISOString().replace(/[:.]/g, '-')}.cpuprofile`;
+    const fullPath = path.join(logsDir, filename);
+    await fs.writeFile(fullPath, JSON.stringify(profile));
+    console.log(`[PERF] Captured PGLite worker CPU profile (elu=${triggerElu.toFixed(2)}) -> ${fullPath}`);
+  } catch (err) {
+    console.log('[PERF] PGLite worker CPU profile capture failed:', err);
+  } finally {
+    try { session.disconnect(); } catch { /* already disconnected */ }
+    pgliteProfileInFlight = false;
+  }
+}
+
+function startPgliteWorkerCpuMonitor() {
+  let prev = performance.eventLoopUtilization();
+  const timer = setInterval(() => {
+    const next = performance.eventLoopUtilization();
+    const delta = performance.eventLoopUtilization(next, prev);
+    prev = next;
+    if (delta.utilization >= WORKER_ELU_THRESHOLD) {
+      pgliteHighEluStreak++;
+      if (pgliteHighEluStreak >= WORKER_ELU_TRIGGER_SAMPLES) {
+        pgliteHighEluStreak = 0;
+        capturePgliteWorkerCpuProfile(delta.utilization);
+      }
+    } else {
+      pgliteHighEluStreak = 0;
+    }
+  }, 10_000);
+  if (typeof timer.unref === 'function') timer.unref();
+}
+
+startPgliteWorkerCpuMonitor();
 
 // WAL maintenance: total bytes across pg_wal/ that triggers an idle CHECKPOINT.
 // Why this number: PGLite's runtime settings are min_wal_size=80MB, max_wal_size=1GB

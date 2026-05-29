@@ -46,6 +46,11 @@ export function getMigrations(schemaDir: string): Migration[] {
       name: 'initial',
       sqlFile: path.join(schemaDir, '0001_initial.sql'),
     },
+    {
+      version: 2,
+      name: 'pending_files_index',
+      sqlFile: path.join(schemaDir, '0002_pending_files_index.sql'),
+    },
   ];
 }
 

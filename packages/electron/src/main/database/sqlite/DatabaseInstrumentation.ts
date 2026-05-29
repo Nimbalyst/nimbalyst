@@ -254,7 +254,16 @@ export class DatabaseInstrumentation {
       if (t.samples.length > 1000) t.samples.shift();
     }
 
-    if (isSlow) this.persistSlowQuery(opts, shape, callSite);
+    if (isSlow) {
+      this.persistSlowQuery(opts, shape, callSite);
+      // Surface the exact SQL + duration + call site in main.log so we don't
+      // have to guess which query is hot. Shape-normalized so logs aren't
+      // flooded with literal-only variants.
+      this.log(
+        'warn',
+        `[DBInstr] SLOW ${opts.kind} ${opts.durationMs.toFixed(1)}ms${opts.rowsReturned != null ? ` rows=${opts.rowsReturned}` : ''} site=${callSite ?? '?'} sql=${shape.length > 240 ? shape.slice(0, 240) + '...' : shape}`,
+      );
+    }
   }
 
   beginInFlight(sql: string, stack?: string): InFlightHandle {

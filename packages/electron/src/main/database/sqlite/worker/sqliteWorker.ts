@@ -22,6 +22,8 @@
  */
 
 import { parentPort } from 'worker_threads';
+import { performance } from 'node:perf_hooks';
+import inspector from 'node:inspector';
 import * as path from 'path';
 import * as fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
@@ -78,6 +80,102 @@ interface PendingBridge {
   timer?: ReturnType<typeof setTimeout>;
 }
 const pendingBridge = new Map<string, PendingBridge>();
+
+// ---------------------------------------------------------------------------
+// CPU profile auto-capture inside the worker.
+//
+// inspector.Session on main never sees this isolate, so if the worker pegs
+// CPU (e.g. a busy query loop, an instrumentation hot path, a runaway timer)
+// the main-side profile shows 100% idle and we have no signal. We poll
+// event-loop utilization here -- when it stays >0.8 across two checks we
+// capture a 5s profile to the same logs dir as main and emit a `log` event
+// so it shows up in main.log. 60s cooldown.
+// ---------------------------------------------------------------------------
+
+let workerLogsDir: string | null = null;
+let workerProfileInFlight = false;
+let workerLastProfileAt = 0;
+let workerHighEluStreak = 0;
+const WORKER_PROFILE_TTL_MS = 60_000;
+const WORKER_PROFILE_DURATION_MS = 5_000;
+const WORKER_ELU_THRESHOLD = 0.8;
+const WORKER_ELU_TRIGGER_SAMPLES = 2;
+
+async function captureWorkerCpuProfile(triggerElu: number): Promise<void> {
+  if (workerProfileInFlight || !workerLogsDir) return;
+  const now = Date.now();
+  if (now - workerLastProfileAt < WORKER_PROFILE_TTL_MS) return;
+  workerProfileInFlight = true;
+  workerLastProfileAt = now;
+
+  // First: dump the top-10 query shapes by total time. This usually answers
+  // "what's hot?" without anyone having to open the .cpuprofile.
+  try {
+    if (sqlite) {
+      const snap = sqlite.getInstrumentation().getSnapshot() as {
+        byShape: Array<{ shape: string; count: number; totalMs: number; p99: number; maxMs: number; lastCallSite: string | null }>;
+      };
+      const top = snap.byShape.slice(0, 10);
+      log('warn', `[PERF] SQLite worker hot shapes (elu=${triggerElu.toFixed(2)}, top ${top.length} by totalMs):`);
+      for (const s of top) {
+        const shape = s.shape.length > 200 ? s.shape.slice(0, 200) + '...' : s.shape;
+        log('warn', `[PERF]   ${s.totalMs}ms total / ${s.count} calls / p99=${s.p99}ms / max=${s.maxMs}ms / site=${s.lastCallSite ?? '?'} | ${shape}`);
+      }
+    }
+  } catch (err) {
+    log('warn', '[PERF] Failed to dump hot shapes: ' + (err instanceof Error ? err.message : String(err)));
+  }
+
+  const session = new inspector.Session();
+  try {
+    session.connect();
+    const post = <T>(method: string, params?: object) =>
+      new Promise<T>((resolve, reject) => {
+        session.post(method, params, (err, result) => {
+          if (err) reject(err); else resolve(result as T);
+        });
+      });
+    await post('Profiler.enable');
+    await post('Profiler.start');
+    await new Promise<void>((r) => setTimeout(r, WORKER_PROFILE_DURATION_MS));
+    const { profile } = await post<{ profile: object }>('Profiler.stop');
+
+    await fs.promises.mkdir(workerLogsDir, { recursive: true });
+    const filename = `cpu-sqlite-worker-${new Date().toISOString().replace(/[:.]/g, '-')}.cpuprofile`;
+    const fullPath = path.join(workerLogsDir, filename);
+    await fs.promises.writeFile(fullPath, JSON.stringify(profile));
+    log('info', '[PERF] Captured SQLite worker CPU profile', { triggerElu: triggerElu.toFixed(2), path: fullPath });
+  } catch (err) {
+    log('error', '[PERF] SQLite worker CPU profile capture failed', { err: err instanceof Error ? err.message : String(err) });
+  } finally {
+    try { session.disconnect(); } catch { /* already disconnected */ }
+    workerProfileInFlight = false;
+  }
+}
+
+function startWorkerCpuMonitor(): void {
+  // performance.eventLoopUtilization tracks (busy / (idle + busy)). Reading
+  // it without an arg returns the cumulative ELU since worker start; passing
+  // the previous reading returns the delta since last call. Anything close to
+  // 1.0 for sustained periods means this worker's event loop is saturated.
+  let prev = performance.eventLoopUtilization();
+  const timer = setInterval(() => {
+    const next = performance.eventLoopUtilization();
+    const delta = performance.eventLoopUtilization(next, prev);
+    prev = next;
+    const elu = delta.utilization;
+    if (elu >= WORKER_ELU_THRESHOLD) {
+      workerHighEluStreak++;
+      if (workerHighEluStreak >= WORKER_ELU_TRIGGER_SAMPLES) {
+        workerHighEluStreak = 0;
+        void captureWorkerCpuProfile(elu);
+      }
+    } else {
+      workerHighEluStreak = 0;
+    }
+  }, 10_000);
+  if (typeof timer.unref === 'function') timer.unref();
+}
 
 // ---------------------------------------------------------------------------
 // Outbound events + bridge requests.
@@ -186,6 +284,10 @@ async function handle(req: RequestEnvelope): Promise<unknown> {
     case 'init': {
       const opts = req.payload as InitPayload;
       initOpts = opts;
+      // Logs dir is sibling of the data dir (matches main process layout:
+      // userData/sqlite-db -> userData/logs).
+      workerLogsDir = path.join(path.dirname(path.dirname(opts.dbDir)), 'logs');
+      startWorkerCpuMonitor();
       const t0 = performance.now();
       sqlite = new SQLiteDatabase({
         dbDir: opts.dbDir,

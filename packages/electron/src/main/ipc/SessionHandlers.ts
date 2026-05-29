@@ -608,7 +608,8 @@ export async function registerSessionHandlers() {
                 `SELECT s.id, s.provider, s.model, s.session_type, s.mode, s.agent_role, s.created_by_session_id, s.title, s.workspace_id,
                         s.worktree_id, s.parent_session_id, s.created_at, s.updated_at, s.is_archived, s.is_pinned,
                         s.metadata,
-                        COUNT(m.id) as message_count
+                        COUNT(m.id) as message_count,
+                        (SELECT COUNT(*) FROM ai_sessions cs WHERE cs.parent_session_id = s.id) as child_count
                  FROM ai_sessions s
                  LEFT JOIN ai_agent_messages m ON s.id = m.session_id AND m.direction = 'input' AND (m.hidden = FALSE OR m.hidden IS NULL)
                  WHERE s.parent_session_id = $1 AND s.workspace_id = $2
@@ -651,13 +652,23 @@ export async function registerSessionHandlers() {
                     title: row.title || 'Untitled Session',
                     provider: row.provider,
                     model: row.model,
+                    sessionType: row.session_type || 'session',
+                    mode: row.mode || null,
                     agentRole: row.agent_role || 'standard',
                     createdBySessionId: row.created_by_session_id || null,
                     createdAt: row.created_at instanceof Date ? row.created_at.getTime() : new Date(row.created_at).getTime(),
                     updatedAt: row.updated_at instanceof Date ? row.updated_at.getTime() : new Date(row.updated_at).getTime(),
+                    workspaceId: row.workspace_id,
+                    worktreeId: row.worktree_id || null,
                     parentSessionId: row.parent_session_id,
                     isArchived: row.is_archived || false,
                     isPinned: row.is_pinned || false,
+                    messageCount: typeof row.message_count === 'string'
+                        ? parseInt(row.message_count, 10) || 0
+                        : (row.message_count || 0),
+                    childCount: typeof row.child_count === 'string'
+                        ? parseInt(row.child_count, 10) || 0
+                        : (row.child_count || 0),
                     uncommittedCount: uncommittedMap.get(row.id) || 0,
                     // Metadata fields needed by TrackerPanel, kanban, etc.
                     phase: metadata.phase || undefined,
