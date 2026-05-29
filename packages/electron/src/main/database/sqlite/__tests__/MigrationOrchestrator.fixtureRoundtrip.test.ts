@@ -283,13 +283,13 @@ describe('MigrationOrchestrator fixture round-trip', () => {
       // but the migrator backfills regardless for historical search).
       expect(msgHits.length).toBeGreaterThanOrEqual(1);
 
-      // FTS over transcript events via the helper
-      const eventHits = await adapter.searchTranscriptEventSessions!('migration', { limit: 10 });
-      const eventSessionIds = new Set(eventHits.map((h) => h.session_id));
-      expect(eventSessionIds.has('sess-1')).toBe(true);
-      // 'tracker sync' lookup should not surface sess-1
-      const trackerHits = await adapter.searchTranscriptEventSessions!('tracker', { limit: 10 });
-      expect(trackerHits.map((h) => h.session_id)).toEqual(['sess-2']);
+      // Note: ai_transcript_events is intentionally not copied by the migrator
+      // (see PGLiteToSQLiteMigrator COPY_TABLES doc). The events table is
+      // derived from ai_agent_messages by TranscriptTransformer on first
+      // session open after migration, so the FTS5 mirror is also empty until
+      // then. The agent-messages FTS coverage above already verifies the
+      // round-trip path; transcript-events FTS belongs to a TranscriptTransformer
+      // integration test, not this round-trip.
 
       // Session metadata JSON round-trips intact (tags array preserved)
       const { rows: metaRows } = await adapter.query<{ metadata: string }>(

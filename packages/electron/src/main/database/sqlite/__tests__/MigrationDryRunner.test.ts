@@ -86,6 +86,8 @@ describe('MigrationDryRunner', () => {
       userDataPath,
       schemaDir: SCHEMA_DIR,
       pglite: liveWorker(pglite),
+      // Force cleanup; the default is now to retain artifacts for adoption.
+      keepArtifacts: false,
     });
 
     const result = await runner.run();

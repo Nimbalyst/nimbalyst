@@ -52,8 +52,9 @@ describe('runMigrations', () => {
   });
 
   it('applies migrations in version order and records them', () => {
-    // Use a temp schema dir with one trivial sql file the runner can find.
+    // Use a temp schema dir with the sql files the runner expects to find.
     fs.writeFileSync(path.join(tmp, '0001_initial.sql'), '-- noop\n');
+    fs.writeFileSync(path.join(tmp, '0002_pending_files_index.sql'), '-- noop\n');
 
     const db = new FakeDb();
     // Hack: inject our own migration list via reflection-equivalent. Re-using
@@ -65,15 +66,15 @@ describe('runMigrations', () => {
     ];
     // The simplest way to test ordering is to call the runner directly with
     // a stand-in implementation; for now, test the file-backed path with the
-    // single bundled migration.
+    // bundled migrations.
     const result = runMigrations(db as unknown as import('better-sqlite3').Database, tmp);
-    expect(result.applied).toEqual([1]);
+    expect(result.applied).toEqual([1, 2]);
     expect(result.skipped).toEqual([]);
 
     // Second invocation: nothing to apply, all skipped.
     const result2 = runMigrations(db as unknown as import('better-sqlite3').Database, tmp);
     expect(result2.applied).toEqual([]);
-    expect(result2.skipped).toEqual([1]);
+    expect(result2.skipped).toEqual([1, 2]);
 
     // Anti-flake: unused locals lint silencer.
     void customs;
@@ -84,8 +85,13 @@ describe('runMigrations', () => {
       path.join(tmp, '0001_initial.sql'),
       'CREATE TABLE foo (id INTEGER PRIMARY KEY);',
     );
+    fs.writeFileSync(
+      path.join(tmp, '0002_pending_files_index.sql'),
+      'CREATE INDEX bar ON foo(id);',
+    );
     const db = new FakeDb();
     runMigrations(db as unknown as import('better-sqlite3').Database, tmp);
     expect(db.execs.some((s) => s.includes('CREATE TABLE foo'))).toBe(true);
+    expect(db.execs.some((s) => s.includes('CREATE INDEX bar'))).toBe(true);
   });
 });
