@@ -364,23 +364,42 @@ export class AIService {
    * this, `ai:getModels` filters out newly-introduced variants (e.g. the
    * `opus-4-6` pinned variant) because they aren't in the saved list and
    * there's no UI in ClaudeCodePanel to re-enable them.
+   *
+   * Each variant gets its own migration key so we can introduce new pinned
+   * variants incrementally without re-running prior insertions.
    */
   private migrateClaudeCodeModelList(): void {
-    const MIGRATION_KEY = 'migrations.claudeCodeOpus46Added';
-    if (this.settingsStore!.get(MIGRATION_KEY)) return;
+    this.migrateClaudeCodeVariantInsertion(
+      'migrations.claudeCodeOpus46Added',
+      'claude-code:opus-4-6',
+      'claude-code:opus',
+    );
+    this.migrateClaudeCodeVariantInsertion(
+      'migrations.claudeCodeOpus47Added',
+      'claude-code:opus-4-7',
+      'claude-code:opus',
+    );
+  }
+
+  private migrateClaudeCodeVariantInsertion(
+    migrationKey: string,
+    variantId: string,
+    insertAfterId: string,
+  ): void {
+    if (this.settingsStore!.get(migrationKey)) return;
     const providerSettings = this.settingsStore!.get('providerSettings', {}) as any;
     const claudeCode = providerSettings?.['claude-code'];
-    if (claudeCode && Array.isArray(claudeCode.models) && !claudeCode.models.includes('claude-code:opus-4-6')) {
-      const opusIndex = claudeCode.models.indexOf('claude-code:opus');
-      const insertAt = opusIndex >= 0 ? opusIndex + 1 : claudeCode.models.length;
+    if (claudeCode && Array.isArray(claudeCode.models) && !claudeCode.models.includes(variantId)) {
+      const anchorIndex = claudeCode.models.indexOf(insertAfterId);
+      const insertAt = anchorIndex >= 0 ? anchorIndex + 1 : claudeCode.models.length;
       claudeCode.models = [
         ...claudeCode.models.slice(0, insertAt),
-        'claude-code:opus-4-6',
+        variantId,
         ...claudeCode.models.slice(insertAt),
       ];
       this.settingsStore!.set('providerSettings', providerSettings);
     }
-    this.settingsStore!.set(MIGRATION_KEY, true);
+    this.settingsStore!.set(migrationKey, true);
   }
 
   private getSettingsStore(): Store<Record<string, unknown>> {
@@ -407,7 +426,7 @@ export class AIService {
                 enabled: true,
                 testStatus: "idle",
                 installStatus: "not-installed",
-                models: ["claude-code:opus", "claude-code:opus-4-6", "claude-code:sonnet", "claude-code:haiku"]
+                models: ["claude-code:opus", "claude-code:opus-4-7", "claude-code:opus-4-6", "claude-code:sonnet", "claude-code:haiku"]
               },
               openai: {
                 enabled: false,
