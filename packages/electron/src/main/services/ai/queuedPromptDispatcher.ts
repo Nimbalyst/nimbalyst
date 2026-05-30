@@ -24,6 +24,7 @@ interface DispatchClaimedQueuedPromptOptions {
   ) => Promise<void>;
   logError: (message: string, error: unknown) => void;
   onAfterSettled?: () => Promise<void>;
+  onChainSettled?: (payload: { sessionId: string; workspacePath: string; source: string }) => Promise<void>;
   onPromptClaimed: (payload: { sessionId: string; promptId: string }) => void;
   processingSet: Set<string>;
   queueStore: QueuedPromptStoreLike;
@@ -49,6 +50,7 @@ export async function dispatchClaimedQueuedPrompt(
     continueQueuedPromptChain,
     logError,
     onAfterSettled,
+    onChainSettled,
     onPromptClaimed,
     processingSet,
     queueStore,
@@ -104,6 +106,17 @@ export async function dispatchClaimedQueuedPrompt(
       } catch (chainErr) {
         logError(`[AIService] ${source} finally: error checking for pending prompts:`, chainErr);
       }
+      // If no follow-on prompt was dispatched, the chain has fully settled.
+      // The inner sendMessage's completion handler deferred endSession because
+      // processingSet still contained this session (we hadn't reached this
+      // delete yet), so nobody has marked the session idle. Do it now.
+      if (!processingSet.has(sessionId) && onChainSettled) {
+        try {
+          await onChainSettled({ sessionId, workspacePath, source });
+        } catch (settledErr) {
+          logError(`[AIService] ${source} finally: chain-settled hook failed:`, settledErr);
+        }
+      }
       if (onAfterSettled) {
         try {
           await onAfterSettled();
@@ -120,6 +133,7 @@ interface TryClaimAndDispatchNextQueuedPromptOptions {
   logError: DispatchClaimedQueuedPromptOptions['logError'];
   logInfo: (message: string) => void;
   onAfterSettled?: DispatchClaimedQueuedPromptOptions['onAfterSettled'];
+  onChainSettled?: DispatchClaimedQueuedPromptOptions['onChainSettled'];
   onPromptClaimed: DispatchClaimedQueuedPromptOptions['onPromptClaimed'];
   processingSet: Set<string>;
   queueStore: QueuedPromptStoreLike;
@@ -139,6 +153,7 @@ export async function tryClaimAndDispatchNextQueuedPrompt(
     logError,
     logInfo,
     onAfterSettled,
+    onChainSettled,
     onPromptClaimed,
     processingSet,
     queueStore,
@@ -186,6 +201,7 @@ export async function tryClaimAndDispatchNextQueuedPrompt(
     continueQueuedPromptChain,
     logError,
     onAfterSettled,
+    onChainSettled,
     onPromptClaimed,
     processingSet,
     queueStore,

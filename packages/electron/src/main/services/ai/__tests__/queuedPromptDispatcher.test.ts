@@ -76,4 +76,108 @@ describe('queuedPromptDispatcher', () => {
     expect(order).toEqual(['startSession', 'promptClaimed', 'sendMessage', 'complete', 'continue']);
     expect(processingSet.has('session-1')).toBe(false);
   });
+
+  it('fires onChainSettled when no follow-on prompt is dispatched', async () => {
+    vi.useFakeTimers();
+
+    const claimedPrompt: ClaimedQueuedPrompt = {
+      id: 'prompt-1',
+      prompt: 'continue',
+      attachments: null,
+      documentContext: null,
+    };
+
+    const queueStore: QueuedPromptStoreLike = {
+      listPending: vi.fn(async () => [claimedPrompt]),
+      claim: vi.fn(async () => claimedPrompt),
+      complete: vi.fn(async () => {}),
+      fail: vi.fn(async () => {}),
+    };
+
+    const processingSet = new Set<string>();
+    const targetWindow = {
+      isDestroyed: () => false,
+      webContents: { send: vi.fn(), mainFrame: {} },
+    } as unknown as Electron.BrowserWindow;
+
+    const onChainSettled = vi.fn(async () => {});
+    // continueQueuedPromptChain doesn't dispatch a follow-on (no pending prompts).
+    const continueQueuedPromptChain = vi.fn(async () => {});
+
+    await tryClaimAndDispatchNextQueuedPrompt({
+      continueQueuedPromptChain,
+      logError: vi.fn(),
+      logInfo: vi.fn(),
+      onChainSettled,
+      onPromptClaimed: () => {},
+      processingSet,
+      queueStore,
+      sendMessageHandler: vi.fn(async () => ({ content: 'ok' })),
+      sessionId: 'session-1',
+      source: 'test queue',
+      startSession: vi.fn(async () => {}),
+      targetWindow,
+      workspacePath: '/workspace/project',
+    });
+
+    await vi.runAllTimersAsync();
+
+    expect(processingSet.has('session-1')).toBe(false);
+    expect(onChainSettled).toHaveBeenCalledTimes(1);
+    expect(onChainSettled).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      workspacePath: '/workspace/project',
+      source: 'test queue',
+    });
+  });
+
+  it('does NOT fire onChainSettled when a follow-on prompt is dispatched', async () => {
+    vi.useFakeTimers();
+
+    const claimedPrompt: ClaimedQueuedPrompt = {
+      id: 'prompt-1',
+      prompt: 'continue',
+      attachments: null,
+      documentContext: null,
+    };
+
+    const queueStore: QueuedPromptStoreLike = {
+      listPending: vi.fn(async () => [claimedPrompt]),
+      claim: vi.fn(async () => claimedPrompt),
+      complete: vi.fn(async () => {}),
+      fail: vi.fn(async () => {}),
+    };
+
+    const processingSet = new Set<string>();
+    const targetWindow = {
+      isDestroyed: () => false,
+      webContents: { send: vi.fn(), mainFrame: {} },
+    } as unknown as Electron.BrowserWindow;
+
+    const onChainSettled = vi.fn(async () => {});
+    // continueQueuedPromptChain dispatches a follow-on by re-adding to processingSet.
+    const continueQueuedPromptChain = vi.fn(async (sessionId: string) => {
+      processingSet.add(sessionId);
+    });
+
+    await tryClaimAndDispatchNextQueuedPrompt({
+      continueQueuedPromptChain,
+      logError: vi.fn(),
+      logInfo: vi.fn(),
+      onChainSettled,
+      onPromptClaimed: () => {},
+      processingSet,
+      queueStore,
+      sendMessageHandler: vi.fn(async () => ({ content: 'ok' })),
+      sessionId: 'session-1',
+      source: 'test queue',
+      startSession: vi.fn(async () => {}),
+      targetWindow,
+      workspacePath: '/workspace/project',
+    });
+
+    await vi.runAllTimersAsync();
+
+    expect(onChainSettled).not.toHaveBeenCalled();
+  });
 });
