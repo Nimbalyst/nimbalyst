@@ -558,6 +558,60 @@ describe('PGLiteToSQLiteMigrator', () => {
     expect(xyzHits.length).toBe(1);
   });
 
+  it('drops transient codex app-server raw notifications during ai_agent_messages migration', async () => {
+    await seedPgliteSchema();
+    await pglite.query(
+      `INSERT INTO ai_sessions(id, provider, title) VALUES ($1, $2, $3)`,
+      ['sess-codex', 'openai-codex', 'codex cleanup test'],
+    );
+    await pglite.query(
+      `INSERT INTO ai_agent_messages(session_id, source, direction, content, metadata, searchable)
+       VALUES
+         ($1, $2, $3, $4, $5::jsonb, $6),
+         ($1, $2, $3, $7, $8::jsonb, $6),
+         ($1, $2, $3, $9, $10::jsonb, $6)`,
+      [
+        'sess-codex',
+        'assistant',
+        'output',
+        'transient-delta-row',
+        JSON.stringify({ transport: 'app-server', eventType: 'item/agentMessage/delta', codexProvider: true }),
+        false,
+        'transient-usage-row',
+        JSON.stringify({ transport: 'app-server', eventType: 'thread/tokenUsage/updated', codexProvider: true }),
+        'kept-file-change-row',
+        JSON.stringify({ transport: 'app-server', eventType: 'item/completed', codexProvider: true }),
+      ],
+    );
+
+    const migrator = new PGLiteToSQLiteMigrator();
+    await migrator.migrate({
+      pglite: pglite as unknown as Parameters<PGLiteToSQLiteMigrator['migrate']>[0]['pglite'],
+      sqlite,
+    });
+
+    const handle = sqlite.getRawHandle()!;
+    const migratedRows = handle
+      .prepare(`SELECT content, json_extract(metadata, '$.eventType') AS eventType FROM ai_agent_messages ORDER BY id`)
+      .all() as { content: string; eventType: string | null }[];
+
+    expect(migratedRows).toHaveLength(1);
+    expect(migratedRows[0]).toEqual({
+      content: 'kept-file-change-row',
+      eventType: 'item/completed',
+    });
+
+    const deltaHits = handle
+      .prepare(`SELECT rowid FROM ai_agent_messages_fts WHERE ai_agent_messages_fts MATCH ?`)
+      .all('"transient-delta-row"') as { rowid: number }[];
+    const keptHits = handle
+      .prepare(`SELECT rowid FROM ai_agent_messages_fts WHERE ai_agent_messages_fts MATCH ?`)
+      .all('"kept-file-change-row"') as { rowid: number }[];
+
+    expect(deltaHits.length).toBe(0);
+    expect(keptHits.length).toBe(1);
+  });
+
   it('throws when row counts mismatch (simulated by deleting a target row mid-flight)', async () => {
     // We can't easily simulate row-count mismatch without monkey-patching, but
     // we can verify the verifier catches a known bad state by directly

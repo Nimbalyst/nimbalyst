@@ -24,7 +24,9 @@
  *     populate automatically through the AFTER INSERT triggers; no separate
  *     backfill step needed. The plan called for this to be wider than the
  *     PGLite `searchable=true` partial index — the SQLite trigger has no
- *     WHERE clause, so every copied row is indexed.
+ *     WHERE clause, so every copied row is indexed. The ai_agent_messages
+ *     copy itself filters transient Codex app-server raw-notification noise
+ *     before rows ever reach SQLite or its FTS mirror.
  *   - Generated columns (`tracker_items.title`, `status`, `kanban_sort_order`)
  *     are skipped at INSERT time; SQLite computes them from `data`.
  *
@@ -175,6 +177,31 @@ const CURSOR_COLUMNS: Record<string, string> = {
   // ai_session_wakeups, super_loops, super_iterations, tracker_body_cache,
   // tracker_transactions, collab_local_origins.
 };
+
+const APP_SERVER_NOTIFICATION_METHODS_TO_KEEP = [
+  'item/started',
+  'item/completed',
+  'turn/completed',
+  'turn/failed',
+  'error',
+] as const;
+
+function getSourceTableFilterSql(table: string): string {
+  if (table !== 'ai_agent_messages') {
+    return '';
+  }
+
+  const keptMethods = APP_SERVER_NOTIFICATION_METHODS_TO_KEEP
+    .map((value) => `'${value}'`)
+    .join(', ');
+
+  return `
+    WHERE NOT (
+      COALESCE(metadata->>'transport', '') = 'app-server'
+      AND COALESCE(metadata->>'eventType', '') NOT IN (${keptMethods})
+    )
+  `;
+}
 
 interface TargetColumn {
   name: string;
@@ -634,8 +661,9 @@ export class PGLiteToSQLiteMigrator {
         out.push({ name, rows: 0 });
         continue;
       }
+      const filterSql = getSourceTableFilterSql(name);
       const result = await pglite.query<{ c: string }>(
-        `SELECT COUNT(*)::text AS c FROM ${quoteIdent(name)}`,
+        `SELECT COUNT(*)::text AS c FROM ${quoteIdent(name)}${filterSql}`,
       );
       const count = Number(result.rows[0]?.c ?? 0);
       out.push({ name, rows: count });
@@ -726,6 +754,7 @@ export class PGLiteToSQLiteMigrator {
       );
     }
     const pkCol = useCursor ? quoteIdent(opts.cursorColumn!) : null;
+    const filterSql = getSourceTableFilterSql(opts.sourceTable);
 
     let copied = 0;
     let offset = 0;
@@ -741,15 +770,15 @@ export class PGLiteToSQLiteMigrator {
       const result = useCursor
         ? cursor === null
           ? await opts.pglite.query<Record<string, unknown>>(
-              `SELECT * FROM ${quoteIdent(opts.sourceTable)} ORDER BY ${pkCol} LIMIT $1`,
+              `SELECT * FROM ${quoteIdent(opts.sourceTable)}${filterSql} ORDER BY ${pkCol} LIMIT $1`,
               [opts.batchSize],
             )
           : await opts.pglite.query<Record<string, unknown>>(
-              `SELECT * FROM ${quoteIdent(opts.sourceTable)} WHERE ${pkCol} > $1 ORDER BY ${pkCol} LIMIT $2`,
+              `SELECT * FROM ${quoteIdent(opts.sourceTable)}${filterSql}${filterSql ? ' AND' : ' WHERE'} ${pkCol} > $1 ORDER BY ${pkCol} LIMIT $2`,
               [cursor, opts.batchSize],
             )
         : await opts.pglite.query<Record<string, unknown>>(
-            `SELECT * FROM ${quoteIdent(opts.sourceTable)} ORDER BY 1 LIMIT $1 OFFSET $2`,
+            `SELECT * FROM ${quoteIdent(opts.sourceTable)}${filterSql} ORDER BY 1 LIMIT $1 OFFSET $2`,
             [opts.batchSize, offset],
           );
       if (result.rows.length === 0) break;
