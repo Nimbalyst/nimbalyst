@@ -18,6 +18,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { MonacoCodeEditor } from './MonacoCodeEditor';
 import type { EditorHost } from '../extensions/editorHost';
 import type { ConfigTheme } from '../editor';
+import type { editor as MonacoEditorType } from 'monaco-editor';
 
 export interface MonacoEditorConfig {
   /** Theme for the editor */
@@ -28,6 +29,15 @@ export interface MonacoEditorConfig {
 
   /** Whether this editor's tab is active */
   isActive?: boolean;
+
+  /** Optional Monaco construction overrides for normal edit mode */
+  editorOptions?: MonacoEditorType.IStandaloneEditorConstructionOptions;
+
+  /** Optional transform from stored file content to visible editor content */
+  transformLoadContent?: (content: string) => string;
+
+  /** Optional transform from visible editor content back to stored file content */
+  transformSaveContent?: (content: string) => string;
 }
 
 export interface MonacoEditorProps {
@@ -68,6 +78,9 @@ export function MonacoEditor({
   onGetContent: onGetContentProp,
   onDiffChangeCountUpdate,
 }: MonacoEditorProps): React.ReactElement {
+  const transformLoadContent = config.transformLoadContent;
+  const transformSaveContent = config.transformSaveContent;
+
   // Loading state - we load content via host.loadContent()
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<Error | null>(null);
@@ -88,7 +101,7 @@ export function MonacoEditor({
         setIsLoading(true);
         const content = await host.loadContent();
         if (mounted) {
-          setInitialContent(content);
+          setInitialContent(transformLoadContent?.(content) ?? content);
           setIsLoading(false);
         }
       } catch (error) {
@@ -104,7 +117,7 @@ export function MonacoEditor({
     return () => {
       mounted = false;
     };
-  }, [host]);
+  }, [host, transformLoadContent]);
 
   // Subscribe to save requests from host (autosave timer, manual Cmd+S)
   useEffect(() => {
@@ -116,7 +129,7 @@ export function MonacoEditor({
 
       try {
         const content = getContentFnRef.current();
-        await host.saveContent(content);
+        await host.saveContent(transformSaveContent?.(content) ?? content);
       } catch (error) {
         console.error('[MonacoEditor] Save failed:', error);
       }
@@ -124,20 +137,20 @@ export function MonacoEditor({
 
     const unsubscribe = host.onSaveRequested(handleSaveRequest);
     return unsubscribe;
-  }, [host]);
+  }, [host, transformSaveContent]);
 
   // Subscribe to file changes (external edits)
   useEffect(() => {
     const handleFileChanged = (newContent: string) => {
       // Use editor's setContent method to update content
       if (editorWrapperRef.current?.setContent) {
-        editorWrapperRef.current.setContent(newContent);
+        editorWrapperRef.current.setContent(transformLoadContent?.(newContent) ?? newContent);
       }
     };
 
     const unsubscribe = host.onFileChanged(handleFileChanged);
     return unsubscribe;
-  }, [host]);
+  }, [host, transformLoadContent]);
 
   // NOTE: We intentionally do NOT subscribe to diff requests here.
   // Monaco diff handling is fully implemented in TabEditor.tsx which calls
@@ -212,6 +225,7 @@ export function MonacoEditor({
       theme={(config.theme ?? host.theme) as ConfigTheme}
       extensionThemeId={config.extensionThemeId}
       isActive={config.isActive}
+      editorOptions={config.editorOptions}
       onDirtyChange={handleDirtyChange}
       onGetContent={handleGetContent}
       onEditorReady={handleEditorReady}

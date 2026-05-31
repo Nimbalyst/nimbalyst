@@ -46,6 +46,7 @@ import { TrayManager } from '../../tray/TrayManager';
 import { logger } from '../../utils/logger';
 import { windowStates, findWindowByWorkspace, getWindowId, createWindow } from '../../window/WindowManager';
 import { sessionFileTracker } from '../SessionFileTracker';
+import { enrichTranscriptMessagesWithToolCallDiffs } from '../TranscriptToolCallEnricher';
 import { extractFilePath } from './tools/extractFilePath';
 import { toolCallMatcher, unwrapShellCommand } from '../ToolCallMatcher';
 import { workspaceFileEditAttributionService } from '../WorkspaceFileEditAttributionService';
@@ -100,6 +101,7 @@ import {
 import { MessageStreamingHandler } from './MessageStreamingHandler';
 import { HooklessAgentFileWatcher } from './HooklessAgentFileWatcher';
 import { getAgentWorkflowService } from '../AgentWorkflowService';
+import { tryClaimAndDispatchNextQueuedPrompt } from './queuedPromptDispatcher';
 
 const execFileAsync = promisify(execFile);
 
@@ -604,110 +606,85 @@ export class AIService {
     await this.processQueuedPrompt(sessionId, workspacePath, targetWindow);
   }
 
+  public async tryDispatchNextQueuedPrompt(
+    sessionId: string,
+    workspacePath: string,
+    targetWindow: Electron.BrowserWindow | null,
+    source: string,
+  ): Promise<boolean> {
+    const { getQueuedPromptsStore } = await import('../RepositoryManager');
+    const queueStore = getQueuedPromptsStore();
+
+    return tryClaimAndDispatchNextQueuedPrompt({
+      continueQueuedPromptChain: (nextSessionId, nextWorkspacePath, nextTargetWindow, nextSource) =>
+        this.continueQueuedPromptChain(nextSessionId, nextWorkspacePath, nextTargetWindow, nextSource),
+      logError: (message, error) => logger.main.error(message, error),
+      logInfo: (message) => logger.main.info(message),
+      onAfterSettled: async () => {
+        try {
+          const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
+          const childSession = await AISessionsRepository.get(sessionId);
+          if (!childSession?.createdBySessionId) return;
+
+          const metaSession = await AISessionsRepository.get(childSession.createdBySessionId);
+          if (!metaSession?.workspacePath) return;
+
+          const stateManager = getSessionStateManager();
+          const metaState = stateManager.getSessionState(metaSession.id);
+          const metaStatus = metaState?.status || 'idle';
+          if (metaStatus === 'idle' || metaStatus === 'error') {
+            logger.main.info(`[AIService] ${source}: waking meta-agent ${metaSession.id} after child ${sessionId} completed`);
+            this.triggerQueuedPromptProcessingForSession(metaSession.id, metaSession.workspacePath).catch((err) => {
+              logger.main.error('[AIService] Failed to trigger meta-agent queue processing:', err);
+            });
+          }
+        } catch (metaErr) {
+          logger.main.error(`[AIService] ${source}: error checking meta-agent wakeup:`, metaErr);
+        }
+      },
+      onChainSettled: async ({ sessionId: settledSessionId, source: settledSource }) => {
+        // The completion handler in MessageStreamingHandler deferred endSession
+        // because processingSet still contained this session while the inner
+        // sendMessage was running. Now that the chain has fully drained, mark
+        // the session idle and stop its file watcher.
+        const stateManager = getSessionStateManager();
+        logger.main.info(`[AIService] ${settledSource}: chain settled for session ${settledSessionId}, ending session`);
+        await stateManager.endSession(settledSessionId);
+        this.hooklessWatcher.scheduleStop(settledSessionId, 500);
+      },
+      onPromptClaimed: ({ sessionId: claimedSessionId, promptId }) => {
+        targetWindow?.webContents.send('ai:promptClaimed', {
+          sessionId: claimedSessionId,
+          promptId,
+        });
+      },
+      processingSet: this.sessionsProcessingQueue,
+      queueStore,
+      sendMessageHandler: this.sendMessageHandler,
+      sessionId,
+      source,
+      startSession: ({ sessionId: activeSessionId, workspacePath: activeWorkspacePath }) =>
+        getSessionStateManager().startSession({
+          sessionId: activeSessionId,
+          workspacePath: activeWorkspacePath,
+        }),
+      targetWindow,
+      workspacePath,
+    });
+  }
+
   /**
    * Process the next queued prompt for a session.
    * Called from mobile sync handler to ensure prompts are processed even when session isn't open.
    * Also used by the ai:triggerQueueProcessing IPC handler.
    */
   private async processQueuedPrompt(sessionId: string, workspacePath: string, targetWindow: Electron.BrowserWindow): Promise<boolean> {
-    // Prevent concurrent queue processing for the same session.
-    // Multiple callers (completion handler, triggerQueueProcessing IPC, mobile sync)
-    // can race here - only one should process at a time.
-    if (this.sessionsProcessingQueue.has(sessionId)) {
-      logger.main.info(`[AIService] processQueuedPrompt: session ${sessionId} already processing a queued prompt, skipping`);
-      return false;
-    }
-
-    const { getQueuedPromptsStore } = await import('../RepositoryManager');
-    const queueStore = getQueuedPromptsStore();
-    const pendingPrompts = await queueStore.listPending(sessionId);
-
-    if (pendingPrompts.length === 0) {
-      logger.main.info(`[AIService] processQueuedPrompt: no pending prompts for session ${sessionId}`);
-      return false;
-    }
-
-    const nextPrompt = pendingPrompts[0];
-    logger.main.info(`[AIService] processQueuedPrompt: processing prompt ${nextPrompt.id} for session ${sessionId}`);
-
-    // Claim the prompt atomically
-    const claimed = await queueStore.claim(nextPrompt.id);
-    if (!claimed) {
-      logger.main.info(`[AIService] processQueuedPrompt: prompt ${nextPrompt.id} already claimed`);
-      return false;
-    }
-
-    // Mark session as processing before the setImmediate
-    this.sessionsProcessingQueue.add(sessionId);
-
-    // Notify renderer that prompt was claimed (so UI removes it from queue list)
-    if (targetWindow && !targetWindow.isDestroyed()) {
-      targetWindow.webContents.send('ai:promptClaimed', {
-        sessionId,
-        promptId: claimed.id,
-      });
-    }
-
-    // Build document context for the queued prompt
-    const docContext = {
-      ...claimed.documentContext,
-      queuedPromptId: claimed.id,
-      attachments: claimed.attachments,
-    };
-
-    // Process the prompt via sendMessage
-    setImmediate(async () => {
-      try {
-        if (!this.sendMessageHandler) {
-          throw new Error('sendMessageHandler not initialized');
-        }
-        // Create a mock event with the target window's webContents
-        const mockEvent = {
-          sender: targetWindow.webContents,
-          senderFrame: targetWindow.webContents.mainFrame,
-        } as Electron.IpcMainInvokeEvent;
-
-        await this.sendMessageHandler(mockEvent, claimed.prompt, docContext as any, sessionId, workspacePath);
-        // Mark as completed
-        await queueStore.complete(claimed.id);
-      } catch (queueError) {
-        logger.main.error(`[AIService] Failed to process queued prompt ${claimed.id}:`, queueError);
-        await queueStore.fail(claimed.id, queueError instanceof Error ? queueError.message : 'Unknown error');
-      } finally {
-        this.sessionsProcessingQueue.delete(sessionId);
-
-        try {
-          await this.continueQueuedPromptChain(sessionId, workspacePath, targetWindow, 'processQueuedPrompt finally');
-        } catch (chainErr) {
-          logger.main.error('[AIService] processQueuedPrompt finally: error checking for pending prompts:', chainErr);
-        }
-
-        // If this was a meta-agent child session, ensure the meta-agent
-        // processes any queued notifications (wakeup safety net).
-        try {
-          const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
-          const childSession = await AISessionsRepository.get(sessionId);
-          if (childSession?.createdBySessionId) {
-            const metaSession = await AISessionsRepository.get(childSession.createdBySessionId);
-            if (metaSession?.workspacePath) {
-              const stateManager = getSessionStateManager();
-              const metaState = stateManager.getSessionState(metaSession.id);
-              const metaStatus = metaState?.status || 'idle';
-              if (metaStatus === 'idle' || metaStatus === 'error') {
-                logger.main.info(`[AIService] processQueuedPrompt: waking meta-agent ${metaSession.id} after child ${sessionId} completed`);
-                this.triggerQueuedPromptProcessingForSession(metaSession.id, metaSession.workspacePath).catch((err) => {
-                  logger.main.error('[AIService] Failed to trigger meta-agent queue processing:', err);
-                });
-              }
-            }
-          }
-        } catch (metaErr) {
-          logger.main.error('[AIService] processQueuedPrompt: error checking meta-agent wakeup:', metaErr);
-        }
-      }
-    });
-
-    return true;
+    return this.tryDispatchNextQueuedPrompt(
+      sessionId,
+      workspacePath,
+      targetWindow,
+      'processQueuedPrompt',
+    );
   }
 
   private async initializeMobileSyncHandler() {
@@ -1443,7 +1420,6 @@ export class AIService {
                     tokens: parsedUsage.totalTokens,
                     contextWindow: parsedUsage.contextWindow,
                   },
-                  updatedAt: Date.now(),
                 } as any,
               });
             }
@@ -1823,6 +1799,8 @@ export class AIService {
         return null;
       }
 
+      session.messages = await enrichTranscriptMessagesWithToolCallDiffs(session.id, session.messages);
+
       // Restore document context state from persisted data (if available)
       // This enables transition detection across app restarts
       if (session.lastDocumentState) {
@@ -2068,72 +2046,14 @@ export class AIService {
       sessionId: string,
       workspacePath: string
     ) => {
-      // Check per-session guard - the completion handler may already be processing for this session
-      if (this.sessionsProcessingQueue.has(sessionId)) {
-        logger.main.info(`[AIService] triggerQueueProcessing: session ${sessionId} already processing a queued prompt, skipping`);
-        return { processed: false };
-      }
-
-      const { getQueuedPromptsStore } = await import('../RepositoryManager');
-      const queueStore = getQueuedPromptsStore();
-      const pendingPrompts = await queueStore.listPending(sessionId);
-
-      if (pendingPrompts.length === 0) {
-        logger.main.info(`[AIService] triggerQueueProcessing: no pending prompts for session ${sessionId}`);
-        return { processed: false };
-      }
-
-      const nextPrompt = pendingPrompts[0];
-      logger.main.info(`[AIService] triggerQueueProcessing: processing prompt ${nextPrompt.id} for session ${sessionId}`);
-
-      // Claim the prompt atomically
-      const claimed = await queueStore.claim(nextPrompt.id);
-      if (!claimed) {
-        logger.main.info(`[AIService] triggerQueueProcessing: prompt ${nextPrompt.id} already claimed`);
-        return { processed: false };
-      }
-
-      // Mark session as processing before the setImmediate
-      this.sessionsProcessingQueue.add(sessionId);
-
-      // Notify renderer that prompt was claimed (so UI removes it from queue list)
-      safeSend(event, 'ai:promptClaimed', {
+      const processed = await this.tryDispatchNextQueuedPrompt(
         sessionId,
-        promptId: claimed.id,
-      });
+        workspacePath,
+        BrowserWindow.fromWebContents(event.sender),
+        'triggerQueueProcessing',
+      );
 
-      // Build document context for the queued prompt
-      const docContext = {
-        ...claimed.documentContext,
-        queuedPromptId: claimed.id,
-        attachments: claimed.attachments,
-      };
-
-      // Process the prompt via sendMessage
-      setImmediate(async () => {
-        try {
-          await this.sendMessageHandler!(event, claimed.prompt, docContext as any, sessionId, workspacePath);
-          // Mark as completed
-          await queueStore.complete(claimed.id);
-        } catch (queueError) {
-          logger.main.error(`[AIService] Failed to process queued prompt ${claimed.id}:`, queueError);
-          await queueStore.fail(claimed.id, queueError instanceof Error ? queueError.message : 'Unknown error');
-        } finally {
-          this.sessionsProcessingQueue.delete(sessionId);
-          try {
-            await this.continueQueuedPromptChain(
-              sessionId,
-              workspacePath,
-              BrowserWindow.fromWebContents(event.sender),
-              'triggerQueueProcessing finally'
-            );
-          } catch (chainErr) {
-            logger.main.error('[AIService] triggerQueueProcessing finally: error checking for pending prompts:', chainErr);
-          }
-        }
-      });
-
-      return { processed: true };
+      return { processed };
     });
 
     // Save draft input

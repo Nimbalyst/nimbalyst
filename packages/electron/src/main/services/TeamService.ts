@@ -285,17 +285,29 @@ async function fetchTeamApi(path: string, method: string, body?: unknown, orgId?
     }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TEAM_API_TIMEOUT_MS);
+    const reqStart = Date.now();
     try {
-      return await net.fetch(`${httpUrl}${path}`, {
+      const resp = await net.fetch(`${httpUrl}${path}`, {
         method,
         headers,
         body: body !== undefined ? JSON.stringify(body) : undefined,
         signal: controller.signal,
       });
+      const reqMs = Date.now() - reqStart;
+      // Log slow (and any non-2xx) responses so a degraded team API surfaces
+      // before it hits the 15s timeout. The happy-path 200s under 500ms stay
+      // silent.
+      if (reqMs >= 500 || !resp.ok) {
+        logger.main.info(`[TeamService] ${method} ${path} -> ${resp.status} in ${reqMs}ms (jwt: ${jwtSource})`);
+      }
+      return resp;
     } catch (err) {
+      const reqMs = Date.now() - reqStart;
       if ((err as { name?: string })?.name === 'AbortError') {
+        logger.main.warn(`[TeamService] ${method} ${path} timed out after ${reqMs}ms (jwt: ${jwtSource})`);
         throw new Error(`Team API timeout after ${TEAM_API_TIMEOUT_MS}ms: ${method} ${path}`);
       }
+      logger.main.warn(`[TeamService] ${method} ${path} threw after ${reqMs}ms (jwt: ${jwtSource}):`, err);
       throw err;
     } finally {
       clearTimeout(timer);
@@ -410,42 +422,69 @@ function getMemberIdFromJwt(jwt: string): string | null {
  * List all teams the current user belongs to, across all signed-in accounts.
  * Queries each account's teams and deduplicates by orgId.
  */
+// Short-TTL cache: findTeamForWorkspace is fanned out from many sites
+// (workspace open, sync init, tracker init, body-doc service, etc.) and each
+// listTeams call hits /api/teams once per signed-in account. Without this,
+// opening a workspace can trigger a parallel HTTP storm and the same call
+// repeats every few hundred ms during init.
+let listTeamsCache: { promise: Promise<TeamDetails[]>; expiresAt: number } | null = null;
+const LIST_TEAMS_TTL_MS = 5000;
+
+export function invalidateListTeamsCache(): void {
+  listTeamsCache = null;
+}
+
 async function listTeams(): Promise<TeamDetails[]> {
   if (!isAuthenticated()) {
     logger.main.info('[TeamService] listTeams: not authenticated, skipping');
     return [];
   }
 
-  const allAccounts = getAccounts();
-  const seenOrgIds = new Set<string>();
-  const allTeams: TeamDetails[] = [];
+  const now = Date.now();
+  if (listTeamsCache && listTeamsCache.expiresAt > now) {
+    return listTeamsCache.promise;
+  }
 
-  // Query teams for each signed-in account in parallel
-  const results = await Promise.allSettled(
-    allAccounts.map(async (account) => {
-      try {
-        const data = await fetchTeamApi('/api/teams', 'GET', undefined, undefined, account.personalOrgId) as { teams: TeamDetails[] };
-        return data.teams || [];
-      } catch (err) {
-        logger.main.error(`[TeamService] listTeams error for account ${account.email}:`, err);
-        return [];
-      }
-    })
-  );
+  const promise = (async (): Promise<TeamDetails[]> => {
+    const allAccounts = getAccounts();
+    const seenOrgIds = new Set<string>();
+    const allTeams: TeamDetails[] = [];
 
-  for (const result of results) {
-    if (result.status === 'fulfilled') {
-      for (const team of result.value) {
-        if (!seenOrgIds.has(team.orgId)) {
-          seenOrgIds.add(team.orgId);
-          allTeams.push(team);
+    // Query teams for each signed-in account in parallel
+    const results = await Promise.allSettled(
+      allAccounts.map(async (account) => {
+        try {
+          const data = await fetchTeamApi('/api/teams', 'GET', undefined, undefined, account.personalOrgId) as { teams: TeamDetails[] };
+          return data.teams || [];
+        } catch (err) {
+          logger.main.error(`[TeamService] listTeams error for account ${account.email}:`, err);
+          return [];
+        }
+      })
+    );
+
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        for (const team of result.value) {
+          if (!seenOrgIds.has(team.orgId)) {
+            seenOrgIds.add(team.orgId);
+            allTeams.push(team);
+          }
         }
       }
     }
-  }
 
-  // logger.main.info(`[TeamService] listTeams: found ${allTeams.length} team(s)`, allTeams.map(t => ({ orgId: t.orgId, name: t.name, hash: t.gitRemoteHash?.substring(0, 8) })));
-  return allTeams;
+    return allTeams;
+  })();
+
+  listTeamsCache = { promise, expiresAt: now + LIST_TEAMS_TTL_MS };
+  // Drop the cache on rejection so the next caller retries instead of pinning
+  // a failed promise for the TTL window.
+  promise.catch(() => {
+    if (listTeamsCache?.promise === promise) listTeamsCache = null;
+  });
+
+  return promise;
 }
 
 /**
@@ -490,7 +529,10 @@ export async function findTeamForWorkspace(workspacePath: string, precomputedRem
     if (match) {
       // logger.main.info('[TeamService] findTeamForWorkspace: matched team:', match.name, 'orgId:', match.orgId, 'for workspace:', workspacePath);
     } else if (teams.length > 0) {
-      logger.main.info('[TeamService] findTeamForWorkspace: no hash match. workspace hash:', remoteHash, 'team hashes:', teams.map(t => ({ orgId: t.orgId, name: t.name, hash: t.gitRemoteHash, membership: t.membershipType })));
+      // Don't dump the full team list on every miss -- this is on a hot path
+      // (called from many sites during workspace init) and the full dump was
+      // burning measurable CPU on JSON.stringify alone.
+      logger.main.debug('[TeamService] findTeamForWorkspace: no hash match', { remoteHash, teamCount: teams.length });
     }
     return match;
   } catch (err) {

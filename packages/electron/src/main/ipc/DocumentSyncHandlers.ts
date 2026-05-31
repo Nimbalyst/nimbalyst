@@ -39,6 +39,7 @@ import {
   recordLocalOriginShare,
   relinkLocalOriginBinding,
   reuploadFromLocalOrigin,
+  seedSharedDocumentFromContent,
 } from '../services/CollabLocalOriginService';
 import WebSocket from 'ws';
 
@@ -95,6 +96,20 @@ export function registerDocumentSyncHandlers(): void {
     title?: string;
     documentType?: string;
   }) => {
+    // Phase timing. safeHandle already emits IpcSlow when the whole call
+    // exceeds 1s, but doesn't say WHICH sub-step (team lookup vs envelope
+    // fetch vs fingerprint check) ate the budget. The shortDocId tag lets
+    // us correlate phases across the many document-sync:open calls that
+    // fire at startup when restoring open tabs.
+    const handlerStart = Date.now();
+    const shortDocId = payload.documentId?.slice(0, 8) ?? '?';
+    const logPhase = (phase: string, since: number) => {
+      const ms = Date.now() - since;
+      if (ms >= 200) {
+        logger.main.info(`[DocumentSyncHandlers] open(${shortDocId}) ${phase}: ${ms}ms`);
+      }
+    };
+
     if (!isAuthenticated()) {
       return { success: false, error: 'Not authenticated. Sign in first.' };
     }
@@ -105,13 +120,16 @@ export function registerDocumentSyncHandlers(): void {
     }
 
     // Find team for workspace
+    const teamStart = Date.now();
     const team = await findTeamForWorkspace(payload.workspacePath);
+    logPhase('findTeamForWorkspace', teamStart);
     if (!team) {
       return { success: false, error: 'No team found for this workspace. Create or join a team first.' };
     }
     const orgId = team.orgId;
 
     // Get org encryption key
+    const keyStart = Date.now();
     let encryptionKey = await getOrgKey(orgId);
     if (!encryptionKey) {
       logger.main.info('[DocumentSyncHandlers] No org key cached, attempting to fetch envelope...');
@@ -127,8 +145,10 @@ export function registerDocumentSyncHandlers(): void {
         return { success: false, error: 'No encryption key available. Team admin may need to re-share keys.' };
       }
     }
+    logPhase('getOrgKey/fetchEnvelope', keyStart);
 
     // Verify local key fingerprint against server to detect stale keys
+    const fpStart = Date.now();
     const localFingerprint = getOrgKeyFingerprint(orgId);
     if (localFingerprint) {
       try {
@@ -156,10 +176,12 @@ export function registerDocumentSyncHandlers(): void {
         return { success: false, error: 'Cannot verify encryption key epoch against server. Check your network connection and try again.' };
       }
     }
+    logPhase('verifyFingerprint', fpStart);
 
     // Export key as raw base64 for renderer to reconstruct
     const rawBytes = await crypto.subtle.exportKey('raw', encryptionKey!);
     const orgKeyBase64 = Buffer.from(rawBytes).toString('base64');
+    logPhase('total', handlerStart);
 
     const serverUrl = getCollabSyncWsUrl();
     const workspaceState = getWorkspaceState(payload.workspacePath);
@@ -455,6 +477,20 @@ export function registerDocumentSyncHandlers(): void {
       };
     });
     return { success: true };
+  });
+
+  safeHandle('document-sync:seed-shared-document', async (_event, payload: {
+    workspacePath: string;
+    documentId: string;
+    documentType: string;
+    content: string;
+  }) => {
+    try {
+      const ok = await seedSharedDocumentFromContent(payload);
+      return { success: ok };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
   });
 
   safeHandle('document-sync:get-local-origin', async (_event, payload: {

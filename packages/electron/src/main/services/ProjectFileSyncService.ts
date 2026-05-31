@@ -21,6 +21,15 @@ import { timeStartupPhase } from '../utils/startupTiming';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
+// buildManifest is the prime suspect for main-process freezes during project
+// sync startup -- it reads + sha256-hashes every .md file sequentially. These
+// thresholds + batch-progress logs make it possible to tell from a user log
+// whether: (a) the loop is wedged on a single huge file, or (b) the cumulative
+// hash cost is dominating, or (c) the work actually finished quickly and the
+// freeze is elsewhere.
+const MANIFEST_PROGRESS_BATCH = 100;       // log every N files processed
+const MANIFEST_SLOW_FILE_MS = 50;          // log any single file slower than this
+
 interface SyncedFileState {
   syncId: string;
   contentHash: string;
@@ -106,13 +115,26 @@ export class ProjectFileSyncService {
       await timeStartupPhase(
         `ProjectFileSync.buildManifest(${projectName}, ${mdFiles.length} files)`,
         async () => {
+          const phaseStart = Date.now();
+          let totalReadMs = 0;
+          let totalHashMs = 0;
+          let totalBytes = 0;
+          let processed = 0;
           for (const filePath of mdFiles) {
+            const fileStart = Date.now();
             try {
               const relativePath = path.relative(workspacePath, filePath);
               const syncId = this.syncIdFromPath(relativePath);
+              const readStart = Date.now();
               const content = await fs.readFile(filePath, 'utf-8');
               const stat = await fs.stat(filePath);
+              const readMs = Date.now() - readStart;
+              const hashStart = Date.now();
               const contentHash = this.sha256(content);
+              const hashMs = Date.now() - hashStart;
+              totalReadMs += readMs;
+              totalHashMs += hashMs;
+              totalBytes += content.length;
 
               manifest.push({
                 syncId,
@@ -135,10 +157,21 @@ export class ProjectFileSyncService {
                 contentHash,
                 lastSyncedMtime: Math.floor(stat.mtimeMs),
               });
+
+              const fileMs = Date.now() - fileStart;
+              if (fileMs >= MANIFEST_SLOW_FILE_MS) {
+                logger.main.info(`[ProjectFileSync] slow file ${path.relative(workspacePath, filePath)}: ${fileMs}ms (read=${readMs}ms hash=${hashMs}ms size=${content.length}B)`);
+              }
             } catch (err) {
               logger.main.error(`[ProjectFileSync] Failed to process ${filePath}:`, err);
             }
+            processed++;
+            if (processed % MANIFEST_PROGRESS_BATCH === 0) {
+              const elapsed = Date.now() - phaseStart;
+              logger.main.info(`[ProjectFileSync] buildManifest progress: ${processed}/${mdFiles.length} files in ${elapsed}ms (read=${totalReadMs}ms hash=${totalHashMs}ms bytes=${totalBytes})`);
+            }
           }
+          logger.main.info(`[ProjectFileSync] buildManifest done: ${processed} files in ${Date.now() - phaseStart}ms (read=${totalReadMs}ms hash=${totalHashMs}ms bytes=${totalBytes})`);
         },
       );
 
@@ -238,9 +271,21 @@ export class ProjectFileSyncService {
     const cache = (this as any)._fileMapCache?.get(projectId) as { fileMap: Map<string, string>; workspacePath: string } | undefined;
     if (!cache) return;
 
+    const startedAt = Date.now();
+    const updatedCount = response.updatedFiles.length;
+    const newCount = response.newFiles.length;
+    const deleteCount = response.deletedSyncIds.length;
+    const needFromClientCount = response.needFromClient.length;
+    logger.main.info(`[ProjectFileSync] handleSyncResponse start: updated=${updatedCount} new=${newCount} deleted=${deleteCount} needFromClient=${needFromClientCount}`);
+
     // Write updated/new files from server to disk
-    for (const file of [...response.updatedFiles, ...response.newFiles]) {
+    const writePhaseStart = Date.now();
+    const filesToWrite = [...response.updatedFiles, ...response.newFiles];
+    for (const file of filesToWrite) {
       await this.writeRemoteFileToDisk(cache.workspacePath, file);
+    }
+    if (filesToWrite.length > 0) {
+      logger.main.info(`[ProjectFileSync] handleSyncResponse wrote ${filesToWrite.length} remote files in ${Date.now() - writePhaseStart}ms`);
     }
 
     // Delete files that were deleted on server
@@ -258,6 +303,7 @@ export class ProjectFileSyncService {
 
     // Push files the server needs from us
     if (response.needFromClient.length > 0) {
+      const pushPhaseStart = Date.now();
       const filesToPush: Array<{
         syncId: string;
         content: string;
@@ -288,13 +334,17 @@ export class ProjectFileSyncService {
         }
       }
 
+      const readPhaseMs = Date.now() - pushPhaseStart;
+      logger.main.info(`[ProjectFileSync] handleSyncResponse read ${filesToPush.length}/${response.needFromClient.length} needFromClient files in ${readPhaseMs}ms`);
+
       if (filesToPush.length > 0) {
+        const networkStart = Date.now();
         await this.provider!.pushFileBatch(projectId, filesToPush);
-        logger.main.info(`[ProjectFileSync] Pushed ${filesToPush.length} files to server`);
+        logger.main.info(`[ProjectFileSync] Pushed ${filesToPush.length} files to server in ${Date.now() - networkStart}ms`);
       }
     }
 
-    logger.main.info(`[ProjectFileSync] Sync complete for project ${projectId}`);
+    logger.main.info(`[ProjectFileSync] Sync complete for project ${projectId} (total ${Date.now() - startedAt}ms)`);
   }
 
   // MARK: - Remote Updates

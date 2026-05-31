@@ -18,6 +18,7 @@ import { useIPCHandlers } from './hooks/useIPCHandlers';
 import { useWindowLifecycle } from './hooks/useWindowLifecycle';
 import { useTheme } from './hooks/useTheme';
 import { useConfirmDialog } from './hooks/useConfirmDialog';
+import { useDialogRequestTrigger } from './hooks/useDialogRequestTrigger';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useExtensionKeybindings } from './extensions/commands/useExtensionKeybindings';
 import { useOnboarding } from './hooks/useOnboarding';
@@ -1295,14 +1296,18 @@ export default function App() {
   // React to "show session import dialog" command (Developer menu). The IPC
   // subscription lives in store/listeners/appCommandListeners.ts.
   const showSessionImportDialogVersion = useAtomValue(showSessionImportDialogRequestAtom);
-  const showSessionImportDialogInitialRef = useRef(showSessionImportDialogVersion);
-  useEffect(() => {
-    if (showSessionImportDialogVersion === showSessionImportDialogInitialRef.current) return;
-    if (!dialogRef.current || !workspacePath) return;
-    dialogRef.current.open(DIALOG_IDS.SESSION_IMPORT, {
-      workspacePath,
-    });
-  }, [showSessionImportDialogVersion, workspacePath]);
+  // Fires once per increment, deferred until a workspace is ready. Consuming the
+  // version on fire stops the dialog re-opening on every workspace switch (#480);
+  // the previous inline effect never updated its ref and depended on
+  // workspacePath, so each folder change re-ran it and re-opened the dialog.
+  useDialogRequestTrigger(
+    showSessionImportDialogVersion,
+    Boolean(workspacePath),
+    useCallback(() => {
+      if (!workspacePath) return;
+      dialogRef.current?.open(DIALOG_IDS.SESSION_IMPORT, { workspacePath });
+    }, [workspacePath]),
+  );
 
   // React to "show extension project intro dialog" requests. The IPC
   // subscription lives in store/listeners/appCommandListeners.ts. The
@@ -1999,7 +2004,7 @@ export default function App() {
       }}
     />
     <WalkthroughProvider currentMode={activeMode}>
-    <TipProvider currentMode={activeMode}>
+    <TipProvider currentMode={activeMode} workspacePath={workspacePath || undefined}>
     <div data-layout="root-container" className="h-screen flex flex-row">
       {/* Far-left: project rail (Discord-style) — visible only when
           multi-project mode is enabled in settings. */}

@@ -32,6 +32,12 @@ export interface MonacoEditorConfig {
 
   /** Whether this editor's tab is active */
   isActive?: boolean;
+
+  /** Optional transform from stored file content to visible editor content */
+  transformLoadContent?: (content: string) => string;
+
+  /** Optional transform from visible editor content back to stored file content */
+  transformSaveContent?: (content: string) => string;
 }
 
 export interface MonacoEditorProps {

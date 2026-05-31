@@ -40,6 +40,9 @@ export interface MonacoCodeEditorProps {
   // Whether this editor's tab is active
   isActive?: boolean;
 
+  // Optional Monaco construction overrides for normal edit mode
+  editorOptions?: MonacoEditorType.IStandaloneEditorConstructionOptions;
+
   // Callbacks
   /**
    * Called when content changes (user makes edits).
@@ -67,6 +70,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   theme,
   extensionThemeId,
   isActive = true,
+  editorOptions,
   onDirtyChange,
   onGetContent,
   onEditorReady,
@@ -526,6 +530,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
             glyphMargin: false,
             accessibilitySupport: 'auto',
             unusualLineTerminators: 'auto',
+            ...editorOptions,
           }}
         />
       )}
