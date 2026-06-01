@@ -241,6 +241,26 @@ const TOOLS = [
     },
   },
   {
+    name: "ai_set_session_progress_naming",
+    description:
+      "Enable or disable automatic session title/phase refresh based on progress reviews, configure how many user turns elapse between reviews, and optionally set a session title template using the {name} placeholder. Currently applies to OpenAI Codex sessions.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        enabled: { type: "boolean" },
+        cadenceTurns: {
+          type: "number",
+          description: "How many user turns between progress reviews. Integer from 1 to 50.",
+        },
+        titleTemplate: {
+          type: "string",
+          description: "Optional session title template. Must include the {name} placeholder, for example 【{name}】 or Session: {name}.",
+        },
+      },
+      required: ["enabled"],
+    },
+  },
+  {
     name: "features_toggle",
     description:
       "Toggle an alpha, beta, or developer feature flag by tag. Alpha and developer toggles require Developer Mode to already be enabled; if not, returns requiresUserAction='developer-mode' and you should ask the user to enable it from Settings > Advanced.",
@@ -388,6 +408,15 @@ function createSettingsMcpServer(aiSessionId: string, workspaceId: string | unde
         case "ai_set_preferred_language":
           return respond(
             await svc.setPreferredAgentLanguage(aiSessionId, { language: args.language ?? "" }),
+          );
+
+        case "ai_set_session_progress_naming":
+          return respond(
+            await svc.setSessionProgressNaming(aiSessionId, {
+              enabled: !!args.enabled,
+              cadenceTurns: args.cadenceTurns,
+              titleTemplate: args.titleTemplate,
+            }),
           );
 
         case "features_toggle":

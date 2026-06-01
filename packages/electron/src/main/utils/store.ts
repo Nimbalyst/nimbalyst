@@ -26,6 +26,12 @@ export interface TrackerSyncPolicySetting {
   scope?: 'project' | 'workspace';
 }
 
+export interface SessionProgressNamingSetting {
+  enabled?: boolean;
+  cadenceTurns?: number;
+  titleTemplate?: string;
+}
+
 /**
  * Extension settings stored per extension.
  * Tracks enabled state and extension-specific configuration.
@@ -163,6 +169,9 @@ interface AppStoreSchema {
   // Empty/undefined means no preference -- the agent picks based on the
   // conversation language.
   preferredAgentLanguage?: string;
+  // Periodically review whether the session title/phase still reflect the
+  // latest progress, then auto-update if the agent decides they are stale.
+  sessionProgressNaming?: SessionProgressNamingSetting;
   // Walkthrough guide system state
   walkthroughs?: WalkthroughState;
   // First-open tracking for editor types (for walkthrough triggers)
