@@ -392,7 +392,7 @@ export class MessageStreamingHandler {
     // canonical user_message event; appending another user message here would
     // duplicate it in session.messages and in the conversation history that
     // the provider forwards to the model API.
-    const isEditedInPlace = (documentContext as any)?.editedInPlace === true;
+    const isEditedInPlace = documentContext?.editedInPlace === true;
     if (!isEditedInPlace) {
       await this.svc.sessionManager.addMessage(userMessage, session.id);
     }

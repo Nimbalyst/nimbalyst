@@ -1193,6 +1193,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
 
     const lastIdx = messages.length - 1;
     const lastMessage = messages[lastIdx];
+    let optimisticApplied = false;
     if (lastMessage?.type === 'user_message') {
       const optimisticMessages = [...messages];
       optimisticMessages[lastIdx] = { ...lastMessage, text: trimmed };
@@ -1200,6 +1201,7 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
         sessionId,
         updates: { messages: optimisticMessages },
       });
+      optimisticApplied = true;
     }
 
     try {
@@ -1218,6 +1220,12 @@ export const SessionTranscript = forwardRef<SessionTranscriptRef, SessionTranscr
       );
     } catch (error) {
       console.error('[SessionTranscript] Failed to edit last user message:', error);
+      if (optimisticApplied) {
+        updateSessionStore({
+          sessionId,
+          updates: { messages },
+        });
+      }
     }
   }, [sessionId, workspacePath, aiMode, getEffectiveDocumentContext, messages, updateSessionStore]);
 

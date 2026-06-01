@@ -2572,10 +2572,6 @@ export class AIService {
       });
       const tailUserMessage = userMessageEvents[userMessageEvents.length - 1];
       if (tailUserMessage) {
-        const nextPayload = {
-          ...(tailUserMessage.payload as Record<string, unknown>),
-        };
-        await transcriptStore.updateEventPayload(tailUserMessage.id, nextPayload);
         await transcriptStore.updateEventText(tailUserMessage.id, newContent);
         const updatedEvent = await transcriptStore.getEventById(tailUserMessage.id);
         if (updatedEvent) {

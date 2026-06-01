@@ -509,6 +509,9 @@ const EDIT_TOOL_NAMES = new Set([
   'applypatch', 'apply_patch',
 ]);
 
+const EDIT_TEXTAREA_MIN_ROWS = 3;
+const EDIT_TEXTAREA_MAX_ROWS = 12;
+
 const TRANSCRIPT_BOTTOM_THRESHOLD_PX = 50;
 const DESKTOP_TRANSCRIPT_BUFFER_PX = 10000;
 const MOBILE_TRANSCRIPT_BUFFER_PX = 800;
@@ -2198,7 +2201,7 @@ export const RichTranscriptView = React.forwardRef<
                 value={editDraft}
                 onChange={(e) => setEditDraft(e.target.value)}
                 autoFocus
-                rows={Math.max(3, Math.min(12, editDraft.split('\n').length))}
+                rows={Math.max(EDIT_TEXTAREA_MIN_ROWS, Math.min(EDIT_TEXTAREA_MAX_ROWS, editDraft.split('\n').length))}
                 className="rich-transcript-message-edit-textarea w-full resize-y rounded-sm border border-[var(--nim-border)] bg-[var(--nim-bg)] p-2 text-sm text-[var(--nim-text)] font-mono focus:outline-none focus:border-[var(--nim-primary)]"
                 onKeyDown={(e) => {
                   if (e.key === 'Escape') {
