@@ -1,5 +1,14 @@
 import { BrowserWindow } from 'electron';
-import { SessionManager, ClaudeCodeProvider, OpenAICodexProvider, OpenAICodexACPProvider, OpenCodeProvider, setPreferredAgentLanguage as setRuntimePreferredAgentLanguage } from '@nimbalyst/runtime/ai/server';
+import {
+  SessionManager,
+  ClaudeCodeProvider,
+  OpenAICodexProvider,
+  OpenAICodexACPProvider,
+  OpenCodeProvider,
+  setPreferredAgentLanguage as setRuntimePreferredAgentLanguage,
+  setSessionProgressNamingConfig as setRuntimeSessionProgressNamingConfig,
+  type SessionProgressNamingConfig,
+} from '@nimbalyst/runtime/ai/server';
 import { AISessionsRepository } from '@nimbalyst/runtime';
 import {
   startSessionNamingServer,
@@ -13,7 +22,7 @@ import {
 } from '../mcp/sessionNamingServer';
 import { getDatabase } from '../database/initialize';
 import { createWorktreeStore } from './WorktreeStore';
-import { getPreferredAgentLanguage } from '../utils/store';
+import { getAppSetting, getPreferredAgentLanguage } from '../utils/store';
 
 /**
  * Service to manage the session naming MCP server
@@ -61,6 +70,7 @@ export class SessionNamingService {
         // dependency. Renderer changes call SessionNamingService.setLanguage()
         // to keep this in sync at runtime.
         setRuntimePreferredAgentLanguage(getPreferredAgentLanguage());
+        setRuntimeSessionProgressNamingConfig(getAppSetting('sessionProgressNaming'));
 
         // Set the update function that will be called by the MCP server
         // This is called once at startup and captures sessionManager in the closure
@@ -251,6 +261,10 @@ export class SessionNamingService {
    */
   public setLanguage(language: string | undefined): void {
     setRuntimePreferredAgentLanguage(language);
+  }
+
+  public setSessionProgressNaming(config: Partial<SessionProgressNamingConfig> | undefined): void {
+    setRuntimeSessionProgressNamingConfig(config);
   }
 
   /**

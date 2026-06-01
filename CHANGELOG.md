@@ -10,9 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 <!-- New features go here -->
+- Agent Features settings now include an option to auto-refresh session title and phase from progress reviews for OpenAI Codex sessions, including a configurable review cadence.
 
 ### Changed
 <!-- Changes to existing functionality go here -->
+- OpenAI Codex session naming can now re-run on later milestones instead of only on the first turn, so long sessions can keep their title and phase aligned with current progress.
 
 ### Fixed
 <!-- Bug fixes go here -->

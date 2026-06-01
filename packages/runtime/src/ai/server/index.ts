@@ -14,3 +14,5 @@ export * from './providers/OpenCodeProvider';
 export * from './providers/CopilotCLIProvider';
 export * from './utils/errorDetection';
 export * from './preferredAgentLanguageConfig';
+export * from './sessionProgressNamingConfig';
+export * from './sessionProgressNaming';

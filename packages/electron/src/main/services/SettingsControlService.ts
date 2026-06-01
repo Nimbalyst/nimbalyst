@@ -68,6 +68,7 @@ export const ALLOWED_APP_KEYS = [
   'analyticsEnabled',
   'defaultAIModel',
   'preferredAgentLanguage',
+  'sessionProgressNaming',
   'sessionSync',
   'voiceMode',
   'alphaFeatures',
@@ -162,6 +163,7 @@ export class SettingsControlService {
       completionSoundEnabled: getAppSetting<boolean>('completionSoundEnabled') ?? false,
       spellcheckEnabled: getAppSetting<boolean>('spellcheckEnabled') ?? true,
       preferredAgentLanguage: getAppSetting<string>('preferredAgentLanguage') ?? '',
+      sessionProgressNaming: getAppSetting('sessionProgressNaming') ?? { enabled: false, cadenceTurns: 10 },
       voiceMode: getAppSetting<unknown>('voiceMode') ?? null,
       sessionSync: sync
         ? {
@@ -448,6 +450,40 @@ export class SettingsControlService {
     SessionNamingService.getInstance().setLanguage(args.language);
     this.audit('ai_set_preferred_language', sessionId, { before, after: args.language });
     return { ok: true, before, after: args.language };
+  }
+
+  async setSessionProgressNaming(
+    sessionId: string,
+    args: { enabled: boolean; cadenceTurns?: number },
+  ): Promise<
+    SettingsToolResult<
+      { enabled: boolean; cadenceTurns: number } | undefined,
+      { enabled: boolean; cadenceTurns: number }
+    >
+  > {
+    rateLimit(sessionId);
+    const before = getAppSetting<{ enabled?: boolean; cadenceTurns?: number }>('sessionProgressNaming');
+    const normalized = {
+      enabled: args.enabled === true,
+      cadenceTurns: Number.isFinite(Number(args.cadenceTurns))
+        ? Math.max(1, Math.min(50, Math.round(Number(args.cadenceTurns))))
+        : 10,
+    };
+    setAppSetting('sessionProgressNaming', normalized);
+    SessionNamingService.getInstance().setSessionProgressNaming(normalized);
+    this.audit('ai_set_session_progress_naming', sessionId, { before, after: normalized });
+    return {
+      ok: true,
+      before: before
+        ? {
+            enabled: before.enabled === true,
+            cadenceTurns: Number.isFinite(Number(before.cadenceTurns))
+              ? Math.max(1, Math.min(50, Math.round(Number(before.cadenceTurns))))
+              : 10,
+          }
+        : undefined,
+      after: normalized,
+    };
   }
 
   // ── Feature flags ────────────────────────────────────────────────

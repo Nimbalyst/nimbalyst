@@ -24,12 +24,18 @@ import { PermissionMode, TrustChecker, PermissionPatternSaver, PermissionPattern
 import { CodexSdkModuleLike, loadCodexSdkModule } from './codex/codexSdkLoader';
 import { resolvePackagedCodexBinaryPath } from './codex/codexBinaryPath';
 import { McpConfigService } from '../services/McpConfigService';
+import { SessionManager } from '../SessionManager';
 import { MCPServerConfig } from '../../../types/MCPServerConfig';
 import { safeJSONSerialize } from '../../../utils/serialization';
 import { AskUserQuestionPrompt, AskUserQuestionPromptOption } from './shared/askUserQuestionTypes';
 import { AgentProtocolTranscriptAdapter } from './agentProtocol/AgentProtocolTranscriptAdapter';
 import { buildCodexToolLookupId } from '../toolLookupIds';
 import { reverseCodexPatch, type CodexPatchKind } from './codex/patchReverse';
+import {
+  buildSessionProgressNamingReminderPrompt,
+  shouldReviewSessionProgressNaming,
+} from '../sessionProgressNaming';
+import { getSessionProgressNamingConfig } from '../sessionProgressNamingConfig';
 
 /**
  * Codex transport selection.
@@ -1361,14 +1367,12 @@ export class OpenAICodexProvider extends BaseAgentProvider {
         console.error('[CODEX] WARNING: Stream completed but thread ID was never captured!');
       }
 
-      if (
-        sessionId &&
-        !isResumedThread &&
-        hasSessionNamingServer &&
-        !usedSessionNamingToolThisTurn &&
-        !abortController.signal.aborted
-      ) {
-        await this.sendSessionNamingReminder(session, sessionId);
+      if (sessionId && hasSessionNamingServer && !usedSessionNamingToolThisTurn && !abortController.signal.aborted) {
+        if (!isResumedThread) {
+          await this.sendSessionNamingReminder(session, sessionId);
+        } else {
+          await this.maybeSendSessionProgressNamingReminder(session, sessionId);
+        }
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -1708,6 +1712,68 @@ export class OpenAICodexProvider extends BaseAgentProvider {
 
     if (!reminderTriggeredNaming) {
       console.warn('[CODEX] Session naming reminder turn completed without update_session_meta call');
+    }
+  }
+
+  private async maybeSendSessionProgressNamingReminder(
+    session: ProtocolSession,
+    sessionId: string
+  ): Promise<void> {
+    const namingConfig = getSessionProgressNamingConfig();
+    if (!namingConfig.enabled) {
+      return;
+    }
+
+    try {
+      const manager = new SessionManager();
+      await manager.initialize();
+      const currentSession = await manager.loadSession(sessionId);
+      if (!currentSession || !shouldReviewSessionProgressNaming(currentSession.messages, namingConfig)) {
+        return;
+      }
+
+      const reminderPrompt = buildSessionProgressNamingReminderPrompt({
+        currentTitle: currentSession.title || 'Untitled',
+        currentPhase: (currentSession.metadata as Record<string, unknown> | undefined)?.phase as string | null | undefined,
+        cadenceTurns: namingConfig.cadenceTurns,
+      });
+
+      await this.logAgentMessageBestEffort(
+        sessionId,
+        'input',
+        reminderPrompt,
+        {
+          hidden: true,
+          searchable: false,
+          metadata: {
+            promptType: 'system_reminder',
+            reminderKind: 'session_progress_naming',
+          },
+        }
+      );
+
+      let reminderTriggeredNaming = false;
+      for await (const reminderEvent of this.protocol.sendMessage(session, {
+        content: reminderPrompt,
+      })) {
+        await this.storeRawEventIfPresent(reminderEvent, sessionId, {
+          promptType: 'system_reminder',
+          reminderKind: 'session_progress_naming',
+        });
+
+        if (reminderEvent.type === 'tool_call' && reminderEvent.toolCall) {
+          if (OpenAICodexProvider.isSessionNamingToolCall(reminderEvent.toolCall.name)) {
+            reminderTriggeredNaming = true;
+          }
+          this.handleAskUserQuestionToolCall(reminderEvent.toolCall, sessionId);
+        }
+      }
+
+      if (!reminderTriggeredNaming) {
+        console.log('[CODEX] Session progress naming review completed without metadata changes');
+      }
+    } catch (error) {
+      console.warn('[CODEX] Session progress naming review failed:', (error as Error)?.message ?? error);
     }
   }
 

@@ -123,6 +123,29 @@ export function registerSettingsHandlers() {
         return getAppSetting<string>('preferredAgentLanguage') ?? '';
     });
 
+    safeHandle('session-progress-naming:get', () => {
+        const current = getAppSetting<{ enabled?: boolean; cadenceTurns?: number }>('sessionProgressNaming');
+        return {
+            enabled: current?.enabled === true,
+            cadenceTurns: Number.isFinite(Number(current?.cadenceTurns))
+                ? Math.max(1, Math.min(50, Math.round(Number(current?.cadenceTurns))))
+                : 10,
+        };
+    });
+
+    safeHandle('session-progress-naming:set', (_event, config: unknown) => {
+        const raw = (config && typeof config === 'object') ? config as { enabled?: unknown; cadenceTurns?: unknown } : {};
+        const normalized = {
+            enabled: raw.enabled === true,
+            cadenceTurns: Number.isFinite(Number(raw.cadenceTurns))
+                ? Math.max(1, Math.min(50, Math.round(Number(raw.cadenceTurns))))
+                : 10,
+        };
+        setAppSetting('sessionProgressNaming', normalized);
+        SessionNamingService.getInstance().setSessionProgressNaming(normalized);
+        return normalized;
+    });
+
     // Get the enhanced PATH that Nimbalyst uses for spawning processes
     // This includes custom user paths, detected paths, and common system paths
     safeHandle('environment:get-enhanced-path', () => {
