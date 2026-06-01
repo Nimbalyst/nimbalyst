@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- Changes to existing functionality go here -->
 
 ### Fixed
-<!-- Bug fixes go here -->
+- SQLite migration dry-run no longer fails on row-count mismatch when PGLite is being written to concurrently
 
 ### Removed
 <!-- Removed features go here -->

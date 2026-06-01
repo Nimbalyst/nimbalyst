@@ -387,7 +387,16 @@ export class PGLiteToSQLiteMigrator {
     `);
 
     // Verify counts. Emit per-table progress so the UI shows which table is
-    // being counted (SELECT COUNT(*) can be slow on large tables).
+    // being counted (SELECT COUNT(*) can be slow on large tables). The dry-run
+    // runs against a LIVE PGLite — inserts (sync, agent writes) and deletes
+    // (AgentMessagesBackfill cleanup of transient rows) happen during the copy
+    // window. The cursor loop deliberately drains past `expected` (see comment
+    // at copyTable), so the SQLite count can legitimately end up above or
+    // below the count we measured at the start. We log the per-table drift so
+    // the UI/log records it, but we never throw — the dry-run database is
+    // thrown away after the run, and integrity_check + foreign_key_check
+    // (below) plus the spot-check are the real correctness gates.
+    let totalDrift = 0;
     for (let i = 0; i < pgliteCounts.length; i++) {
       const { name, rows: expected } = pgliteCounts[i];
       opts.onProgress?.({
@@ -404,10 +413,16 @@ export class PGLiteToSQLiteMigrator {
       });
       const actual = sqliteHandle.prepare(`SELECT COUNT(*) AS c FROM ${quoteIdent(name)}`).get() as { c: number };
       if (actual.c !== expected) {
-        throw new Error(
-          `Row-count mismatch on ${name}: source=${expected}, target=${actual.c}`,
+        const drift = actual.c - expected;
+        totalDrift += Math.abs(drift);
+        log(
+          'warn',
+          `[migrator] ${name}: target=${actual.c} drifted ${drift >= 0 ? '+' : ''}${drift} from start-of-run source=${expected} (live writes during dry-run)`,
         );
       }
+    }
+    if (totalDrift > 0) {
+      log('info', `[migrator] total absolute row-count drift across tables: ${totalDrift}`);
     }
 
     // Spot-check captured samples (NOT a fresh read from PGLite — see the
