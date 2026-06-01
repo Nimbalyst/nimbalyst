@@ -35,6 +35,11 @@ export interface DocumentContext {
   // AI mode at time of message submission (planning vs agent)
   mode?: 'planning' | 'agent';
 
+  // Set by the in-place edit IPC. Tells the streaming handler that the raw row
+  // and canonical event already reflect the new content, so it must not insert
+  // a duplicate user message in the session history or rewrite the title.
+  editedInPlace?: boolean;
+
   // Worktree context (for isolated AI coding sessions)
   worktreeId?: string;  // ID of the associated worktree
   worktreePath?: string;  // Path to the worktree directory
